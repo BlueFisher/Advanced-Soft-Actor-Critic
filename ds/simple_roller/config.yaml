@@ -1,0 +1,21 @@
+build_path: 
+  win32: C:\Users\Fisher\Documents\Unity\build-simple-roller\rl-test.exe
+  linux: /data/zzy/linux-test-boat/boat.x86_64
+
+# replay_host: 127.0.0.1
+# replay_port: 8888
+# learner_host: 127.0.0.1
+# learner_port: 8889
+# websocket_host: 127.0.0.1
+# websocket_port: 8890
+# update_policy_variables_per_step: 100
+
+# name: {time}
+# sac: sac
+
+batch_size: 1024
+capacity: 1000000
+
+sac_config:
+  write_summary_graph: true
+  use_auto_alpha: True
