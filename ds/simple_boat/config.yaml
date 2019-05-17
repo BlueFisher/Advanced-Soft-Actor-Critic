@@ -1,14 +1,21 @@
 build_path: 
   win32: C:\Users\Fisher\Documents\Unity\build-simple-boat\boat.exe
   linux: /data/zzy/linux-test-boat/boat.x86_64
-
+  
 # replay_host: 127.0.0.1
-# replay_port: 8888
+# replay_port: 18888
 # learner_host: 127.0.0.1
-# learner_port: 8889
+# learner_port: 18889
 # websocket_host: 127.0.0.1
-# websocket_port: 8890
+# websocket_port: 18890
+
+reset_config:
+  # copy: 1
+  action: 0 # 0: can backward, 1: cannot backward
+  reward: 1 # 0: include prior knowledge, 1: not included
+
 # update_policy_variables_per_step: 100
+# add_trans_threshold: 100
 
 # name: {time}
 # sac: sac
@@ -18,4 +25,12 @@ capacity: 1000000
 
 sac_config:
   write_summary_graph: true
-  use_auto_alpha: True
+  # seed: 0
+  # gamma: 0.99
+  # tau: 0.005
+  # save_model_per_step: 5000
+  # write_summary_per_step: 20
+  # update_target_per_step: 1
+  # init_log_alpha: -4.6
+  # use_auto_alpha: True
+  # lr: 0.0003

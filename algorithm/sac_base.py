@@ -151,6 +151,17 @@ class SAC_Base(object):
 
         return a
 
+    def get_td_error(self, s, a, r, s_, done):
+        td_error = self.sess.run(self.td_error, {
+            self.pl_s: s,
+            self.pl_a: a,
+            self.pl_r: r,
+            self.pl_s_: s_,
+            self.pl_done: done
+        })
+
+        return td_error
+
     def save_model(self, iteration):
         self.saver.save(iteration + self.init_iteration)
 

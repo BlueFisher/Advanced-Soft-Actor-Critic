@@ -1,10 +1,15 @@
 import sys
 from pathlib import Path
 
+import numpy as np
 import tensorflow as tf
+import tensorflow_probability as tfp
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from algorithm.sac_base import SAC_Base
+
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 initializer_helper = {
     'kernel_initializer': tf.truncated_normal_initializer(0, .1),
@@ -39,15 +44,23 @@ class SAC(SAC_Base):
 
             mu = tf.layers.dense(l, 256, tf.nn.relu, **initializer_helper, trainable=trainable)
             mu = tf.layers.dense(mu, self.a_dim, tf.nn.tanh, **initializer_helper, trainable=trainable)
-            mu = mu
 
             sigma = tf.layers.dense(l, 256, tf.nn.relu, **initializer_helper, trainable=trainable)
             sigma = tf.layers.dense(sigma, self.a_dim, tf.nn.sigmoid, **initializer_helper, trainable=trainable)
             sigma = sigma + .1
 
-            policy = tf.distributions.Normal(loc=mu, scale=sigma)
+            policy = tfp.distributions.Normal(loc=mu, scale=sigma)
             action = policy.sample()
 
             variables = tf.get_variable_scope().global_variables()
 
         return policy, action, variables
+
+    def choose_action(self, s):
+        assert len(s.shape) == 2
+
+        a = self.sess.run(self.action_sampled, {
+            self.pl_s: s,
+        })
+
+        return np.clip(a, -1, 1)

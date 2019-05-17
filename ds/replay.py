@@ -1,21 +1,32 @@
 import sys
+import logging
 import getopt
 import yaml
 from pathlib import Path
+import threading
 
 from flask import Flask, jsonify, request
+import requests
 import numpy as np
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from algorithm.replay_buffer import PrioritizedReplayBuffer
 
+logger = logging.getLogger('sac.ds')
+
 
 class Replay(object):
-    _replay_port = 8888
+    _replay_port = 18888
+    _learner_host = '127.0.0.1'
+    _learner_port = 18889
     _batch_size = 256
     _capacity = 1e6
 
     def __init__(self, argv):
+        self._init_config(argv)
+        self._run()
+
+    def _init_config(self, argv):
         try:
             opts, args = getopt.getopt(argv, 'c:p:', ['config=',
                                                       'replay_port='])
@@ -29,24 +40,40 @@ class Replay(object):
                     for k, v in config_file.items():
                         if k == 'replay_port':
                             self._replay_port = v
+                        elif k == 'learner_host':
+                            self._learner_host = v
+                        elif k == 'learner_port':
+                            self._learner_port = v
                         elif k == 'batch_size':
                             self._batch_size = v
                         elif k == 'capacity':
                             self._capacity = v
             elif opt in ('-p', '--replay_port'):
                 self._replay_port = int(arg)
-        
-        self._run()
 
     def _run(self):
         app = Flask('replay')
 
-        import logging
-        log = logging.getLogger('werkzeug')
-        log.setLevel(logging.ERROR)
+        _tmp_trans_arr_lock = threading.Lock()
 
         replay_buffer = PrioritizedReplayBuffer(self._batch_size, self._capacity)
         _tmp_trans_arr = []
+
+        def _add_trans(*trans):
+            while True:
+                try:
+                    r = requests.post(f'http://{self._learner_host}:{self._learner_port}/get_td_errors',
+                                      json=[t.tolist() for t in trans])
+                except Exception as e:
+                    logger.error(f'_clear_replay_buffer: {str(e)}')
+                else:
+                    break
+
+            td_errors = r.json()
+
+            replay_buffer.add_with_td_errors(td_errors, trans)
+
+            logger.info(f'buffer_size: {replay_buffer.size}/{replay_buffer.capacity}, {replay_buffer.size/replay_buffer.capacity*100:.2f}%')
 
         @app.route('/update', methods=['POST'])
         def update():
@@ -56,24 +83,28 @@ class Replay(object):
 
             replay_buffer.update(points, td_errors)
 
-            for trans in _tmp_trans_arr:
-                replay_buffer.add(*trans)
+            print(np.sum(replay_buffer.get_leaves() == 1))
 
+            _tmp_trans_arr_lock.acquire()
+            for trans in _tmp_trans_arr:
+                _add_trans(*trans)
             _tmp_trans_arr.clear()
+            _tmp_trans_arr_lock.release()
 
             return jsonify({
                 'succeeded': True
             })
 
+        learning_starts = 2048
+
         @app.route('/sample')
         def sample():
-            if not replay_buffer.is_lg_batch_size:
+            if replay_buffer.size < learning_starts:
                 return jsonify({})
 
             points, trans, is_weights = replay_buffer.sample()
 
-            for i, p in enumerate(trans):
-                trans[i] = p.tolist()
+            trans = [t.tolist() for t in trans]
 
             return jsonify({
                 'points': points.tolist(),
@@ -84,15 +115,24 @@ class Replay(object):
         @app.route('/add', methods=['POST'])
         def add():
             trans = request.get_json()
+            trans = [np.array(t) for t in trans]
 
-            for i, p in enumerate(trans):
-                trans[i] = np.array(p)
-
-            if not replay_buffer.is_lg_batch_size:
-                replay_buffer.add(*trans)
+            
+            if replay_buffer.size < learning_starts:
+                _add_trans(*trans)
             else:
+                _tmp_trans_arr_lock.acquire()
                 _tmp_trans_arr.append(trans)
+                _tmp_trans_arr_lock.release()
 
+            return jsonify({
+                'succeeded': True
+            })
+
+        @app.route('/clear')
+        def clear():
+            replay_buffer.clear()
+            logger.info('replay buffer cleared')
             return jsonify({
                 'succeeded': True
             })
