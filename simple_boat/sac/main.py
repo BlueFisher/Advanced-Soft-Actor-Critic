@@ -22,7 +22,9 @@ config = {
     'sac': 'sac',
     'max_iter': 1000,
     'agents_num': 1,
-    'save_model_per_iter': 500
+    'save_model_per_iter': 500,
+    'action_idx': 0,
+    'reward_idx': 1
 }
 agent_config = dict()
 
@@ -40,7 +42,7 @@ except getopt.GetoptError:
 for opt, arg in opts:
     if opt in ('-c', '--config'):
         with open(arg) as f:
-            config_file = yaml.load(f)
+            config_file = yaml.load(f, Loader=yaml.FullLoader)
             for k, v in config_file.items():
                 if k in config.keys():
                     if k == 'build_path':
@@ -100,7 +102,8 @@ sac = SAC(state_dim=state_dim,
 
 reset_config = {
     'copy': config['agents_num'],
-    'reward': 0
+    'action': config['action_idx'],
+    'reward': config['reward_idx']
 }
 
 brain_info = env.reset(train_mode=TRAIN_MODE, config=reset_config)[default_brain_name]
@@ -109,7 +112,7 @@ for iteration in range(config['max_iter'] + 1):
         brain_info = env.reset(train_mode=TRAIN_MODE, config=reset_config)[default_brain_name]
 
     len_agents = len(brain_info.agents)
-    
+
     all_done = [False] * len_agents
     all_cumulative_rewards = [0] * len_agents
 
@@ -144,7 +147,7 @@ for iteration in range(config['max_iter'] + 1):
 
         if TRAIN_MODE:
             tmp_start = time.time()
-        
+
             dones = np.logical_and(local_dones, np.logical_not(max_reached))
 
             sac.train(states,
@@ -169,7 +172,6 @@ for iteration in range(config['max_iter'] + 1):
         sac.save_model(iteration)
 
     print(f'iter {iteration}, rewards {", ".join([f"{i:.1f}" for i in sorted(all_cumulative_rewards)])}, hitted {hitted}')
-    print(f'interaction {sum(interaction_time_arr):.2f}, training {sum(training_time_arr):.2f}, buffer {sac.replay_buffer.size}, steps {len(training_time_arr)}')
     print('=' * 10)
 
 env.close()
