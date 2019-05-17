@@ -1,5 +1,6 @@
 import time
 import sys
+import logging
 import os
 import getopt
 import importlib
@@ -16,25 +17,36 @@ import requests
 import numpy as np
 import tensorflow as tf
 
+from sac_ds_base import SAC_DS_Base
+
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from mlagents.envs import UnityEnvironment
 
+logger = logging.getLogger('sac.ds')
 NOW = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
 
 class Learner(object):
     _replay_host = '127.0.0.1'
-    _replay_port = 8888
-    _learner_port = 8889
-    _websocket_port = 8890
+    _replay_port = 18888
+    _learner_port = 18889
+    _websocket_port = 18890
     _build_path = None
     _build_port = 5006
 
     def __init__(self, argv):
+        config, self._reset_config, agent_config = self._init_config(argv)
+        self._init_env(config['sac'], config['name'], agent_config)
+        self._run()
+
+    def _init_config(self, argv):
         config = {
             'name': NOW,
             'sac': 'sac',
             'save_model_per_step': 10000
+        }
+        reset_config = {
+            'copy': 1
         }
         agent_config = dict()
 
@@ -64,7 +76,14 @@ class Learner(object):
                             self._websocket_port = v
                         elif k == 'build_path':
                             self._build_path = v[sys.platform]
+                        elif k == 'reset_config':
+                            if v is None:
+                                continue
+                            for kk, vv in v.items():
+                                reset_config[kk] = vv
                         elif k == 'sac_config':
+                            if v is None:
+                                continue
                             for kk, vv in v.items():
                                 agent_config[kk] = vv
                         else:
@@ -86,14 +105,14 @@ class Learner(object):
         with open(f'config/{config["name"]}.yaml', 'w') as f:
             yaml.dump({**config, **agent_config}, f, default_flow_style=False)
 
+        config_str = ''
         for k, v in config.items():
-            print(f'{k:>25}: {v}')
+            config_str += f'\n{k:>25}: {v}'
         for k, v in agent_config.items():
-            print(f'{k:>25}: {v}')
-        print('=' * 20)
+            config_str += f'\n{k:>25}: {v}'
+        logger.info(config_str)
 
-        self._init_env(config['sac'], config['name'], agent_config)
-        self._run()
+        return config, reset_config, agent_config
 
     def _init_env(self, sac, name, agent_config):
         self.env = UnityEnvironment(file_name=self._build_path,
@@ -106,7 +125,18 @@ class Learner(object):
         state_dim = brain_params.vector_observation_space_size
         action_dim = brain_params.vector_action_space_size[0]
 
-        SAC = importlib.import_module(sac).SAC
+        sac_func = importlib.import_module(sac)
+
+        class SAC(SAC_DS_Base):
+            def _build_q_net(*args, **kwargs):
+                return sac_func._build_q_net(*args, **kwargs)
+
+            def _build_policy_net(*args, **kwargs):
+                return sac_func._build_policy_net(*args, **kwargs)
+
+            def choose_action(*args, **kwargs):
+                return sac_func.choose_action(*args, **kwargs)
+
         self.sac = SAC(state_dim=state_dim,
                        action_dim=action_dim,
                        saver_model_path=f'model/{name}',
@@ -117,17 +147,16 @@ class Learner(object):
     def _start_policy_evaluation(self):
         eval_step = 0
         start_time = time.time()
-        brain_info = self.env.reset(train_mode=True)[self.default_brain_name]
+        brain_info = self.env.reset(train_mode=True, config=self._reset_config)[self.default_brain_name]
 
         while True:
             if self.env.global_done:
-                brain_info = self.env.reset(train_mode=True)[self.default_brain_name]
+                brain_info = self.env.reset(train_mode=True, config=self._reset_config)[self.default_brain_name]
 
             len_agents = len(brain_info.agents)
 
             all_done = [False] * len_agents
             all_cumulative_rewards = np.zeros(len_agents)
-            hitted = 0
 
             states = brain_info.vector_observations
 
@@ -143,8 +172,6 @@ class Learner(object):
                 for i in range(len_agents):
                     if not all_done[i]:
                         all_cumulative_rewards[i] += rewards[i]
-                        if rewards[i] > 0:
-                            hitted += 1
 
                     all_done[i] = all_done[i] or local_dones[i]
 
@@ -153,26 +180,27 @@ class Learner(object):
             self.sac.write_constant_summaries([
                 {'tag': 'reward/mean', 'simple_value': all_cumulative_rewards.mean()},
                 {'tag': 'reward/max', 'simple_value': all_cumulative_rewards.max()},
-                {'tag': 'reward/min', 'simple_value': all_cumulative_rewards.min()},
-                {'tag': 'reward/hitted', 'simple_value': hitted}
+                {'tag': 'reward/min', 'simple_value': all_cumulative_rewards.min()}
             ], eval_step)
 
             time_elapse = (time.time() - start_time) / 60
             rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(all_cumulative_rewards)])
-            print(f'{eval_step}, {time_elapse:.2f}m, rewards {rewards_sorted}, hitted {hitted}')
+            logger.info(f'{eval_step}, {time_elapse:.2f}min, rewards {rewards_sorted}')
             eval_step += 1
 
     def _run_learner_server(self):
         app = Flask('learner')
 
-        import logging
-        log = logging.getLogger('werkzeug')
-        log.setLevel(logging.ERROR)
-
         @app.route('/get_policy_variables')
         def get_policy_variables():
             variables = self.sac.get_policy_variables()
             return jsonify(variables)
+
+        @app.route('/get_td_errors', methods=['POST'])
+        def get_td_errors():
+            trans = request.get_json()
+            td_errors = self.sac.get_td_error(*trans)
+            return jsonify(td_errors.flatten().tolist())
 
         app.run(host='0.0.0.0', port=self._learner_port)
 
@@ -181,7 +209,7 @@ class Learner(object):
             try:
                 r = requests.get(f'http://{self._replay_host}:{self._replay_port}/sample')
             except Exception as e:
-                print('Exception _get_sampled_trans:', e)
+                logger.error(f'exception _get_sampled_trans: {str(e)}')
             else:
                 break
         return r.json()
@@ -195,13 +223,23 @@ class Learner(object):
                                   'td_errors': td_errors
                               })
             except Exception as e:
-                print('Exception _update_td_errors:', e)
+                logger.error(f'exception _update_td_errors: {str(e)}')
+            else:
+                break
+
+    def _clear_replay_buffer(self):
+        while True:
+            try:
+                requests.get(f'http://{self._replay_host}:{self._replay_port}/clear')
+            except Exception as e:
+                logger.error(f'_clear_replay_buffer: {str(e)}')
             else:
                 break
 
     def _run_training_client(self):
         # asyncio.run(self._websocket_server.send_to_all('aaa'))
         t_evaluation = threading.Thread(target=self._start_policy_evaluation)
+        self._clear_replay_buffer()
 
         while True:
             data = self._get_sampled_data()
@@ -219,11 +257,7 @@ class Learner(object):
 
                 s, a, r, s_, done = trans
                 curr_step, td_errors = self.sac.train(s, a, r, s_, done, is_weights)
-
                 self._update_td_errors(data['points'], td_errors.tolist())
-            else:
-                print('sampled None. Wating 5 seconds...')
-                time.sleep(5)
 
     def _run(self):
         self._websocket_server = WebsocketServer(self._websocket_port)
@@ -243,22 +277,29 @@ class WebsocketServer:
         start_server = websockets.serve(self._websocket_open, '0.0.0.0', port)
         loop = asyncio.get_event_loop()
         loop.run_until_complete(start_server)
+        logger.info('websocket server started')
 
     async def _websocket_open(self, websocket, path):
-        self._websocket_clients.add(websocket)
-        self.print_websocket_clients()
-
         try:
             async for message in websocket:
-                pass
+                if message == 'actor':
+                    self._websocket_clients.add(websocket)
+                    self.print_websocket_clients()
+                    await websocket.send('reset')
         except websockets.ConnectionClosed:
-            self._websocket_clients.remove(websocket)
-            self.print_websocket_clients()
+            try:
+                self._websocket_clients.remove(websocket)
+            except:
+                pass
+            else:
+                self.print_websocket_clients()
 
     def print_websocket_clients(self):
-        print(f'{len(self._websocket_clients)} active actors')
+        log_str = f'{len(self._websocket_clients)} active actors'
         for i, client in enumerate(self._websocket_clients):
-            print(f'[{i+1}]. {client.remote_address[0]} : {client.remote_address[1]}')
+            log_str += (f'\n[{i+1}]. {client.remote_address[0]} : {client.remote_address[1]}')
+
+        logger.info(log_str)
 
     async def send_to_all(self, message):
         tasks = []

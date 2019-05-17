@@ -9,10 +9,10 @@ class ReplayBuffer(object):
     _size = 0
 
     def __init__(self, batch_size, capacity):
-        self.batch_size = batch_size
-        self.capacity = capacity
+        self.batch_size = int(batch_size)
+        self.capacity = int(capacity)
 
-        self._buffer = np.empty(capacity, dtype=object)
+        self._buffer = np.empty(self.capacity, dtype=object)
 
     def add(self, *args):
         for arg in args:
@@ -77,6 +77,18 @@ class SumTree(object):
         if self._size < self.capacity:
             self._size += 1
 
+        # if self._size < self.capacity:
+        #     tree_idx = self._size + self.capacity - 1
+        #     self._data[self._size] = data  # update data_frame
+        #     self._size += 1
+        # else:
+        #     leaves = self._tree[self.capacity - 1:]
+        #     data_idx = np.where(leaves == np.min(leaves))[0][0]
+        #     tree_idx = data_idx + self.capacity - 1
+        #     self._data[data_idx] = data
+
+        # self.update(tree_idx, p)  # update tree_frame
+
     def update(self, tree_idx, p):
         change = p - self._tree[tree_idx]
         self._tree[tree_idx] = p
@@ -114,6 +126,12 @@ class SumTree(object):
         data_idx = leaf_idx - self.capacity + 1
         return leaf_idx, self._tree[leaf_idx], self._data[data_idx]
 
+    def clear(self):
+        self._size = 0
+
+    def get_leaves(self):
+        return self._tree[self.capacity - 1:self._size + self.capacity - 1]
+
     @property
     def total_p(self):
         return self._tree[0]  # the root
@@ -133,17 +151,17 @@ class SumTree(object):
         return self._size
 
 
-class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_ ) in SumTree
+class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumTree
     epsilon = 0.01  # small amount to avoid zero priority
-    alpha = 0.6  # [0~1] convert the importance of TD error to priority
+    alpha = 0.9  # [0~1] convert the importance of TD error to priority
     beta = 0.4  # importance-sampling, from initial value increasing to 1
     beta_increment_per_sampling = 0.001
     td_err_upper = 1.  # clipped abs error
 
     def __init__(self, batch_size, capacity):
         self.batch_size = batch_size
-        capacity = 2**math.floor(math.log2(capacity))
-        self._tree = SumTree(capacity)
+        self.capacity = 2**math.floor(math.log2(capacity))
+        self._tree = SumTree(self.capacity)
 
     def add(self, *args):
         max_p = self._tree.max
@@ -152,6 +170,12 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_ ) in SumTree
 
         for i in range(len(args[0])):
             self._tree.add(max_p, tuple(arg[i] for arg in args))
+
+    def add_with_td_errors(self, td_errors, *args):
+        assert len(td_errors) == len(args[0])
+
+        for i in range(len(args[0])):
+            self._tree.add(td_errors[i], tuple(t[i] for t in args))
 
     def sample(self):
         n_sample = self.batch_size if self.is_lg_batch_size else self.size
@@ -163,6 +187,8 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_ ) in SumTree
         self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
 
         min_prob = self._tree.min / self._tree.total_p     # for later calculate ISweight
+        if min_prob == 0:
+            min_prob = self.epsilon
 
         for i in range(n_sample):
             a, b = pri_seg * i, pri_seg * (i + 1)
@@ -181,6 +207,12 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_ ) in SumTree
         for ti, p in zip(points, ps):
             self._tree.update(ti, p)
 
+    def clear(self):
+        self._tree.clear()
+
+    def get_leaves(self):
+        return self._tree.get_leaves()
+
     @property
     def size(self):
         return self._tree.size
@@ -188,6 +220,10 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_ ) in SumTree
     @property
     def is_lg_batch_size(self):
         return self.size > self.batch_size
+
+    @property
+    def is_full(self):
+        return self.size == self.capacity
 
 
 if __name__ == "__main__":
@@ -204,19 +240,17 @@ if __name__ == "__main__":
 
     #     print('=' * 10)
 
-    replay_buffer = PrioritizedReplayBuffer(2, 9)
+    replay_buffer = PrioritizedReplayBuffer(5, 16)
     for i in range(9):
-        start = time.time()
         replay_buffer.add(np.random.randn(9, 1), np.random.randn(9, 2))
-        print('add', time.time() - start)
-        print(replay_buffer.size)
-
-        start = time.time()
+        for a in zip(replay_buffer._tree._data_ids, replay_buffer._tree._tree[16 - 1:]):
+            print(a, end=' ')
+        print()
         points, (a, b), ratio = replay_buffer.sample()
-        print('sample', time.time() - start)
+        print(points)
 
-        start = time.time()
-        replay_buffer.update(points, np.abs(np.random.randn(256)))
-        print('update', time.time() - start)
+        replay_buffer.update(points, np.array(points, dtype=float))
+
+        print('tds', replay_buffer._tree._tree[16 - 1:])
 
         print('=' * 10)

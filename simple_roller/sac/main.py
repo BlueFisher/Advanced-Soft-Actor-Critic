@@ -23,8 +23,6 @@ config = {
     'max_iter': 1000,
     'agents_num': 1,
     'save_model_per_iter': 500,
-    'action_idx': 0,
-    'reward_idx': 1
 }
 agent_config = dict()
 
@@ -101,9 +99,7 @@ sac = SAC(state_dim=state_dim,
           **agent_config)
 
 reset_config = {
-    'copy': config['agents_num'],
-    'action': config['action_idx'],
-    'reward': config['reward_idx']
+    'copy': config['agents_num']
 }
 
 brain_info = env.reset(train_mode=TRAIN_MODE, config=reset_config)[default_brain_name]
@@ -171,7 +167,8 @@ for iteration in range(config['max_iter'] + 1):
     if iteration % config['save_model_per_iter'] == 0:
         sac.save_model(iteration)
 
-    print(f'iter {iteration}, rewards {", ".join([f"{i:.1f}" for i in sorted(all_cumulative_rewards)])}, hitted {hitted}')
+    rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(all_cumulative_rewards)])
+    print(f'iter {iteration}, rewards {rewards_sorted}, hitted {hitted}')
     print('=' * 10)
 
 env.close()

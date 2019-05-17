@@ -1,5 +1,6 @@
 import time
 import sys
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -8,11 +9,10 @@ import tensorflow as tf
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from algorithm.sac_base import SAC_Base
 from algorithm.saver import Saver
+from algorithm.replay_buffer import PrioritizedReplayBuffer
 
 
 class SAC_DS_Base(SAC_Base):
-    summary_writer = None
-
     def __init__(self,
                  state_dim,
                  action_dim,
@@ -70,11 +70,21 @@ class SAC_DS_Base(SAC_Base):
 
                 self.sess.run(self.update_target_hard_op)
 
+    def get_td_error(self, s, a, r, s_, done):
+        td_error = self.sess.run(self.td_error, {
+            self.pl_s: s,
+            self.pl_a: a,
+            self.pl_r: r,
+            self.pl_s_: s_,
+            self.pl_done: done
+        })
+
+        return td_error
+
     def get_policy_variables(self):
         variables = self.sess.run(self.policy_variables)
-        variables = map(lambda v: v.tolist(), variables)
 
-        return list(variables)
+        return [v.tolist() for v in variables]
 
     def update_policy_variables(self, policy_variables):
         assert len(self.policy_variables) == len(policy_variables)
@@ -143,3 +153,4 @@ class SAC_DS_Base(SAC_Base):
             self.saver.save(global_step)
 
         return global_step, td_error.flatten()
+        

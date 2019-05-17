@@ -1,13 +1,11 @@
 build_path: 
-  win32: C:\Users\Fisher\Documents\Unity\build-simple-boat\boat.exe
+  win32: C:\Users\Fisher\Documents\Unity\build-simple-roller\rl-test.exe
   linux: /data/zzy/linux-test-boat/boat.x86_64
 
 # sac: sac
 max_iter: 10000
 # agents_num: 1
 # save_model_per_iter: 500
-action_idx: 0
-reward_idx: 1
 
 write_summary_graph: true
 # seed: None
@@ -19,5 +17,5 @@ write_summary_graph: true
 # use_auto_alpha: true
 # lr: 3e-4
 use_priority: true
-# batch_size: 256
-# replay_buffer_capacity: 1000000
+batch_size: 256
+replay_buffer_capacity: 1000000
