@@ -51,16 +51,17 @@ class TransBuffer(object):
 
 class Actor(object):
     _replay_host = '127.0.0.1'
-    _replay_port = 18889  # 18889
+    _replay_port = 61000
     _learner_host = '127.0.0.1'
-    _learner_port = 18889
+    _learner_port = 61001
     _websocket_host = '127.0.0.1'
-    _websocket_port = 18890
+    _websocket_port = 61002
     _build_path = None
     _build_port = 5005
     _reset_config = {
         'copy': 1
     }
+    _logger_file = None
     _sac = 'sac'
     _train_mode = True
     _update_policy_variables_per_step = 100
@@ -84,6 +85,7 @@ class Actor(object):
                                                     'learner_port=',
                                                     'build_path=',
                                                     'build_port=',
+                                                    'logger_file=',
                                                     'sac=',
                                                     'agents=',
                                                     'run'])
@@ -135,12 +137,25 @@ class Actor(object):
                 self._build_path = arg
             elif opt == '--build_port':
                 self._build_port = int(arg)
+            elif opt == '--logger_file':
+                self._logger_file = arg
             elif opt == '--sac':
                 self._sac = arg
             elif opt == '--agents':
                 self._reset_config['copy'] = int(arg)
             elif opt == '--run':
                 self._train_mode = False
+
+        if self._logger_file is not None:
+            # remove all existing logger handlers
+            for handler in logging.root.handlers[:]:
+                logging.root.removeHandler(handler)
+
+            handler = logging.FileHandler(self._logger_file, 'w', encoding='utf-8')
+            handler.setLevel(logging.INFO)
+            formatter = logging.Formatter('%(asctime)s - [%(levelname)s] - [%(name)s] - %(message)s')
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
 
     def _init_websocket_client(self):
         loop = asyncio.get_event_loop()
@@ -162,6 +177,7 @@ class Actor(object):
                             break
             except Exception as e:
                 logger.error(f'exception _connect_websocket: {str(e)}')
+                time.sleep(1)
 
     def _update_policy_variables(self):
         while True:
@@ -169,6 +185,7 @@ class Actor(object):
                 r = requests.get(f'http://{self._learner_host}:{self._learner_port}/get_policy_variables')
             except Exception as e:
                 logger.error(f'exception _update_policy_variables: {str(e)}')
+                time.sleep(1)
             else:
                 break
 
@@ -177,7 +194,7 @@ class Actor(object):
 
     def _add_trans(self, s, a, r, s_, done):
         if self._reset_signal:
-            return 
+            return
 
         self._tmp_trans_buffer.add(s, a, r, s_, done)
 
@@ -193,6 +210,7 @@ class Actor(object):
                                         done.tolist()])
                 except Exception as e:
                     logger.error(f'exception _add_trans: {str(e)}')
+                    time.sleep(1)
                 else:
                     break
 
@@ -204,6 +222,8 @@ class Actor(object):
                                         no_graphics=True,
                                         base_port=self._build_port)
 
+        logger.info(f'{self._build_path} initialized')
+
         self.default_brain_name = self.env.brain_names[0]
 
         brain_params = self.env.brains[self.default_brain_name]
@@ -213,7 +233,14 @@ class Actor(object):
         class SAC(importlib.import_module(self._sac).SAC_Custom, SAC_DS_Base):
             pass
 
-        self.sac_actor = SAC(state_dim, action_dim, only_actor=True)
+        try:
+            self.sac_actor = SAC(state_dim,
+                                 action_dim,
+                                 model_root_path=None)
+        except Exception as e:
+            logger.error(str(e))
+
+        logger.info(f'actor initialized')
 
     def _run(self):
         global_step = 0
@@ -262,11 +289,11 @@ class Actor(object):
 
             if self._reset_signal:
                 self._reset_signal = False
-                
+
                 self._tmp_trans_buffer.clear()
                 brain_info = self.env.reset(train_mode=self._train_mode, config=self._reset_config)[self.default_brain_name]
                 global_step = 0
-                
+
                 logger.info('reset')
                 continue
 

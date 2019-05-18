@@ -115,6 +115,4 @@ dmypy.json
 .pyre/
 
 .vscode
-log
-model
-config
+models

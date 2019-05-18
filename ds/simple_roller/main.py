@@ -6,8 +6,6 @@ sys.path.append('..')
 
 import numpy as np
 
-# for handler in logging.root.handlers[:]:
-#     logging.root.removeHandler(handler)
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] - [%(name)s] - %(message)s')
 
 _log = logging.getLogger('werkzeug')

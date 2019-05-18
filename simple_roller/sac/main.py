@@ -65,10 +65,12 @@ for opt, arg in opts:
     elif opt == '--agents':
         config['agents_num'] = int(arg)
 
+model_root_path = f'models/{config["name"]}'
+
 if TRAIN_MODE:
-    if not os.path.exists('config'):
-        os.makedirs('config')
-    with open(f'config/{config["name"]}.yaml', 'w') as f:
+    if not os.path.exists(model_root_path):
+        os.makedirs(model_root_path)
+    with open(f'{model_root_path}/config.yaml', 'w') as f:
         yaml.dump({**config, **agent_config}, f, default_flow_style=False)
 
 for k, v in config.items():
@@ -93,9 +95,7 @@ action_dim = brain_params.vector_action_space_size[0]
 SAC = importlib.import_module(config['sac']).SAC
 sac = SAC(state_dim=state_dim,
           action_dim=action_dim,
-          saver_model_path=f'model/{config["name"]}',
-          summary_path='log' if TRAIN_MODE else None,
-          summary_name=config["name"],
+          model_root_path=model_root_path,
           **agent_config)
 
 reset_config = {

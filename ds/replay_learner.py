@@ -12,7 +12,6 @@ import asyncio
 
 import websockets
 from flask import Flask, jsonify, request
-import requests
 
 import numpy as np
 import tensorflow as tf
@@ -44,9 +43,7 @@ class ReplayLearner(Learner):
 
         self.sac = SAC(state_dim=state_dim,
                        action_dim=action_dim,
-                       saver_model_path=f'model/{name}',
-                       summary_path=f'log',
-                       summary_name=name,
+                       model_root_path=self.model_root_path,
                        **agent_config)
 
     def _run_learner_server(self):
@@ -62,7 +59,9 @@ class ReplayLearner(Learner):
             trans = request.get_json()
             trans = [np.array(t) for t in trans]
 
-            self.sac.add(*trans)
+            td_errors = self.sac.get_td_error(*trans)
+            self.sac.add_with_td_errors(td_errors.flatten(), *trans)
+            # self.sac.add(*trans)
             print('add')
 
             return jsonify({

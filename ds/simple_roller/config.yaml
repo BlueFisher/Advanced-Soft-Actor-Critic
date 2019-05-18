@@ -3,11 +3,11 @@ build_path:
   linux: /data/zzy/linux-simple-roller/rl-test.x86_64
 
 # replay_host: 127.0.0.1
-replay_port: 18889
+replay_port: 61001
 # learner_host: 127.0.0.1
-learner_port: 18889
+# learner_port: 61001
 # websocket_host: 127.0.0.1
-# websocket_port: 18890
+# websocket_port: 61002
 
 reset_config:
   # copy: 1
@@ -18,12 +18,12 @@ reset_config:
 # name: {time}
 # sac: sac
 
-batch_size: 256
+batch_size: 1024
 capacity: 1000000
 
 sac_config:
   write_summary_graph: true
-  seed: 0
+  # seed: 0
   # gamma: 0.99
   # tau: 0.005
   # save_model_per_step: 5000

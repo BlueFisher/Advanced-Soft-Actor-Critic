@@ -16,9 +16,9 @@ logger = logging.getLogger('sac.ds')
 
 
 class Replay(object):
-    _replay_port = 18888
+    _replay_port = 61000
     _learner_host = '127.0.0.1'
-    _learner_port = 18889
+    _learner_port = 61001
     _batch_size = 256
     _capacity = 1e6
 
@@ -66,6 +66,7 @@ class Replay(object):
                                       json=[t.tolist() for t in trans])
                 except Exception as e:
                     logger.error(f'_clear_replay_buffer: {str(e)}')
+                    time.sleep(1)
                 else:
                     break
 

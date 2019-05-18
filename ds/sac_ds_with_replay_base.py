@@ -16,10 +16,8 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
     def __init__(self,
                  state_dim,
                  action_dim,
-                 only_actor=False,
-                 saver_model_path='model',
-                 summary_path='log',
-                 summary_name=None,
+                 model_root_path,
+                 
                  write_summary_graph=False,
                  seed=None,
                  gamma=0.99,
@@ -36,10 +34,7 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
         self.replay_buffer = PrioritizedReplayBuffer(batch_size, replay_buffer_capacity)
         super().__init__(state_dim,
                          action_dim,
-                         only_actor,
-                         saver_model_path,
-                         summary_path,
-                         summary_name,
+                         model_root_path,
                          write_summary_graph,
                          seed,
                          gamma,
@@ -54,15 +49,21 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
     _replay_lock = threading.Lock()
 
     def add(self, s, a, r, s_, done):
-        assert not self.only_actor
+        assert self.model_root_path is not None
 
         self._replay_lock.acquire()
         self.replay_buffer.add(s, a, r, s_, done)
         self._replay_lock.release()
 
+    def add_with_td_errors(self, td_errors, s, a, r, s_, done):
+        assert self.model_root_path is not None
+
+        self._replay_lock.acquire()
+        self.replay_buffer.add_with_td_errors(td_errors, s, a, r, s_, done)
+        self._replay_lock.release()
 
     def train(self):
-        assert not self.only_actor
+        assert self.model_root_path is not None
 
         if self.replay_buffer.size == 0:
             return
