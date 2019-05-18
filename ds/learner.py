@@ -28,9 +28,9 @@ NOW = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
 class Learner(object):
     _replay_host = '127.0.0.1'
-    _replay_port = 18888
-    _learner_port = 18889
-    _websocket_port = 18890
+    _replay_port = 61000
+    _learner_port = 61001
+    _websocket_port = 61002
     _build_path = None
     _build_port = 5006
 
@@ -100,9 +100,11 @@ class Learner(object):
             elif opt == '--sac':
                 config['sac'] = arg
 
-        if not os.path.exists('config'):
-            os.makedirs('config')
-        with open(f'config/{config["name"]}.yaml', 'w') as f:
+        self.model_root_path = f'models/{config["name"]}'
+    
+        if not os.path.exists(self.model_root_path):
+            os.makedirs(self.model_root_path)
+        with open(f'{self.model_root_path}/config.yaml', 'w') as f:
             yaml.dump({**config, **agent_config}, f, default_flow_style=False)
 
         config_str = ''
@@ -125,23 +127,12 @@ class Learner(object):
         state_dim = brain_params.vector_observation_space_size
         action_dim = brain_params.vector_action_space_size[0]
 
-        sac_func = importlib.import_module(sac)
-
-        class SAC(SAC_DS_Base):
-            def _build_q_net(*args, **kwargs):
-                return sac_func._build_q_net(*args, **kwargs)
-
-            def _build_policy_net(*args, **kwargs):
-                return sac_func._build_policy_net(*args, **kwargs)
-
-            def choose_action(*args, **kwargs):
-                return sac_func.choose_action(*args, **kwargs)
+        class SAC(importlib.import_module(sac).SAC_Custom, SAC_DS_Base):
+            pass
 
         self.sac = SAC(state_dim=state_dim,
                        action_dim=action_dim,
-                       saver_model_path=f'model/{name}',
-                       summary_path=f'log',
-                       summary_name=name,
+                       model_root_path=self.model_root_path,
                        **agent_config)
 
     def _start_policy_evaluation(self):
@@ -210,6 +201,7 @@ class Learner(object):
                 r = requests.get(f'http://{self._replay_host}:{self._replay_port}/sample')
             except Exception as e:
                 logger.error(f'exception _get_sampled_trans: {str(e)}')
+                time.sleep(1)
             else:
                 break
         return r.json()
@@ -224,6 +216,7 @@ class Learner(object):
                               })
             except Exception as e:
                 logger.error(f'exception _update_td_errors: {str(e)}')
+                time.sleep(1)
             else:
                 break
 
@@ -233,6 +226,7 @@ class Learner(object):
                 requests.get(f'http://{self._replay_host}:{self._replay_port}/clear')
             except Exception as e:
                 logger.error(f'_clear_replay_buffer: {str(e)}')
+                time.sleep(1)
             else:
                 break
 
@@ -273,7 +267,7 @@ class Learner(object):
 class WebsocketServer:
     _websocket_clients = set()
 
-    def __init__(self, port=8890):
+    def __init__(self, port=61002):
         start_server = websockets.serve(self._websocket_open, '0.0.0.0', port)
         loop = asyncio.get_event_loop()
         loop.run_until_complete(start_server)

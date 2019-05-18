@@ -9,14 +9,11 @@ from .replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 
 
 class SAC_Base(object):
-    summary_writer = None
-
     def __init__(self,
                  state_dim,
                  action_dim,
-                 saver_model_path='model',
-                 summary_path='log',
-                 summary_name=None,
+                 model_root_path,
+
                  write_summary_graph=False,
                  seed=None,
                  gamma=0.99,
@@ -53,17 +50,14 @@ class SAC_Base(object):
 
             self._build_model(gamma, tau, lr, init_log_alpha)
 
-            self.saver = Saver(saver_model_path, self.sess)
+            self.saver = Saver(f'{model_root_path}/model', self.sess)
             self.init_iteration = self.saver.restore_or_init()
 
-            if summary_path is not None:
-                if summary_name is None:
-                    summary_name = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-
-                if write_summary_graph:
-                    writer = tf.summary.FileWriter(f'{summary_path}/{summary_name}', self.graph)
-                    writer.close()
-                self.summary_writer = tf.summary.FileWriter(f'{summary_path}/{summary_name}')
+            summary_path = f'{model_root_path}/log'
+            if write_summary_graph:
+                writer = tf.summary.FileWriter(summary_path, self.graph)
+                writer.close()
+            self.summary_writer = tf.summary.FileWriter(summary_path)
 
             self.sess.run(self.update_target_hard_op)
 
@@ -166,11 +160,10 @@ class SAC_Base(object):
         self.saver.save(iteration + self.init_iteration)
 
     def write_constant_summaries(self, constant_summaries, iteration):
-        if self.summary_writer is not None:
-            summaries = tf.Summary(value=[tf.Summary.Value(tag=i['tag'],
-                                                           simple_value=i['simple_value'])
-                                          for i in constant_summaries])
-            self.summary_writer.add_summary(summaries, iteration + self.init_iteration)
+        summaries = tf.Summary(value=[tf.Summary.Value(tag=i['tag'],
+                                                        simple_value=i['simple_value'])
+                                        for i in constant_summaries])
+        self.summary_writer.add_summary(summaries, iteration + self.init_iteration)
 
     def train(self, s, a, r, s_, done):
         assert len(s.shape) == 2
