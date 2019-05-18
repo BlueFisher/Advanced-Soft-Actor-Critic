@@ -3,11 +3,11 @@ build_path:
   linux: /data/zzy/linux-test-boat/boat.x86_64
   
 # replay_host: 127.0.0.1
-# replay_port: 18888
+# replay_port: 61000
 # learner_host: 127.0.0.1
-# learner_port: 18889
+# learner_port: 61001
 # websocket_host: 127.0.0.1
-# websocket_port: 18890
+# websocket_port: 61002
 
 reset_config:
   # copy: 1

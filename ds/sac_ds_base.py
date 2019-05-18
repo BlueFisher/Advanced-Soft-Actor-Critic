@@ -16,10 +16,8 @@ class SAC_DS_Base(SAC_Base):
     def __init__(self,
                  state_dim,
                  action_dim,
-                 only_actor=False,
-                 saver_model_path='model',
-                 summary_path='log',
-                 summary_name=None,
+                 model_root_path,
+
                  write_summary_graph=False,
                  seed=None,
                  gamma=0.99,
@@ -38,8 +36,7 @@ class SAC_DS_Base(SAC_Base):
 
         self.s_dim = state_dim
         self.a_dim = action_dim
-
-        self.only_actor = only_actor
+        self.model_root_path = model_root_path
 
         self.save_model_per_step = save_model_per_step
         self.write_summary_per_step = write_summary_per_step
@@ -51,22 +48,19 @@ class SAC_DS_Base(SAC_Base):
         with self.graph.as_default():
             self._build_model(gamma, tau, lr, init_log_alpha)
 
-            if not only_actor:
+            if model_root_path is not None:
                 if seed is not None:
                     tf.random.set_random_seed(seed)
 
-                self.saver = Saver(saver_model_path, self.sess)
+                self.saver = Saver(f'{model_root_path}/model', self.sess)
                 init_step = self.saver.restore_or_init()
                 self.global_step.load(init_step, self.sess)
 
-                if summary_path is not None:
-                    if summary_name is None:
-                        summary_name = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-
-                    if write_summary_graph:
-                        writer = tf.summary.FileWriter(f'{summary_path}/{summary_name}', self.graph)
-                        writer.close()
-                    self.summary_writer = tf.summary.FileWriter(f'{summary_path}/{summary_name}')
+                summary_path = f'{model_root_path}/log'
+                if write_summary_graph:
+                    writer = tf.summary.FileWriter(summary_path, self.graph)
+                    writer.close()
+                self.summary_writer = tf.summary.FileWriter(summary_path)
 
                 self.sess.run(self.update_target_hard_op)
 
@@ -104,7 +98,7 @@ class SAC_DS_Base(SAC_Base):
 
     def train(self, s, a, r, s_, done, is_weight):
         assert len(s.shape) == 2
-        assert not self.only_actor
+        assert self.model_root_path is not None
 
         global_step = self.sess.run(self.global_step)
 
@@ -153,4 +147,3 @@ class SAC_DS_Base(SAC_Base):
             self.saver.save(global_step)
 
         return global_step, td_error.flatten()
-        

@@ -3,11 +3,11 @@ build_path:
   linux: /data/zzy/linux-simple-roller/rl-test.x86_64
 
 replay_host: 10.0.4.227
-replay_port: 30555
+replay_port: 30168
 learner_host: 10.0.4.227
-learner_port: 30883
+learner_port: 30168
 websocket_host: 10.0.4.227
-websocket_port: 31396
+websocket_port: 31322
 
 reset_config:
   # copy: 1
