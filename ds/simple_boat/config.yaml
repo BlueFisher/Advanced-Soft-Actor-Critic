@@ -1,9 +1,9 @@
 build_path: 
-  win32: C:\Users\Fisher\Documents\Unity\build-simple-boat\RL-Envs.exe
+  win32: C:\Users\Fisher\Documents\Unity\build-simple-boat\RL-Evs.exe
   linux: /data/zzy/linux-test-boat/RL-Envs.x86_64
   
 # replay_host: 127.0.0.1
-# replay_port: 61000
+replay_port: 61001
 # learner_host: 127.0.0.1
 # learner_port: 61001
 # websocket_host: 127.0.0.1
