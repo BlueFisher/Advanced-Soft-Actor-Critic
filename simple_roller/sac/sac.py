@@ -1,12 +1,6 @@
-import sys
-from pathlib import Path
-
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
-
-sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from algorithm.sac_base import SAC_Base
 
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -17,7 +11,7 @@ initializer_helper = {
 }
 
 
-class SAC(SAC_Base):
+class SAC_Custom(object):
     def _build_q_net(self, s_input, a_input, scope, trainable=True, reuse=False):
         with tf.variable_scope(scope, reuse=reuse):
             ls = tf.layers.dense(
