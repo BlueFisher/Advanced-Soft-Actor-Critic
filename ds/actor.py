@@ -61,7 +61,6 @@ class Actor(object):
     _reset_config = {
         'copy': 1
     }
-    _logger_file = None
     _sac = 'sac'
     _train_mode = True
     _update_policy_variables_per_step = 100
@@ -137,25 +136,12 @@ class Actor(object):
                 self._build_path = arg
             elif opt == '--build_port':
                 self._build_port = int(arg)
-            elif opt == '--logger_file':
-                self._logger_file = arg
             elif opt == '--sac':
                 self._sac = arg
             elif opt == '--agents':
                 self._reset_config['copy'] = int(arg)
             elif opt == '--run':
                 self._train_mode = False
-
-        if self._logger_file is not None:
-            # remove all existing logger handlers
-            for handler in logging.root.handlers[:]:
-                logging.root.removeHandler(handler)
-
-            handler = logging.FileHandler(self._logger_file, 'w', encoding='utf-8')
-            handler.setLevel(logging.INFO)
-            formatter = logging.Formatter('%(asctime)s - [%(levelname)s] - [%(name)s] - %(message)s')
-            handler.setFormatter(formatter)
-            logger.addHandler(handler)
 
     def _init_websocket_client(self):
         loop = asyncio.get_event_loop()
