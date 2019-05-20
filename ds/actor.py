@@ -200,7 +200,7 @@ class Actor(object):
 
         if self._tmp_trans_buffer.size > self._add_trans_threshold:
             s, a, r, s_, done = self._tmp_trans_buffer.get_trans_and_clear()
-            while True:
+            while True and not self._reset_signal:
                 try:
                     requests.post(f'http://{self._replay_host}:{self._replay_port}/add',
                                   json=[s.tolist(),
