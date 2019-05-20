@@ -146,6 +146,8 @@ elif node == '-a':
                     self._tmp_trans_buffer.clear()
                     brain_info = self.env.reset(train_mode=self._train_mode, config=self._reset_config)[self.default_brain_name]
                     global_step = 0
+
+                    logger.info('reset')
                     continue
 
                 rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(all_cumulative_rewards)])

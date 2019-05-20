@@ -11,6 +11,7 @@ import tensorflow as tf
 
 sys.path.append('../..')
 from mlagents.envs import UnityEnvironment
+from algorithm.sac_base import SAC_Base
 
 NOW = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 TRAIN_MODE = True
@@ -94,7 +95,11 @@ brain_params = env.brains[default_brain_name]
 state_dim = brain_params.vector_observation_space_size
 action_dim = brain_params.vector_action_space_size[0]
 
-SAC = importlib.import_module(config['sac']).SAC
+
+class SAC(importlib.import_module(config['sac']).SAC_Custom, SAC_Base):
+    pass
+
+
 sac = SAC(state_dim=state_dim,
           action_dim=action_dim,
           model_root_path=model_root_path,
@@ -115,9 +120,6 @@ for iteration in range(config['max_iter'] + 1):
 
     all_done = [False] * len_agents
     all_cumulative_rewards = [0] * len_agents
-
-    interaction_time_arr = []
-    training_time_arr = []
 
     hitted = 0
     states = brain_info.vector_observations
@@ -143,11 +145,7 @@ for iteration in range(config['max_iter'] + 1):
 
         states_ = brain_info.vector_observations
 
-        interaction_time_arr.append(time.time() - tmp_start)
-
         if TRAIN_MODE:
-            tmp_start = time.time()
-
             dones = np.logical_and(local_dones, np.logical_not(max_reached))
 
             sac.train(states,
@@ -156,22 +154,23 @@ for iteration in range(config['max_iter'] + 1):
                       states_,
                       dones[:, np.newaxis])
 
-            training_time_arr.append(time.time() - tmp_start)
-
         states = states_
 
     rewards = np.array(all_cumulative_rewards)
-    sac.write_constant_summaries([
-        {'tag': 'reward/mean', 'simple_value': rewards.mean()},
-        {'tag': 'reward/max', 'simple_value': rewards.max()},
-        {'tag': 'reward/min', 'simple_value': rewards.min()},
-        {'tag': 'reward/hitted', 'simple_value': hitted}
-    ], iteration)
 
-    if iteration % config['save_model_per_iter'] == 0:
-        sac.save_model(iteration)
+    if TRAIN_MODE:
+        sac.write_constant_summaries([
+            {'tag': 'reward/mean', 'simple_value': rewards.mean()},
+            {'tag': 'reward/max', 'simple_value': rewards.max()},
+            {'tag': 'reward/min', 'simple_value': rewards.min()},
+            {'tag': 'reward/hitted', 'simple_value': hitted}
+        ], iteration)
 
-    print(f'iter {iteration}, rewards {", ".join([f"{i:.1f}" for i in sorted(all_cumulative_rewards)])}, hitted {hitted}')
+        if iteration % config['save_model_per_iter'] == 0:
+            sac.save_model(iteration)
+
+    rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(all_cumulative_rewards)])
+    print(f'iter {iteration}, rewards {rewards_sorted}, hitted {hitted}')
     print('=' * 10)
 
 env.close()
