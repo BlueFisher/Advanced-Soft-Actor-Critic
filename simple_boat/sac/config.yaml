@@ -1,6 +1,6 @@
 build_path: 
   win32: C:\Users\Fisher\Documents\Unity\build-simple-boat\RL-Envs.exe
-  linux: /data/zzy/linux-test-boat/RL-Envs.x86_64
+  linux: /data/zzy/linux-simple-boat/RL-Envs.x86_64
 
 # sac: sac
 max_iter: 10000
@@ -18,6 +18,6 @@ write_summary_graph: true
 # init_log_alpha: -4.6
 # use_auto_alpha: true
 # lr: 3e-4
-use_priority: true
+use_priority: false
 # batch_size: 256
 # replay_buffer_capacity: 1000000

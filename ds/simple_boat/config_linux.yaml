@@ -1,5 +1,5 @@
 build_path: 
-  linux: /data/zzy/linux-test-boat/RL-Envs.x86_64
+  linux: /data/zzy/linux-simple-boat/RL-Envs.x86_64
   
 replay_host: 10.0.4.227
 replay_port: 30168
@@ -19,7 +19,7 @@ reset_config:
 # name: {time}
 # sac: sac
 
-batch_size: 512
+batch_size: 256
 capacity: 1000000
 
 sac_config:
