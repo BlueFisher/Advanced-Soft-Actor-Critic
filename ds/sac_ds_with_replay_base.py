@@ -17,7 +17,7 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
                  state_dim,
                  action_dim,
                  model_root_path,
-                 
+
                  write_summary_graph=False,
                  seed=None,
                  gamma=0.99,
@@ -28,10 +28,16 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
                  init_log_alpha=-4.6,
                  use_auto_alpha=True,
                  lr=3e-4,
-                 batch_size=256,
-                 replay_buffer_capacity=1e6):
 
-        self.replay_buffer = PrioritizedReplayBuffer(batch_size, replay_buffer_capacity)
+                 replay_config={
+                     'batch_size': 256,
+                     'capacity': 1e6,
+                     'alpha': 0.9
+                 }):
+
+        self.replay_buffer = PrioritizedReplayBuffer(replay_config['batch_size'],
+                                                     replay_config['capacity'],
+                                                     replay_config['alpha'])
         super().__init__(state_dim,
                          action_dim,
                          model_root_path,
@@ -46,21 +52,15 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
                          use_auto_alpha,
                          lr)
 
-    _replay_lock = threading.Lock()
-
     def add(self, s, a, r, s_, done):
         assert self.model_root_path is not None
 
-        self._replay_lock.acquire()
         self.replay_buffer.add(s, a, r, s_, done)
-        self._replay_lock.release()
 
     def add_with_td_errors(self, td_errors, s, a, r, s_, done):
         assert self.model_root_path is not None
 
-        self._replay_lock.acquire()
         self.replay_buffer.add_with_td_errors(td_errors, s, a, r, s_, done)
-        self._replay_lock.release()
 
     def train(self):
         assert self.model_root_path is not None
@@ -70,11 +70,7 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
 
         global_step = self.sess.run(self.global_step)
 
-        start = time.time()
-        self._replay_lock.acquire()
         points, (s, a, r, s_, done), is_weight = self.replay_buffer.sample()
-        self._replay_lock.release()
-        print(time.time() - start)
 
         # update target networks
         if global_step % self.update_target_per_step == 0:

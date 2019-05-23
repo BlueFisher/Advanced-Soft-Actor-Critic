@@ -1,6 +1,5 @@
 build_path: 
-  win32: C:\Users\Fisher\Documents\Unity\build-simple-boat\RL-Evs.exe
-  linux: /data/zzy/linux-test-boat/RL-Envs.x86_64
+  win32: C:\Users\Fisher\Documents\Unity\build-simple-boat\RL-Envs.exe
   
 # replay_host: 127.0.0.1
 replay_port: 61001
@@ -20,8 +19,10 @@ reset_config:
 # name: {time}
 # sac: sac
 
-batch_size: 512
-capacity: 1000000
+replay_config:
+  batch_size: 1024
+  # capacity: 1000000
+  # alpha: 0.9
 
 sac_config:
   write_summary_graph: true
