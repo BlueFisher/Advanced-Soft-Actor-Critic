@@ -1,6 +1,10 @@
 import random
 import math
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
+
 import numpy as np
 
 
@@ -8,7 +12,7 @@ class ReplayBuffer(object):
     _data_pointer = 0
     _size = 0
 
-    def __init__(self, batch_size, capacity):
+    def __init__(self, batch_size=256, capacity=1e6):
         self.batch_size = int(batch_size)
         self.capacity = int(capacity)
 
@@ -157,27 +161,46 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
     beta = 0.4  # importance-sampling, from initial value increasing to 1
     beta_increment_per_sampling = 0.001
     td_err_upper = 1.  # clipped abs error
+    # pool = ThreadPoolExecutor(max_workers=2)
+    # thread_batch = 256
 
-    def __init__(self, batch_size, capacity):
+    _lock = threading.Lock()
+
+    def __init__(self,
+                 batch_size=256,
+                 capacity=1e6,
+                 alpha=0.9):
         self.batch_size = batch_size
         self.capacity = 2**math.floor(math.log2(capacity))
+        self.alpha = alpha
         self._tree = SumTree(self.capacity)
 
     def add(self, *args):
+        self._lock.acquire()
         max_p = self._tree.max
         if max_p == 0:
             max_p = self.td_err_upper
 
         for i in range(len(args[0])):
             self._tree.add(max_p, tuple(arg[i] for arg in args))
+        self._lock.release()
 
     def add_with_td_errors(self, td_errors, *args):
         assert len(td_errors) == len(args[0])
 
+        td_errors += self.epsilon  # convert to abs and avoid 0
+        clipped_errors = np.minimum(td_errors, self.td_err_upper)
+        ps = np.power(clipped_errors, self.alpha)
+
+        self._lock.acquire()
         for i in range(len(args[0])):
-            self._tree.add(td_errors[i], tuple(t[i] for t in args))
+            self._tree.add(ps[i], tuple(t[i] for t in args))
+        self._lock.release()
 
     def sample(self):
+        self._lock.acquire()
+        start = time.time()
+
         n_sample = self.batch_size if self.is_lg_batch_size else self.size
         if n_sample == 0:
             return None
@@ -190,22 +213,35 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
         if min_prob == 0:
             min_prob = self.epsilon
 
+        # def cal(s_i):
+            # for i in range(s_i, min(s_i + self.thread_batch, n_sample)):
+
         for i in range(n_sample):
             a, b = pri_seg * i, pri_seg * (i + 1)
             v = np.random.uniform(a, b)
             idx, p, data = self._tree.get_leaf(v)
             prob = p / self._tree.total_p
+
             is_weights[i, 0] = np.power(prob / min_prob, -self.beta)
             points[i], transitions[i] = idx, data
+
+        # for _ in self.pool.map(cal, range(0, n_sample, self.thread_batch)):
+        #     pass
+
+        print(time.time() - start)
+        self._lock.release()
+
         return points, [np.array(e) for e in zip(*transitions)], is_weights
 
     def update(self, points, td_errors):
         td_errors += self.epsilon  # convert to abs and avoid 0
         clipped_errors = np.minimum(td_errors, self.td_err_upper)
-
         ps = np.power(clipped_errors, self.alpha)
+
+        self._lock.acquire()
         for ti, p in zip(points, ps):
             self._tree.update(ti, p)
+        self._lock.release()
 
     def clear(self):
         self._tree.clear()
@@ -227,6 +263,8 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
 
 
 if __name__ == "__main__":
+    import time
+
     # replay_buffer = ReplayBuffer(256, 1000000)
     # for i in range(1000000):
     #     start = time.time()
@@ -240,17 +278,12 @@ if __name__ == "__main__":
 
     #     print('=' * 10)
 
-    replay_buffer = PrioritizedReplayBuffer(5, 16)
-    for i in range(9):
-        replay_buffer.add(np.random.randn(9, 1), np.random.randn(9, 2))
-        for a in zip(replay_buffer._tree._data_ids, replay_buffer._tree._tree[16 - 1:]):
-            print(a, end=' ')
-        print()
+    replay_buffer = PrioritizedReplayBuffer(1024, 1e6)
+    replay_buffer.add(np.random.randn(2048, 1), np.random.randn(2048, 2))
+
+    while True:
+        start = time.time()
         points, (a, b), ratio = replay_buffer.sample()
-        print(points)
-
-        replay_buffer.update(points, np.array(points, dtype=float))
-
-        print('tds', replay_buffer._tree._tree[16 - 1:])
+        print(time.time() - start)
 
         print('=' * 10)
