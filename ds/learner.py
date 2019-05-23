@@ -35,7 +35,7 @@ class Learner(object):
     _build_port = 5006
 
     def __init__(self, argv):
-        config, self._reset_config, agent_config = self._init_config(argv)
+        config, self._reset_config, _, agent_config = self._init_config(argv)
         self._init_env(config['sac'], config['name'], agent_config)
         self._run()
 
@@ -47,6 +47,11 @@ class Learner(object):
         }
         reset_config = {
             'copy': 1
+        }
+        replay_config = {
+            'batch_size': 256,
+            'capacity': int(1e6),
+            'alpha': 0.9
         }
         agent_config = dict()
 
@@ -61,6 +66,7 @@ class Learner(object):
         except getopt.GetoptError:
             raise Exception('ARGS ERROR')
 
+        # config from file
         for opt, arg in opts:
             if opt in ('-c', '--config'):
                 with open(arg) as f:
@@ -76,20 +82,30 @@ class Learner(object):
                             self._websocket_port = v
                         elif k == 'build_path':
                             self._build_path = v[sys.platform]
+
                         elif k == 'reset_config':
                             if v is None:
                                 continue
                             for kk, vv in v.items():
                                 reset_config[kk] = vv
+
+                        elif k == 'replay_config':
+                            if v is None:
+                                continue
+                            for kk, vv in v.items():
+                                replay_config[kk] = vv
+
                         elif k == 'sac_config':
                             if v is None:
                                 continue
                             for kk, vv in v.items():
                                 agent_config[kk] = vv
-                        else:
+
+                        elif k in config.keys():
                             config[k] = v
                 break
 
+        # config from console
         for opt, arg in opts:
             if opt == 'learner_port':
                 config['learner_port'] == int(arg)
@@ -101,20 +117,34 @@ class Learner(object):
                 config['sac'] = arg
 
         self.model_root_path = f'models/{config["name"]}'
-    
+
         if not os.path.exists(self.model_root_path):
             os.makedirs(self.model_root_path)
         with open(f'{self.model_root_path}/config.yaml', 'w') as f:
-            yaml.dump({**config, **agent_config}, f, default_flow_style=False)
+            yaml.dump({**config,
+                       'reset_config': {**reset_config},
+                       'replay_config': {**replay_config},
+                       'agents_config': {**agent_config}
+                       }, f, default_flow_style=False)
 
-        config_str = ''
+        config_str = '\ncommon_config'
         for k, v in config.items():
             config_str += f'\n{k:>25}: {v}'
+
+        config_str += '\nreset_config:'
+        for k, v in reset_config.items():
+            config_str += f'\n{k:>25}: {v}'
+
+        config_str += '\nreplay_config:'
+        for k, v in replay_config.items():
+            config_str += f'\n{k:>25}: {v}'
+
+        config_str += '\nagent_config:'
         for k, v in agent_config.items():
             config_str += f'\n{k:>25}: {v}'
         logger.info(config_str)
 
-        return config, reset_config, agent_config
+        return config, reset_config, replay_config, agent_config
 
     def _init_env(self, sac, name, agent_config):
         self.env = UnityEnvironment(file_name=self._build_path,

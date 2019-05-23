@@ -27,7 +27,12 @@ NOW = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
 
 class ReplayLearner(Learner):
-    def _init_env(self, sac, name, agent_config):
+    def __init__(self, argv):
+        config, self._reset_config, replay_config, agent_config = self._init_config(argv)
+        self._init_env(config['sac'], config['name'], replay_config, agent_config)
+        self._run()
+
+    def _init_env(self, sac, name, replay_config, agent_config):
         self.env = UnityEnvironment(file_name=self._build_path,
                                     no_graphics=True,
                                     base_port=self._build_port)
@@ -44,6 +49,7 @@ class ReplayLearner(Learner):
         self.sac = SAC(state_dim=state_dim,
                        action_dim=action_dim,
                        model_root_path=self.model_root_path,
+                       replay_config=replay_config,
                        **agent_config)
 
     def _run_learner_server(self):

@@ -19,8 +19,11 @@ class Replay(object):
     _replay_port = 61000
     _learner_host = '127.0.0.1'
     _learner_port = 61001
-    _batch_size = 256
-    _capacity = 1e6
+    _replay_config = {
+        'batch_size': 256,
+        'capacity': 1e6,
+        'alpha': 0.9
+    }
 
     def __init__(self, argv):
         self._init_config(argv)
@@ -44,10 +47,12 @@ class Replay(object):
                             self._learner_host = v
                         elif k == 'learner_port':
                             self._learner_port = v
-                        elif k == 'batch_size':
-                            self._batch_size = v
-                        elif k == 'capacity':
-                            self._capacity = v
+
+                        elif k == 'replay_config':
+                            if v is None:
+                                continue
+                            for kk, vv in v.items():
+                                self._replay_config[kk] = vv
             elif opt in ('-p', '--replay_port'):
                 self._replay_port = int(arg)
 
@@ -56,7 +61,9 @@ class Replay(object):
 
         _tmp_trans_arr_lock = threading.Lock()
 
-        replay_buffer = PrioritizedReplayBuffer(self._batch_size, self._capacity)
+        replay_buffer = PrioritizedReplayBuffer(self._replay_config['batch_size'],
+                                                self._replay_config['capacity'],
+                                                self._replay_config['alpha'])
         _tmp_trans_arr = []
 
         def _add_trans(*trans):
@@ -72,7 +79,7 @@ class Replay(object):
 
             td_errors = r.json()
 
-            replay_buffer.add_with_td_errors(td_errors, trans)
+            replay_buffer.add_with_td_errors(td_errors, *trans)
 
             logger.info(f'buffer_size: {replay_buffer.size}/{replay_buffer.capacity}, {replay_buffer.size/replay_buffer.capacity*100:.2f}%')
 
@@ -118,7 +125,6 @@ class Replay(object):
             trans = request.get_json()
             trans = [np.array(t) for t in trans]
 
-            
             if replay_buffer.size < learning_starts:
                 _add_trans(*trans)
             else:
