@@ -1,11 +1,13 @@
 import random
 import math
 import time
+import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-
 import numpy as np
+
+logger = logging.getLogger('sac.ds')
 
 
 class ReplayBuffer(object):
@@ -228,7 +230,7 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
         # for _ in self.pool.map(cal, range(0, n_sample, self.thread_batch)):
         #     pass
 
-        print(time.time() - start)
+        logger.debug(time.time() - start)
         self._lock.release()
 
         return points, [np.array(e) for e in zip(*transitions)], is_weights
