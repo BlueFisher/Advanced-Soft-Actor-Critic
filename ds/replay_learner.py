@@ -68,7 +68,7 @@ class ReplayLearner(Learner):
             td_errors = self.sac.get_td_error(*trans)
             self.sac.add_with_td_errors(td_errors.flatten(), *trans)
             # self.sac.add(*trans)
-            print('add')
+            logger.debug('add')
 
             return jsonify({
                 'succeeded': True
