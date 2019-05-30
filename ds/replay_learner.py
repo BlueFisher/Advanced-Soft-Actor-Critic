@@ -21,15 +21,18 @@ from sac_ds_with_replay_base import SAC_DS_with_Replay_Base
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from mlagents.envs import UnityEnvironment
+from algorithm.agent import Agent
 
 logger = logging.getLogger('sac.ds')
 NOW = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
 
 class ReplayLearner(Learner):
-    def __init__(self, argv):
-        config, self._reset_config, replay_config, agent_config = self._init_config(argv)
-        self._init_env(config['sac'], config['name'], replay_config, agent_config)
+    def __init__(self, argv, agent_class=Agent):
+        self._agent_class = agent_class
+
+        self._config, self._reset_config, replay_config, agent_config = self._init_config(argv)
+        self._init_env(self._config['sac'], self._config['name'], replay_config, agent_config)
         self._run()
 
     def _init_env(self, sac, name, replay_config, agent_config):

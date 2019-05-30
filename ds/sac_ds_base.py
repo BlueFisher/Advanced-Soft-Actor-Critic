@@ -20,7 +20,6 @@ class SAC_DS_Base(SAC_Base):
 
                  write_summary_graph=False,
                  seed=None,
-                 gamma=0.99,
                  tau=0.005,
                  save_model_per_step=5000,
                  write_summary_per_step=20,
@@ -46,7 +45,7 @@ class SAC_DS_Base(SAC_Base):
         self.use_auto_alpha = use_auto_alpha
 
         with self.graph.as_default():
-            self._build_model(gamma, tau, lr, init_log_alpha)
+            self._build_model(tau, lr, init_log_alpha)
 
             if model_root_path is not None:
                 if seed is not None:
@@ -63,17 +62,6 @@ class SAC_DS_Base(SAC_Base):
                 self.summary_writer = tf.summary.FileWriter(summary_path)
 
                 self.sess.run(self.update_target_hard_op)
-
-    def get_td_error(self, s, a, r, s_, done):
-        td_error = self.sess.run(self.td_error, {
-            self.pl_s: s,
-            self.pl_a: a,
-            self.pl_r: r,
-            self.pl_s_: s_,
-            self.pl_done: done
-        })
-
-        return td_error
 
     def get_policy_variables(self):
         variables = self.sess.run(self.policy_variables)
@@ -96,7 +84,7 @@ class SAC_DS_Base(SAC_Base):
                                           for i in constant_summaries])
             self.summary_writer.add_summary(summaries, self.sess.run(self.global_step) if step is None else step)
 
-    def train(self, s, a, r, s_, done, is_weight):
+    def train(self, s, a, r, s_, done, gamma, is_weight):
         assert len(s.shape) == 2
         assert self.model_root_path is not None
 
@@ -113,6 +101,7 @@ class SAC_DS_Base(SAC_Base):
                 self.pl_r: r,
                 self.pl_s_: s_,
                 self.pl_done: done,
+                self.pl_gamma: gamma,
                 self.pl_is: is_weight
             })
             self.summary_writer.add_summary(summaries, global_step)
@@ -123,6 +112,7 @@ class SAC_DS_Base(SAC_Base):
             self.pl_r: r,
             self.pl_s_: s_,
             self.pl_done: done,
+            self.pl_gamma: gamma,
             self.pl_is: is_weight
         })
 
@@ -140,7 +130,8 @@ class SAC_DS_Base(SAC_Base):
             self.pl_a: a,
             self.pl_r: r,
             self.pl_s_: s_,
-            self.pl_done: done
+            self.pl_done: done,
+            self.pl_gamma: gamma
         })
 
         if global_step % self.save_model_per_step == 0:

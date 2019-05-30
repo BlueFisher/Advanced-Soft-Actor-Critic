@@ -20,7 +20,6 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
 
                  write_summary_graph=False,
                  seed=None,
-                 gamma=0.99,
                  tau=0.005,
                  save_model_per_step=5000,
                  write_summary_per_step=20,
@@ -29,12 +28,14 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
                  use_auto_alpha=True,
                  lr=3e-4,
 
-                 replay_config={
-                     'batch_size': 256,
-                     'capacity': 1e6,
-                     'alpha': 0.9
-                 }):
+                 replay_config=None):
 
+        default_replay_config = {
+            'batch_size': 256,
+            'capacity': 1e6,
+            'alpha': 0.9
+        }
+        replay_config = dict(default_replay_config, **({} if replay_config is None else replay_config))
         self.replay_buffer = PrioritizedReplayBuffer(replay_config['batch_size'],
                                                      replay_config['capacity'],
                                                      replay_config['alpha'])
@@ -43,7 +44,6 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
                          model_root_path,
                          write_summary_graph,
                          seed,
-                         gamma,
                          tau,
                          save_model_per_step,
                          write_summary_per_step,
@@ -52,15 +52,15 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
                          use_auto_alpha,
                          lr)
 
-    def add(self, s, a, r, s_, done):
+    def add(self, s, a, r, s_, done, gamma):
         assert self.model_root_path is not None
 
-        self.replay_buffer.add(s, a, r, s_, done)
+        self.replay_buffer.add(s, a, r, s_, done, gamma)
 
-    def add_with_td_errors(self, td_errors, s, a, r, s_, done):
+    def add_with_td_errors(self, td_errors, s, a, r, s_, done, gamma):
         assert self.model_root_path is not None
 
-        self.replay_buffer.add_with_td_errors(td_errors, s, a, r, s_, done)
+        self.replay_buffer.add_with_td_errors(td_errors, s, a, r, s_, done, gamma)
 
     def train(self):
         assert self.model_root_path is not None
@@ -70,7 +70,7 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
 
         global_step = self.sess.run(self.global_step)
 
-        points, (s, a, r, s_, done), is_weight = self.replay_buffer.sample()
+        points, (s, a, r, s_, done, gamma), is_weight = self.replay_buffer.sample()
 
         # update target networks
         if global_step % self.update_target_per_step == 0:
@@ -83,6 +83,7 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
                 self.pl_r: r,
                 self.pl_s_: s_,
                 self.pl_done: done,
+                self.pl_gamma: gamma,
                 self.pl_is: is_weight
             })
             self.summary_writer.add_summary(summaries, global_step)
@@ -97,6 +98,7 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
                 self.pl_r: r,
                 self.pl_s_: s_,
                 self.pl_done: done,
+                self.pl_gamma: gamma,
                 self.pl_is: np.zeros((1, 1)) if not self.use_priority else is_weight
             })
 
@@ -115,7 +117,8 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
                     self.pl_a: a,
                     self.pl_r: r,
                     self.pl_s_: s_,
-                    self.pl_done: done
+                    self.pl_done: done,
+                    self.pl_gamma: gamma
                 })
 
                 self.replay_buffer.update(points, td_error.flatten())

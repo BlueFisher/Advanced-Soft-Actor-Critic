@@ -16,7 +16,6 @@ class SAC_Base(object):
 
                  write_summary_graph=False,
                  seed=None,
-                 gamma=0.99,
                  tau=0.005,
                  write_summary_per_step=20,
                  update_target_per_step=1,
@@ -24,8 +23,8 @@ class SAC_Base(object):
                  use_auto_alpha=True,
                  lr=3e-4,
                  use_priority=False,
-                 batch_size=256,
-                 replay_buffer_capacity=1e6):
+
+                 replay_config=None):
         self.graph = tf.Graph()
         gpu_options = tf.GPUOptions(allow_growth=True)
         self.sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options),
@@ -33,10 +32,20 @@ class SAC_Base(object):
 
         self.use_auto_alpha = use_auto_alpha
         self.use_priority = use_priority
+
+        default_replay_config = {
+            'batch_size': 256,
+            'capacity': 1e6,
+            'alpha': 0.9
+        }
+        replay_config = dict(default_replay_config, **({} if replay_config is None else replay_config))
         if self.use_priority:
-            self.replay_buffer = PrioritizedReplayBuffer(batch_size, replay_buffer_capacity)
+            self.replay_buffer = PrioritizedReplayBuffer(replay_config['batch_size'],
+                                                         replay_config['capacity'],
+                                                         replay_config['alpha'])
         else:
-            self.replay_buffer = ReplayBuffer(batch_size, replay_buffer_capacity)
+            self.replay_buffer = ReplayBuffer(replay_config['batch_size'],
+                                              replay_config['capacity'])
 
         self.s_dim = state_dim
         self.a_dim = action_dim
@@ -48,7 +57,7 @@ class SAC_Base(object):
             if seed is not None:
                 tf.random.set_random_seed(seed)
 
-            self._build_model(gamma, tau, lr, init_log_alpha)
+            self._build_model(tau, lr, init_log_alpha)
 
             self.saver = Saver(f'{model_root_path}/model', self.sess)
             self.init_iteration = self.saver.restore_or_init()
@@ -61,12 +70,13 @@ class SAC_Base(object):
 
             self.sess.run(self.update_target_hard_op)
 
-    def _build_model(self, gamma, tau, lr, init_log_alpha):
+    def _build_model(self, tau, lr, init_log_alpha):
         self.pl_s = tf.placeholder(tf.float32, shape=(None, self.s_dim), name='state')
         self.pl_a = tf.placeholder(tf.float32, shape=(None, self.a_dim), name='action')
         self.pl_r = tf.placeholder(tf.float32, shape=(None, 1), name='reward')
         self.pl_s_ = tf.placeholder(tf.float32, shape=(None, self.s_dim), name='state_')
         self.pl_done = tf.placeholder(tf.float32, shape=(None, 1), name='done')
+        self.pl_gamma = tf.placeholder(tf.float32, shape=(None, 1), name='gamma')
 
         self.pl_is = tf.placeholder(tf.float32, shape=(None, 1), name='is_weight')
 
@@ -83,7 +93,7 @@ class SAC_Base(object):
         q2, q2_variables = self._build_q_net(self.pl_s, self.pl_a, 'q2')
         q2_target, q2_target_variables = self._build_q_net(self.pl_s_, action_next_sampled, 'q2_target', trainable=False)
 
-        y = self.pl_r + gamma * (1 - self.pl_done) * (tf.minimum(q1_target, q2_target) - alpha * policy_next.log_prob(action_next_sampled))
+        y = self.pl_r + self.pl_gamma * (1 - self.pl_done) * (tf.minimum(q1_target, q2_target) - alpha * policy_next.log_prob(action_next_sampled))
         y = tf.stop_gradient(y)
 
         if self.use_priority:
@@ -143,15 +153,16 @@ class SAC_Base(object):
             self.pl_s: s,
         })
 
-        return a
+        return np.clip(a, -1, 1)
 
-    def get_td_error(self, s, a, r, s_, done):
+    def get_td_error(self, s, a, r, s_, done, gamma):
         td_error = self.sess.run(self.td_error, {
             self.pl_s: s,
             self.pl_a: a,
             self.pl_r: r,
             self.pl_s_: s_,
-            self.pl_done: done
+            self.pl_done: done,
+            self.pl_gamma: gamma
         })
 
         return td_error
@@ -161,21 +172,21 @@ class SAC_Base(object):
 
     def write_constant_summaries(self, constant_summaries, iteration):
         summaries = tf.Summary(value=[tf.Summary.Value(tag=i['tag'],
-                                                        simple_value=i['simple_value'])
-                                        for i in constant_summaries])
+                                                       simple_value=i['simple_value'])
+                                      for i in constant_summaries])
         self.summary_writer.add_summary(summaries, iteration + self.init_iteration)
 
-    def train(self, s, a, r, s_, done):
+    def train(self, s, a, r, s_, done, gamma):
         assert len(s.shape) == 2
 
         global_step = self.sess.run(self.global_step)
 
-        self.replay_buffer.add(s, a, r, s_, done)
+        self.replay_buffer.add(s, a, r, s_, done, gamma)
 
         if self.use_priority:
-            points, (s, a, r, s_, done), is_weight = self.replay_buffer.sample()
+            points, (s, a, r, s_, done, gamma), is_weight = self.replay_buffer.sample()
         else:
-            s, a, r, s_, done = self.replay_buffer.sample()
+            s, a, r, s_, done, gamma = self.replay_buffer.sample()
 
         if global_step % self.update_target_per_step == 0:
             self.sess.run(self.update_target_op)
@@ -187,6 +198,7 @@ class SAC_Base(object):
                 self.pl_r: r,
                 self.pl_s_: s_,
                 self.pl_done: done,
+                self.pl_gamma: gamma,
                 self.pl_is: np.zeros((1, 1)) if not self.use_priority else is_weight
             })
             self.summary_writer.add_summary(summaries, global_step)
@@ -198,6 +210,7 @@ class SAC_Base(object):
                 self.pl_r: r,
                 self.pl_s_: s_,
                 self.pl_done: done,
+                self.pl_gamma: gamma,
                 self.pl_is: np.zeros((1, 1)) if not self.use_priority else is_weight
             })
 
@@ -216,7 +229,8 @@ class SAC_Base(object):
                     self.pl_a: a,
                     self.pl_r: r,
                     self.pl_s_: s_,
-                    self.pl_done: done
+                    self.pl_done: done,
+                    self.pl_gamma: gamma
                 })
 
                 self.replay_buffer.update(points, td_error.flatten())

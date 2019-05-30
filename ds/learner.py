@@ -6,6 +6,7 @@ import getopt
 import importlib
 import yaml
 from pathlib import Path
+import json
 
 import threading
 import asyncio
@@ -21,6 +22,7 @@ from sac_ds_base import SAC_DS_Base
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from mlagents.envs import UnityEnvironment
+from algorithm.agent import Agent
 
 logger = logging.getLogger('sac.ds')
 NOW = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
@@ -34,25 +36,28 @@ class Learner(object):
     _build_path = None
     _build_port = 5006
 
-    def __init__(self, argv):
-        config, self._reset_config, _, agent_config = self._init_config(argv)
-        self._init_env(config['sac'], config['name'], agent_config)
+    def __init__(self, argv, agent_class=Agent):
+        self._agent_class = agent_class
+
+        self._config, self._reset_config, _, agent_config = self._init_config(argv)
+        self._init_env(self._config['sac'], self._config['name'], agent_config)
         self._run()
 
     def _init_config(self, argv):
         config = {
             'name': NOW,
             'sac': 'sac',
-            'save_model_per_step': 10000
+            'save_model_per_step': 10000,
+            'update_policy_variables_per_step': 100,
+            'add_trans_threshold': 100,
+            'reset_on_iteration': True
+            'gamma': 0.99,
+            'n_step': 1
         }
         reset_config = {
             'copy': 1
         }
-        replay_config = {
-            'batch_size': 256,
-            'capacity': int(1e6),
-            'alpha': 0.9
-        }
+        replay_config = dict()
         agent_config = dict()
 
         try:
@@ -84,22 +89,13 @@ class Learner(object):
                             self._build_path = v[sys.platform]
 
                         elif k == 'reset_config':
-                            if v is None:
-                                continue
-                            for kk, vv in v.items():
-                                reset_config[kk] = vv
+                            reset_config = dict(reset_config, **({} if v is None else v))
 
                         elif k == 'replay_config':
-                            if v is None:
-                                continue
-                            for kk, vv in v.items():
-                                replay_config[kk] = vv
+                            replay_config = {} if v is None else v
 
                         elif k == 'sac_config':
-                            if v is None:
-                                continue
-                            for kk, vv in v.items():
-                                agent_config[kk] = vv
+                            agent_config = {} if v is None else v
 
                         elif k in config.keys():
                             config[k] = v
@@ -171,43 +167,49 @@ class Learner(object):
         brain_info = self.env.reset(train_mode=True, config=self._reset_config)[self.default_brain_name]
 
         while True:
-            if self.env.global_done:
+            if self.env.global_done or self._config['reset_on_iteration']:
                 brain_info = self.env.reset(train_mode=True, config=self._reset_config)[self.default_brain_name]
 
-            len_agents = len(brain_info.agents)
-
-            all_done = [False] * len_agents
-            all_cumulative_rewards = np.zeros(len_agents)
+            agents = [self._agent_class(i,
+                                        self._config['gamma'],
+                                        self._config['n_step'])
+                      for i in brain_info.agents]
 
             states = brain_info.vector_observations
 
-            while False in all_done:
+            while False in [a.done for a in agents] and not self.env.global_done:
                 actions = self.sac.choose_action(states)
                 brain_info = self.env.step({
                     self.default_brain_name: actions
                 })[self.default_brain_name]
 
-                rewards = np.array(brain_info.rewards)
-                local_dones = np.array(brain_info.local_done, dtype=bool)
+                states_ = brain_info.vector_observations
 
-                for i in range(len_agents):
-                    if not all_done[i]:
-                        all_cumulative_rewards[i] += rewards[i]
+                for i, agent in enumerate(agents):
+                    agent.add_transition(states[i],
+                                         actions[i],
+                                         brain_info.rewards[i],
+                                         brain_info.local_done[i],
+                                         brain_info.max_reached[i],
+                                         states_[i])
 
-                    all_done[i] = all_done[i] or local_dones[i]
+                states = states_
 
-                states = brain_info.vector_observations
-
-            self.sac.write_constant_summaries([
-                {'tag': 'reward/mean', 'simple_value': all_cumulative_rewards.mean()},
-                {'tag': 'reward/max', 'simple_value': all_cumulative_rewards.max()},
-                {'tag': 'reward/min', 'simple_value': all_cumulative_rewards.min()}
-            ], eval_step)
-
-            time_elapse = (time.time() - start_time) / 60
-            rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(all_cumulative_rewards)])
-            logger.info(f'{eval_step}, {time_elapse:.2f}min, rewards {rewards_sorted}')
+            self._log_episode_info(eval_step, start_time, agents)
             eval_step += 1
+
+    def _log_episode_info(self, eval_step, start_time, agents):
+        rewards = np.array([a.reward for a in agents])
+
+        self.sac.write_constant_summaries([
+            {'tag': 'reward/mean', 'simple_value': rewards.mean()},
+            {'tag': 'reward/max', 'simple_value': rewards.max()},
+            {'tag': 'reward/min', 'simple_value': rewards.min()}
+        ], eval_step)
+
+        time_elapse = (time.time() - start_time) / 60
+        rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(rewards)])
+        logger.info(f'{eval_step}, {time_elapse:.2f}min, rewards {rewards_sorted}')
 
     def _run_learner_server(self):
         app = Flask('learner')
@@ -284,7 +286,13 @@ class Learner(object):
                 self._update_td_errors(data['points'], td_errors.tolist())
 
     def _run(self):
-        self._websocket_server = WebsocketServer(self._websocket_port)
+        sac_reset_config = {
+            'update_policy_variables_per_step': self._config['update_policy_variables_per_step'],
+            'add_trans_threshold': self._config['add_trans_threshold'],
+            'gamma': self._config['gamma'],
+            'n_step': self._config['n_step'],
+        }
+        self._websocket_server = WebsocketServer(sac_reset_config, self._websocket_port)
 
         t_learner = threading.Thread(target=self._run_learner_server)
         t_training = threading.Thread(target=self._run_training_client)
@@ -297,7 +305,9 @@ class Learner(object):
 class WebsocketServer:
     _websocket_clients = set()
 
-    def __init__(self, port=61002):
+    def __init__(self, sac_reset_config, port=61002):
+        self._sac_reset_config = sac_reset_config
+
         start_server = websockets.serve(self._websocket_open, '0.0.0.0', port)
         loop = asyncio.get_event_loop()
         loop.run_until_complete(start_server)
@@ -305,11 +315,16 @@ class WebsocketServer:
 
     async def _websocket_open(self, websocket, path):
         try:
-            async for message in websocket:
-                if message == 'actor':
+            async for raw_message in websocket:
+                message = json.loads(raw_message)
+                if message['cmd'] == 'actor':
                     self._websocket_clients.add(websocket)
                     self.print_websocket_clients()
-                    await websocket.send('reset')
+                    message = {
+                        'cmd': 'reset',
+                        'config': self._sac_reset_config
+                    }
+                    await websocket.send(json.dumps(message))
         except websockets.ConnectionClosed:
             try:
                 self._websocket_clients.remove(websocket)

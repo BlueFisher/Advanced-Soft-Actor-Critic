@@ -49,12 +49,3 @@ class SAC_Custom(object):
             variables = tf.get_variable_scope().global_variables()
 
         return policy, action, variables
-
-    def choose_action(self, s):
-        assert len(s.shape) == 2
-
-        a = self.sess.run(self.action_sampled, {
-            self.pl_s: s,
-        })
-
-        return np.clip(a, -1, 1)
