@@ -15,6 +15,9 @@ reset_config:
 
 # update_policy_variables_per_step: 100
 # add_trans_threshold: 100
+reset_on_iteration: false
+# gamma: 0.99
+# n_step: 1
 
 # name: {time}
 # sac: sac
@@ -27,7 +30,6 @@ replay_config:
 sac_config:
   write_summary_graph: true
   # seed: 0
-  # gamma: 0.99
   # tau: 0.005
   # save_model_per_step: 5000
   # write_summary_per_step: 20
