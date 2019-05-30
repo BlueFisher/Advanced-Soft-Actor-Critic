@@ -5,6 +5,7 @@ import getopt
 import importlib
 import yaml
 import asyncio
+import json
 from pathlib import Path
 
 import requests
@@ -17,36 +18,39 @@ from sac_ds_base import SAC_DS_Base
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from mlagents.envs import UnityEnvironment
+from algorithm.agent import Agent
 
 logger = logging.getLogger('sac.ds')
 
 
 class TransBuffer(object):
-    _buffer = list()
+    _buffer = None
 
     def add(self, *args):
         for arg in args:
             assert len(arg.shape) == 2
             assert len(arg) == len(args[0])
 
-        for i in range(len(args[0])):
-            self._buffer.append(tuple(arg[i] for arg in args))
+        if self._buffer is None:
+            self._buffer = list(args)
+        else:
+            for i in range(len(args)):
+                self._buffer[i] = np.concatenate((self._buffer[i], args[i]))
 
     def get_trans_and_clear(self):
-        trans = [np.array(e) for e in zip(*self._buffer)]
-        self._buffer.clear()
+        trans = self._buffer
+        self._buffer = None
         return trans
 
     def clear(self):
-        self._buffer.clear()
+        self._buffer = None
 
     @property
     def size(self):
-        return len(self._buffer)
-
-    @property
-    def is_full(self):
-        return self._size == self.capacity
+        if self._buffer is None:
+            return 0
+        else:
+            return len(self._buffer[0])
 
 
 class Actor(object):
@@ -58,17 +62,24 @@ class Actor(object):
     _websocket_port = 61002
     _build_path = None
     _build_port = 5005
+
     _reset_config = {
         'copy': 1
     }
-    _sac = 'sac'
+
     _train_mode = True
     _update_policy_variables_per_step = 100
     _add_trans_threshold = 100
+    _reset_on_iteration = True
+    _gamma = 0.99
+    _n_step = 1
+    _sac = 'sac'
 
     _reset_signal = False
 
-    def __init__(self, argv):
+    def __init__(self, argv, agent_class=Agent):
+        self._agent_class = agent_class
+
         self._init_config(argv)
         self._init_websocket_client()
         self._init_env()
@@ -84,7 +95,6 @@ class Actor(object):
                                                     'learner_port=',
                                                     'build_path=',
                                                     'build_port=',
-                                                    'logger_file=',
                                                     'sac=',
                                                     'agents=',
                                                     'run'])
@@ -111,14 +121,17 @@ class Actor(object):
                         elif k == 'build_path':
                             self._build_path = v[sys.platform]
                         elif k == 'reset_config':
-                            if v is None:
-                                continue
-                            for kk, vv in v.items():
-                                self._reset_config[kk] = vv
+                            self._reset_config = dict(self._reset_config, **({} if v is None else v))
                         elif k == 'update_policy_variables_per_step':
                             self._update_policy_variables_per_step = v
                         elif k == 'add_trans_threshold':
                             self._add_trans_threshold = v
+                        elif k == 'reset_on_iteration':
+                            self._reset_on_iteration = v
+                        elif k == 'gamma':
+                            self._gamma = v
+                        elif k == 'n_step':
+                            self._n_step = v
                         elif k == 'sac':
                             self._sac = v
                 break
@@ -151,16 +164,34 @@ class Actor(object):
         while True:
             try:
                 async with websockets.connect(f'ws://{self._websocket_host}:{self._websocket_port}') as websocket:
-                    await websocket.send('actor')
+                    await websocket.send(json.dumps({
+                        'cmd': 'actor'
+                    }))
                     logger.info('websocket connected')
                     while True:
                         try:
-                            message = await websocket.recv()
-                            if message == 'reset':
+                            raw_message = await websocket.recv()
+                            message = json.loads(raw_message)
+                            if message['cmd'] == 'reset':
                                 self._reset_signal = True
+                                for k, v in message['config'].items():
+                                    if k == 'update_policy_variables_per_step':
+                                        self._update_policy_variables_per_step = v
+                                    elif k == 'add_trans_threshold':
+                                        self._add_trans_threshold = v
+                                    elif k == 'gamma':
+                                        self._gamma = v
+                                    elif k == 'n_step':
+                                        self._n_step = v
+                                logger.info(f'reset config: {message}')
                         except websockets.ConnectionClosed:
                             logger.error('websocket connection closed')
                             break
+                        except json.JSONDecodeError:
+                            logger.error(f'websocket json decode error, {raw_message}')
+            except ConnectionRefusedError:
+                logger.error(f'websocket connecting failed')
+                time.sleep(1)
             except Exception as e:
                 logger.error(f'exception _connect_websocket: {str(e)}')
                 time.sleep(1)
@@ -178,22 +209,18 @@ class Actor(object):
         new_variables = r.json()
         self.sac_actor.update_policy_variables(new_variables)
 
-    def _add_trans(self, s, a, r, s_, done):
+    def _add_trans(self, *trans):
         if self._reset_signal:
             return
 
-        self._tmp_trans_buffer.add(s, a, r, s_, done)
+        self._tmp_trans_buffer.add(*trans)
 
         if self._tmp_trans_buffer.size > self._add_trans_threshold:
-            s, a, r, s_, done = self._tmp_trans_buffer.get_trans_and_clear()
+            trans = self._tmp_trans_buffer.get_trans_and_clear()
             while True and not self._reset_signal:
                 try:
                     requests.post(f'http://{self._replay_host}:{self._replay_port}/add',
-                                  json=[s.tolist(),
-                                        a.tolist(),
-                                        r.tolist(),
-                                        s_.tolist(),
-                                        done.tolist()])
+                                  json=[t.tolist() for t in trans])
                 except Exception as e:
                     logger.error(f'exception _add_trans: {str(e)}')
                     time.sleep(1)
@@ -228,23 +255,25 @@ class Actor(object):
 
         logger.info(f'actor initialized')
 
+    def _log_episode_info(self, global_step, agents):
+        rewards = [a.reward for a in agents]
+        rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(rewards)])
+        logger.info(f'{global_step}, rewards {rewards_sorted}')
+
     def _run(self):
         global_step = 0
 
         brain_info = self.env.reset(train_mode=self._train_mode, config=self._reset_config)[self.default_brain_name]
 
         while True:
-            if self.env.global_done:
+            if self.env.global_done or self._reset_on_iteration:
                 brain_info = self.env.reset(train_mode=self._train_mode, config=self._reset_config)[self.default_brain_name]
 
-            len_agents = len(brain_info.agents)
-
-            all_done = [False] * len_agents
-            all_cumulative_rewards = [0] * len_agents
+            agents = [self._agent_class(i, self._gamma, self._n_step) for i in brain_info.agents]
 
             states = brain_info.vector_observations
 
-            while False in all_done and not self.env.global_done and not self._reset_signal:
+            while False in [a.done for a in agents] and not self.env.global_done and not self._reset_signal:
                 if global_step % self._update_policy_variables_per_step == 0:
                     self._update_policy_variables()
 
@@ -253,22 +282,19 @@ class Actor(object):
                     self.default_brain_name: actions
                 })[self.default_brain_name]
 
-                rewards = np.array(brain_info.rewards)
-                local_dones = np.array(brain_info.local_done, dtype=bool)
-                max_reached = np.array(brain_info.max_reached, dtype=bool)
-
-                for i in range(len_agents):
-                    if not all_done[i]:
-                        all_cumulative_rewards[i] += rewards[i]
-
-                    all_done[i] = all_done[i] or local_dones[i]
-
                 states_ = brain_info.vector_observations
 
-                dones = np.logical_and(local_dones, np.logical_not(max_reached))
+                trans_list = [agents[i].add_transition(states[i],
+                                                       actions[i],
+                                                       brain_info.rewards[i],
+                                                       brain_info.local_done[i],
+                                                       brain_info.max_reached[i],
+                                                       states_[i])
+                              for i in range(len(agents))]
 
-                s, a, r, s_, done = states, actions, rewards[:, np.newaxis], states_, dones[:, np.newaxis]
-                self._add_trans(s, a, r, s_, done)
+                trans = [np.concatenate(t) for t in zip(*trans_list)]
+
+                self._add_trans(*trans)
 
                 states = states_
                 global_step += 1
@@ -283,5 +309,4 @@ class Actor(object):
                 logger.info('reset')
                 continue
 
-            rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(all_cumulative_rewards)])
-            logger.info(f'{global_step}, rewards {rewards_sorted}')
+            self._log_episode_info(global_step, agents)
