@@ -50,7 +50,7 @@ class Learner(object):
             'save_model_per_step': 10000,
             'update_policy_variables_per_step': 100,
             'add_trans_threshold': 100,
-            'reset_on_iteration': True
+            'reset_on_iteration': True,
             'gamma': 0.99,
             'n_step': 1
         }
