@@ -235,6 +235,9 @@ class SAC_Base(object):
 
                 self.replay_buffer.update(points, td_error.flatten())
 
+    def dispose(self):
+        self.sess.close()
+
 
 if __name__ == '__main__':
     sac = SAC(3, 2, np.array([1, 1]))
