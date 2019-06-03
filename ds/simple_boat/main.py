@@ -10,7 +10,7 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='[%(levelname)s] - [%(name)s] - %(message)s')
 
     _log = logging.getLogger('werkzeug')
-    _log.setLevel(logging.WARN)
+    _log.setLevel(logging.WARNING)
 
     _log = logging.getLogger('tensorflow')
     _log.setLevel(logging.ERROR)

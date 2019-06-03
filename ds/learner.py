@@ -231,8 +231,11 @@ class Learner(object):
         while True:
             try:
                 r = requests.get(f'http://{self._replay_host}:{self._replay_port}/sample')
+            except requests.ConnectionError:
+                logger.error(f'get_sampled_data connecting error')
+                time.sleep(1)
             except Exception as e:
-                logger.error(f'exception _get_sampled_trans: {str(e)}')
+                logger.error(f'get_sampled_data error {type(e)}, {str(e)}')
                 time.sleep(1)
             else:
                 break
@@ -246,8 +249,11 @@ class Learner(object):
                                   'points': points,
                                   'td_errors': td_errors
                               })
+            except requests.ConnectionError:
+                logger.error(f'update_td_errors connecting error')
+                time.sleep(1)
             except Exception as e:
-                logger.error(f'exception _update_td_errors: {str(e)}')
+                logger.error(f'update_td_errors error {type(e)}, {str(e)}')
                 time.sleep(1)
             else:
                 break
@@ -256,8 +262,11 @@ class Learner(object):
         while True:
             try:
                 requests.get(f'http://{self._replay_host}:{self._replay_port}/clear')
+            except requests.ConnectionError:
+                logger.error(f'clear_replay_buffer connecting error')
+                time.sleep(1)
             except Exception as e:
-                logger.error(f'_clear_replay_buffer: {str(e)}')
+                logger.error(f'clear_replay_buffer error {type(e)}, {str(e)}')
                 time.sleep(1)
             else:
                 break
