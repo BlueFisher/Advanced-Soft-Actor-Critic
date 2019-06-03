@@ -13,10 +13,10 @@ n_step: 5
 # reset_config:
 #   copy: 1
 
-# replay_config:
+replay_config:
 #   batch_size: 256
 #   capacity: 1000000
-#   alpha: 0.9
+  alpha: 0.6
 
 sac_config:
   write_summary_graph: true
@@ -24,7 +24,7 @@ sac_config:
   # tau: 0.005
   # write_summary_per_step: 20
   # update_target_per_step: 1
-  # init_log_alpha: -4.6
+  init_log_alpha: -1.0
   # use_auto_alpha: true
   # lr: 3e-4
   use_priority: true

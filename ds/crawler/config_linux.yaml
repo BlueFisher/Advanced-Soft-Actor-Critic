@@ -1,5 +1,5 @@
 build_path: 
-  linux: /data/zzy/linux-simple-boat/RL-Envs.x86_64
+  linux: /data/zzy/linux-crawler/RL-Envs.x86_64
   
 replay_host: 10.0.4.227
 replay_port: 30168
@@ -10,14 +10,12 @@ websocket_port: 31322
 
 reset_config:
   # copy: 1
-  action: 0 # 0: can backward, 1: cannot backward
-  reward: 1 # 0: include prior knowledge, 1: not included
 
 # update_policy_variables_per_step: 100
 # add_trans_threshold: 100
 reset_on_iteration: false
 # gamma: 0.99
-n_step: 3
+n_step: 5
 
 # name: {time}
 # sac: sac
