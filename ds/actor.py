@@ -97,6 +97,7 @@ class Actor(object):
                                                     'learner_port=',
                                                     'build_path=',
                                                     'build_port=',
+                                                    'logger_file=',
                                                     'sac=',
                                                     'agents=',
                                                     'run'])
@@ -130,6 +131,7 @@ class Actor(object):
                             self._config[k] = v
                 break
 
+        logger_file = None
         for opt, arg in opts:
             if opt == '--replay_host':
                 self._replay_host = arg
@@ -143,12 +145,28 @@ class Actor(object):
                 self._build_path = arg
             elif opt == '--build_port':
                 self._build_port = int(arg)
+            elif opt == '--logger_file':
+                logger_file = arg
             elif opt == '--sac':
                 self._config['sac'] = arg
             elif opt == '--agents':
                 self._reset_config['copy'] = int(arg)
             elif opt == '--run':
                 self._train_mode = False
+
+        # logger config
+        if logger_file is not None:
+            # create file handler
+            fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=1024 * 1024, backupCount=5)
+            fh.setLevel(logging.INFO)
+
+            # create formatter
+            fmt = "%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s"
+            formatter = logging.Formatter(fmt)
+
+            # add handler and formatter to logger
+            fh.setFormatter(formatter)
+            logger.addHandler(fh)
 
     def _init_websocket_client(self):
         loop = asyncio.get_event_loop()
@@ -175,11 +193,11 @@ class Actor(object):
                             break
                         except json.JSONDecodeError:
                             logger.error(f'websocket json decode error, {raw_message}')
-            except ConnectionRefusedError:
+            except (ConnectionRefusedError, websockets.InvalidMessage):
                 logger.error(f'websocket connecting failed')
                 time.sleep(1)
             except Exception as e:
-                logger.error(f'exception _connect_websocket: {str(e)}')
+                logger.error(f'websocket connecting error {type(e)}, {str(e)}')
                 time.sleep(1)
             finally:
                 self._websocket_connected = False
@@ -221,7 +239,7 @@ class Actor(object):
                 logger.error('update_policy_variables connecting error')
                 time.sleep(1)
             except Exception as e:
-                logger.error(f'update_policy_variables error {str(e)}')
+                logger.error(f'update_policy_variables error {type(e)}, {str(e)}')
                 break
             else:
                 break
@@ -239,7 +257,7 @@ class Actor(object):
                     logger.error(f'add_trans connecting error')
                     time.sleep(1)
                 except Exception as e:
-                    logger.error(f'add_trans error {str(e)}')
+                    logger.error(f'add_trans error {type(e)}, {str(e)}')
                     break
                 else:
                     break
