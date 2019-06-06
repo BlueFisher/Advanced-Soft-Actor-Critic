@@ -10,8 +10,9 @@ reset_on_iteration: false
 # gamma: 0.99
 n_step: 5
 
-# reset_config:
-#   copy: 1
+reset_config:
+  # copy: 1
+  reward: 100 # TimePenalty, FacingTarget, MovingTowards
 
 replay_config:
 #   batch_size: 256

@@ -1,9 +1,9 @@
-import sys
-import logging
-import getopt
-import yaml
 from pathlib import Path
+import getopt
+import logging
+import sys
 import threading
+import yaml
 
 from flask import Flask, jsonify, request
 import requests
@@ -109,6 +109,9 @@ class Replay(object):
         def sample():
             if replay_buffer.size < learning_starts:
                 return jsonify({})
+
+            data = request.get_json()
+            ratio = data['ratio']
 
             points, trans, is_weights = replay_buffer.sample()
 

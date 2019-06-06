@@ -1,14 +1,13 @@
-import time
-import sys
-import logging
-import os
+from pathlib import Path
+import asyncio
 import getopt
 import importlib
-import yaml
-from pathlib import Path
-
+import logging
+import os
+import sys
 import threading
-import asyncio
+import time
+import yaml
 
 import websockets
 from flask import Flask, jsonify, request

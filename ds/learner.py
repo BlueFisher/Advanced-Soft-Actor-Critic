@@ -1,15 +1,14 @@
-import time
-import sys
-import logging
-import os
+from pathlib import Path
+import asyncio
 import getopt
 import importlib
-import yaml
-from pathlib import Path
 import json
-
+import logging
+import os
+import sys
 import threading
-import asyncio
+import time
+import yaml
 
 import websockets
 from flask import Flask, jsonify, request
@@ -168,7 +167,7 @@ class Learner(object):
 
         while True:
             if self.env.global_done or self._config['reset_on_iteration']:
-                brain_info = self.env.reset(train_mode=True, config=self._reset_config)[self.default_brain_name]
+                brain_info = self.env.reset(train_mode=True)[self.default_brain_name]
 
             agents = [self._agent_class(i,
                                         self._config['gamma'],

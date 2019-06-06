@@ -10,10 +10,11 @@ websocket_port: 31322
 
 reset_config:
   # copy: 1
+  reward: 100 # TimePenalty, FacingTarget, MovingTowards
 
 # update_policy_variables_per_step: 100
 # add_trans_threshold: 100
-reset_on_iteration: false
+reset_on_iteration: true
 # gamma: 0.99
 n_step: 5
 

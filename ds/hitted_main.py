@@ -1,7 +1,7 @@
-import time
+from pathlib import Path
 import logging
 import sys
-from pathlib import Path
+import time
 
 import numpy as np
 
