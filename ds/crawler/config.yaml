@@ -10,6 +10,7 @@ replay_port: 61001
 
 reset_config:
   # copy: 1
+  reward: 100 # TimePenalty, FacingTarget, MovingTowards
 
 # update_policy_variables_per_step: 100
 # add_trans_threshold: 100
