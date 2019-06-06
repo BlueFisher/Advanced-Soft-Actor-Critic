@@ -1,9 +1,9 @@
-import random
-import math
-import time
-import logging
-import threading
 from concurrent.futures import ThreadPoolExecutor
+import logging
+import math
+import random
+import threading
+import time
 
 import numpy as np
 
@@ -133,6 +133,7 @@ class SumTree(object):
         return leaf_idx, self._tree[leaf_idx], self._data[data_idx]
 
     def clear(self):
+        self._tree = np.zeros(2 * self.capacity - 1)
         self._size = 0
 
     def get_leaves(self):

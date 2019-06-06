@@ -1,7 +1,7 @@
-import time
+from pathlib import Path
 import sys
 import threading
-from pathlib import Path
+import time
 
 import numpy as np
 import tensorflow as tf

@@ -1,12 +1,12 @@
-import sys
+from collections import deque
+from pathlib import Path
 import getopt
-import time
-import os
 import importlib
 import logging
+import os
+import sys
+import time
 import yaml
-from pathlib import Path
-from collections import deque
 
 import numpy as np
 import tensorflow as tf

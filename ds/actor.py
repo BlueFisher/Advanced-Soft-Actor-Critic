@@ -1,12 +1,13 @@
-import time
-import sys
-import logging
+from pathlib import Path
+import asyncio
 import getopt
 import importlib
-import yaml
-import asyncio
 import json
-from pathlib import Path
+import logging
+import logging.handlers
+import sys
+import time
+import yaml
 
 import requests
 import websockets
@@ -157,7 +158,7 @@ class Actor(object):
         # logger config
         if logger_file is not None:
             # create file handler
-            fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=1024 * 1024, backupCount=5)
+            fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=1024 * 100, backupCount=5)
             fh.setLevel(logging.INFO)
 
             # create formatter
@@ -278,7 +279,7 @@ class Actor(object):
                 self._init_sac()
 
             if self.env.global_done or self._config['reset_on_iteration']:
-                brain_info = self.env.reset(train_mode=self._train_mode, config=self._reset_config)[self.default_brain_name]
+                brain_info = self.env.reset(train_mode=self._train_mode)[self.default_brain_name]
 
             agents = [self._agent_class(i, self._config['gamma'], self._config['n_step']) for i in brain_info.agents]
 
