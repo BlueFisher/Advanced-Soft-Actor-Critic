@@ -1,13 +1,10 @@
 from pathlib import Path
 import asyncio
-import getopt
 import importlib
 import logging
-import os
 import sys
 import threading
 import time
-import yaml
 
 import websockets
 from flask import Flask, jsonify, request
@@ -69,7 +66,6 @@ class ReplayLearner(Learner):
 
             td_errors = self.sac.get_td_error(*trans)
             self.sac.add_with_td_errors(td_errors.flatten(), *trans)
-            # self.sac.add(*trans)
             logger.debug('add')
 
             return jsonify({
@@ -83,7 +79,10 @@ class ReplayLearner(Learner):
         t_evaluation = threading.Thread(target=self._start_policy_evaluation)
 
         while True:
-            if self.sac.train() is not None:
+            _t = time.time()
+            result = self.sac.train()
+            if result is not None:
+                logger.debug(f'train {time.time() - _t}')
                 if not t_evaluation.is_alive():
                     t_evaluation.start()
             else:
