@@ -7,7 +7,7 @@ sys.path.append('..')
 import numpy as np
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO, format='[%(levelname)s] - [%(name)s] - %(message)s')
+    logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] - [%(name)s] - %(message)s')
 
     _log = logging.getLogger('werkzeug')
     _log.setLevel(logging.WARNING)
