@@ -91,8 +91,6 @@ class Replay(object):
 
             replay_buffer.update(points, td_errors)
 
-            print(np.sum(replay_buffer.get_leaves() == 1))
-
             _tmp_trans_arr_lock.acquire()
             for trans in _tmp_trans_arr:
                 _add_trans(*trans)

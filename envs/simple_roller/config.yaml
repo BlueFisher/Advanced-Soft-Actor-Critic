@@ -8,7 +8,7 @@ max_iter: 10000
 # save_model_per_iter: 500
 reset_on_iteration: false
 # gamma: 0.99
-n_step: 1
+n_step: 3
 
 # reset_config:
 #   copy: 1
@@ -27,4 +27,4 @@ sac_config:
   # init_log_alpha: -4.6
   # use_auto_alpha: true
   # lr: 3e-4
-  use_priority: false
+  use_priority: true

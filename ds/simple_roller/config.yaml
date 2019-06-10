@@ -15,7 +15,7 @@ reset_config:
 # add_trans_threshold: 100
 reset_on_iteration: false
 # gamma: 0.99
-# n_step: 1
+n_step: 3
 
 # name: {time}
 # sac: sac
