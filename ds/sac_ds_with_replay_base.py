@@ -99,7 +99,7 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
             self.pl_s_: s_,
             self.pl_done: done,
             self.pl_gamma: gamma,
-            self.pl_is: np.zeros((1, 1)) if not self.use_priority else is_weight
+            self.pl_is: is_weight
         })
 
         self.sess.run(self.train_policy_op, {
@@ -111,16 +111,15 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
                 self.pl_s: s,
             })
 
-        if self.use_priority:
-            td_error = self.sess.run(self.td_error, {
-                self.pl_s: s,
-                self.pl_a: a,
-                self.pl_r: r,
-                self.pl_s_: s_,
-                self.pl_done: done,
-                self.pl_gamma: gamma
-            })
+        td_error = self.sess.run(self.td_error, {
+            self.pl_s: s,
+            self.pl_a: a,
+            self.pl_r: r,
+            self.pl_s_: s_,
+            self.pl_done: done,
+            self.pl_gamma: gamma
+        })
 
-            self.replay_buffer.update(points, td_error.flatten())
+        self.replay_buffer.update(points, td_error.flatten())
 
         return global_step
