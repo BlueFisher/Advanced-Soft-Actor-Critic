@@ -35,4 +35,4 @@ if __name__ == '__main__':
 
         ActorHitted(sys.argv[2:], AgentHitted)
     else:
-        logger.error('the first arg must be one of -r, -l, -rl, or -a')
+        logger.fatal('the first arg must be one of -r, -l, -rl, or -a')

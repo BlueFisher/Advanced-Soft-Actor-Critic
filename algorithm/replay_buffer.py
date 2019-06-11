@@ -1,9 +1,5 @@
 import math
-import multiprocessing
 import random
-import threading
-import time
-import os
 
 import numpy as np
 
@@ -88,22 +84,13 @@ class SumTree(object):
     _max = 0
 
     def __init__(self, batch_size, capacity):
-        self.batch_size = batch_size
         self.capacity = capacity  # for all priority values
-        self._tree = multiprocessing.Array('d', [0] * (2 * capacity - 1), lock=False)
+        self._tree = np.zeros(2 * capacity - 1)
         # [--------------Parent nodes-------------][-------leaves to recode priority-------]
         #             size: capacity - 1                       size: capacity
-        self._sample_leaf_idxes = multiprocessing.Array('i', [0] * batch_size, lock=False)
         self._data = np.zeros(capacity, dtype=object)  # for all transitions
         # [--------------data frame-------------]
         #             size: capacity
-
-        pipe_tuples = [multiprocessing.Pipe() for i in range(4)]
-        self._pipes = [p[0] for p in pipe_tuples]
-
-        for p in pipe_tuples:
-            multiprocessing.Process(target=sample_process_worker,
-                                    args=(self._tree, self._sample_leaf_idxes, p[1])).start()
 
     def add(self, p, data):
         if self._size == 0:
@@ -167,22 +154,6 @@ class SumTree(object):
         data_idx = leaf_idx - self.capacity + 1
         return leaf_idx, self._tree[leaf_idx], self._data[data_idx]
 
-    def get_leaves_parallel(self, v_list):
-        v_i_list = [(v, i) for i, v in enumerate(v_list)]
-        seg = math.ceil(len(v_i_list) / len(self._pipes))
-
-        for i, pipe in enumerate(self._pipes):
-            pipe.send(v_i_list[seg * i:seg * (i + 1)])
-
-        for pipe in self._pipes:
-            done = pipe.recv()
-
-        idx = np.array(self._sample_leaf_idxes, dtype=np.int32)
-        p = np.array([self._tree[i] for i in idx])
-        data = np.array([self._data[i - self.capacity + 1] for i in idx], dtype=object)
-
-        return idx, p, data
-
     def clear(self):
         for i in range(len(self._tree)):
             self._tree[i] = 0
@@ -212,8 +183,6 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
     beta_increment_per_sampling = 0.001
     td_err_upper = 1.  # clipped abs error
 
-    _lock = threading.Lock()
-
     def __init__(self,
                  batch_size=256,
                  capacity=524288,
@@ -224,14 +193,12 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
         self._sum_tree = SumTree(self.batch_size, self.capacity)
 
     def add(self, *args):
-        self._lock.acquire()
         max_p = self._sum_tree.max
         if max_p == 0:
             max_p = self.td_err_upper
 
         for i in range(len(args[0])):
             self._sum_tree.add(max_p, tuple(arg[i] for arg in args))
-        self._lock.release()
 
     def add_with_td_errors(self, td_errors, *args):
         assert len(td_errors) == len(args[0])
@@ -240,17 +207,14 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
         clipped_errors = np.minimum(td_errors, self.td_err_upper)
         probs = np.power(clipped_errors, self.alpha)
 
-        self._lock.acquire()
         for i in range(len(args[0])):
             self._sum_tree.add(probs[i], tuple(t[i] for t in args))
-        self._lock.release()
 
     def sample(self):
         if not self.is_lg_batch_size:
             return None
-
-        self._lock.acquire()
-
+        
+        points, transitions, is_weights = np.empty((self.batch_size,), dtype=np.int32), np.empty((self.batch_size,), dtype=object), np.empty((self.batch_size, 1))
         pri_seg = self._sum_tree.total_p / self.batch_size       # priority segment
         self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
 
@@ -258,30 +222,24 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
         if min_prob == 0:
             min_prob = self.epsilon
 
-        v_list = list()
         for i in range(self.batch_size):
             a, b = pri_seg * i, pri_seg * (i + 1)
             v = np.random.uniform(a, b)
-            v_list.append(v)
+            idx, p, data = self._sum_tree.get_leaf(v)
+            prob = p / self._sum_tree.total_p
 
-        points, probs, transitions = self._sum_tree.get_leaves_parallel(v_list)
+            is_weights[i, 0] = np.power(prob / min_prob, -self.beta)
+            points[i], transitions[i] = idx, data
 
-        probs = probs / self._sum_tree.total_p
-        is_weights = np.power(probs / min_prob, -self.beta)
-
-        self._lock.release()
-
-        return points, [np.array(e) for e in zip(*transitions)], is_weights[:, np.newaxis]
+        return points, [np.array(e) for e in zip(*transitions)], is_weights
 
     def update(self, points, td_errors):
         td_errors += self.epsilon  # convert to abs and avoid 0
         clipped_errors = np.minimum(td_errors, self.td_err_upper)
         ps = np.power(clipped_errors, self.alpha)
 
-        self._lock.acquire()
         for ti, p in zip(points, ps):
             self._sum_tree.update(ti, p)
-        self._lock.release()
 
     def clear(self):
         self._sum_tree.clear()
