@@ -51,6 +51,8 @@ class ReplayLearner(Learner):
                        replay_config=replay_config,
                        **agent_config)
 
+    _trans_cached = None
+
     def _run_learner_server(self):
         app = Flask('learner')
 
@@ -62,11 +64,15 @@ class ReplayLearner(Learner):
         @app.route('/add', methods=['POST'])
         def add():
             trans = request.get_json()
-            trans = [np.array(t) for t in trans]
 
-            td_errors = self.sac.get_td_error(*trans)
-            self.sac.add_with_td_errors(td_errors.flatten(), *trans)
-            logger.debug('add')
+            self._lock.acquire()
+            if self._trans_cached is None:
+                self._trans_cached = [np.array(t) for t in trans]
+            else:
+                trans = [np.array(t) for t in trans]
+                for i in range(len(self._trans_cached)):
+                    self._trans_cached[i] = np.concatenate((self._trans_cached[i], trans[i]))
+            self._lock.release()
 
             return jsonify({
                 'succeeded': True
@@ -74,11 +80,20 @@ class ReplayLearner(Learner):
 
         app.run(host='0.0.0.0', port=self._learner_port)
 
+    _lock = threading.Lock()
+
     def _run_training_client(self):
         # asyncio.run(self._websocket_server.send_to_all('aaa'))
         t_evaluation = threading.Thread(target=self._start_policy_evaluation)
 
         while True:
+            self._lock.acquire()
+            if self._trans_cached is not None:
+                td_errors = self.sac.get_td_error(*self._trans_cached)
+                self.sac.add_with_td_errors(td_errors.flatten(), *self._trans_cached)
+                self._trans_cached = None
+            self._lock.release()
+
             _t = time.time()
             result = self.sac.train()
             if result is not None:
