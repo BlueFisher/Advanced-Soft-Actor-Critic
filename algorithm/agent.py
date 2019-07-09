@@ -1,6 +1,7 @@
 from collections import deque
 import numpy as np
 
+
 class Agent(object):
     reward = 0
     done = False
@@ -19,6 +20,14 @@ class Agent(object):
                        local_done,
                        max_reached,
                        state_):
+
+        if type(state) == np.ndarray:
+            state = state.tolist()
+        if type(action) == np.ndarray:
+            action = action.tolist()
+        if type(state_) == np.ndarray:
+            state_ = state_.tolist()
+
         self._tmp_trans.append({
             'state': state,
             'action': action,
@@ -38,7 +47,7 @@ class Agent(object):
                         max_reached,
                         state_)
 
-        trans = list(self._get_trans())
+        trans = [[t] for t in self._get_trans()]
 
         if local_done:
             self.done = True
@@ -47,7 +56,7 @@ class Agent(object):
             while len(self._tmp_trans) != 0:
                 _trans = self._get_trans()
                 for i in range(len(trans)):
-                    trans[i] = np.concatenate((trans[i], _trans[i]))
+                    trans[i].append(_trans[i])
                 self._tmp_trans.popleft()
 
         return trans
@@ -71,11 +80,4 @@ class Agent(object):
         done = self._tmp_trans[-1]['local_done'] and not self._tmp_trans[-1]['max_reached']
         gamma = np.power(self.gamma, len(self._tmp_trans))
 
-        s = s[np.newaxis, :]
-        a = a[np.newaxis, :]
-        r = np.array([[r]])
-        s_ = s_[np.newaxis, :]
-        done = np.array([[done]])
-        gamma = np.array([[gamma]])
-
-        return s, a, r, s_, done, gamma
+        return s, a, [r], s_, [done], [gamma], [t['state'] for t in self._tmp_trans], [t['action'] for t in self._tmp_trans]

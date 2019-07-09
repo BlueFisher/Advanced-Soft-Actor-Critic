@@ -25,7 +25,7 @@ if __name__ == '__main__':
                        local_done,
                        max_reached,
                        state_):
-            
+
             if not self.done and reward >= 1:
                 self.hitted += 1
 

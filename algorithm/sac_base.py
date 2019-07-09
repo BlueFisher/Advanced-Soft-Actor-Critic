@@ -1,3 +1,4 @@
+import functools
 import time
 import sys
 
@@ -23,6 +24,7 @@ class SAC_Base(object):
                  use_auto_alpha=True,
                  lr=3e-4,
                  use_priority=False,
+                 use_n_step_is=True,
 
                  replay_config=None):
         self.graph = tf.Graph()
@@ -32,6 +34,7 @@ class SAC_Base(object):
 
         self.use_auto_alpha = use_auto_alpha
         self.use_priority = use_priority
+        self.use_n_step_is = use_n_step_is
 
         default_replay_config = {
             'batch_size': 256,
@@ -77,13 +80,15 @@ class SAC_Base(object):
         self.pl_s_ = tf.placeholder(tf.float32, shape=(None, self.s_dim), name='state_')
         self.pl_done = tf.placeholder(tf.float32, shape=(None, 1), name='done')
         self.pl_gamma = tf.placeholder(tf.float32, shape=(None, 1), name='gamma')
+        self.pl_n_step_is = tf.placeholder(tf.float32, shape=(None, 1), name='n_step_is')
 
-        self.pl_is = tf.placeholder(tf.float32, shape=(None, 1), name='is_weight')
+        self.pl_priority_is = tf.placeholder(tf.float32, shape=(None, 1), name='priority_is')
 
         log_alpha = tf.get_variable('alpha', shape=(), initializer=tf.constant_initializer(init_log_alpha))
         alpha = tf.exp(log_alpha)
 
-        policy, self.action_sampled, self.policy_variables = self._build_policy_net(self.pl_s, 'policy')
+        self.policy, self.action_sampled, self.policy_variables = self._build_policy_net(self.pl_s, 'policy')
+        self.policy_prob = self.policy.prob(self.pl_a)
         policy_next, action_next_sampled, policy_next_variables = self._build_policy_net(self.pl_s_, 'policy', reuse=True)
 
         q1, q1_variables = self._build_q_net(self.pl_s, self.pl_a, 'q1')
@@ -97,21 +102,21 @@ class SAC_Base(object):
         y = tf.stop_gradient(y)
 
         if self.use_priority:
-            L_q1 = tf.reduce_mean(tf.squared_difference(q1, y) * self.pl_is)
-            L_q2 = tf.reduce_mean(tf.squared_difference(q2, y) * self.pl_is)
+            L_q1 = tf.reduce_mean(tf.squared_difference(q1, y) * self.pl_n_step_is * self.pl_priority_is)
+            L_q2 = tf.reduce_mean(tf.squared_difference(q2, y) * self.pl_n_step_is * self.pl_priority_is)
         else:
-            L_q1 = tf.reduce_mean(tf.squared_difference(q1, y))
-            L_q2 = tf.reduce_mean(tf.squared_difference(q2, y))
+            L_q1 = tf.reduce_mean(tf.squared_difference(q1, y) * self.pl_n_step_is)
+            L_q2 = tf.reduce_mean(tf.squared_difference(q2, y) * self.pl_n_step_is)
 
         q1_td_error = tf.abs(q1 - y)
         q2_td_error = tf.abs(q2 - y)
         self.td_error = tf.reduce_mean(tf.concat([q1_td_error, q2_td_error], axis=1),
                                        axis=1, keepdims=True)
 
-        L_policy = tf.reduce_mean(alpha * policy.log_prob(self.action_sampled) - q1_for_gradient)
+        L_policy = tf.reduce_mean(alpha * self.policy.log_prob(self.action_sampled) - q1_for_gradient)
 
-        entropy = policy.entropy()
-        L_alpha = -log_alpha * policy.log_prob(self.action_sampled) + log_alpha * self.a_dim
+        entropy = self.policy.entropy()
+        L_alpha = -log_alpha * self.policy.log_prob(self.action_sampled) + log_alpha * self.a_dim
 
         with tf.name_scope('optimizer'):
             self.global_step = tf.get_variable('global_step', shape=(), dtype=tf.int32, initializer=tf.constant_initializer(0), trainable=False)
@@ -155,6 +160,12 @@ class SAC_Base(object):
 
         return np.clip(a, -1, 1)
 
+    def get_policy_prob(self, s, a):
+        return self.sess.run(self.policy_prob, {
+            self.pl_s: s,
+            self.pl_a: a
+        })
+
     def get_td_error(self, s, a, r, s_, done, gamma):
         td_error = self.sess.run(self.td_error, {
             self.pl_s: s,
@@ -176,10 +187,35 @@ class SAC_Base(object):
                                       for i in constant_summaries])
         self.summary_writer.add_summary(summaries, iteration + self.init_iteration)
 
-    def train(self, s, a, r, s_, done, gamma):
-        assert len(s.shape) == 2
+    def _get_probs(self, n_states, n_actions):
+        n_states_lens = [len(t) for t in n_states]
+        n_actions_lens = [len(t) for t in n_actions]
 
-        self.replay_buffer.add(s, a, r, s_, done, gamma)
+        for i in range(len(n_states_lens)):
+            assert n_states_lens[i] == n_actions_lens[i]
+
+        n_states_flatten = functools.reduce(lambda x, y: x + y, n_states)
+        n_actions_flatten = functools.reduce(lambda x, y: x + y, n_actions)
+
+        tmp_probs = self.get_policy_prob(n_states_flatten, n_actions_flatten)
+
+        n_probs = []
+        tmp_index = 0
+        for n_states_len in n_states_lens:
+            tmp_n_probs = []
+            for _ in range(n_states_len):
+                tmp_n_probs += tmp_probs[tmp_index].tolist()
+
+            n_probs.append(tmp_n_probs)
+
+        return n_probs
+
+    def train(self, s, a, r, s_, done, gamma, n_states, n_actions):
+        assert len(s) == len(a) == len(r) == len(s_) == len(done) == len(gamma) == len(n_states) == len(n_actions)
+
+        mu_n_probs = self._get_probs(n_states, n_actions)
+
+        self.replay_buffer.add(s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs)
 
         sampled = self.replay_buffer.sample()
         if sampled is None:
@@ -188,9 +224,22 @@ class SAC_Base(object):
         global_step = self.sess.run(self.global_step)
 
         if self.use_priority:
-            points, (s, a, r, s_, done, gamma), is_weight = sampled
+            points, (s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs), priority_is = sampled
         else:
-            s, a, r, s_, done, gamma = sampled
+            points, (s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs) = sampled
+        
+        priority_is = np.ones((len(s), 1))
+
+        n_step_is = np.ones((len(s), 1))
+        if self.use_n_step_is:
+            pi_n_probs = self._get_probs(n_states, n_actions)
+
+            for i in range(len(pi_n_probs)):
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    tmp_is = np.true_divide(pi_n_probs[i], mu_n_probs[i])
+                    tmp_is[~np.isfinite(tmp_is)] = 1.
+                    tmp_is = np.clip(tmp_is, 0, 1.)
+                    n_step_is[i] = np.product(tmp_is)
 
         if global_step % self.write_summary_per_step == 0:
             summaries = self.sess.run(self.summaries, {
@@ -200,7 +249,8 @@ class SAC_Base(object):
                 self.pl_s_: s_,
                 self.pl_done: done,
                 self.pl_gamma: gamma,
-                self.pl_is: np.zeros((1, 1)) if not self.use_priority else is_weight
+                self.pl_n_step_is: n_step_is,
+                self.pl_priority_is: priority_is
             })
             self.summary_writer.add_summary(summaries, global_step)
 
@@ -215,7 +265,8 @@ class SAC_Base(object):
             self.pl_s_: s_,
             self.pl_done: done,
             self.pl_gamma: gamma,
-            self.pl_is: np.zeros((1, 1)) if not self.use_priority else is_weight
+            self.pl_n_step_is: n_step_is,
+            self.pl_priority_is: priority_is
         })
 
         self.sess.run(self.train_policy_op, {
@@ -239,6 +290,10 @@ class SAC_Base(object):
 
             self.replay_buffer.update(points, td_error.flatten())
 
+        if self.use_n_step_is:
+            pi_n_probs = self._get_probs(n_states, n_actions)
+            self.replay_buffer.update_transitions(8, points, pi_n_probs)
+
     def dispose(self):
         self.sess.close()
 
@@ -246,9 +301,9 @@ class SAC_Base(object):
 if __name__ == '__main__':
     sac = SAC(3, 2, np.array([1, 1]))
 
-    sac.train(np.array([[1., 1., 2.]]),
-              np.array([[2., 2.]]),
-              np.array([[1.]]),
-              np.array([[1., 1., 3.]]),
-              np.array([[0]]),
+    sac.train([[1., 1., 2.]],
+              [[2., 2.]],
+              [[1.]],
+              [[1., 1., 3.]],
+              [[0]],
               10)

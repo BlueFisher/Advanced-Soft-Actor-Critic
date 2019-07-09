@@ -3,7 +3,7 @@ build_path:
   linux: /data/zzy/linux-simple-roller/RL-Envs.x86_64
 
 # sac: sac
-max_iter: 10000
+max_iter: 150
 # agents_num: 1
 # save_model_per_iter: 500
 reset_on_iteration: false
@@ -28,3 +28,4 @@ sac_config:
   # use_auto_alpha: true
   # lr: 3e-4
   use_priority: true
+  # use_n_step_is: true
