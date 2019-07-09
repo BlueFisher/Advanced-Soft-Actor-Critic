@@ -14,13 +14,12 @@ class ReplayBuffer(object):
 
         self._buffer = np.empty(self.capacity, dtype=object)
 
-    def add(self, *args):
+    def add(self, *args):  # list [[None, n], [None, n]]
         for arg in args:
-            assert len(arg.shape) == 2
             assert len(arg) == len(args[0])
 
         for i in range(len(args[0])):
-            self._buffer[self._data_pointer] = tuple(arg[i] for arg in args)
+            self._buffer[self._data_pointer] = [arg[i] for arg in args]
             self._data_pointer += 1
 
             if self._data_pointer >= self.capacity:  # replace when exceed the capacity
@@ -31,8 +30,14 @@ class ReplayBuffer(object):
 
     def sample(self):
         n_sample = self.batch_size if self.is_lg_batch_size else self._size
-        t = np.random.choice(self._buffer[:self._size], size=n_sample, replace=False)
-        return [np.array(e) for e in zip(*t)]
+        points = np.random.choice(range(self._size), size=n_sample, replace=False)
+        transitions = self._buffer[points]
+        return points, list(list(t) for t in zip(*transitions))
+
+    def update_transitions(self, transition_idx, points, data):
+        trans = self._buffer[points]
+        for i, tran in enumerate(trans):
+            tran[transition_idx] = data[i]
 
     @property
     def is_full(self):
@@ -125,6 +130,12 @@ class SumTree(object):
             tree_idx = (tree_idx - 1) // 2
             self._tree[tree_idx] += change
 
+    def update_transitions(self, transition_idx, tree_idx, data):
+        data_index = tree_idx + 1 - self.capacity
+        trans = self._data[data_index]
+        for i, tran in enumerate(trans):
+            tran[transition_idx] = data[i]
+
     def get_leaf(self, v):
         """
         Tree structure and array storage:
@@ -198,7 +209,7 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
             max_p = self.td_err_upper
 
         for i in range(len(args[0])):
-            self._sum_tree.add(max_p, tuple(arg[i] for arg in args))
+            self._sum_tree.add(max_p, [arg[i] for arg in args])
 
     def add_with_td_errors(self, td_errors, *args):
         assert len(td_errors) == len(args[0])
@@ -208,12 +219,12 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
         probs = np.power(clipped_errors, self.alpha)
 
         for i in range(len(args[0])):
-            self._sum_tree.add(probs[i], tuple(t[i] for t in args))
+            self._sum_tree.add(probs[i], [t[i] for t in args])
 
     def sample(self):
         if not self.is_lg_batch_size:
             return None
-        
+
         points, transitions, is_weights = np.empty((self.batch_size,), dtype=np.int32), np.empty((self.batch_size,), dtype=object), np.empty((self.batch_size, 1))
         pri_seg = self._sum_tree.total_p / self.batch_size       # priority segment
         self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
@@ -231,7 +242,7 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
             is_weights[i, 0] = np.power(prob / min_prob, -self.beta)
             points[i], transitions[i] = idx, data
 
-        return points, [np.array(e) for e in zip(*transitions)], is_weights
+        return points, list(list(t) for t in zip(*transitions)), is_weights
 
     def update(self, points, td_errors):
         td_errors += self.epsilon  # convert to abs and avoid 0
@@ -240,6 +251,9 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
 
         for ti, p in zip(points, ps):
             self._sum_tree.update(ti, p)
+
+    def update_transitions(self, transition_idx, tree_idx, data):
+        self._sum_tree.update_transitions(transition_idx, tree_idx, data)
 
     def clear(self):
         self._sum_tree.clear()
@@ -260,8 +274,12 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
 if __name__ == "__main__":
     import time
 
-    replay_buffer = PrioritizedReplayBuffer(1024)
+    replay_buffer = PrioritizedReplayBuffer(2)
 
-    while True:
-        replay_buffer.add_with_td_errors(np.abs(np.random.randn(1029)), np.random.randn(1029, 1), np.random.randn(1029, 2))
+    for i in range(10):
+        tmp = []
+        for j in range(1029):
+            tmp.append([1] * np.random.randint(1, 5))
+        replay_buffer.add_with_td_errors(np.abs(np.random.randn(1029)), np.random.randn(1029, 1).tolist(), tmp)
         points, (a, b), ratio = replay_buffer.sample()
+        print(a, b)
