@@ -10,7 +10,7 @@ replay_port: 61001
 
 reset_config:
   # copy: 1
-  reward: 100 # TimePenalty, FacingTarget, MovingTowards
+  reward: 111 # TimePenalty, FacingTarget, MovingTowards
 
 # update_policy_variables_per_step: 100
 # add_trans_threshold: 100
@@ -33,6 +33,6 @@ sac_config:
   # save_model_per_step: 5000
   # write_summary_per_step: 20
   # update_target_per_step: 1
-  # init_log_alpha: -4.6
-  # use_auto_alpha: True
+  init_log_alpha: -2.3
+  use_auto_alpha: False
   # lr: 0.0003

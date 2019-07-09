@@ -1,5 +1,6 @@
 from collections import deque
 from pathlib import Path
+import functools
 import getopt
 import importlib
 import logging
@@ -19,13 +20,12 @@ from mlagents.envs import UnityEnvironment
 
 logger = logging.getLogger('sac')
 
-NOW = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-
 
 class Main(object):
     train_mode = True
 
     def __init__(self, argv, agent_class=Agent):
+        self._now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
         self._agent_class = agent_class
 
         self.config, self.reset_config, replay_config, agent_config, model_root_path = self._init_config(argv)
@@ -34,7 +34,7 @@ class Main(object):
 
     def _init_config(self, argv):
         config = {
-            'name': NOW,
+            'name': self._now,
             'build_path': None,
             'port': 7000,
             'sac': 'sac',
@@ -52,13 +52,14 @@ class Main(object):
         agent_config = dict()
 
         try:
-            opts, args = getopt.getopt(sys.argv[1:], 'rc:n:b:p:', ['run',
-                                                                   'config=',
-                                                                   'name=',
-                                                                   'build=',
-                                                                   'port=',
-                                                                   'sac=',
-                                                                   'agents='])
+            opts, args = getopt.getopt(argv, 'rc:n:b:p:', ['run',
+                                                           'config=',
+                                                           'name=',
+                                                           'build=',
+                                                           'port=',
+                                                           'seed=',
+                                                           'sac=',
+                                                           'agents='])
         except getopt.GetoptError:
             raise Exception('ARGS ERROR')
 
@@ -87,11 +88,13 @@ class Main(object):
             if opt in ('-r', '--run'):
                 self.train_mode = False
             elif opt in ('-n', '--name'):
-                config['name'] = arg.replace('{time}', NOW)
+                config['name'] = arg.replace('{time}', self._now)
             elif opt in ('-b', '--build'):
                 config['build_path'] = arg
             elif opt in ('-p', '--port'):
                 config['port'] = int(arg)
+            elif opt == '--seed':
+                agent_config['seed'] = int(arg)
             elif opt == '--sac':
                 config['sac'] = arg
             elif opt == '--agents':
@@ -177,7 +180,8 @@ class Main(object):
                                                        states_[i])
                               for i in range(len(agents))]
 
-                trans = [np.concatenate(t) for t in zip(*trans_list)]
+                # s, a, r, s_, done, gamma, n_states, n_actions
+                trans = [functools.reduce(lambda x, y: x + y, t) for t in zip(*trans_list)]
 
                 if self.train_mode:
                     self.sac.train(*trans)
