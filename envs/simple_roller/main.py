@@ -49,3 +49,8 @@ if __name__ == '__main__':
             logger.info(f'iter {iteration}, rewards {rewards_sorted}, hitted {hitted}')
 
     MainHitted(sys.argv[1:], AgentHitted)
+
+    # for seed in range(5):        
+    #     arg = sys.argv[1:] + [f'--seed={seed}', f'--name=td_{seed}_{{time}}']
+    #     print(arg)
+    #     MainHitted(arg, AgentHitted)

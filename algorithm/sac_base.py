@@ -210,6 +210,18 @@ class SAC_Base(object):
 
         return n_probs
 
+    def _get_n_step_is(self, pi_n_probs, mu_n_probs):
+        n_step_is = np.ones((len(pi_n_probs), 1))
+
+        for i in range(len(pi_n_probs)):
+            with np.errstate(divide='ignore', invalid='ignore'):
+                tmp_is = np.true_divide(pi_n_probs[i], mu_n_probs[i])
+                tmp_is[~np.isfinite(tmp_is)] = 1.
+                tmp_is = np.clip(tmp_is, 0, 1.)
+                n_step_is[i] = np.product(tmp_is)
+
+        return n_step_is
+
     def train(self, s, a, r, s_, done, gamma, n_states, n_actions):
         assert len(s) == len(a) == len(r) == len(s_) == len(done) == len(gamma) == len(n_states) == len(n_actions)
 
@@ -227,19 +239,13 @@ class SAC_Base(object):
             points, (s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs), priority_is = sampled
         else:
             points, (s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs) = sampled
-        
-        priority_is = np.ones((len(s), 1))
+            priority_is = np.ones((len(s), 1))
 
-        n_step_is = np.ones((len(s), 1))
         if self.use_n_step_is:
             pi_n_probs = self._get_probs(n_states, n_actions)
-
-            for i in range(len(pi_n_probs)):
-                with np.errstate(divide='ignore', invalid='ignore'):
-                    tmp_is = np.true_divide(pi_n_probs[i], mu_n_probs[i])
-                    tmp_is[~np.isfinite(tmp_is)] = 1.
-                    tmp_is = np.clip(tmp_is, 0, 1.)
-                    n_step_is[i] = np.product(tmp_is)
+            n_step_is = self._get_n_step_is(pi_n_probs, mu_n_probs)
+        else:
+            n_step_is = np.ones((len(s), 1))
 
         if global_step % self.write_summary_per_step == 0:
             summaries = self.sess.run(self.summaries, {
@@ -296,14 +302,3 @@ class SAC_Base(object):
 
     def dispose(self):
         self.sess.close()
-
-
-if __name__ == '__main__':
-    sac = SAC(3, 2, np.array([1, 1]))
-
-    sac.train([[1., 1., 2.]],
-              [[2., 2.]],
-              [[1.]],
-              [[1., 1., 3.]],
-              [[0]],
-              10)

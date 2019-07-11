@@ -1,6 +1,7 @@
 build_path: 
-  win32: C:\Users\Fisher\Documents\Unity\build-crawler\RL-Envs.exe
-  linux: /data/zzy/linux-simple-roller/RL-Envs.x86_64
+  win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
+  linux: /data/zzy/build-RL-Envs\RL-Envs.x86_64
+scene: CrawlerDynamicTarget
 
 # sac: sac
 max_iter: 10000

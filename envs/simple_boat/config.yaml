@@ -1,6 +1,7 @@
 build_path: 
-  win32: C:\Users\Fisher\Documents\Unity\build-simple-boat\RL-Envs.exe
-  linux: /data/zzy/linux-simple-boat/RL-Envs.x86_64
+  win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
+  linux: /data/zzy/build-RL-Envs\RL-Envs.x86_64
+scene: SimpleBoat
 
 # sac: sac
 max_iter: 10000
