@@ -1,5 +1,6 @@
 build_path: 
-  linux: /data/zzy/linux-crawler/RL-Envs.x86_64
+  linux: /data/zzy/build-RL-Envs\RL-Envs.x86_64
+scene: CrawlerDynamicTarget
   
 replay_host: 10.0.4.227
 replay_port: 30168

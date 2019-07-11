@@ -36,6 +36,7 @@ class Main(object):
         config = {
             'name': self._now,
             'build_path': None,
+            'scene': None,
             'port': 7000,
             'sac': 'sac',
             'max_iter': 1000,
@@ -133,7 +134,8 @@ class Main(object):
         else:
             self.env = UnityEnvironment(file_name=self.config['build_path'],
                                         no_graphics=self.train_mode,
-                                        base_port=self.config['port'])
+                                        base_port=self.config['port'],
+                                        args=['--scene', self.config['scene']])
 
         self.default_brain_name = self.env.brain_names[0]
 

@@ -48,6 +48,7 @@ class UnityEnvironment(BaseUnityEnvironment):
         docker_training: bool = False,
         no_graphics: bool = False,
         timeout_wait: int = 30,
+        args: list = []
     ):
         """
         Starts a new unity environment and establishes a connection with the environment.
@@ -84,7 +85,7 @@ class UnityEnvironment(BaseUnityEnvironment):
                 "the worker-id must be 0 in order to connect with the Editor."
             )
         if file_name is not None:
-            self.executable_launcher(file_name, docker_training, no_graphics)
+            self.executable_launcher(file_name, docker_training, no_graphics, args)
         else:
             logger.info(
                 "Start training by pressing the Play button in the Unity Editor."
@@ -179,7 +180,7 @@ class UnityEnvironment(BaseUnityEnvironment):
     def reset_parameters(self):
         return self._resetParameters
 
-    def executable_launcher(self, file_name, docker_training, no_graphics):
+    def executable_launcher(self, file_name, docker_training, no_graphics, args):
         cwd = os.getcwd()
         file_name = (
             file_name.strip()
@@ -247,12 +248,12 @@ class UnityEnvironment(BaseUnityEnvironment):
                             "-nographics",
                             "-batchmode",
                             "--port",
-                            str(self.port),
-                        ]
+                            str(self.port)
+                        ] + args
                     )
                 else:
                     self.proc1 = subprocess.Popen(
-                        [launch_string, "--port", str(self.port)]
+                        [launch_string, "--port", str(self.port)] + args
                     )
             else:
                 """
@@ -633,8 +634,8 @@ class UnityEnvironment(BaseUnityEnvironment):
             _m_s = len(memory[b]) // n_agents
             for i in range(n_agents):
                 action = AgentActionProto(
-                    vector_actions=vector_action[b][i * _a_s : (i + 1) * _a_s],
-                    memories=memory[b][i * _m_s : (i + 1) * _m_s],
+                    vector_actions=vector_action[b][i * _a_s: (i + 1) * _a_s],
+                    memories=memory[b][i * _m_s: (i + 1) * _m_s],
                     text_actions=text_action[b][i],
                     custom_action=custom_action[b][i],
                 )

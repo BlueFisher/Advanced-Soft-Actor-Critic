@@ -1,5 +1,6 @@
 build_path: 
-  win32: C:\Users\Fisher\Documents\Unity\build-crawler\RL-Envs.exe
+  win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
+scene: CrawlerDynamicTarget
   
 # replay_host: 127.0.0.1
 replay_port: 61001
