@@ -63,6 +63,7 @@ class Actor(object):
     _websocket_port = 61002
     _build_path = None
     _build_port = 5005
+    _scene = None
 
     _reset_config = {
         'copy': 1
@@ -124,6 +125,8 @@ class Actor(object):
                             self._websocket_port = v
                         elif k == 'build_path':
                             self._build_path = v[sys.platform]
+                        elif k == 'scene':
+                            self._scene = v
 
                         elif k == 'reset_config':
                             self._reset_config = dict(self._reset_config, **({} if v is None else v))
@@ -209,7 +212,8 @@ class Actor(object):
         else:
             self.env = UnityEnvironment(file_name=self._build_path,
                                         no_graphics=True,
-                                        base_port=self._build_port)
+                                        base_port=self._build_port,
+                                        args=['--scene', self._scene])
 
         logger.info(f'{self._build_path} initialized')
 

@@ -34,6 +34,7 @@ class Learner(object):
     _websocket_port = 61002
     _build_path = None
     _build_port = 5006
+    _scene = None
 
     def __init__(self, argv, agent_class=Agent):
         self._agent_class = agent_class
@@ -86,6 +87,8 @@ class Learner(object):
                             self._websocket_port = v
                         elif k == 'build_path':
                             self._build_path = v[sys.platform]
+                        elif k == 'scene':
+                            self._scene = v
 
                         elif k == 'reset_config':
                             reset_config = dict(reset_config, **({} if v is None else v))
@@ -144,7 +147,8 @@ class Learner(object):
     def _init_env(self, sac, name, agent_config):
         self.env = UnityEnvironment(file_name=self._build_path,
                                     no_graphics=True,
-                                    base_port=self._build_port)
+                                    base_port=self._build_port,
+                                    args=['--scene', self._scene])
 
         self.default_brain_name = self.env.brain_names[0]
 
