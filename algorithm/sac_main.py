@@ -28,8 +28,8 @@ class Main(object):
         self._now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
         self._agent_class = agent_class
 
-        self.config, self.reset_config, replay_config, agent_config, model_root_path = self._init_config(argv)
-        self._init_env(replay_config, agent_config, model_root_path)
+        self.config, self.reset_config, replay_config, sac_config, model_root_path = self._init_config(argv)
+        self._init_env(replay_config, sac_config, model_root_path)
         self._run()
 
     def _init_config(self, argv):
@@ -50,7 +50,7 @@ class Main(object):
             'copy': 1
         }
         replay_config = dict()
-        agent_config = dict()
+        sac_config = dict()
 
         try:
             opts, args = getopt.getopt(argv, 'rc:n:b:p:', ['run',
@@ -79,7 +79,7 @@ class Main(object):
                             replay_config = {} if v is None else v
 
                         elif k == 'sac_config':
-                            agent_config = {} if v is None else v
+                            sac_config = {} if v is None else v
 
                         else:
                             config[k] = v
@@ -95,7 +95,7 @@ class Main(object):
             elif opt in ('-p', '--port'):
                 config['port'] = int(arg)
             elif opt == '--seed':
-                agent_config['seed'] = int(arg)
+                sac_config['seed'] = int(arg)
             elif opt == '--sac':
                 config['sac'] = arg
             elif opt == '--agents':
@@ -107,7 +107,9 @@ class Main(object):
             if not os.path.exists(model_root_path):
                 os.makedirs(model_root_path)
             with open(f'{model_root_path}/config.yaml', 'w') as f:
-                yaml.dump({**config, **agent_config}, f, default_flow_style=False)
+                yaml.dump({**config,
+                           'sac_config': {**sac_config}
+                           }, f, default_flow_style=False)
 
         config_str = '\ncommon_config'
         for k, v in config.items():
@@ -121,14 +123,14 @@ class Main(object):
         for k, v in replay_config.items():
             config_str += f'\n{k:>25}: {v}'
 
-        config_str += '\nagent_config:'
-        for k, v in agent_config.items():
+        config_str += '\nsac_config:'
+        for k, v in sac_config.items():
             config_str += f'\n{k:>25}: {v}'
         logger.info(config_str)
 
-        return config, reset_config, replay_config, agent_config, model_root_path
+        return config, reset_config, replay_config, sac_config, model_root_path
 
-    def _init_env(self, replay_config, agent_config, model_root_path):
+    def _init_env(self, replay_config, sac_config, model_root_path):
         if self.config['build_path'] is None or self.config['build_path'] == '':
             self.env = UnityEnvironment()
         else:
@@ -150,7 +152,7 @@ class Main(object):
                        action_dim=action_dim,
                        model_root_path=model_root_path,
                        replay_config=replay_config,
-                       **agent_config)
+                       **sac_config)
 
     def _run(self):
         brain_info = self.env.reset(train_mode=self.train_mode, config=self.reset_config)[self.default_brain_name]

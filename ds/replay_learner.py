@@ -27,11 +27,11 @@ class ReplayLearner(Learner):
     def __init__(self, argv, agent_class=Agent):
         self._agent_class = agent_class
 
-        self._config, self._reset_config, replay_config, agent_config = self._init_config(argv)
-        self._init_env(self._config['sac'], self._config['name'], replay_config, agent_config)
+        self._config, self._reset_config, replay_config, sac_config = self._init_config(argv)
+        self._init_env(self._config['sac'], self._config['name'], replay_config, sac_config)
         self._run()
 
-    def _init_env(self, sac, name, replay_config, agent_config):
+    def _init_env(self, sac, name, replay_config, sac_config):
         self.env = UnityEnvironment(file_name=self._build_path,
                                     no_graphics=True,
                                     base_port=self._build_port)
@@ -49,7 +49,7 @@ class ReplayLearner(Learner):
                        action_dim=action_dim,
                        model_root_path=self.model_root_path,
                        replay_config=replay_config,
-                       **agent_config)
+                       **sac_config)
 
     _trans_cached = None
 

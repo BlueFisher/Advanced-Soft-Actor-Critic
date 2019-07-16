@@ -39,8 +39,8 @@ class Learner(object):
     def __init__(self, argv, agent_class=Agent):
         self._agent_class = agent_class
 
-        self._config, self._reset_config, _, agent_config = self._init_config(argv)
-        self._init_env(self._config['sac'], self._config['name'], agent_config)
+        self._config, self._reset_config, _, sac_config = self._init_config(argv)
+        self._init_env(self._config['sac'], self._config['name'], sac_config)
         self._run()
 
     def _init_config(self, argv):
@@ -58,7 +58,7 @@ class Learner(object):
             'copy': 1
         }
         replay_config = dict()
-        agent_config = dict()
+        sac_config = dict()
 
         try:
             opts, args = getopt.getopt(argv, 'c:en:n:', ['config=',
@@ -97,7 +97,7 @@ class Learner(object):
                             replay_config = {} if v is None else v
 
                         elif k == 'sac_config':
-                            agent_config = {} if v is None else v
+                            sac_config = {} if v is None else v
 
                         elif k in config.keys():
                             config[k] = v
@@ -122,7 +122,7 @@ class Learner(object):
             yaml.dump({**config,
                        'reset_config': {**reset_config},
                        'replay_config': {**replay_config},
-                       'agents_config': {**agent_config}
+                       'sac_config': {**sac_config}
                        }, f, default_flow_style=False)
 
         config_str = '\ncommon_config'
@@ -137,14 +137,14 @@ class Learner(object):
         for k, v in replay_config.items():
             config_str += f'\n{k:>25}: {v}'
 
-        config_str += '\nagent_config:'
-        for k, v in agent_config.items():
+        config_str += '\nsac_config:'
+        for k, v in sac_config.items():
             config_str += f'\n{k:>25}: {v}'
         logger.info(config_str)
 
-        return config, reset_config, replay_config, agent_config
+        return config, reset_config, replay_config, sac_config
 
-    def _init_env(self, sac, name, agent_config):
+    def _init_env(self, sac, name, sac_config):
         self.env = UnityEnvironment(file_name=self._build_path,
                                     no_graphics=True,
                                     base_port=self._build_port,
@@ -162,7 +162,7 @@ class Learner(object):
         self.sac = SAC(state_dim=state_dim,
                        action_dim=action_dim,
                        model_root_path=self.model_root_path,
-                       **agent_config)
+                       **sac_config)
 
     def _start_policy_evaluation(self):
         eval_step = 0
