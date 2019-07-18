@@ -20,7 +20,7 @@ class SAC_Base(object):
                  tau=0.005,
                  write_summary_per_step=20,
                  update_target_per_step=1,
-                 init_log_alpha=-4.6,
+                 init_log_alpha=-2.3,
                  use_auto_alpha=True,
                  lr=3e-4,
                  use_priority=False,
@@ -188,6 +188,12 @@ class SAC_Base(object):
         self.summary_writer.add_summary(summaries, iteration + self.init_iteration)
 
     def _get_probs(self, n_states, n_actions):
+        """
+        n_states: [None, variable number of states, length of state space]
+        n_actions: [None, variable number of actions, length of state space]
+        The number of states and the number of actions msut be identical
+        """
+
         n_states_lens = [len(t) for t in n_states]
         n_actions_lens = [len(t) for t in n_actions]
 
@@ -198,19 +204,24 @@ class SAC_Base(object):
         n_actions_flatten = functools.reduce(lambda x, y: x + y, n_actions)
 
         tmp_probs = self.get_policy_prob(n_states_flatten, n_actions_flatten)
+        # [None, length of action space]
 
         n_probs = []
         tmp_index = 0
         for n_states_len in n_states_lens:
             tmp_n_probs = []
             for _ in range(n_states_len):
-                tmp_n_probs += tmp_probs[tmp_index].tolist()
+                tmp_n_probs.append(tmp_probs[tmp_index].tolist())
 
             n_probs.append(tmp_n_probs)
 
-        return n_probs
+        return n_probs  # [None, number of states, length of action space]
 
     def _get_n_step_is(self, pi_n_probs, mu_n_probs):
+        """
+        pi_n_probs, mu_n_probs: [None, variable number of states, length of state space]
+        """
+
         n_step_is = np.ones((len(pi_n_probs), 1))
 
         for i in range(len(pi_n_probs)):
@@ -220,9 +231,10 @@ class SAC_Base(object):
                 tmp_is = np.clip(tmp_is, 0, 1.)
                 n_step_is[i] = np.product(tmp_is)
 
-        return n_step_is
+        return n_step_is  # [None, 1]
 
     def train(self, s, a, r, s_, done, gamma, n_states, n_actions):
+        # n_states: [None, number of states, length of state space]
         assert len(s) == len(a) == len(r) == len(s_) == len(done) == len(gamma) == len(n_states) == len(n_actions)
 
         mu_n_probs = self._get_probs(n_states, n_actions)

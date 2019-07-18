@@ -25,7 +25,7 @@ sac_config:
   # tau: 0.005
   # write_summary_per_step: 20
   # update_target_per_step: 1
-  # init_log_alpha: -4.6
+  # init_log_alpha: -2.3
   # use_auto_alpha: true
   # lr: 3e-4
   use_priority: false

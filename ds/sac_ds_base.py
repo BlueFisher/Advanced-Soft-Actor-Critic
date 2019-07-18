@@ -24,7 +24,7 @@ class SAC_DS_Base(SAC_Base):
                  save_model_per_step=5000,
                  write_summary_per_step=20,
                  update_target_per_step=1,
-                 init_log_alpha=-4.6,
+                 init_log_alpha=-2.3,
                  use_auto_alpha=True,
                  lr=3e-4):
 
