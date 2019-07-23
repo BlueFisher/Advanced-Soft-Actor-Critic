@@ -12,6 +12,9 @@ from .replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 class SAC_Base(object):
     def __init__(self,
                  state_dim,
+                 #  ob_dim_x,
+                 #  ob_dim_y,
+                 #  ob_dim_c,
                  action_dim,
                  model_root_path,
 
@@ -51,6 +54,9 @@ class SAC_Base(object):
                                               replay_config['capacity'])
 
         self.s_dim = state_dim
+        # self.ob_dim_x = ob_dim_x
+        # self.ob_dim_y = ob_dim_y
+        # self.ob_dim_c = ob_dim_c
         self.a_dim = action_dim
 
         self.write_summary_per_step = write_summary_per_step
@@ -152,7 +158,7 @@ class SAC_Base(object):
         # return policy, action_sampled, variables
 
     def choose_action(self, s):
-        assert len(s.shape) == 2
+        assert len(s.shape) == len(self.pl_s.shape)
 
         a = self.sess.run(self.action_sampled, {
             self.pl_s: s,
