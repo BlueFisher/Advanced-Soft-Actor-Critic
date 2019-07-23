@@ -143,12 +143,18 @@ class Main(object):
 
         brain_params = self.env.brains[self.default_brain_name]
         state_dim = brain_params.vector_observation_space_size
+        # ob_dim_x = brain_params.camera_resolutions[0]['width']
+        # ob_dim_y = brain_params.camera_resolutions[0]['height']
+        # ob_dim_c = 1 if brain_params.camera_resolutions[0]['blackAndWhite'] else 3
         action_dim = brain_params.vector_action_space_size[0]
 
         class SAC(importlib.import_module(self.config['sac']).SAC_Custom, SAC_Base):
             pass
 
         self.sac = SAC(state_dim=state_dim,
+                    #    ob_dim_x=ob_dim_x,
+                    #    ob_dim_y=ob_dim_y,
+                    #    ob_dim_c=ob_dim_c,
                        action_dim=action_dim,
                        model_root_path=model_root_path,
                        replay_config=replay_config,
@@ -167,6 +173,7 @@ class Main(object):
                       for i in brain_info.agents]
 
             states = brain_info.vector_observations
+            # states = brain_info.visual_observations[0]
 
             while False in [a.done for a in agents] and not self.env.global_done:
                 actions = self.sac.choose_action(states)
@@ -175,6 +182,7 @@ class Main(object):
                 })[self.default_brain_name]
 
                 states_ = brain_info.vector_observations
+                # states_ = brain_info.visual_observations[0]
 
                 trans_list = [agents[i].add_transition(states[i],
                                                        actions[i],
