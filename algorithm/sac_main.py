@@ -108,24 +108,28 @@ class Main(object):
                 reset_config['copy'] = int(arg)
 
         # logger config
-        logging.basicConfig(level=logging.INFO, format='[%(levelname)s] - [%(name)s] - %(message)s')
+        _log = logging.getLogger()
+        # remove default root logger handler
+        _log.handlers = []
 
-        _log = logging.getLogger('tensorflow')
-        _log.setLevel(logging.ERROR)
+        # create stream handler
+        sh = logging.StreamHandler()
+        sh.setLevel(logging.INFO)
+
+        # add handler and formatter to logger
+        sh.setFormatter(logging.Formatter('[%(levelname)s] - [%(name)s] - %(message)s'))
+        _log.addHandler(sh)
 
         self.logger = logging.getLogger('sac')
+        self.logger.setLevel(level=logging.INFO)
 
         if logger_file is not None:
             # create file handler
             fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=1024 * 100, backupCount=5)
             fh.setLevel(logging.INFO)
 
-            # create formatter
-            fmt = "%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s"
-            formatter = logging.Formatter(fmt)
-
             # add handler and formatter to logger
-            fh.setFormatter(formatter)
+            fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
             self.logger.addHandler(fh)
 
         model_root_path = f'models/{config["name"]}'
