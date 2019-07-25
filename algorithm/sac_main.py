@@ -19,15 +19,13 @@ from .agent import Agent
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from mlagents.envs import UnityEnvironment
 
-logger = logging.getLogger('sac')
-
 
 class Main(object):
     train_mode = True
+    _agent_class = Agent
 
-    def __init__(self, argv, agent_class=Agent):
+    def __init__(self, argv):
         self._now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-        self._agent_class = agent_class
 
         self.config, self.reset_config, replay_config, sac_config, model_root_path = self._init_config(argv)
         self._init_env(replay_config, sac_config, model_root_path)
@@ -53,6 +51,7 @@ class Main(object):
         replay_config = dict()
         sac_config = dict()
 
+        # define command line arguments
         try:
             opts, args = getopt.getopt(argv, 'rc:n:b:p:', ['run',
                                                            'config=',
@@ -66,6 +65,7 @@ class Main(object):
         except getopt.GetoptError:
             raise Exception('ARGS ERROR')
 
+        # initialize config from config.yaml
         for opt, arg in opts:
             if opt in ('-c', '--config'):
                 with open(arg) as f:
@@ -87,6 +87,7 @@ class Main(object):
                             config[k] = v
                 break
 
+        # initialize config from command line arguments
         logger_file = None
         for opt, arg in opts:
             if opt in ('-r', '--run'):
@@ -107,6 +108,13 @@ class Main(object):
                 reset_config['copy'] = int(arg)
 
         # logger config
+        logging.basicConfig(level=logging.INFO, format='[%(levelname)s] - [%(name)s] - %(message)s')
+
+        _log = logging.getLogger('tensorflow')
+        _log.setLevel(logging.ERROR)
+
+        self.logger = logging.getLogger('sac')
+
         if logger_file is not None:
             # create file handler
             fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=1024 * 100, backupCount=5)
@@ -118,10 +126,11 @@ class Main(object):
 
             # add handler and formatter to logger
             fh.setFormatter(formatter)
-            logger.addHandler(fh)
+            self.logger.addHandler(fh)
 
         model_root_path = f'models/{config["name"]}'
 
+        # save config
         if self.train_mode:
             if not os.path.exists(model_root_path):
                 os.makedirs(model_root_path)
@@ -130,6 +139,7 @@ class Main(object):
                            'sac_config': {**sac_config}
                            }, f, default_flow_style=False)
 
+        # display config
         config_str = '\ncommon_config'
         for k, v in config.items():
             config_str += f'\n{k:>25}: {v}'
@@ -145,7 +155,7 @@ class Main(object):
         config_str += '\nsac_config:'
         for k, v in sac_config.items():
             config_str += f'\n{k:>25}: {v}'
-        logger.info(config_str)
+        self.logger.info(config_str)
 
         return config, reset_config, replay_config, sac_config, model_root_path
 
@@ -218,7 +228,6 @@ class Main(object):
                     self.sac.train(*trans)
 
                 states = states_
-
             if self.train_mode:
                 self._log_episode_summaries(iteration, agents)
 
@@ -240,4 +249,4 @@ class Main(object):
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]
         rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(rewards)])
-        logger.info(f'iter {iteration}, rewards {rewards_sorted}')
+        self.logger.info(f'iter {iteration}, rewards {rewards_sorted}')
