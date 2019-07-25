@@ -4,6 +4,7 @@ import functools
 import getopt
 import importlib
 import logging
+import logging.handlers
 import os
 import sys
 import time
@@ -58,6 +59,7 @@ class Main(object):
                                                            'name=',
                                                            'build=',
                                                            'port=',
+                                                           'logger_file=',
                                                            'seed=',
                                                            'sac=',
                                                            'agents='])
@@ -85,6 +87,7 @@ class Main(object):
                             config[k] = v
                 break
 
+        logger_file = None
         for opt, arg in opts:
             if opt in ('-r', '--run'):
                 self.train_mode = False
@@ -94,12 +97,28 @@ class Main(object):
                 config['build_path'] = arg
             elif opt in ('-p', '--port'):
                 config['port'] = int(arg)
+            elif opt == '--logger_file':
+                logger_file = arg
             elif opt == '--seed':
                 sac_config['seed'] = int(arg)
             elif opt == '--sac':
                 config['sac'] = arg
             elif opt == '--agents':
                 reset_config['copy'] = int(arg)
+
+        # logger config
+        if logger_file is not None:
+            # create file handler
+            fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=1024 * 100, backupCount=5)
+            fh.setLevel(logging.INFO)
+
+            # create formatter
+            fmt = "%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s"
+            formatter = logging.Formatter(fmt)
+
+            # add handler and formatter to logger
+            fh.setFormatter(formatter)
+            logger.addHandler(fh)
 
         model_root_path = f'models/{config["name"]}'
 
@@ -152,9 +171,9 @@ class Main(object):
             pass
 
         self.sac = SAC(state_dim=state_dim,
-                    #    ob_dim_x=ob_dim_x,
-                    #    ob_dim_y=ob_dim_y,
-                    #    ob_dim_c=ob_dim_c,
+                       #    ob_dim_x=ob_dim_x,
+                       #    ob_dim_y=ob_dim_y,
+                       #    ob_dim_c=ob_dim_c,
                        action_dim=action_dim,
                        model_root_path=model_root_path,
                        replay_config=replay_config,

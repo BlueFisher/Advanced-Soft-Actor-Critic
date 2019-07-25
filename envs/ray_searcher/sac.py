@@ -15,11 +15,11 @@ class SAC_Custom(object):
     def _build_q_net(self, s_input, a_input, scope, trainable=True, reuse=False):
         with tf.variable_scope(scope, reuse=reuse):
             ls = tf.layers.dense(
-                s_input, 64, activation=tf.nn.tanh,
+                s_input, 64, activation=tf.nn.relu,
                 trainable=trainable, **initializer_helper
             )
             la = tf.layers.dense(
-                a_input, 64, activation=tf.nn.tanh,
+                a_input, 64, activation=tf.nn.relu,
                 trainable=trainable, **initializer_helper
             )
             l = tf.concat([ls, la], 1)
