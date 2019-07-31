@@ -86,8 +86,8 @@ class SAC_Base(object):
         self.pl_s_ = tf.placeholder(tf.float32, shape=(None, self.s_dim), name='state_')
         self.pl_done = tf.placeholder(tf.float32, shape=(None, 1), name='done')
         self.pl_gamma = tf.placeholder(tf.float32, shape=(None, 1), name='gamma')
-        self.pl_n_step_is = tf.placeholder(tf.float32, shape=(None, 1), name='n_step_is')
 
+        self.pl_n_step_is = tf.placeholder(tf.float32, shape=(None, 1), name='n_step_is')
         self.pl_priority_is = tf.placeholder(tf.float32, shape=(None, 1), name='priority_is')
 
         log_alpha = tf.get_variable('alpha', shape=(), initializer=tf.constant_initializer(init_log_alpha))
