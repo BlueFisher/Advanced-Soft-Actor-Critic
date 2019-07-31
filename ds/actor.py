@@ -1,5 +1,6 @@
 from pathlib import Path
 import asyncio
+import functools
 import getopt
 import importlib
 import json
@@ -21,22 +22,19 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from mlagents.envs import UnityEnvironment
 from algorithm.agent import Agent
 
-logger = logging.getLogger('sac.ds')
-
 
 class TransBuffer(object):
     _buffer = None
 
     def add(self, *args):
         for arg in args:
-            assert len(arg.shape) == 2
             assert len(arg) == len(args[0])
 
         if self._buffer is None:
             self._buffer = list(args)
         else:
             for i in range(len(args)):
-                self._buffer[i] = np.concatenate((self._buffer[i], args[i]))
+                self._buffer[i] += args[i]
 
     def get_trans_and_clear(self):
         trans = self._buffer
@@ -159,18 +157,29 @@ class Actor(object):
                 self._train_mode = False
 
         # logger config
+        _log = logging.getLogger()
+        # remove default root logger handler
+        _log.handlers = []
+
+        # create stream handler
+        sh = logging.StreamHandler()
+        sh.setLevel(logging.INFO)
+
+        # add handler and formatter to logger
+        sh.setFormatter(logging.Formatter('[%(levelname)s] - [%(name)s] - %(message)s'))
+        _log.addHandler(sh)
+
+        self.logger = logging.getLogger('sac.ds.actor')
+        self.logger.setLevel(level=logging.INFO)
+
         if logger_file is not None:
             # create file handler
             fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=1024 * 100, backupCount=5)
             fh.setLevel(logging.INFO)
 
-            # create formatter
-            fmt = "%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s"
-            formatter = logging.Formatter(fmt)
-
             # add handler and formatter to logger
-            fh.setFormatter(formatter)
-            logger.addHandler(fh)
+            fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
+            self.logger.addHandler(fh)
 
     def _init_websocket_client(self):
         loop = asyncio.get_event_loop()
@@ -183,7 +192,7 @@ class Actor(object):
                     await websocket.send(json.dumps({
                         'cmd': 'actor'
                     }))
-                    logger.info('websocket connected')
+                    self.logger.info('websocket connected')
                     while True:
                         try:
                             raw_message = await websocket.recv()
@@ -191,17 +200,17 @@ class Actor(object):
                             if message['cmd'] == 'reset':
                                 self._websocket_connected = True
                                 self._config = dict(self._config, **message['config'])
-                                logger.info(f'reset config: {message["config"]}')
+                                self.logger.info(f'reset config: {message["config"]}')
                         except websockets.ConnectionClosed:
-                            logger.error('websocket connection closed')
+                            self.logger.error('websocket connection closed')
                             break
                         except json.JSONDecodeError:
-                            logger.error(f'websocket json decode error, {raw_message}')
+                            self.logger.error(f'websocket json decode error, {raw_message}')
             except (ConnectionRefusedError, websockets.InvalidMessage):
-                logger.error(f'websocket connecting failed')
+                self.logger.error(f'websocket connecting failed')
                 time.sleep(1)
             except Exception as e:
-                logger.error(f'websocket connecting error {type(e)}, {str(e)}')
+                self.logger.error(f'websocket connecting error {type(e)}, {str(e)}')
                 time.sleep(1)
             finally:
                 self._websocket_connected = False
@@ -215,7 +224,7 @@ class Actor(object):
                                         base_port=self._build_port,
                                         args=['--scene', self._scene])
 
-        logger.info(f'{self._build_path} initialized')
+        self.logger.info(f'{self._build_path} initialized')
 
         self.default_brain_name = self.env.brain_names[0]
 
@@ -231,7 +240,7 @@ class Actor(object):
                              action_dim,
                              model_root_path=None)
 
-        logger.info(f'actor initialized')
+        self.logger.info(f'actor initialized')
 
     def _update_policy_variables(self):
         while True and self._websocket_connected:
@@ -241,10 +250,10 @@ class Actor(object):
                 new_variables = r.json()
                 self.sac_actor.update_policy_variables(new_variables)
             except requests.ConnectionError:
-                logger.error('update_policy_variables connecting error')
+                self.logger.error('update_policy_variables connecting error')
                 time.sleep(1)
             except Exception as e:
-                logger.error(f'update_policy_variables error {type(e)}, {str(e)}')
+                self.logger.error(f'update_policy_variables error {type(e)}, {str(e)}')
                 break
             else:
                 break
@@ -257,12 +266,12 @@ class Actor(object):
             while True and self._websocket_connected:
                 try:
                     requests.post(f'http://{self._replay_host}:{self._replay_port}/add',
-                                  json=[t.tolist() for t in trans])
+                                  json=trans)
                 except requests.ConnectionError:
-                    logger.error(f'add_trans connecting error')
+                    self.logger.error(f'add_trans connecting error')
                     time.sleep(1)
                 except Exception as e:
-                    logger.error(f'add_trans error {type(e)}, {str(e)}')
+                    self.logger.error(f'add_trans error {type(e)}, {str(e)}')
                     break
                 else:
                     break
@@ -277,15 +286,16 @@ class Actor(object):
                 global_step = 0
                 time.sleep(1)
                 continue
-
             if global_step == 0 and self._websocket_connected:
                 self._tmp_trans_buffer.clear()
                 self._init_sac()
-
             if self.env.global_done or self._config['reset_on_iteration']:
                 brain_info = self.env.reset(train_mode=self._train_mode)[self.default_brain_name]
 
-            agents = [self._agent_class(i, self._config['gamma'], self._config['n_step']) for i in brain_info.agents]
+            agents = [self._agent_class(i,
+                                        self._config['gamma'],
+                                        self._config['n_step'])
+                      for i in brain_info.agents]
 
             states = brain_info.vector_observations
 
@@ -308,9 +318,11 @@ class Actor(object):
                                                        states_[i])
                               for i in range(len(agents))]
 
-                trans = [np.concatenate(t) for t in zip(*trans_list)]
-
-                self._add_trans(*trans)
+                # s, a, r, s_, done, gamma, n_states, n_actions
+                trans = [functools.reduce(lambda x, y: x + y, t) for t in zip(*trans_list)]
+                n_states, n_actions = trans[6], trans[7]
+                mu_n_probs = self.sac_actor.get_probs(n_states, n_actions)
+                self._add_trans(*trans, mu_n_probs)
 
                 states = states_
                 global_step += 1
@@ -320,4 +332,4 @@ class Actor(object):
     def _log_episode_info(self, global_step, agents):
         rewards = [a.reward for a in agents]
         rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(rewards)])
-        logger.info(f'{global_step}, rewards {rewards_sorted}')
+        self.logger.info(f'{global_step}, rewards {rewards_sorted}')

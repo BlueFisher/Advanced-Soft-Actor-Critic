@@ -1,5 +1,4 @@
 from pathlib import Path
-import logging
 import sys
 import time
 
@@ -11,8 +10,6 @@ from actor import Actor
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from algorithm.agent import Agent
-
-logger = logging.getLogger('sac.ds')
 
 
 class HittedLearner_Custom(object):
@@ -29,7 +26,7 @@ class HittedLearner_Custom(object):
 
         time_elapse = (time.time() - start_time) / 60
         rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(rewards)])
-        logger.info(f'{eval_step}, {time_elapse:.2f}min, rewards {rewards_sorted}, hitted {hitted}')
+        self.logger.info(f'{eval_step}, {time_elapse:.2f}min, rewards {rewards_sorted}, hitted {hitted}')
 
 
 class LearnerHitted(HittedLearner_Custom, Learner):
@@ -50,7 +47,7 @@ class AgentHitted(Agent):
                    local_done,
                    max_reached,
                    state_):
-        if reward >= 1:
+        if not self.done and reward >= 1:
             self.hitted += 1
 
 
@@ -62,4 +59,4 @@ class ActorHitted(Actor):
         rewards = [a.reward for a in agents]
         rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(rewards)])
         hitted = sum([a.hitted for a in agents])
-        logger.info(f'{global_step}, rewards {rewards_sorted}, hitted {hitted}')
+        self.logger.info(f'{global_step}, rewards {rewards_sorted}, hitted {hitted}')
