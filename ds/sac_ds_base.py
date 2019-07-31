@@ -26,7 +26,8 @@ class SAC_DS_Base(SAC_Base):
                  update_target_per_step=1,
                  init_log_alpha=-2.3,
                  use_auto_alpha=True,
-                 lr=3e-4):
+                 lr=3e-4,
+                 use_n_step_is=True):
 
         self.graph = tf.Graph()
         gpu_options = tf.GPUOptions(allow_growth=True)
@@ -41,8 +42,9 @@ class SAC_DS_Base(SAC_Base):
         self.write_summary_per_step = write_summary_per_step
         self.update_target_per_step = update_target_per_step
 
-        self.use_priority = True
         self.use_auto_alpha = use_auto_alpha
+        self.use_priority = True
+        self.use_n_step_is = use_n_step_is
 
         with self.graph.as_default():
             self._build_model(tau, lr, init_log_alpha)
@@ -84,15 +86,17 @@ class SAC_DS_Base(SAC_Base):
                                           for i in constant_summaries])
             self.summary_writer.add_summary(summaries, self.sess.run(self.global_step) if step is None else step)
 
-    def train(self, s, a, r, s_, done, gamma, is_weight):
-        assert len(s.shape) == 2
+    def train(self, s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs, priority_is):
+        # n_states: [None, number of states, length of state space]
         assert self.model_root_path is not None
 
         global_step = self.sess.run(self.global_step)
 
-        # update target networks
-        if global_step % self.update_target_per_step == 0:
-            self.sess.run(self.update_target_op)
+        if self.use_n_step_is:
+            pi_n_probs = self.get_probs(n_states, n_actions)
+            n_step_is = self._get_n_step_is(pi_n_probs, mu_n_probs)
+        else:
+            n_step_is = np.ones((len(s), 1))
 
         if global_step % self.write_summary_per_step == 0:
             summaries = self.sess.run(self.summaries, {
@@ -102,9 +106,14 @@ class SAC_DS_Base(SAC_Base):
                 self.pl_s_: s_,
                 self.pl_done: done,
                 self.pl_gamma: gamma,
-                self.pl_is: is_weight
+                self.pl_n_step_is: n_step_is,
+                self.pl_priority_is: priority_is
             })
             self.summary_writer.add_summary(summaries, global_step)
+
+        # update target networks
+        if global_step % self.update_target_per_step == 0:
+            self.sess.run(self.update_target_op)
 
         self.sess.run(self.train_q_ops, {
             self.pl_s: s,
@@ -113,7 +122,8 @@ class SAC_DS_Base(SAC_Base):
             self.pl_s_: s_,
             self.pl_done: done,
             self.pl_gamma: gamma,
-            self.pl_is: is_weight
+            self.pl_n_step_is: n_step_is,
+            self.pl_priority_is: priority_is
         })
 
         self.sess.run(self.train_policy_op, {
@@ -137,4 +147,8 @@ class SAC_DS_Base(SAC_Base):
         if global_step % self.save_model_per_step == 0:
             self.saver.save(global_step)
 
-        return global_step, td_error.flatten()
+        pi_n_probs = None
+        if self.use_n_step_is:
+            pi_n_probs = self.get_probs(n_states, n_actions)
+
+        return global_step, td_error.flatten(), pi_n_probs

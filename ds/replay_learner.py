@@ -19,13 +19,11 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from mlagents.envs import UnityEnvironment
 from algorithm.agent import Agent
 
-logger = logging.getLogger('sac.ds')
-NOW = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-
 
 class ReplayLearner(Learner):
     def __init__(self, argv, agent_class=Agent):
         self._agent_class = agent_class
+        self._now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
         self._config, self._reset_config, replay_config, sac_config = self._init_config(argv)
         self._init_env(self._config['sac'], self._config['name'], replay_config, sac_config)
@@ -34,7 +32,8 @@ class ReplayLearner(Learner):
     def _init_env(self, sac, name, replay_config, sac_config):
         self.env = UnityEnvironment(file_name=self._build_path,
                                     no_graphics=True,
-                                    base_port=self._build_port)
+                                    base_port=self._build_port,
+                                    args=['--scene', self._scene])
 
         self.default_brain_name = self.env.brain_names[0]
 
@@ -51,6 +50,7 @@ class ReplayLearner(Learner):
                        replay_config=replay_config,
                        **sac_config)
 
+    # s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs
     _trans_cached = None
 
     def _run_learner_server(self):
@@ -67,11 +67,10 @@ class ReplayLearner(Learner):
 
             self._lock.acquire()
             if self._trans_cached is None:
-                self._trans_cached = [np.array(t) for t in trans]
+                self._trans_cached = trans
             else:
-                trans = [np.array(t) for t in trans]
                 for i in range(len(self._trans_cached)):
-                    self._trans_cached[i] = np.concatenate((self._trans_cached[i], trans[i]))
+                    self._trans_cached[i] += trans[i]
             self._lock.release()
 
             return jsonify({
@@ -89,7 +88,7 @@ class ReplayLearner(Learner):
         while True:
             self._lock.acquire()
             if self._trans_cached is not None:
-                td_errors = self.sac.get_td_error(*self._trans_cached)
+                td_errors = self.sac.get_td_error(*self._trans_cached[:6])
                 self.sac.add_with_td_errors(td_errors.flatten(), *self._trans_cached)
                 self._trans_cached = None
             self._lock.release()
@@ -97,7 +96,7 @@ class ReplayLearner(Learner):
             _t = time.time()
             result = self.sac.train()
             if result is not None:
-                logger.debug(f'train {time.time() - _t}')
+                self.logger.debug(f'train {time.time() - _t}')
                 if not t_evaluation.is_alive():
                     t_evaluation.start()
             else:

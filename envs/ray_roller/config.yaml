@@ -1,10 +1,10 @@
 build_path: 
   win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
-  linux: /home/fisher/data/linux-RL-Envs/RL-Envs.x86_64
+  linux: /data/linux-RL-Envs/RL-Envs.x86_64
 scene: RayRoller
 
 # sac: sac
-max_iter: 5000
+max_iter: 400
 # agents_num: 1
 save_model_per_iter: 100
 reset_on_iteration: false

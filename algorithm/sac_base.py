@@ -193,7 +193,7 @@ class SAC_Base(object):
                                       for i in constant_summaries])
         self.summary_writer.add_summary(summaries, iteration + self.init_iteration)
 
-    def _get_probs(self, n_states, n_actions):
+    def get_probs(self, n_states, n_actions):
         """
         n_states: [None, variable number of states, length of state space]
         n_actions: [None, variable number of actions, length of state space]
@@ -243,7 +243,7 @@ class SAC_Base(object):
         # n_states: [None, number of states, length of state space]
         assert len(s) == len(a) == len(r) == len(s_) == len(done) == len(gamma) == len(n_states) == len(n_actions)
 
-        mu_n_probs = self._get_probs(n_states, n_actions)
+        mu_n_probs = self.get_probs(n_states, n_actions)
 
         self.replay_buffer.add(s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs)
 
@@ -260,7 +260,7 @@ class SAC_Base(object):
             priority_is = np.ones((len(s), 1))
 
         if self.use_n_step_is:
-            pi_n_probs = self._get_probs(n_states, n_actions)
+            pi_n_probs = self.get_probs(n_states, n_actions)
             n_step_is = self._get_n_step_is(pi_n_probs, mu_n_probs)
         else:
             n_step_is = np.ones((len(s), 1))
@@ -315,7 +315,7 @@ class SAC_Base(object):
             self.replay_buffer.update(points, td_error.flatten())
 
         if self.use_n_step_is:
-            pi_n_probs = self._get_probs(n_states, n_actions)
+            pi_n_probs = self.get_probs(n_states, n_actions)
             self.replay_buffer.update_transitions(8, points, pi_n_probs)
 
     def dispose(self):

@@ -23,9 +23,6 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from mlagents.envs import UnityEnvironment
 from algorithm.agent import Agent
 
-logger = logging.getLogger('sac.ds')
-NOW = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-
 
 class Learner(object):
     _replay_host = '127.0.0.1'
@@ -38,6 +35,7 @@ class Learner(object):
 
     def __init__(self, argv, agent_class=Agent):
         self._agent_class = agent_class
+        self._now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
         self._config, self._reset_config, _, sac_config = self._init_config(argv)
         self._init_env(self._config['sac'], self._config['name'], sac_config)
@@ -45,7 +43,7 @@ class Learner(object):
 
     def _init_config(self, argv):
         config = {
-            'name': NOW,
+            'name': self._now,
             'sac': 'sac',
             'save_model_per_step': 10000,
             'update_policy_variables_per_step': 100,
@@ -114,6 +112,25 @@ class Learner(object):
             elif opt == '--sac':
                 config['sac'] = arg
 
+        # logger config
+        _log = logging.getLogger()
+        # remove default root logger handler
+        _log.handlers = []
+
+        # create stream handler
+        sh = logging.StreamHandler()
+        sh.setLevel(logging.INFO)
+
+        # add handler and formatter to logger
+        sh.setFormatter(logging.Formatter('[%(levelname)s] - [%(name)s] - %(message)s'))
+        _log.addHandler(sh)
+
+        _log = logging.getLogger('werkzeug')
+        _log.setLevel(level=logging.ERROR)
+
+        self.logger = logging.getLogger('sac.ds.learner')
+        self.logger.setLevel(level=logging.INFO)
+
         self.model_root_path = f'models/{config["name"]}'
 
         if not os.path.exists(self.model_root_path):
@@ -140,7 +157,7 @@ class Learner(object):
         config_str += '\nsac_config:'
         for k, v in sac_config.items():
             config_str += f'\n{k:>25}: {v}'
-        logger.info(config_str)
+        self.logger.info(config_str)
 
         return config, reset_config, replay_config, sac_config
 
@@ -212,7 +229,7 @@ class Learner(object):
 
         time_elapse = (time.time() - start_time) / 60
         rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(rewards)])
-        logger.info(f'{eval_step}, {time_elapse:.2f}min, rewards {rewards_sorted}')
+        self.logger.info(f'{eval_step}, {time_elapse:.2f}min, rewards {rewards_sorted}')
 
     def _run_learner_server(self):
         app = Flask('learner')
@@ -235,10 +252,10 @@ class Learner(object):
             try:
                 r = requests.get(f'http://{self._replay_host}:{self._replay_port}/sample')
             except requests.ConnectionError:
-                logger.error(f'get_sampled_data connecting error')
+                self.logger.error(f'get_sampled_data connecting error')
                 time.sleep(1)
             except Exception as e:
-                logger.error(f'get_sampled_data error {type(e)}, {str(e)}')
+                self.logger.error(f'get_sampled_data error {type(e)}, {str(e)}')
                 time.sleep(1)
             else:
                 break
@@ -253,10 +270,28 @@ class Learner(object):
                                   'td_errors': td_errors
                               })
             except requests.ConnectionError:
-                logger.error(f'update_td_errors connecting error')
+                self.logger.error(f'update_td_errors connecting error')
                 time.sleep(1)
             except Exception as e:
-                logger.error(f'update_td_errors error {type(e)}, {str(e)}')
+                self.logger.error(f'update_td_errors error {type(e)}, {str(e)}')
+                time.sleep(1)
+            else:
+                break
+
+    def _update_transitions(self, transition_idx, points, data):
+        while True:
+            try:
+                requests.post(f'http://{self._replay_host}:{self._replay_port}/update_transitions',
+                              json={
+                                  'transition_idx': transition_idx,
+                                  'points': points,
+                                  'data': data
+                              })
+            except requests.ConnectionError:
+                self.logger.error(f'_update_transitions connecting error')
+                time.sleep(1)
+            except Exception as e:
+                self.logger.error(f'update_transitions error {type(e)}, {str(e)}')
                 time.sleep(1)
             else:
                 break
@@ -266,10 +301,10 @@ class Learner(object):
             try:
                 requests.get(f'http://{self._replay_host}:{self._replay_port}/clear')
             except requests.ConnectionError:
-                logger.error(f'clear_replay_buffer connecting error')
+                self.logger.error(f'clear_replay_buffer connecting error')
                 time.sleep(1)
             except Exception as e:
-                logger.error(f'clear_replay_buffer error {type(e)}, {str(e)}')
+                self.logger.error(f'clear_replay_buffer error {type(e)}, {str(e)}')
                 time.sleep(1)
             else:
                 break
@@ -286,16 +321,19 @@ class Learner(object):
                 if not t_evaluation.is_alive():
                     t_evaluation.start()
 
+                points = data['points']
                 trans = data['trans']
                 is_weights = data['is_weights']
 
-                is_weights = np.array(is_weights)
-                for i, p in enumerate(trans):
-                    trans[i] = np.array(p)
-
-                s, a, r, s_, done = trans
-                curr_step, td_errors = self.sac.train(s, a, r, s_, done, is_weights)
-                self._update_td_errors(data['points'], td_errors.tolist())
+                s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs = trans
+                curr_step, td_errors, pi_n_probs = self.sac.train(s, a, r, s_, done, gamma,
+                                                                  n_states, n_actions, mu_n_probs,
+                                                                  is_weights)
+                self._update_td_errors(points, td_errors.tolist())
+                self._update_transitions(8, points, pi_n_probs)
+            else:
+                self.logger.warn('no data sampled')
+                time.sleep(1)
 
     def _run(self):
         sac_reset_config = {
@@ -323,7 +361,11 @@ class WebsocketServer:
         start_server = websockets.serve(self._websocket_open, '0.0.0.0', port)
         loop = asyncio.get_event_loop()
         loop.run_until_complete(start_server)
-        logger.info('websocket server started')
+
+        self.logger = logging.getLogger('websocket')
+        self.logger.setLevel(level=logging.INFO)
+
+        self.logger.info('websocket server started')
 
     async def _websocket_open(self, websocket, path):
         try:
@@ -348,9 +390,9 @@ class WebsocketServer:
     def print_websocket_clients(self):
         log_str = f'{len(self._websocket_clients)} active actors'
         for i, client in enumerate(self._websocket_clients):
-            log_str += (f'\n[{i+1}]. {client.remote_address[0]} : {client.remote_address[1]}')
+            log_str += (f'\n\t[{i+1}]. {client.remote_address[0]} : {client.remote_address[1]}')
 
-        logger.info(log_str)
+        self.logger.info(log_str)
 
     async def send_to_all(self, message):
         tasks = []

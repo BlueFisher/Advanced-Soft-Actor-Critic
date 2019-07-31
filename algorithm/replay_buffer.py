@@ -214,6 +214,12 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
     def add_with_td_errors(self, td_errors, *args):
         assert len(td_errors) == len(args[0])
 
+        if type(td_errors) == list:
+            td_errors = np.array(td_errors)
+
+        if len(td_errors.shape) == 2:
+            td_errors = td_errors.flatten()
+
         td_errors += self.epsilon  # convert to abs and avoid 0
         clipped_errors = np.minimum(td_errors, self.td_err_upper)
         probs = np.power(clipped_errors, self.alpha)
@@ -245,6 +251,12 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
         return points, list(list(t) for t in zip(*transitions)), is_weights
 
     def update(self, points, td_errors):
+        if type(td_errors) == list:
+            td_errors = np.array(td_errors)
+
+        if len(td_errors.shape) == 2:
+            td_errors = td_errors.flatten()
+
         td_errors += self.epsilon  # convert to abs and avoid 0
         clipped_errors = np.minimum(td_errors, self.td_err_upper)
         ps = np.power(clipped_errors, self.alpha)
@@ -252,8 +264,11 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
         for ti, p in zip(points, ps):
             self._sum_tree.update(ti, p)
 
-    def update_transitions(self, transition_idx, tree_idx, data):
-        self._sum_tree.update_transitions(transition_idx, tree_idx, data)
+    def update_transitions(self, transition_idx, points, data):
+        if type(points) == list:
+            points = np.array(points)
+            
+        self._sum_tree.update_transitions(transition_idx, points, data)
 
     def clear(self):
         self._sum_tree.clear()

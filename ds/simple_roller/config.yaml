@@ -1,38 +1,36 @@
 build_path: 
   win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
+  linux: /data/linux-RL-Envs/RL-Envs.x86_64
 scene: ContinousSimpleRoller
 
-# replay_host: 127.0.0.1
+replay_host: 58.199.160.89
 replay_port: 61001
-# learner_host: 127.0.0.1
-# learner_port: 61001
-# websocket_host: 127.0.0.1
-# websocket_port: 61002
+learner_host: 58.199.160.89
+learner_port: 61001
+websocket_host: 58.199.160.89
+websocket_port: 61002
 
-reset_config:
-  # copy: 1
-
+# name: {time}
+# sac: sac
 # update_policy_variables_per_step: 100
 # add_trans_threshold: 100
 reset_on_iteration: false
 # gamma: 0.99
-n_step: 3
+# n_step: 3
 
-# name: {time}
-# sac: sac
-
-replay_config:
-  batch_size: 1024
-  # capacity: 1000000
-  # alpha: 0.9
+# replay_config:
+#   batch_size: 256
+#   capacity: 1000000
+#   alpha: 0.9
 
 sac_config:
   write_summary_graph: true
-  # seed: 0
+  # seed: null
   # tau: 0.005
   # save_model_per_step: 5000
   # write_summary_per_step: 20
   # update_target_per_step: 1
   # init_log_alpha: -2.3
-  # use_auto_alpha: True
+  # use_auto_alpha: true
   # lr: 0.0003
+  # use_n_step_is: true

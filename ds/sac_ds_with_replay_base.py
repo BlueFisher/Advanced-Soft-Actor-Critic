@@ -27,6 +27,7 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
                  init_log_alpha=-4.6,
                  use_auto_alpha=True,
                  lr=3e-4,
+                 use_n_step_is=True,
 
                  replay_config=None):
 
@@ -50,17 +51,14 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
                          update_target_per_step,
                          init_log_alpha,
                          use_auto_alpha,
-                         lr)
+                         lr,
+                         use_n_step_is)
 
-    def add(self, s, a, r, s_, done, gamma):
-        assert self.model_root_path is not None
+    def add(self, s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs):
+        self.replay_buffer.add(s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs)
 
-        self.replay_buffer.add(s, a, r, s_, done, gamma)
-
-    def add_with_td_errors(self, td_errors, s, a, r, s_, done, gamma):
-        assert self.model_root_path is not None
-
-        self.replay_buffer.add_with_td_errors(td_errors, s, a, r, s_, done, gamma)
+    def add_with_td_errors(self, td_errors, s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs):
+        self.replay_buffer.add_with_td_errors(td_errors, s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs)
 
     def train(self):
         assert self.model_root_path is not None
@@ -71,7 +69,13 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
 
         global_step = self.sess.run(self.global_step)
 
-        points, (s, a, r, s_, done, gamma), is_weight = sampled
+        points, (s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs), priority_is = sampled
+
+        if self.use_n_step_is:
+            pi_n_probs = self.get_probs(n_states, n_actions)
+            n_step_is = self._get_n_step_is(pi_n_probs, mu_n_probs)
+        else:
+            n_step_is = np.ones((len(s), 1))
 
         if global_step % self.write_summary_per_step == 0:
             summaries = self.sess.run(self.summaries, {
@@ -81,7 +85,8 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
                 self.pl_s_: s_,
                 self.pl_done: done,
                 self.pl_gamma: gamma,
-                self.pl_is: is_weight
+                self.pl_n_step_is: n_step_is,
+                self.pl_priority_is: priority_is
             })
             self.summary_writer.add_summary(summaries, global_step)
 
@@ -99,7 +104,8 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
             self.pl_s_: s_,
             self.pl_done: done,
             self.pl_gamma: gamma,
-            self.pl_is: is_weight
+            self.pl_n_step_is: n_step_is,
+            self.pl_priority_is: priority_is
         })
 
         self.sess.run(self.train_policy_op, {
@@ -121,5 +127,9 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
         })
 
         self.replay_buffer.update(points, td_error.flatten())
+
+        if self.use_n_step_is:
+            pi_n_probs = self.get_probs(n_states, n_actions)
+            self.replay_buffer.update_transitions(8, points, pi_n_probs)
 
         return global_step
