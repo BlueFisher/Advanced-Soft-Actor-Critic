@@ -259,6 +259,7 @@ class Actor(object):
                 break
 
     def _add_trans(self, *trans):
+        # s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs
         self._tmp_trans_buffer.add(*trans)
 
         if self._tmp_trans_buffer.size > self._config['add_trans_threshold']:
