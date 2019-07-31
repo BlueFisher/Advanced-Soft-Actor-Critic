@@ -50,8 +50,7 @@ class ReplayLearner(Learner):
                        replay_config=replay_config,
                        **sac_config)
 
-    # s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs
-    _trans_cached = None
+    _trans_cached = None # s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs
 
     def _run_learner_server(self):
         app = Flask('learner')
@@ -64,6 +63,7 @@ class ReplayLearner(Learner):
         @app.route('/add', methods=['POST'])
         def add():
             trans = request.get_json()
+            # s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs
 
             self._lock.acquire()
             if self._trans_cached is None:
