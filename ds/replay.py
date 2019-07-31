@@ -12,8 +12,6 @@ import numpy as np
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from algorithm.replay_buffer import PrioritizedReplayBuffer
 
-logger = logging.getLogger('sac.ds')
-
 
 class Replay(object):
     _replay_port = 61000
@@ -56,6 +54,22 @@ class Replay(object):
             elif opt in ('-p', '--replay_port'):
                 self._replay_port = int(arg)
 
+            # logger config
+            _log = logging.getLogger()
+            # remove default root logger handler
+            _log.handlers = []
+
+            # create stream handler
+            sh = logging.StreamHandler()
+            sh.setLevel(logging.INFO)
+
+            # add handler and formatter to logger
+            sh.setFormatter(logging.Formatter('[%(levelname)s] - [%(name)s] - %(message)s'))
+            _log.addHandler(sh)
+
+            self.logger = logging.getLogger('sac.ds.replay')
+            self.logger.setLevel(level=logging.INFO)
+
     def _run(self):
         app = Flask('replay')
 
@@ -67,13 +81,13 @@ class Replay(object):
         _tmp_trans_arr = []
 
         def _add_trans(*trans):
+            # s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs
             while True:
                 try:
                     r = requests.post(f'http://{self._learner_host}:{self._learner_port}/get_td_errors',
-                                      json=[t.tolist() for t in trans])
+                                      json=trans[:6])
                 except Exception as e:
-                    logger.error(f'_clear_replay_buffer: {str(e)}')
-                    time.sleep(1)
+                    self.logger.error(f'_clear_replay_buffer: {str(e)}')
                 else:
                     break
 
@@ -81,13 +95,13 @@ class Replay(object):
 
             replay_buffer.add_with_td_errors(td_errors, *trans)
 
-            logger.info(f'buffer_size: {replay_buffer.size}/{replay_buffer.capacity}, {replay_buffer.size/replay_buffer.capacity*100:.2f}%')
+            self.logger.info(f'buffer_size: {replay_buffer.size}/{replay_buffer.capacity}, {replay_buffer.size/replay_buffer.capacity*100:.2f}%')
 
         @app.route('/update', methods=['POST'])
         def update():
             data = request.get_json()
-            points = np.array(data['points'])
-            td_errors = np.array(data['td_errors'])
+            points = data['points']
+            td_errors = data['td_errors']
 
             replay_buffer.update(points, td_errors)
 
@@ -101,6 +115,19 @@ class Replay(object):
                 'succeeded': True
             })
 
+        @app.route('/update_transitions', methods=['POST'])
+        def update_transitions():
+            data = request.get_json()
+            transition_idx = data['transition_idx']
+            points = data['points']
+            transition_data = data['data']
+
+            replay_buffer.update_transitions(transition_idx, points, transition_data)
+
+            return jsonify({
+                'succeeded': True
+            })
+
         learning_starts = 2048
 
         @app.route('/sample')
@@ -108,12 +135,7 @@ class Replay(object):
             if replay_buffer.size < learning_starts:
                 return jsonify({})
 
-            data = request.get_json()
-            ratio = data['ratio']
-
             points, trans, is_weights = replay_buffer.sample()
-
-            trans = [t.tolist() for t in trans]
 
             return jsonify({
                 'points': points.tolist(),
@@ -124,7 +146,6 @@ class Replay(object):
         @app.route('/add', methods=['POST'])
         def add():
             trans = request.get_json()
-            trans = [np.array(t) for t in trans]
 
             if replay_buffer.size < learning_starts:
                 _add_trans(*trans)
@@ -140,7 +161,7 @@ class Replay(object):
         @app.route('/clear')
         def clear():
             replay_buffer.clear()
-            logger.info('replay buffer cleared')
+            self.logger.info('replay buffer cleared')
             return jsonify({
                 'succeeded': True
             })

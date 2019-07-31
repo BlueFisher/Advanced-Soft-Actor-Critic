@@ -3,14 +3,20 @@ build_path:
   linux: path_linux
 scene: scene
 
+replay_host: 127.0.0.1
+replay_port: 61000
+learner_host: 127.0.0.1
+learner_port: 61001
+websocket_host: 127.0.0.1
+websocket_port: 61002
+
 name: {time}
 sac: sac
-max_iter: 1000
-agents_num: 1
-save_model_per_iter: 500
+update_policy_variables_per_step: 100
+add_trans_threshold: 100
 reset_on_iteration: true
 gamma: 0.99
-n_step: 1
+n_step: 3
 
 reset_config:
   copy: 1
@@ -24,10 +30,10 @@ sac_config:
   write_summary_graph: false
   seed: null
   tau: 0.005
+  save_model_per_step: 5000
   write_summary_per_step: 20
   update_target_per_step: 1
   init_log_alpha: -2.3
   use_auto_alpha: true
-  lr: 3e-4
-  use_priority: false
+  lr: 0.0003
   use_n_step_is: true
