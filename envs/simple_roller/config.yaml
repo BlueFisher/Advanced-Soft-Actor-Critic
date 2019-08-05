@@ -18,6 +18,7 @@ n_step: 3
 #   batch_size: 256
 #   capacity: 1000000
 #   alpha: 0.9
+#   use_mongodb: false
 
 sac_config:
   write_summary_graph: true
