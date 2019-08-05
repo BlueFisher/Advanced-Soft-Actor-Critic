@@ -107,19 +107,6 @@ class Main(object):
             elif opt == '--agents':
                 reset_config['copy'] = int(arg)
 
-        # logger config
-        _log = logging.getLogger()
-        # remove default root logger handler
-        _log.handlers = []
-
-        # create stream handler
-        sh = logging.StreamHandler()
-        sh.setLevel(logging.INFO)
-
-        # add handler and formatter to logger
-        sh.setFormatter(logging.Formatter('[%(levelname)s] - [%(name)s] - %(message)s'))
-        _log.addHandler(sh)
-
         self.logger = logging.getLogger('sac')
         self.logger.setLevel(level=logging.INFO)
 

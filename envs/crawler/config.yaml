@@ -1,7 +1,7 @@
 build_path: 
   win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
   linux: /data/zzy/build-RL-Envs\RL-Envs.x86_64
-scene: CrawlerDynamicTarget
+scene: Crawler
 
 # sac: sac
 max_iter: 10000
@@ -9,16 +9,18 @@ max_iter: 10000
 # save_model_per_iter: 500
 reset_on_iteration: false
 # gamma: 0.99
-n_step: 3
+n_step: 5
 
 reset_config:
   # copy: 1
   reward: 111 # TimePenalty, FacingTarget, MovingTowards
+  static: 1
 
 replay_config:
 #   batch_size: 256
 #   capacity: 1000000
   alpha: 0.6
+  use_mongodb: true
 
 sac_config:
   write_summary_graph: true

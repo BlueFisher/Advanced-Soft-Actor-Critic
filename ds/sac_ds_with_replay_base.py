@@ -31,15 +31,8 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
 
                  replay_config=None):
 
-        default_replay_config = {
-            'batch_size': 256,
-            'capacity': 1e6,
-            'alpha': 0.9
-        }
-        replay_config = dict(default_replay_config, **({} if replay_config is None else replay_config))
-        self.replay_buffer = PrioritizedReplayBuffer(replay_config['batch_size'],
-                                                     replay_config['capacity'],
-                                                     replay_config['alpha'])
+        replay_config = {} if replay_config is None else replay_config
+        self.replay_buffer = PrioritizedReplayBuffer(**replay_config)
         super().__init__(state_dim,
                          action_dim,
                          model_root_path,

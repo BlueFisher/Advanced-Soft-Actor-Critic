@@ -39,19 +39,11 @@ class SAC_Base(object):
         self.use_priority = use_priority
         self.use_n_step_is = use_n_step_is
 
-        default_replay_config = {
-            'batch_size': 256,
-            'capacity': 1e6,
-            'alpha': 0.9
-        }
-        replay_config = dict(default_replay_config, **({} if replay_config is None else replay_config))
+        replay_config = {} if replay_config is None else replay_config
         if self.use_priority:
-            self.replay_buffer = PrioritizedReplayBuffer(replay_config['batch_size'],
-                                                         replay_config['capacity'],
-                                                         replay_config['alpha'])
+            self.replay_buffer = PrioritizedReplayBuffer(**replay_config)
         else:
-            self.replay_buffer = ReplayBuffer(replay_config['batch_size'],
-                                              replay_config['capacity'])
+            self.replay_buffer = ReplayBuffer(**replay_config)
 
         self.s_dim = state_dim
         # self.ob_dim_x = ob_dim_x

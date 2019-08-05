@@ -1,5 +1,6 @@
 import math
 import random
+import time
 
 import numpy as np
 
@@ -88,14 +89,28 @@ class SumTree(object):
     _min = 0
     _max = 0
 
-    def __init__(self, batch_size, capacity):
+    def __init__(self, batch_size, capacity, use_mongodb=False):
         self.capacity = capacity  # for all priority values
+        self.use_mongodb = use_mongodb
+
         self._tree = np.zeros(2 * capacity - 1)
         # [--------------Parent nodes-------------][-------leaves to recode priority-------]
         #             size: capacity - 1                       size: capacity
-        self._data = np.zeros(capacity, dtype=object)  # for all transitions
-        # [--------------data frame-------------]
-        #             size: capacity
+
+        if self.use_mongodb:
+            from pymongo import MongoClient, UpdateOne
+            self._update_one = UpdateOne
+            client = MongoClient()
+            db = client['replay_buffer']
+            self._coll = db[time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))]
+
+            self._coll.insert_many([{
+                '_id': i
+            } for i in range(capacity)])
+        else:
+            self._data = np.zeros(capacity, dtype=object)  # for all transitions
+            # [--------------data frame-------------]
+            #             size: capacity
 
     def add(self, p, data):
         if self._size == 0:
@@ -107,7 +122,18 @@ class SumTree(object):
                 self._max = p
 
         tree_idx = self._data_pointer + self.capacity - 1
-        self._data[self._data_pointer] = data  # update data_frame
+
+        if self.use_mongodb:
+            self._coll.update_one({
+                '_id': self._data_pointer
+            }, {
+                '$set': {
+                    str(i): d for i, d in enumerate(data)
+                }
+            })
+        else:
+            self._data[self._data_pointer] = data  # update data_frame
+
         self.update(tree_idx, p)  # update tree_frame
 
         self._data_pointer += 1
@@ -131,10 +157,24 @@ class SumTree(object):
             self._tree[tree_idx] += change
 
     def update_transitions(self, transition_idx, tree_idx, data):
-        data_index = tree_idx + 1 - self.capacity
-        trans = self._data[data_index]
-        for i, tran in enumerate(trans):
-            tran[transition_idx] = data[i]
+        # tree_idx: array, data: array
+        if type(tree_idx) == list:
+            tree_idx = np.array(tree_idx)
+
+        data_idx = tree_idx + 1 - self.capacity
+
+        if self.use_mongodb:
+            update_bulk = [self._update_one(
+                {'_id': int(di)},
+                {'$set': {str(transition_idx): data[i]}}
+            ) for i, di in enumerate(data_idx)]
+
+            self._coll.bulk_write(update_bulk)
+
+        else:
+            tmp_data = self._data[data_idx]
+            for i, d in enumerate(tmp_data):
+                d[transition_idx] = data[i]
 
     def get_leaf(self, v):
         """
@@ -163,12 +203,38 @@ class SumTree(object):
                     parent_idx = cr_idx
 
         data_idx = leaf_idx - self.capacity + 1
-        return leaf_idx, self._tree[leaf_idx], self._data[data_idx]
+
+        return leaf_idx, self._tree[leaf_idx], data_idx
 
     def clear(self):
         for i in range(len(self._tree)):
             self._tree[i] = 0
+        
+        self._data_pointer = 0
         self._size = 0
+        self._min = 0
+        self._max = 0
+
+    def _get_data(self, data_idx):
+        # data_idx: array
+        if self.use_mongodb:
+            tmp_data = self._coll.find({
+                '_id': {
+                    '$in': data_idx
+                }
+            })
+
+            data = []
+            i = 0
+            for d in tmp_data:
+                while i < len(data_idx) and d['_id'] == data_idx[i]:
+                    data.append(list(d.values())[1:])
+                    i += 1
+
+            return data
+
+        else:
+            return self._data[data_idx]
 
     @property
     def total_p(self):
@@ -197,11 +263,12 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
     def __init__(self,
                  batch_size=256,
                  capacity=524288,
-                 alpha=0.9):
+                 alpha=0.9,
+                 use_mongodb=False):
         self.batch_size = batch_size
         self.capacity = int(2**math.floor(math.log2(capacity)))
         self.alpha = alpha
-        self._sum_tree = SumTree(self.batch_size, self.capacity)
+        self._sum_tree = SumTree(self.batch_size, self.capacity, use_mongodb)
 
     def add(self, *args):
         max_p = self._sum_tree.max
@@ -231,7 +298,7 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
         if not self.is_lg_batch_size:
             return None
 
-        points, transitions, is_weights = np.empty((self.batch_size,), dtype=np.int32), np.empty((self.batch_size,), dtype=object), np.empty((self.batch_size, 1))
+        points, is_weights = np.empty((self.batch_size,), dtype=np.int32), np.empty((self.batch_size, 1))
         pri_seg = self._sum_tree.total_p / self.batch_size       # priority segment
         self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
 
@@ -239,14 +306,18 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
         if min_prob == 0:
             min_prob = self.epsilon
 
+        data_idx_list = []
         for i in range(self.batch_size):
             a, b = pri_seg * i, pri_seg * (i + 1)
             v = np.random.uniform(a, b)
-            idx, p, data = self._sum_tree.get_leaf(v)
+            idx, p, data_idx = self._sum_tree.get_leaf(v)
+            data_idx_list.append(data_idx)
             prob = p / self._sum_tree.total_p
 
             is_weights[i, 0] = np.power(prob / min_prob, -self.beta)
-            points[i], transitions[i] = idx, data
+            points[i] = idx
+
+        transitions = self._sum_tree._get_data(data_idx_list)
 
         return points, list(list(t) for t in zip(*transitions)), is_weights
 
@@ -259,15 +330,12 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
 
         td_errors += self.epsilon  # convert to abs and avoid 0
         clipped_errors = np.minimum(td_errors, self.td_err_upper)
-        ps = np.power(clipped_errors, self.alpha)
+        p = np.power(clipped_errors, self.alpha)
 
-        for ti, p in zip(points, ps):
-            self._sum_tree.update(ti, p)
+        for point, _p in zip(points, p):
+            self._sum_tree.update(point, _p)
 
     def update_transitions(self, transition_idx, points, data):
-        if type(points) == list:
-            points = np.array(points)
-            
         self._sum_tree.update_transitions(transition_idx, points, data)
 
     def clear(self):
@@ -289,12 +357,19 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
 if __name__ == "__main__":
     import time
 
-    replay_buffer = PrioritizedReplayBuffer(2)
+    replay_buffer = PrioritizedReplayBuffer(5, 50, use_mongodb=True)
 
     for i in range(10):
-        tmp = []
-        for j in range(1029):
-            tmp.append([1] * np.random.randint(1, 5))
-        replay_buffer.add_with_td_errors(np.abs(np.random.randn(1029)), np.random.randn(1029, 1).tolist(), tmp)
-        points, (a, b), ratio = replay_buffer.sample()
-        print(a, b)
+        replay_buffer.add_with_td_errors(np.abs(np.random.randn(10)), np.random.randn(10, 1).tolist(), np.random.randn(10, 5).tolist())
+        sampled = replay_buffer.sample()
+        if sampled is None:
+            print('None')
+        else:
+            print(sampled)
+            points, (a, b), ratio = sampled
+            print('a')
+            print(a)
+            print('b')
+            print(b)
+            print('ratio')
+            print(ratio)
