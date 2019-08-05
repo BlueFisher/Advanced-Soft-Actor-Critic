@@ -16,12 +16,13 @@ websocket_port: 61002
 # add_trans_threshold: 100
 reset_on_iteration: false
 # gamma: 0.99
-# n_step: 3
+n_step: 3
 
-# replay_config:
-#   batch_size: 256
-#   capacity: 1000000
-#   alpha: 0.9
+replay_config:
+  batch_size: 256
+  capacity: 1000000
+  alpha: 0.9
+  use_mongodb: false
 
 sac_config:
   write_summary_graph: true

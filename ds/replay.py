@@ -17,11 +17,7 @@ class Replay(object):
     _replay_port = 61000
     _learner_host = '127.0.0.1'
     _learner_port = 61001
-    _replay_config = {
-        'batch_size': 256,
-        'capacity': 1e6,
-        'alpha': 0.9
-    }
+    _replay_config = {}
 
     def __init__(self, argv):
         self._init_config(argv)
@@ -47,10 +43,8 @@ class Replay(object):
                             self._learner_port = v
 
                         elif k == 'replay_config':
-                            if v is None:
-                                continue
-                            for kk, vv in v.items():
-                                self._replay_config[kk] = vv
+                            self._replay_config = {} if v is None else v
+                            
             elif opt in ('-p', '--replay_port'):
                 self._replay_port = int(arg)
 
@@ -66,6 +60,9 @@ class Replay(object):
             # add handler and formatter to logger
             sh.setFormatter(logging.Formatter('[%(levelname)s] - [%(name)s] - %(message)s'))
             _log.addHandler(sh)
+
+            _log = logging.getLogger('werkzeug')
+            _log.setLevel(level=logging.ERROR)
 
             self.logger = logging.getLogger('sac.ds.replay')
             self.logger.setLevel(level=logging.INFO)
