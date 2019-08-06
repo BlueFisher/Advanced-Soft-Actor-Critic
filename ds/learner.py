@@ -163,8 +163,6 @@ class Learner(object):
 
     def _init_env(self, sac, name, sac_config):
         self.env = UnityEnvironment(file_name=self._build_path,
-                                    no_graphics=True,
-                                    base_port=self._build_port,
                                     args=['--scene', self._scene])
 
         self.default_brain_name = self.env.brain_names[0]
@@ -184,11 +182,11 @@ class Learner(object):
     def _start_policy_evaluation(self):
         eval_step = 0
         start_time = time.time()
-        brain_info = self.env.reset(train_mode=True, config=self._reset_config)[self.default_brain_name]
+        brain_info = self.env.reset(train_mode=False, config=self._reset_config)[self.default_brain_name]
 
         while True:
             if self.env.global_done or self._config['reset_on_iteration']:
-                brain_info = self.env.reset(train_mode=True)[self.default_brain_name]
+                brain_info = self.env.reset(train_mode=False)[self.default_brain_name]
 
             agents = [self._agent_class(i,
                                         self._config['gamma'],

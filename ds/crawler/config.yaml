@@ -20,8 +20,8 @@ n_step: 5
 
 reset_config:
   # copy: 1
-  reward: 111 # TimePenalty, FacingTarget, MovingTowards
-  static: 1
+  reward: 101 # TimePenalty, FacingTarget, MovingTowards
+  static: 0
 
 replay_config:
 #   batch_size: 256
@@ -36,7 +36,7 @@ sac_config:
   # save_model_per_step: 5000
   # write_summary_per_step: 20
   # update_target_per_step: 1
-  # init_log_alpha: -2.3
+  init_log_alpha: -1
   use_auto_alpha: false
   # lr: 0.0003
   # use_n_step_is: true
