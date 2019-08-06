@@ -31,8 +31,6 @@ class ReplayLearner(Learner):
 
     def _init_env(self, sac, name, replay_config, sac_config):
         self.env = UnityEnvironment(file_name=self._build_path,
-                                    no_graphics=True,
-                                    base_port=self._build_port,
                                     args=['--scene', self._scene])
 
         self.default_brain_name = self.env.brain_names[0]
