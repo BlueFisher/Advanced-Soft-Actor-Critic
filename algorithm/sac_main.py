@@ -43,7 +43,8 @@ class Main(object):
             'save_model_per_iter': 500,
             'reset_on_iteration': True,
             'gamma': 0.99,
-            'n_step': 1
+            'n_step': 1,
+            'use_rnn': False
         }
         reset_config = {
             'copy': 1
@@ -106,7 +107,23 @@ class Main(object):
                 config['sac'] = arg
             elif opt == '--agents':
                 reset_config['copy'] = int(arg)
+        
+        # logger config
+        _log = logging.getLogger()
+        # remove default root logger handler
+        _log.handlers = []
 
+        # create stream handler
+        sh = logging.StreamHandler()
+        sh.setLevel(logging.INFO)
+
+        # add handler and formatter to logger
+        sh.setFormatter(logging.Formatter('[%(levelname)s] - [%(name)s] - %(message)s'))
+        _log.addHandler(sh)
+
+        _log = logging.getLogger('tensorflow')
+        _log.setLevel(level=logging.ERROR)
+        
         self.logger = logging.getLogger('sac')
         self.logger.setLevel(level=logging.INFO)
 
@@ -163,9 +180,6 @@ class Main(object):
 
         brain_params = self.env.brains[self.default_brain_name]
         state_dim = brain_params.vector_observation_space_size
-        # ob_dim_x = brain_params.camera_resolutions[0]['width']
-        # ob_dim_y = brain_params.camera_resolutions[0]['height']
-        # ob_dim_c = 1 if brain_params.camera_resolutions[0]['blackAndWhite'] else 3
         action_dim = brain_params.vector_action_space_size[0]
 
         class SAC(importlib.import_module(self.config['sac']).SAC_Custom, SAC_Base):
@@ -177,6 +191,7 @@ class Main(object):
                        #    ob_dim_c=ob_dim_c,
                        action_dim=action_dim,
                        model_root_path=model_root_path,
+                       use_rnn=self.config['use_rnn'],
                        replay_config=replay_config,
                        **sac_config)
 
@@ -189,14 +204,22 @@ class Main(object):
 
             agents = [self._agent_class(i,
                                         self.config['gamma'],
-                                        self.config['n_step'])
+                                        self.config['n_step'],
+                                        self.config['use_rnn'])
                       for i in brain_info.agents]
 
             states = brain_info.vector_observations
             # states = brain_info.visual_observations[0]
 
+            if self.config['use_rnn']:
+                initial_lstm_state = lstm_state = self.sac.get_initial_lstm_state(len(states))
+
             while False in [a.done for a in agents] and not self.env.global_done:
-                actions = self.sac.choose_action(states)
+                if self.config['use_rnn']:
+                    actions, lstm_state_ = self.sac.choose_action(states, lstm_state)
+                else:
+                    actions = self.sac.choose_action(states)
+
                 brain_info = self.env.step({
                     self.default_brain_name: actions
                 })[self.default_brain_name]
@@ -209,7 +232,9 @@ class Main(object):
                                                        brain_info.rewards[i],
                                                        brain_info.local_done[i],
                                                        brain_info.max_reached[i],
-                                                       states_[i])
+                                                       states_[i],
+                                                       lstm_state.c[i] if self.config['use_rnn'] else None,
+                                                       lstm_state.h[i] if self.config['use_rnn'] else None)
                               for i in range(len(agents))]
 
                 # s, a, r, s_, done, gamma, n_states, n_actions
@@ -219,6 +244,13 @@ class Main(object):
                     self.sac.train(*trans)
 
                 states = states_
+                if self.config['use_rnn']:
+                    lstm_state_c = lstm_state_.c
+                    lstm_state_h = lstm_state_.h
+                    lstm_state_c[brain_info.local_done] = initial_lstm_state.c[brain_info.local_done]
+                    lstm_state_h[brain_info.local_done] = initial_lstm_state.h[brain_info.local_done]
+                    lstm_state = tf.nn.rnn_cell.LSTMStateTuple(c=lstm_state_c, h=lstm_state_h)
+
             if self.train_mode:
                 self._log_episode_summaries(iteration, agents)
 

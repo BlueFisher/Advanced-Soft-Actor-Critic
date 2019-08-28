@@ -6,10 +6,11 @@ class Agent(object):
     reward = 0
     done = False
 
-    def __init__(self, agent_id, gamma=0.99, n_step=1):
+    def __init__(self, agent_id, gamma=0.99, n_step=1, use_rnn=False):
         self.agent_id = agent_id
         self.gamma = gamma
         self.n_step = n_step
+        self.use_rnn = use_rnn
 
         self._tmp_trans = deque(maxlen=self.n_step)
 
@@ -19,7 +20,9 @@ class Agent(object):
                        reward,
                        local_done,
                        max_reached,
-                       state_):
+                       state_,
+                       lstm_state_c=None,
+                       lstm_state_h=None):
 
         if type(state) == np.ndarray:
             state = state.tolist()
@@ -27,6 +30,10 @@ class Agent(object):
             action = action.tolist()
         if type(state_) == np.ndarray:
             state_ = state_.tolist()
+        if type(lstm_state_c) == np.ndarray:
+            lstm_state_c = lstm_state_c.tolist()
+        if type(lstm_state_h) == np.ndarray:
+            lstm_state_h = lstm_state_h.tolist()
 
         self._tmp_trans.append({
             'state': state,
@@ -35,6 +42,8 @@ class Agent(object):
             'local_done': local_done,
             'max_reached': max_reached,
             'state_': state_,
+            'lstm_state_c': lstm_state_c,
+            'lstm_state_h': lstm_state_h
         })
 
         if not self.done:
@@ -47,17 +56,18 @@ class Agent(object):
                         max_reached,
                         state_)
 
-        trans = [[t] for t in self._get_trans()]
+        trans = self._get_trans()
+        if trans is None:
+            if self.use_rnn:
+                trans = [[]] * 10
+            else:
+                trans = [[]] * 8
+        else:
+            trans = [[t] for t in self._get_trans()]
 
         if local_done:
             self.done = True
-
-            self._tmp_trans.popleft()
-            while len(self._tmp_trans) != 0:
-                _trans = self._get_trans()
-                for i in range(len(trans)):
-                    trans[i].append(_trans[i])
-                self._tmp_trans.popleft()
+            self._tmp_trans.clear()
 
         return trans
 
@@ -71,7 +81,12 @@ class Agent(object):
         pass
 
     def _get_trans(self):
+        if len(self._tmp_trans) < self.n_step:
+            return None
+
         s, a, r = self._tmp_trans[0]['state'], self._tmp_trans[0]['action'], 0.
+        lstm_state_c = self._tmp_trans[0]['lstm_state_c']
+        lstm_state_h = self._tmp_trans[0]['lstm_state_h']
 
         for i, tran in enumerate(self._tmp_trans):
             r += np.power(self.gamma, i) * tran['reward']
@@ -80,4 +95,12 @@ class Agent(object):
         done = self._tmp_trans[-1]['local_done'] and not self._tmp_trans[-1]['max_reached']
         gamma = np.power(self.gamma, len(self._tmp_trans))
 
-        return s, a, [r], s_, [done], [gamma], [t['state'] for t in self._tmp_trans], [t['action'] for t in self._tmp_trans]
+        if self.use_rnn:
+            return (s, a, [r], s_, [done], [gamma],
+                    [t['state'] for t in self._tmp_trans],
+                    [t['action'] for t in self._tmp_trans],
+                    lstm_state_c, lstm_state_h)
+        else:
+            return (s, a, [r], s_, [done], [gamma],
+                    [t['state'] for t in self._tmp_trans],
+                    [t['action'] for t in self._tmp_trans])
