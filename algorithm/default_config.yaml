@@ -11,6 +11,7 @@ save_model_per_iter: 500
 reset_on_iteration: true
 gamma: 0.99
 n_step: 1
+use_rnn: false
 
 reset_config:
   copy: 1

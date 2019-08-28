@@ -30,8 +30,10 @@ class ReplayBuffer(object):
                 self._size += 1
 
     def sample(self):
-        n_sample = self.batch_size if self.is_lg_batch_size else self._size
-        points = np.random.choice(range(self._size), size=n_sample, replace=False)
+        if not self.is_lg_batch_size:
+            return None
+
+        points = np.random.choice(range(self._size), size=self.batch_size, replace=False)
         transitions = self._buffer[points]
         return points, list(list(t) for t in zip(*transitions))
 
@@ -158,8 +160,7 @@ class SumTree(object):
 
     def update_transitions(self, transition_idx, tree_idx, data):
         # tree_idx: array, data: array
-        if type(tree_idx) == list:
-            tree_idx = np.array(tree_idx)
+        tree_idx = np.asarray(tree_idx)
 
         data_idx = tree_idx + 1 - self.capacity
 
@@ -280,9 +281,8 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
 
     def add_with_td_errors(self, td_errors, *args):
         assert len(td_errors) == len(args[0])
-
-        if type(td_errors) == list:
-            td_errors = np.array(td_errors)
+        
+        td_errors = np.asarray(td_errors)
 
         if len(td_errors.shape) == 2:
             td_errors = td_errors.flatten()
@@ -322,8 +322,7 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
         return points, list(list(t) for t in zip(*transitions)), is_weights
 
     def update(self, points, td_errors):
-        if type(td_errors) == list:
-            td_errors = np.array(td_errors)
+        td_errors = np.asarray(td_errors)
 
         if len(td_errors.shape) == 2:
             td_errors = td_errors.flatten()
