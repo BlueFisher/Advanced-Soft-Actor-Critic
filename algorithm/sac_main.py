@@ -186,13 +186,13 @@ class Main(object):
             pass
 
         self.sac = SAC(state_dim=state_dim,
-                       #    ob_dim_x=ob_dim_x,
-                       #    ob_dim_y=ob_dim_y,
-                       #    ob_dim_c=ob_dim_c,
                        action_dim=action_dim,
                        model_root_path=model_root_path,
                        use_rnn=self.config['use_rnn'],
                        replay_config=replay_config,
+
+                       gamma=self.config['gamma'],
+                       n_step=self.config['n_step'],
                        **sac_config)
 
     def _run(self):
@@ -209,14 +209,13 @@ class Main(object):
                       for i in brain_info.agents]
 
             states = brain_info.vector_observations
-            # states = brain_info.visual_observations[0]
 
             if self.config['use_rnn']:
                 initial_lstm_state = lstm_state = self.sac.get_initial_lstm_state(len(states))
 
             while False in [a.done for a in agents] and not self.env.global_done:
                 if self.config['use_rnn']:
-                    actions, lstm_state_ = self.sac.choose_action(states, lstm_state)
+                    actions, lstm_state_ = self.sac.choose_lstm_action(lstm_state, states)
                 else:
                     actions = self.sac.choose_action(states)
 
@@ -225,7 +224,6 @@ class Main(object):
                 })[self.default_brain_name]
 
                 states_ = brain_info.vector_observations
-                # states_ = brain_info.visual_observations[0]
 
                 trans_list = [agents[i].add_transition(states[i],
                                                        actions[i],
@@ -237,7 +235,7 @@ class Main(object):
                                                        lstm_state.h[i] if self.config['use_rnn'] else None)
                               for i in range(len(agents))]
 
-                # s, a, r, s_, done, gamma, n_states, n_actions
+                # n_states, n_actions, r, done
                 trans = [functools.reduce(lambda x, y: x + y, t) for t in zip(*trans_list)]
 
                 if self.train_mode:

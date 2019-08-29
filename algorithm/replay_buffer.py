@@ -210,7 +210,7 @@ class SumTree(object):
     def clear(self):
         for i in range(len(self._tree)):
             self._tree[i] = 0
-        
+
         self._data_pointer = 0
         self._size = 0
         self._min = 0
@@ -281,7 +281,7 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
 
     def add_with_td_errors(self, td_errors, *args):
         assert len(td_errors) == len(args[0])
-        
+
         td_errors = np.asarray(td_errors)
 
         if len(td_errors.shape) == 2:
