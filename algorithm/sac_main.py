@@ -43,7 +43,9 @@ class Main(object):
             'save_model_per_iter': 500,
             'reset_on_iteration': True,
             'gamma': 0.99,
+            'burn_in_step': 0,
             'n_step': 1,
+            'stagger': 1,
             'use_rnn': False
         }
         reset_config = {
@@ -107,9 +109,10 @@ class Main(object):
                 config['sac'] = arg
             elif opt == '--agents':
                 reset_config['copy'] = int(arg)
-        
+
         # logger config
         _log = logging.getLogger()
+        _log.setLevel(logging.INFO)
         # remove default root logger handler
         _log.handlers = []
 
@@ -123,7 +126,7 @@ class Main(object):
 
         _log = logging.getLogger('tensorflow')
         _log.setLevel(level=logging.ERROR)
-        
+
         self.logger = logging.getLogger('sac')
         self.logger.setLevel(level=logging.INFO)
 
@@ -179,7 +182,7 @@ class Main(object):
         self.default_brain_name = self.env.brain_names[0]
 
         brain_params = self.env.brains[self.default_brain_name]
-        state_dim = brain_params.vector_observation_space_size
+        state_dim = brain_params.vector_observation_space_size * brain_params.num_stacked_vector_observations
         action_dim = brain_params.vector_action_space_size[0]
 
         class SAC(importlib.import_module(self.config['sac']).SAC_Custom, SAC_Base):
@@ -192,6 +195,7 @@ class Main(object):
                        replay_config=replay_config,
 
                        gamma=self.config['gamma'],
+                       burn_in_step=self.config['burn_in_step'],
                        n_step=self.config['n_step'],
                        **sac_config)
 
@@ -203,10 +207,20 @@ class Main(object):
                 brain_info = self.env.reset(train_mode=self.train_mode)[self.default_brain_name]
 
             agents = [self._agent_class(i,
-                                        self.config['gamma'],
-                                        self.config['n_step'],
-                                        self.config['use_rnn'])
+                                        gamma=self.config['gamma'],
+                                        tran_len=self.config['burn_in_step'] + self.config['n_step'],
+                                        stagger=self.config['stagger'],
+                                        use_rnn=self.config['use_rnn'])
                       for i in brain_info.agents]
+
+            """
+            s0    s1    s2    s3    s4    s5    s6
+             └──burn_in_step───┘     └───n_step──┘
+             └───────────deque_maxlen────────────┘
+                         s2    s3    s4    s5    s6    s7    s8
+             └─────┘
+             stagger
+            """
 
             states = brain_info.vector_observations
 
@@ -235,7 +249,7 @@ class Main(object):
                                                        lstm_state.h[i] if self.config['use_rnn'] else None)
                               for i in range(len(agents))]
 
-                # n_states, n_actions, r, done
+                # n_states, n_actions, n_rewards, done, lstm_state_c, lstm_state_h
                 trans = [functools.reduce(lambda x, y: x + y, t) for t in zip(*trans_list)]
 
                 if self.train_mode:
