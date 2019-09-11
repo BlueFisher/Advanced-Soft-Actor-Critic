@@ -6,13 +6,16 @@ class Agent(object):
     reward = 0
     done = False
 
-    def __init__(self, agent_id, gamma=0.99, n_step=1, use_rnn=False):
+    def __init__(self, agent_id,
+                 gamma=0.99, tran_len=1, stagger=1,
+                 use_rnn=False):
         self.agent_id = agent_id
         self.gamma = gamma
-        self.n_step = n_step
+        self.deque_maxlen = tran_len
+        self._curr_stagger = self.stagger = stagger
         self.use_rnn = use_rnn
 
-        self._tmp_trans = deque(maxlen=self.n_step)
+        self._tmp_trans = deque(maxlen=self.deque_maxlen)
 
     def add_transition(self,
                        state,
@@ -59,15 +62,16 @@ class Agent(object):
         trans = self._get_trans()
         if trans is None:
             if self.use_rnn:
-                trans = [[]] * 6
+                trans = [[]] * 7
             else:
-                trans = [[]] * 4
+                trans = [[]] * 5
         else:
-            trans = [[t] for t in self._get_trans()]
+            trans = [[t] for t in trans]
 
         if local_done:
             self.done = True
             self._tmp_trans.clear()
+            self._curr_stagger = self.stagger
 
         return trans
 
@@ -81,24 +85,31 @@ class Agent(object):
         pass
 
     def _get_trans(self):
-        if len(self._tmp_trans) < self.n_step:
+        if len(self._tmp_trans) < self.deque_maxlen:
             return None
 
-        r = 0.
-        lstm_state_c = self._tmp_trans[0]['lstm_state_c']
-        lstm_state_h = self._tmp_trans[0]['lstm_state_h']
+        if self._curr_stagger != self.stagger:
+            self._curr_stagger += 1
+            return None
 
-        for i, tran in enumerate(self._tmp_trans):
-            r += np.power(self.gamma, i) * tran['reward']
+        self._curr_stagger = 1
 
+        state_ = self._tmp_trans[-1]['state_']
         done = self._tmp_trans[-1]['local_done'] and not self._tmp_trans[-1]['max_reached']
 
         if self.use_rnn:
+            lstm_state_c = self._tmp_trans[0]['lstm_state_c']
+            lstm_state_h = self._tmp_trans[0]['lstm_state_h']
+
             return ([t['state'] for t in self._tmp_trans],
                     [t['action'] for t in self._tmp_trans],
-                    [r], [done],
+                    [t['reward'] for t in self._tmp_trans],
+                    state_,
+                    [done],
                     lstm_state_c, lstm_state_h)
         else:
             return ([t['state'] for t in self._tmp_trans],
                     [t['action'] for t in self._tmp_trans],
-                    [r], [done])
+                    [t['reward'] for t in self._tmp_trans],
+                    state_,
+                    [done])

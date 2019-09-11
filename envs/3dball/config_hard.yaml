@@ -1,18 +1,18 @@
 build_path: 
   win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
   linux: /data/zzy/build-RL-Envs\RL-Envs.x86_64
-scene: ContinousSimpleRoller
+scene: 3DBallHard
 
-# sac: sac
-max_iter: 200
+sac: sac_hard
+max_iter: 10000
 # agents_num: 1
-save_model_per_iter: 200
-reset_on_iteration: false
+save_model_per_iter: 100
+# reset_on_iteration: true
 # gamma: 0.99
-# burn_in_step: 0
-n_step: 3
-# stagger: 1
-use_rnn: false
+burn_in_step: 9
+n_step: 5
+stagger: 1
+use_rnn: true
 
 # reset_config:
 #   copy: 1
@@ -21,11 +21,10 @@ use_rnn: false
 #   batch_size: 256
 #   capacity: 1000000
 #   alpha: 0.9
-#   use_mongodb: false
 
 sac_config:
   write_summary_graph: true
-  # seed: 1
+  # seed: None
   # tau: 0.005
   # write_summary_per_step: 20
   # update_target_per_step: 1
@@ -33,4 +32,3 @@ sac_config:
   # use_auto_alpha: true
   # lr: 3e-4
   use_priority: true
-  # use_n_step_is: true
