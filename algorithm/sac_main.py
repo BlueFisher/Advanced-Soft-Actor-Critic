@@ -201,10 +201,14 @@ class Main(object):
 
     def _run(self):
         brain_info = self.env.reset(train_mode=self.train_mode, config=self.reset_config)[self.default_brain_name]
+        if self.config['use_rnn']:
+            initial_lstm_state = lstm_state = self.sac.get_initial_lstm_state(len(brain_info.agents))
 
         for iteration in range(self.config['max_iter'] + 1):
             if self.env.global_done or self.config['reset_on_iteration']:
                 brain_info = self.env.reset(train_mode=self.train_mode)[self.default_brain_name]
+                if self.config['use_rnn']:
+                    lstm_state = self.sac.get_initial_lstm_state(len(brain_info.agents))
 
             agents = [self._agent_class(i,
                                         gamma=self.config['gamma'],
@@ -223,9 +227,6 @@ class Main(object):
             """
 
             states = brain_info.vector_observations
-
-            if self.config['use_rnn']:
-                initial_lstm_state = lstm_state = self.sac.get_initial_lstm_state(len(states))
 
             while False in [a.done for a in agents] and not self.env.global_done:
                 if self.config['use_rnn']:
@@ -253,7 +254,8 @@ class Main(object):
                 trans = [functools.reduce(lambda x, y: x + y, t) for t in zip(*trans_list)]
 
                 if self.train_mode:
-                    self.sac.train(*trans)
+                    self.sac.fill_replay_buffer(*trans)
+                    self.sac.train()
 
                 states = states_
                 if self.config['use_rnn']:

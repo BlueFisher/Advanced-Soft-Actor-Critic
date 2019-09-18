@@ -89,8 +89,8 @@ class SAC_Base(object):
         self.pl_n_step_a = tf.placeholder(tf.float32, shape=(None, None, self.a_dim), name='n_step_action')
 
         self.pl_s = self.pl_n_step_s[:, self.burn_in_step, :]
+        self.pl_s_ = self.pl_n_step_s_[:, -1, :]
         self.pl_a = self.pl_n_step_a[:, self.burn_in_step, :]
-        self.pl_s_ = self.pl_n_step_s[:, -1, :]
 
         self.pl_r = tf.placeholder(tf.float32, shape=(None, 1), name='reward')
         self.pl_done = tf.placeholder(tf.float32, shape=(None, 1), name='done')
@@ -104,54 +104,60 @@ class SAC_Base(object):
         if self.use_rnn:
             self.pl_batch_size = tf.placeholder(tf.int32, shape=(), name='batch_size')
 
-            encoded_pl_s, self.initial_lstm_state, self.lstm_state, lstm_variables = self._build_lstm_s_input(self.pl_s, 'lstm_state')
-            encoded_pl_s_, self.next_initial_lstm_state, self.next_lstm_state, _ = self._build_lstm_s_input(self.pl_s_, 'lstm_state', reuse=True)
-            encoded_pl_target_s_, self.next_target_initial_lstm_state, self.next_target_lstm_state, target_lstm_variables = self._build_lstm_s_input(self.pl_s_, 'target_lstm_state', trainable=False)
-            encoded_pl_n_step_s, self.n_step_initial_lstm_state, self.n_step_lstm_state, _ = self._build_lstm_s_input(self.pl_n_step_s, 'lstm_state', reuse=True)
-            encoded_pl_target_n_step_s_, self.target_n_step_initial_lstm_state, self.target_n_step_lstm_state, _ = self._build_lstm_s_input(self.pl_s_, 'target_lstm_state', trainable=False, reuse=True)
+            # only for choosing action
+            (encoded_pl_plain_s,
+             self.initial_lstm_state,
+             self.lstm_state,
+             lstm_variables) = self._build_lstm_s_input(self.pl_s, 'lstm_state')
 
-            # approx_n_step_s_ = self._build_rnn_test_net(encoded_pl_n_step_s)
-            # L_approx_lstm, approx_variables = tf.squared_difference(approx_n_step_s_, self.pl_n_step_s_)
+            (encoded_pl_n_step_s,
+             self.n_step_initial_lstm_state,
+             n_step_lstm_state, _) = self._build_lstm_s_input(self.pl_n_step_s, 'lstm_state', reuse=True)
+            pl_n_step_s = encoded_pl_n_step_s
+            pl_s = encoded_pl_n_step_s[:, self.burn_in_step, :]
 
-            pl_s = tf.concat([self.pl_s, encoded_pl_s], 1)
-            pl_s_ = tf.concat([self.pl_s_, encoded_pl_s_], 1)
-            pl_target_s_ = tf.concat([self.pl_s_, encoded_pl_target_s_], 1)
-            pl_n_step_s = tf.concat([self.pl_n_step_s, encoded_pl_n_step_s], 2)
+            pl_s_, *_ = self._build_lstm_s_input(self.pl_s_, 'lstm_state', initial_lstm_state=n_step_lstm_state, reuse=True)
 
-            # pl_s = encoded_pl_s
-            # pl_s_ = encoded_pl_s_
-            # pl_target_s_ = encoded_pl_target_s_
-            # pl_n_step_s = encoded_pl_n_step_s
+            # only for generating target encoded state_
+            (_, self.target_n_step_initial_lstm_state,
+             target_n_step_lstm_state, target_lstm_variables) = self._build_lstm_s_input(self.pl_n_step_s, 'target_lstm_state', trainable=False)
+
+            pl_target_s_, *_ = self._build_lstm_s_input(self.pl_s_, 'target_lstm_state', initial_lstm_state=target_n_step_lstm_state, trainable=False, reuse=True)
+
+            # approx_n_step_s_, approx_variables = self._build_rnn_test_net(encoded_pl_n_step_s, self.pl_n_step_a, 'lstm_approx')
+            # L_approx_lstm = tf.reduce_mean(tf.squared_difference(approx_n_step_s_, self.pl_n_step_s_))
         else:
             pl_s = self.pl_s
             pl_s_ = self.pl_s_
             pl_n_step_s = self.pl_n_step_s
 
         self.policy, self.action_sampled, policy_variables = self._build_policy_net(pl_s, 'policy')
+        if self.use_rnn:
+            _, self.plain_action_sampled, _ = self._build_policy_net(encoded_pl_plain_s, 'policy', reuse=True)
         self.policy_prob = self.policy.prob(self.pl_a)
 
         self.n_step_policy, self.n_step_action_sampled, _ = self._build_policy_net(pl_n_step_s, 'policy', reuse=True)
         self.n_step_policy_prob = self.n_step_policy.prob(self.pl_n_step_a)
 
-        policy_next, action_next_sampled, _ = self._build_policy_net(pl_s_, 'policy', reuse=True)
+        if self.use_rnn:
+            next_policy, next_action_sampled, _ = self._build_policy_net(pl_target_s_, 'policy', reuse=True)
+        else:
+            next_policy, next_action_sampled, _ = self._build_policy_net(pl_s_, 'policy', reuse=True)
 
         q1, q1_variables = self._build_q_net(pl_s, self.pl_a, 'q1')
         q2, q2_variables = self._build_q_net(pl_s, self.pl_a, 'q2')
 
         if self.use_rnn:
-            _, target_action_next_sampled, _ = self._build_policy_net(pl_target_s_, 'policy', reuse=True)
-            target_q1, target_q1_variables = self._build_q_net(pl_target_s_, target_action_next_sampled, 'target_q1', trainable=False)
-            target_q2, target_q2_variables = self._build_q_net(pl_target_s_, target_action_next_sampled, 'target_q2', trainable=False)
+            target_q1, target_q1_variables = self._build_q_net(pl_target_s_, next_action_sampled, 'target_q1', trainable=False)
+            target_q2, target_q2_variables = self._build_q_net(pl_target_s_, next_action_sampled, 'target_q2', trainable=False)
         else:
-            target_q1, target_q1_variables = self._build_q_net(pl_s_, action_next_sampled, 'target_q1', trainable=False)
-            target_q2, target_q2_variables = self._build_q_net(pl_s_, action_next_sampled, 'target_q2', trainable=False)
-
-        self.test_q1, self.test_q2 = q1, q2
+            target_q1, target_q1_variables = self._build_q_net(pl_s_, next_action_sampled, 'target_q1', trainable=False)
+            target_q2, target_q2_variables = self._build_q_net(pl_s_, next_action_sampled, 'target_q2', trainable=False)
 
         q1_for_gradient, _ = self._build_q_net(pl_s, self.action_sampled, 'q1', reuse=True)
 
-        action_prob = tf.reduce_prod(policy_next.log_prob(action_next_sampled), axis=1, keep_dims=True)
-        y = self.pl_r + self.gamma**self.n_step * (1 - self.pl_done) * (tf.minimum(target_q1, target_q2) - alpha * action_prob)
+        next_action_prob = tf.reduce_prod(next_policy.log_prob(next_action_sampled), axis=1, keep_dims=True)
+        y = self.pl_r + self.gamma**self.n_step * (1 - self.pl_done) * (tf.minimum(target_q1, target_q2) - alpha * next_action_prob)
         y = tf.stop_gradient(y)
 
         L_q1 = tf.squared_difference(q1, y)
@@ -183,8 +189,6 @@ class SAC_Base(object):
             target_variables += target_lstm_variables
             eval_variables += lstm_variables
 
-            self.test_var = eval_variables
-
         self.update_target_hard_op = [tf.assign(t, e) for t, e in
                                       zip(target_variables, eval_variables)]
         self.update_target_op = [tf.assign(t, tau * e + (1 - tau) * t) for t, e in
@@ -194,12 +198,12 @@ class SAC_Base(object):
             self.global_step = tf.get_variable('global_step', shape=(), dtype=tf.int32, initializer=tf.constant_initializer(0), trainable=False)
 
             if self.use_rnn:
-                q1_variables = q1_variables + lstm_variables
-                q2_variables = q2_variables + lstm_variables
+                q1_variables = q1_variables + lstm_variables  # + approx_variables
+                q2_variables = q2_variables + lstm_variables  # + approx_variables
 
-            self.train_q_ops = [tf.train.AdamOptimizer(lr).minimize(L_q1,
+            self.train_q_ops = [tf.train.AdamOptimizer(lr).minimize(L_q1,  # + L_approx_lstm,
                                                                     var_list=q1_variables),
-                                tf.train.AdamOptimizer(lr).minimize(L_q2,
+                                tf.train.AdamOptimizer(lr).minimize(L_q2,  # + L_approx_lstm,
                                                                     var_list=q2_variables)]
             self.train_policy_op = tf.train.AdamOptimizer(lr).minimize(L_policy,
                                                                        global_step=self.global_step,
@@ -212,9 +216,14 @@ class SAC_Base(object):
         tf.summary.scalar('loss/policy', L_policy)
         tf.summary.scalar('loss/entropy', tf.reduce_mean(entropy))
         tf.summary.scalar('loss/alpha', alpha)
+        # tf.summary.scalar('loss/approx_lstm', L_approx_lstm)
         self.summaries = tf.summary.merge_all()
 
-    def _build_rnn_test_net(self, s_input, scope, trainable=True, reuse=False):
+    def _build_rnn_test_net(self, s_input, a_input, scope, trainable=True, reuse=False):
+        initializer_helper = {
+            'kernel_initializer': tf.truncated_normal_initializer(0, .1),
+            'bias_initializer': tf.constant_initializer(.1)
+        }
         ls = tf.layers.dense(
             s_input, 64, activation=tf.nn.relu,
             trainable=trainable, **initializer_helper
@@ -223,9 +232,9 @@ class SAC_Base(object):
             a_input, 64, activation=tf.nn.relu,
             trainable=trainable, **initializer_helper
         )
-        l = tf.concat([ls, la], 1)
-        l = tf.layers.dense(l, 64, activation=tf.nn.relu, trainable=trainable, **initializer_helper)
-        l = tf.layers.dense(l, 64, activation=tf.nn.relu, trainable=trainable, **initializer_helper)
+        l = tf.concat([ls, la], -1)
+        l = tf.layers.dense(l, 32, activation=tf.nn.relu, trainable=trainable, **initializer_helper)
+        l = tf.layers.dense(l, 32, activation=tf.nn.relu, trainable=trainable, **initializer_helper)
         s_ = tf.layers.dense(l, self.s_dim, trainable=trainable, **initializer_helper)
 
         variables = tf.get_variable_scope().global_variables()
@@ -258,7 +267,7 @@ class SAC_Base(object):
         assert len(s.shape) == 2
         assert self.use_rnn
 
-        a, lstm_state_ = self.sess.run([self.action_sampled, self.lstm_state], {
+        a, lstm_state_ = self.sess.run([self.plain_action_sampled, self.lstm_state], {
             self.pl_s: s,
             self.initial_lstm_state: lstm_state,
             self.pl_batch_size: len(s)
@@ -271,47 +280,26 @@ class SAC_Base(object):
             self.pl_batch_size: batch_size
         })
 
-    def get_n_step_lstm_state_(self, lstm_state, n_step_s):
-        n_step_s = np.asarray(n_step_s)
-        assert len(n_step_s.shape) == 3
-
-        return self.sess.run(self.n_step_lstm_state, {
-            self.initial_lstm_state: lstm_state,
-            self.pl_n_step_s: n_step_s,
-            self.pl_batch_size: len(n_step_s)
-        })
-
-    def get_target_n_step_lstm_state_(self, lstm_state, n_step_s):
-        n_step_s = np.asarray(n_step_s)
-        assert len(n_step_s.shape) == 3
-
-        return self.sess.run(self.target_n_step_lstm_state, {
-            self.target_n_step_initial_lstm_state: lstm_state,
-            self.pl_n_step_s: n_step_s,
-            self.pl_batch_size: len(n_step_s)
-        })
-
-    def get_td_error(self, s, a, r, s_, done):
+    def get_td_error(self, n_states, n_actions, rewards, state_, done):
         td_error = self.sess.run(self.td_error, {
-            self.pl_s: s,
-            self.pl_a: a,
-            self.pl_r: r,
-            self.pl_s_: s_,
+            self.pl_n_step_s: n_states,
+            self.pl_n_step_a: n_actions,
+            self.pl_r: rewards,
+            self.pl_s_: state_,
             self.pl_done: done,
         })
 
         return td_error
 
-    def get_lstm_td_error(self, lstm_state, s, a, r, lstm_state_, s_, done):
+    def get_lstm_td_error(self, lstm_state, n_states, n_actions, rewards, state_, done):
         td_error = self.sess.run(self.td_error, {
             self.initial_lstm_state: lstm_state,
-            self.pl_s: s,
-            self.pl_a: a,
-            self.pl_r: r,
-            self.next_initial_lstm_state: lstm_state_,
-            self.pl_s_: s_,
+            self.pl_n_step_s: n_states,
+            self.pl_n_step_a: n_actions,
+            self.pl_r: rewards,
+            self.pl_s_: state_,
             self.pl_done: done,
-            self.pl_batch_size: len(s)
+            self.pl_batch_size: len(n_states)
         })
 
         return td_error
@@ -327,13 +315,14 @@ class SAC_Base(object):
 
     def get_n_step_probs(self, n_states, n_actions):
         """
-        n_states: [None, n_step, length of state space]
-        n_actions: [None, n_step, length of action space]
+        n_states: [None, None, length of state space]
+        n_actions: [None, None, length of action space]
         """
 
         n_states = np.asarray(n_states)
         n_actions = np.asarray(n_actions)
         assert len(n_states.shape) == len(n_actions.shape) == 3
+        assert n_states.shape[1] == n_actions.shape[1]
 
         n_probs = self.sess.run(self.n_step_policy_prob, {
             self.pl_n_step_s: n_states,
@@ -345,12 +334,13 @@ class SAC_Base(object):
 
     def get_n_step_lstm_probs(self, lstm_state, n_states, n_actions):
         """
-        n_states: [None, n_step, length of state space]
-        n_actions: [None, n_step, length of action space]
+        n_states: [None, None, length of state space]
+        n_actions: [None, None, length of action space]
         """
         n_states = np.asarray(n_states)
         n_actions = np.asarray(n_actions)
         assert len(n_states.shape) == len(n_actions.shape) == 3
+        assert n_states.shape[1] == n_actions.shape[1]
 
         n_probs = self.sess.run(self.n_step_policy_prob, {
             self.n_step_initial_lstm_state: lstm_state,
@@ -385,8 +375,8 @@ class SAC_Base(object):
         n_rewards_gamma = n_rewards * n_gamma
         return n_rewards_gamma.sum(axis=1, keepdims=True)  # [None, 1]
 
-    def train(self, n_states, n_actions, n_rewards, state_, done,
-              lstm_state_c=None, lstm_state_h=None):
+    def fill_replay_buffer(self, n_states, n_actions, n_rewards, state_, done,
+                           lstm_state_c=None, lstm_state_h=None):
         """
         n_states: [None, burn_in_step + n_step, s_dim]
         n_states: [None, burn_in_step + n_step, s_dim]
@@ -402,17 +392,17 @@ class SAC_Base(object):
         if len(n_states) == 0:
             return
 
-        # store transitions in replay buffer
         if self.use_rnn:
-            # lstm_state_before_burn_in = self._get_lstm_state_tuple(lstm_state_c, lstm_state_h)
-            lstm_state_before_burn_in = self.get_initial_lstm_state(len(n_states))
-            mu_n_probs = self.get_n_step_lstm_probs(lstm_state_before_burn_in, n_states, n_actions)
+            # lstm_state_before_burn_in = self.get_initial_lstm_state(len(n_states))
+            lstm_state_before_burn_in = self._get_lstm_state_tuple(lstm_state_c, lstm_state_h)
+            mu_n_probs = self.get_n_step_lstm_probs(lstm_state_before_burn_in, n_states, n_actions)  # TODO: only need [:, burn_in_step:, :]
             self.replay_buffer.add(n_states, n_actions, n_rewards, state_, done, mu_n_probs,
                                    lstm_state_c, lstm_state_h)
         else:
             mu_n_probs = self.get_n_step_probs(n_states, n_actions)
             self.replay_buffer.add(n_states, n_actions, n_rewards, state_, done, mu_n_probs)
 
+    def train(self):
         # sample from replay buffer
         sampled = self.replay_buffer.sample()
         if sampled is None:
@@ -429,12 +419,8 @@ class SAC_Base(object):
 
         if self.use_rnn:
             n_states, n_actions, n_rewards, state_, done, mu_n_probs, lstm_state_c, lstm_state_h = trans
-            # lstm_state_before_burn_in = self._get_lstm_state_tuple(lstm_state_c, lstm_state_h)
-            lstm_state_before_burn_in = self.get_initial_lstm_state(len(n_states))
-            lstm_state = self.get_n_step_lstm_state_(lstm_state_before_burn_in,
-                                                     n_states[:, :self.burn_in_step, :])
-            # lstm_state_ = self.get_n_step_lstm_state_(lstm_state, n_states[:, self.burn_in_step:, :])
-            target_lstm_state_ = self.get_target_n_step_lstm_state_(lstm_state_before_burn_in, n_states)
+            # lstm_state_before_burn_in = self.get_initial_lstm_state(len(n_states))
+            lstm_state_before_burn_in = self._get_lstm_state_tuple(lstm_state_c, lstm_state_h)
         else:
             n_states, n_actions, n_rewards, state_, done, mu_n_probs = trans
 
@@ -447,17 +433,14 @@ class SAC_Base(object):
             n_step_is = self._get_n_step_is(pi_n_probs[:, self.burn_in_step:, :],
                                             mu_n_probs[:, self.burn_in_step:, :])
 
-        s = n_states[:, self.burn_in_step, :]
-        a = n_actions[:, self.burn_in_step, :]
-        s_ = state_
-        r = self._get_n_reward_gamma_sum(n_rewards[:, self.burn_in_step:])
+        rewards = self._get_n_reward_gamma_sum(n_rewards[:, self.burn_in_step:])
 
         # write summary, update target networks and train q function
         feed_dict = {
-            self.pl_s: s,
-            self.pl_a: a,
-            self.pl_r: r,
-            self.pl_s_: s_,
+            self.pl_n_step_s: n_states,
+            self.pl_n_step_a: n_actions,
+            self.pl_r: rewards,
+            self.pl_s_: state_,
             self.pl_done: done
         }
         if self.use_n_step_is:
@@ -470,9 +453,10 @@ class SAC_Base(object):
             })
         if self.use_rnn:
             feed_dict.update({
-                self.initial_lstm_state: lstm_state,
-                self.next_target_initial_lstm_state: target_lstm_state_,
-                self.pl_batch_size: len(s)
+                self.n_step_initial_lstm_state: lstm_state_before_burn_in,
+                # self.pl_n_step_s_: n_states_,
+                self.target_n_step_initial_lstm_state: lstm_state_before_burn_in,
+                self.pl_batch_size: len(n_states)
             })
 
         if global_step % self.write_summary_per_step == 0:
@@ -483,15 +467,15 @@ class SAC_Base(object):
             self.sess.run(self.update_target_op)
 
         self.sess.run(self.train_q_ops, feed_dict)
-        
+
         # train policy
         feed_dict = {
-            self.pl_s: s,
+            self.pl_n_step_s: n_states,
         }
         if self.use_rnn:
             feed_dict.update({
-                self.initial_lstm_state: lstm_state,
-                self.pl_batch_size: len(s)
+                self.initial_lstm_state: lstm_state_before_burn_in,
+                self.pl_batch_size: len(n_states)
             })
         self.sess.run(self.train_policy_op, feed_dict)
 
@@ -501,9 +485,9 @@ class SAC_Base(object):
         # update td_error
         if self.use_priority:
             if self.use_rnn:
-                td_error = self.get_lstm_td_error(lstm_state, s, a, r, target_lstm_state_, s_, done)
+                td_error = self.get_lstm_td_error(lstm_state_before_burn_in, n_states, n_actions, rewards, state_, done)
             else:
-                td_error = self.get_td_error(s, a, r, s_, done)
+                td_error = self.get_td_error(n_states, n_actions, rewards, state_, done)
 
             self.replay_buffer.update(points, td_error.flatten())
 

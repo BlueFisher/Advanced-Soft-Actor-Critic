@@ -9,7 +9,7 @@ max_iter: 1000
 save_model_per_iter: 100
 reset_on_iteration: false
 # gamma: 0.99
-burn_in_step: 5
+burn_in_step: 10
 n_step: 5
 stagger: 1
 use_rnn: true
@@ -25,8 +25,8 @@ use_rnn: true
 
 sac_config:
   write_summary_graph: true
-  # seed: 1
-  # tau: 0.005
+  seed: 42
+  tau: 0.9
   # write_summary_per_step: 20
   # update_target_per_step: 1
   init_log_alpha: -4.6
