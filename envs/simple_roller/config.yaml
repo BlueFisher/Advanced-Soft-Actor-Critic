@@ -26,7 +26,7 @@ use_rnn: false
 sac_config:
   write_summary_graph: true
   # seed: 1
-  # tau: 0.005
+  tau: 0.9
   # write_summary_per_step: 20
   # update_target_per_step: 1
   init_log_alpha: -4.6
