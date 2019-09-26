@@ -18,7 +18,7 @@ class SAC_Custom(object):
             if is_input_2_dim:
                 s_input = tf.reshape(s_input, (-1, 1, self.s_dim))
 
-            lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(4, trainable=trainable)
+            lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(6, trainable=trainable)
             if initial_lstm_state is None:
                 initial_lstm_state = lstm_cell.zero_state(self.pl_batch_size, dtype=tf.float32)
             l, lstm_state = tf.nn.dynamic_rnn(lstm_cell,
@@ -43,16 +43,16 @@ class SAC_Custom(object):
     def _build_q_net(self, s_input, a_input, scope, trainable=True, reuse=False):
         with tf.variable_scope(scope, reuse=reuse):
             ls = tf.layers.dense(
-                s_input, 64, activation=tf.nn.relu,
+                s_input, 128, activation=tf.nn.relu,
                 trainable=trainable, **initializer_helper
             )
             la = tf.layers.dense(
-                a_input, 64, activation=tf.nn.relu,
+                a_input, 128, activation=tf.nn.relu,
                 trainable=trainable, **initializer_helper
             )
             l = tf.concat([ls, la], -1)
-            l = tf.layers.dense(l, 64, activation=tf.nn.relu, trainable=trainable, **initializer_helper)
-            l = tf.layers.dense(l, 64, activation=tf.nn.relu, trainable=trainable, **initializer_helper)
+            l = tf.layers.dense(l, 128, activation=tf.nn.relu, trainable=trainable, **initializer_helper)
+            l = tf.layers.dense(l, 128, activation=tf.nn.relu, trainable=trainable, **initializer_helper)
             q = tf.layers.dense(l, 1, **initializer_helper, trainable=trainable)
 
             variables = tf.get_variable_scope().global_variables()
@@ -61,13 +61,13 @@ class SAC_Custom(object):
 
     def _build_policy_net(self, s_input, scope, trainable=True, reuse=False):
         with tf.variable_scope(scope, reuse=reuse):
-            l = tf.layers.dense(s_input, 64, tf.nn.relu, **initializer_helper, trainable=trainable)
-            l = tf.layers.dense(l, 64, tf.nn.relu, **initializer_helper, trainable=trainable)
+            l = tf.layers.dense(s_input, 128, tf.nn.relu, **initializer_helper, trainable=trainable)
+            l = tf.layers.dense(l, 128, tf.nn.relu, **initializer_helper, trainable=trainable)
 
-            mu = tf.layers.dense(l, 64, tf.nn.relu, **initializer_helper, trainable=trainable)
+            mu = tf.layers.dense(l, 128, tf.nn.relu, **initializer_helper, trainable=trainable)
             mu = tf.layers.dense(mu, self.a_dim, tf.nn.tanh, **initializer_helper, trainable=trainable)
 
-            sigma = tf.layers.dense(l, 64, tf.nn.relu, **initializer_helper, trainable=trainable)
+            sigma = tf.layers.dense(l, 128, tf.nn.relu, **initializer_helper, trainable=trainable)
             sigma = tf.layers.dense(sigma, self.a_dim, tf.nn.sigmoid, **initializer_helper, trainable=trainable)
             sigma = sigma + .1
 

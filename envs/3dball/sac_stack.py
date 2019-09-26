@@ -12,34 +12,6 @@ initializer_helper = {
 
 
 class SAC_Custom(object):
-    def _build_lstm_s_input(self, s_input, scope, initial_lstm_state=None, trainable=True, reuse=False):
-        with tf.variable_scope(scope, reuse=reuse):
-            is_input_2_dim = len(s_input.shape) == 2
-            if is_input_2_dim:
-                s_input = tf.reshape(s_input, (-1, 1, self.s_dim))
-
-            lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(6, trainable=trainable)
-            if initial_lstm_state is None:
-                initial_lstm_state = lstm_cell.zero_state(self.pl_batch_size, dtype=tf.float32)
-            l, lstm_state = tf.nn.dynamic_rnn(lstm_cell,
-                                              inputs=s_input,
-                                              initial_state=initial_lstm_state,
-                                              dtype=tf.float32)
-
-            l = tf.layers.dense(l, 4, activation=tf.nn.tanh, trainable=trainable, **initializer_helper)
-
-            if is_input_2_dim:
-                s_input = tf.reshape(s_input, (-1, s_input.shape[-1]))
-                encoded_s = tf.reshape(l, (-1, l.shape[-1]))
-            else:
-                encoded_s = l
-
-            encoded_s = tf.concat([s_input, encoded_s], -1)
-
-            variables = tf.get_variable_scope().global_variables()
-
-        return encoded_s, initial_lstm_state, lstm_state, variables
-
     def _build_q_net(self, s_input, a_input, scope, trainable=True, reuse=False):
         with tf.variable_scope(scope, reuse=reuse):
             ls = tf.layers.dense(

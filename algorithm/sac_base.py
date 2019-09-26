@@ -102,7 +102,7 @@ class SAC_Base(object):
         alpha = tf.exp(log_alpha)
 
         if self.use_rnn:
-            self.pl_batch_size = tf.placeholder(tf.int32, shape=(), name='batch_size')
+            self.pl_batch_size = tf.placeholder_with_default(tf.shape(self.pl_s)[0], shape=(), name='batch_size')
 
             # only for choosing action
             (encoded_pl_plain_s,
@@ -269,8 +269,7 @@ class SAC_Base(object):
 
         a, lstm_state_ = self.sess.run([self.plain_action_sampled, self.lstm_state], {
             self.pl_s: s,
-            self.initial_lstm_state: lstm_state,
-            self.pl_batch_size: len(s)
+            self.initial_lstm_state: lstm_state
         })
 
         return np.clip(a, -1, 1), lstm_state_
@@ -298,8 +297,7 @@ class SAC_Base(object):
             self.pl_n_step_a: n_actions,
             self.pl_r: rewards,
             self.pl_s_: state_,
-            self.pl_done: done,
-            self.pl_batch_size: len(n_states)
+            self.pl_done: done
         })
 
         return td_error
@@ -345,8 +343,7 @@ class SAC_Base(object):
         n_probs = self.sess.run(self.n_step_policy_prob, {
             self.n_step_initial_lstm_state: lstm_state,
             self.pl_n_step_s: n_states,
-            self.pl_n_step_a: n_actions,
-            self.pl_batch_size: len(n_states)
+            self.pl_n_step_a: n_actions
         })
         # [None, n_step, length of action space]
 
@@ -455,8 +452,7 @@ class SAC_Base(object):
             feed_dict.update({
                 self.n_step_initial_lstm_state: lstm_state_before_burn_in,
                 # self.pl_n_step_s_: n_states_,
-                self.target_n_step_initial_lstm_state: lstm_state_before_burn_in,
-                self.pl_batch_size: len(n_states)
+                self.target_n_step_initial_lstm_state: lstm_state_before_burn_in
             })
 
         if global_step % self.write_summary_per_step == 0:
@@ -474,8 +470,7 @@ class SAC_Base(object):
         }
         if self.use_rnn:
             feed_dict.update({
-                self.initial_lstm_state: lstm_state_before_burn_in,
-                self.pl_batch_size: len(n_states)
+                self.initial_lstm_state: lstm_state_before_burn_in
             })
         self.sess.run(self.train_policy_op, feed_dict)
 
