@@ -1,10 +1,10 @@
 build_path: 
   win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
-  linux: /data/zzy/build-RL-Envs\RL-Envs.x86_64
+  linux: /data/linux-RL-Envs/RL-Envs.x86_64
 scene: ContinousHardRoller
 
 sac: sac_hard
-max_iter: 1000
+max_iter: 600
 # agents_num: 1
 save_model_per_iter: 100
 reset_on_iteration: false

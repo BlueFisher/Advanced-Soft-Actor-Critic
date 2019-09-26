@@ -1,12 +1,12 @@
 build_path: 
   win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
-  linux: /data/zzy/build-RL-Envs\RL-Envs.x86_64
-scene: 3DBallHardStack
+  linux: /data/linux-RL-Envs/RL-Envs.x86_64
+scene: 3DBall
 
 # sac: sac
-max_iter: 10000
+max_iter: 300
 # agents_num: 1
-save_model_per_iter: 10
+save_model_per_iter: 50
 # reset_on_iteration: true
 # gamma: 0.99
 n_step: 5
