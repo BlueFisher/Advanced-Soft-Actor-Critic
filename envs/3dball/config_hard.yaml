@@ -4,7 +4,7 @@ build_path:
 scene: 3DBallHard
 
 sac: sac_hard
-max_iter: 300
+max_iter: 250
 # agents_num: 1
 save_model_per_iter: 50
 # reset_on_iteration: true
@@ -25,7 +25,7 @@ use_rnn: true
 sac_config:
   write_summary_graph: true
   seed: 42
-  tau: 0.9
+  # tau: 0.9
   # write_summary_per_step: 20
   # update_target_per_step: 1
   init_log_alpha: -4.6
