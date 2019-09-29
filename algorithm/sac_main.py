@@ -251,12 +251,14 @@ class Main(object):
                                                        lstm_state.h[i] if self.config['use_rnn'] else None)
                               for i in range(len(agents))]
 
-                # n_states, n_actions, n_rewards, done, lstm_state_c, lstm_state_h
-                trans = [functools.reduce(lambda x, y: x + y, t) for t in zip(*trans_list)]
+                trans_list = [t for t in trans_list if t is not None]
+                if len(trans_list) != 0:
+                    # n_states, n_actions, n_rewards, done, lstm_state_c, lstm_state_h
+                    trans = [np.concatenate(t, axis=0) for t in zip(*trans_list)]
 
-                if self.train_mode:
-                    self.sac.fill_replay_buffer(*trans)
-                    self.sac.train()
+                    if self.train_mode:
+                        self.sac.fill_replay_buffer(*trans)
+                        self.sac.train()
 
                 states = states_
                 if self.config['use_rnn']:
