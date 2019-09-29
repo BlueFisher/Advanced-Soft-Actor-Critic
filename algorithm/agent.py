@@ -27,17 +27,6 @@ class Agent(object):
                        lstm_state_c=None,
                        lstm_state_h=None):
 
-        if type(state) == np.ndarray:
-            state = state.tolist()
-        if type(action) == np.ndarray:
-            action = action.tolist()
-        if type(state_) == np.ndarray:
-            state_ = state_.tolist()
-        if type(lstm_state_c) == np.ndarray:
-            lstm_state_c = lstm_state_c.tolist()
-        if type(lstm_state_h) == np.ndarray:
-            lstm_state_h = lstm_state_h.tolist()
-
         self._tmp_trans.append({
             'state': state,
             'action': action,
@@ -59,21 +48,16 @@ class Agent(object):
                         max_reached,
                         state_)
 
-        trans = self._get_trans()
-        if trans is None:
-            if self.use_rnn:
-                trans = [[]] * 7
-            else:
-                trans = [[]] * 5
-        else:
-            trans = [[t] for t in trans]
+        trans_list = self._get_trans()
+        if trans_list is not None:
+            trans_list = [np.asarray([t], dtype=np.float32) for t in trans_list]
 
         if local_done:
             self.done = True
             self._tmp_trans.clear()
             self._curr_stagger = self.stagger
 
-        return trans
+        return trans_list
 
     def _extra_log(self,
                    state,

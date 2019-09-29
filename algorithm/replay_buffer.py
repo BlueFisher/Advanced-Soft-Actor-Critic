@@ -35,7 +35,7 @@ class ReplayBuffer(object):
 
         points = np.random.choice(range(self._size), size=self.batch_size, replace=False)
         transitions = self._buffer[points]
-        return points, list(list(t) for t in zip(*transitions))
+        return points, [np.asarray(t, dtype=np.float32) for t in zip(*transitions)]
 
     def update_transitions(self, transition_idx, points, data):
         trans = self._buffer[points]
@@ -298,7 +298,7 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
         if not self.is_lg_batch_size:
             return None
 
-        points, is_weights = np.empty((self.batch_size,), dtype=np.int32), np.empty((self.batch_size, 1))
+        points, is_weights = np.empty((self.batch_size,), dtype=np.int32), np.empty((self.batch_size, 1), dtype=np.float32)
         pri_seg = self._sum_tree.total_p / self.batch_size       # priority segment
         self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
 
@@ -319,7 +319,7 @@ class PrioritizedReplayBuffer(object):  # stored as ( s, a, r, s_, done) in SumT
 
         transitions = self._sum_tree._get_data(data_idx_list)
 
-        return points, list(list(t) for t in zip(*transitions)), is_weights
+        return points, [np.asarray(t, dtype=np.float32) for t in zip(*transitions)], is_weights
 
     def update(self, points, td_errors):
         td_errors = np.asarray(td_errors)

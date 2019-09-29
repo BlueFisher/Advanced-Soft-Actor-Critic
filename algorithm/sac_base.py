@@ -280,9 +280,6 @@ class SAC_Base(object):
             assert lstm_state_c is None
             assert lstm_state_h is None
 
-        if len(n_states) == 0:
-            return
-
         if self.use_rnn:
             # lstm_state_before_burn_in = self.get_initial_lstm_state(len(n_states))
             lstm_state_before_burn_in = self._get_lstm_state_tuple(lstm_state_c, lstm_state_h)
@@ -290,7 +287,6 @@ class SAC_Base(object):
             self.replay_buffer.add(n_states, n_actions, n_rewards, state_, done, mu_n_probs,
                                    lstm_state_c, lstm_state_h)
         else:
-            n_states, n_actions = np.array(n_states, dtype=np.float32), np.array(n_actions, dtype=np.float32)
             mu_n_probs = self.get_n_step_probs(n_states, n_actions).numpy()
             self.replay_buffer.add(n_states, n_actions, n_rewards, state_, done, mu_n_probs)
 
@@ -302,11 +298,8 @@ class SAC_Base(object):
 
         if self.use_priority:
             points, trans, priority_is = sampled
-            priority_is = priority_is.astype(np.float32)
         else:
             points, trans = sampled
-
-        trans = [np.asarray(t, dtype=np.float32) for t in trans]
 
         n_states, n_actions, n_rewards, state_, done, mu_n_probs = trans
         reward = self._get_n_reward_gamma_sum(n_rewards[:, self.burn_in_step:])
