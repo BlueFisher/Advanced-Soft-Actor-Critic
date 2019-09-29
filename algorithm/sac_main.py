@@ -185,19 +185,20 @@ class Main(object):
         state_dim = brain_params.vector_observation_space_size * brain_params.num_stacked_vector_observations
         action_dim = brain_params.vector_action_space_size[0]
 
-        class SAC(importlib.import_module(self.config['sac']).SAC_Custom, SAC_Base):
-            pass
+        custom_sac = importlib.import_module(self.config['sac'])
 
-        self.sac = SAC(state_dim=state_dim,
-                       action_dim=action_dim,
-                       model_root_path=model_root_path,
-                       use_rnn=self.config['use_rnn'],
-                       replay_config=replay_config,
+        self.sac = SAC_Base(state_dim=state_dim,
+                            action_dim=action_dim,
+                            ModelQ=custom_sac.ModelQ,
+                            ModelPolicy=custom_sac.ModelPolicy,
+                            model_root_path=model_root_path,
+                            use_rnn=self.config['use_rnn'],
+                            replay_config=replay_config,
 
-                       gamma=self.config['gamma'],
-                       burn_in_step=self.config['burn_in_step'],
-                       n_step=self.config['n_step'],
-                       **sac_config)
+                            gamma=self.config['gamma'],
+                            burn_in_step=self.config['burn_in_step'],
+                            n_step=self.config['n_step'],
+                            **sac_config)
 
     def _run(self):
         brain_info = self.env.reset(train_mode=self.train_mode, config=self.reset_config)[self.default_brain_name]
@@ -235,7 +236,7 @@ class Main(object):
                     actions = self.sac.choose_action(states)
 
                 brain_info = self.env.step({
-                    self.default_brain_name: actions
+                    self.default_brain_name: actions.numpy()
                 })[self.default_brain_name]
 
                 states_ = brain_info.vector_observations
