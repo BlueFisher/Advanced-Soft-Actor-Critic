@@ -2,50 +2,56 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-
 initializer_helper = {
-    'kernel_initializer': tf.truncated_normal_initializer(0, .1),
-    'bias_initializer': tf.constant_initializer(.1)
+    'kernel_initializer': tf.keras.initializers.TruncatedNormal(0, .1),
+    'bias_initializer': tf.keras.initializers.Constant(0.1)
 }
 
 
-class SAC_Custom(object):
-    def _build_q_net(self, s_input, a_input, scope, trainable=True, reuse=False):
-        with tf.variable_scope(scope, reuse=reuse):
-            ls = tf.layers.dense(
-                s_input, 32, activation=tf.nn.tanh,
-                trainable=trainable, **initializer_helper
-            )
-            la = tf.layers.dense(
-                a_input, 32, activation=tf.nn.tanh,
-                trainable=trainable, **initializer_helper
-            )
-            l = tf.concat([ls, la], 1)
-            l = tf.layers.dense(l, 32, activation=tf.nn.relu, trainable=trainable, **initializer_helper)
-            l = tf.layers.dense(l, 32, activation=tf.nn.relu, trainable=trainable, **initializer_helper)
-            q = tf.layers.dense(l, 1, **initializer_helper, trainable=trainable)
+class ModelQ(tf.keras.Model):
+    def __init__(self, state_dim, action_dim):
+        super(ModelQ, self).__init__()
+        self.layer_s = tf.keras.layers.Dense(32, activation=tf.nn.relu, **initializer_helper)
+        self.layer_a = tf.keras.layers.Dense(32, activation=tf.nn.relu, **initializer_helper)
+        self.layer_1 = tf.keras.layers.Dense(32, activation=tf.nn.relu, **initializer_helper)
+        self.layer_2 = tf.keras.layers.Dense(32, activation=tf.nn.relu, **initializer_helper)
+        self.layer_q = tf.keras.layers.Dense(1, **initializer_helper)
 
-            variables = tf.get_variable_scope().global_variables()
+        self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(action_dim,)))
 
-        return q, variables
+    def call(self, inputs_s, inputs_a):
+        ls = self.layer_s(inputs_s)
+        la = self.layer_a(inputs_a)
+        l = tf.concat([ls, la], -1)
 
-    def _build_policy_net(self, s_inputs, scope, trainable=True, reuse=False):
-        with tf.variable_scope(scope, reuse=reuse):
-            l = tf.layers.dense(s_inputs, 32, tf.nn.relu, **initializer_helper, trainable=trainable)
-            l = tf.layers.dense(l, 32, tf.nn.relu, **initializer_helper, trainable=trainable)
+        l = self.layer_1(l)
+        l = self.layer_2(l)
+        q = self.layer_q(l)
+        return q
 
-            mu = tf.layers.dense(l, 32, tf.nn.relu, **initializer_helper, trainable=trainable)
-            mu = tf.layers.dense(mu, self.a_dim, tf.nn.tanh, **initializer_helper, trainable=trainable)
 
-            sigma = tf.layers.dense(l, 32, tf.nn.relu, **initializer_helper, trainable=trainable)
-            sigma = tf.layers.dense(sigma, self.a_dim, tf.nn.sigmoid, **initializer_helper, trainable=trainable)
-            sigma = sigma + .1
+class ModelPolicy(tf.keras.Model):
+    def __init__(self, state_dim, action_dim):
+        super(ModelPolicy, self).__init__()
+        self.common_layer_1 = tf.keras.layers.Dense(32, activation=tf.nn.relu, **initializer_helper)
+        self.common_layer_2 = tf.keras.layers.Dense(32, activation=tf.nn.relu, **initializer_helper)
+        self.mu_layer_1 = tf.keras.layers.Dense(32, activation=tf.nn.relu, **initializer_helper)
+        self.mu_layer_2 = tf.keras.layers.Dense(action_dim, activation=tf.nn.tanh, **initializer_helper)
+        self.sigma_layer_1 = tf.keras.layers.Dense(32, activation=tf.nn.relu, **initializer_helper)
+        self.sigma_layer_2 = tf.keras.layers.Dense(action_dim, activation=tf.nn.sigmoid, **initializer_helper)
+        self.tfpd = tfp.layers.DistributionLambda(make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
 
-            policy = tfp.distributions.Normal(loc=mu, scale=sigma)
-            action = policy.sample()
+        self(tf.keras.Input(shape=(state_dim,)))
 
-            variables = tf.get_variable_scope().global_variables()
+    def call(self, inputs_s):
+        l = self.common_layer_1(inputs_s)
+        l = self.common_layer_2(l)
 
-        return policy, action, variables
+        mu = self.mu_layer_1(l)
+        mu = self.mu_layer_2(mu)
+
+        sigma = self.sigma_layer_1(l)
+        sigma = self.sigma_layer_2(sigma)
+        sigma = sigma + .1
+
+        return self.tfpd([mu, sigma])
