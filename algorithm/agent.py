@@ -24,8 +24,8 @@ class Agent(object):
                        local_done,
                        max_reached,
                        state_,
-                       lstm_state_c=None,
-                       lstm_state_h=None):
+                       lstm_state_h=None,
+                       lstm_state_c=None):
 
         self._tmp_trans.append({
             'state': state,
@@ -34,8 +34,8 @@ class Agent(object):
             'local_done': local_done,
             'max_reached': max_reached,
             'state_': state_,
-            'lstm_state_c': lstm_state_c,
-            'lstm_state_h': lstm_state_h
+            'lstm_state_h': lstm_state_h,
+            'lstm_state_c': lstm_state_c
         })
 
         if not self.done:
@@ -82,15 +82,15 @@ class Agent(object):
         done = self._tmp_trans[-1]['local_done'] and not self._tmp_trans[-1]['max_reached']
 
         if self.use_rnn:
-            lstm_state_c = self._tmp_trans[0]['lstm_state_c']
             lstm_state_h = self._tmp_trans[0]['lstm_state_h']
+            lstm_state_c = self._tmp_trans[0]['lstm_state_c']
 
             return ([t['state'] for t in self._tmp_trans],
                     [t['action'] for t in self._tmp_trans],
                     [t['reward'] for t in self._tmp_trans],
                     state_,
                     [done],
-                    lstm_state_c, lstm_state_h)
+                    lstm_state_h, lstm_state_c)
         else:
             return ([t['state'] for t in self._tmp_trans],
                     [t['action'] for t in self._tmp_trans],
