@@ -2,9 +2,6 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-
 initializer_helper = {
     'kernel_initializer': tf.keras.initializers.TruncatedNormal(0, .1),
     'bias_initializer': tf.keras.initializers.Constant(0.1)
@@ -42,6 +39,7 @@ class ModelPolicy(tf.keras.Model):
         self.mu_layer_2 = tf.keras.layers.Dense(action_dim, activation=tf.nn.tanh, **initializer_helper)
         self.sigma_layer_1 = tf.keras.layers.Dense(64, activation=tf.nn.relu, **initializer_helper)
         self.sigma_layer_2 = tf.keras.layers.Dense(action_dim, activation=tf.nn.sigmoid, **initializer_helper)
+        self.tfpd = tfp.layers.DistributionLambda(make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
 
         self(tf.keras.Input(shape=(state_dim,)))
 
@@ -56,4 +54,4 @@ class ModelPolicy(tf.keras.Model):
         sigma = self.sigma_layer_2(sigma)
         sigma = sigma + .1
 
-        return mu, sigma
+        return self.tfpd([mu, sigma])
