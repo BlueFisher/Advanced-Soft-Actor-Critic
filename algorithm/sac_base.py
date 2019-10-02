@@ -174,8 +174,7 @@ class SAC_Base(object):
     def _train(self, n_states, n_actions, reward, state_, done,
                n_step_is=None, priority_is=None,
                initial_state_h=None, initial_state_c=None):
-        initial_state_h = tf.convert_to_tensor(initial_state_h, dtype=tf.float32)
-        initial_state_c = tf.convert_to_tensor(initial_state_c, dtype=tf.float32)
+               
         with tf.GradientTape(persistent=True) as tape:
             if self.use_rnn:
                 m_states = tf.concat([n_states, tf.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)

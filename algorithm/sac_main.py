@@ -17,7 +17,7 @@ from .sac_base import SAC_Base
 from .agent import Agent
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from mlagents.envs import UnityEnvironment
+from mlagents.envs.environment import UnityEnvironment
 
 
 class Main(object):
@@ -209,7 +209,7 @@ class Main(object):
             lstm_state_h, lstm_state_c = initial_lstm_state_h, initial_lstm_state_c
 
         for iteration in range(self.config['max_iter'] + 1):
-            if self.env.global_done or self.config['reset_on_iteration']:
+            if self.config['reset_on_iteration']:
                 brain_info = self.env.reset(train_mode=self.train_mode)[self.default_brain_name]
                 if self.config['use_rnn']:
                     lstm_state_h, lstm_state_c = initial_lstm_state_h, initial_lstm_state_c
@@ -232,7 +232,7 @@ class Main(object):
 
             states = brain_info.vector_observations
 
-            while False in [a.done for a in agents] and not self.env.global_done:
+            while False in [a.done for a in agents]:
                 if self.config['use_rnn']:
                     actions, lstm_state_h_, lstm_state_c_ = self.sac.choose_lstm_action(states,
                                                                                         lstm_state_h,
