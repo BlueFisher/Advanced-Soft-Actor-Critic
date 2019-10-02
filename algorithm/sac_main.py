@@ -6,6 +6,7 @@ import importlib
 import logging
 import logging.handlers
 import os
+import shutil
 import sys
 import time
 import yaml
@@ -186,6 +187,7 @@ class Main(object):
         action_dim = brain_params.vector_action_space_size[0]
 
         custom_sac = importlib.import_module(self.config['sac'])
+        shutil.copyfile(f'{self.config["sac"]}.py', f'{model_root_path}/{self.config["sac"]}.py')
 
         self.sac = SAC_Base(state_dim=state_dim,
                             action_dim=action_dim,
