@@ -40,6 +40,7 @@ class Main(object):
             'port': 7000,
             'sac': 'sac',
             'max_iter': 1000,
+            'max_step': -1,
             'agents_num': 1,
             'save_model_per_iter': 500,
             'reset_on_iteration': True,
@@ -97,7 +98,7 @@ class Main(object):
             if opt in ('-r', '--run'):
                 self.train_mode = False
             elif opt in ('-n', '--name'):
-                config['name'] = arg.replace('{time}', self._now)
+                config['name'] = arg
             elif opt in ('-b', '--build'):
                 config['build_path'] = arg
             elif opt in ('-p', '--port'):
@@ -140,6 +141,7 @@ class Main(object):
             fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
             self.logger.addHandler(fh)
 
+        config['name'] = config['name'].replace('{time}', self._now)
         model_root_path = f'models/{config["name"]}'
 
         # save config
@@ -186,16 +188,14 @@ class Main(object):
         state_dim = brain_params.vector_observation_space_size * brain_params.num_stacked_vector_observations
         action_dim = brain_params.vector_action_space_size[0]
 
-        custom_sac = importlib.import_module(self.config['sac'])
+        custom_sac_model = importlib.import_module(self.config['sac'])
         shutil.copyfile(f'{self.config["sac"]}.py', f'{model_root_path}/{self.config["sac"]}.py')
 
         self.sac = SAC_Base(state_dim=state_dim,
                             action_dim=action_dim,
                             model_root_path=model_root_path,
-                            ModelQ=custom_sac.ModelQ,
-                            ModelPolicy=custom_sac.ModelPolicy,
+                            model=custom_sac_model,
                             use_rnn=self.config['use_rnn'],
-                            ModelLSTM=custom_sac.ModelLSTM if self.config['use_rnn'] else None,
 
                             replay_config=replay_config,
 
@@ -233,6 +233,7 @@ class Main(object):
             """
 
             states = brain_info.vector_observations
+            step = 0
 
             while False in [a.done for a in agents]:
                 if self.config['use_rnn']:
@@ -251,6 +252,9 @@ class Main(object):
                 })[self.default_brain_name]
 
                 states_ = brain_info.vector_observations
+                if step == self.config['max_step']:
+                    brain_info.local_done = [True] * len(brain_info.agents)
+                    brain_info.max_reached = [True] * len(brain_info.agents)
 
                 trans_list = [agents[i].add_transition(states[i],
                                                        actions[i],
@@ -277,6 +281,8 @@ class Main(object):
                     lstm_state_c = lstm_state_c_
                     lstm_state_h[brain_info.local_done] = initial_lstm_state_h[brain_info.local_done]
                     lstm_state_c[brain_info.local_done] = initial_lstm_state_c[brain_info.local_done]
+
+                step += 1
 
             if self.train_mode:
                 self._log_episode_summaries(iteration, agents)

@@ -2,78 +2,99 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 initializer_helper = {
-    'kernel_initializer': tf.truncated_normal_initializer(0, .1),
-    'bias_initializer': tf.constant_initializer(.1)
+    'kernel_initializer': tf.keras.initializers.TruncatedNormal(0, .1),
+    'bias_initializer': tf.keras.initializers.Constant(0.1)
 }
 
 
-class SAC_Custom(object):
-    def _build_lstm_s_input(self, s_input, scope, initial_lstm_state=None, trainable=True, reuse=False):
-        with tf.variable_scope(scope, reuse=reuse):
-            is_input_2_dim = len(s_input.shape) == 2
-            if is_input_2_dim:
-                s_input = tf.reshape(s_input, (-1, 1, self.s_dim))
+class ModelLSTM(tf.keras.Model):
+    def __init__(self, state_dim):
+        super(ModelLSTM, self).__init__()
+        self.state_dim = state_dim
+        self.lstm_units = state_dim
+        self.layer_lstm = tf.keras.layers.LSTM(self.lstm_units, return_sequences=True, return_state=True)
 
-            lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(32, trainable=trainable)
-            if initial_lstm_state is None:
-                initial_lstm_state = lstm_cell.zero_state(self.pl_batch_size, dtype=tf.float32)
-            l, lstm_state = tf.nn.dynamic_rnn(lstm_cell,
-                                              inputs=s_input,
-                                              initial_state=initial_lstm_state,
-                                              dtype=tf.float32)
+        self.get_call_result_tensors()
 
-            # l = tf.layers.dense(l, 4, activation=tf.nn.tanh, trainable=trainable, **initializer_helper)
+    def call(self, inputs_s, initial_state_h, initial_state_c):
+        outputs, state_h, state_c = self.layer_lstm(inputs_s, initial_state=[initial_state_h, initial_state_c])
 
-            if is_input_2_dim:
-                s_input = tf.reshape(s_input, (-1, s_input.shape[-1]))
-                encoded_s = tf.reshape(l, (-1, l.shape[-1]))
-            else:
-                encoded_s = l
+        outputs = inputs_s + outputs
 
-            encoded_s = tf.concat([s_input, encoded_s], -1)
+        return outputs, state_h, state_c
 
-            variables = tf.get_variable_scope().global_variables()
+    def get_call_result_tensors(self):
+        return self(tf.keras.Input(shape=(None, self.state_dim,), dtype=tf.float32),
+                    tf.keras.Input(shape=(self.lstm_units,), dtype=tf.float32),
+                    tf.keras.Input(shape=(self.lstm_units,), dtype=tf.float32))
 
-        return encoded_s, initial_lstm_state, lstm_state, variables
 
-    def _build_q_net(self, s_input, a_input, scope, trainable=True, reuse=False):
-        with tf.variable_scope(scope, reuse=reuse):
-            ls = tf.layers.dense(
-                s_input, 128, activation=tf.nn.tanh,
-                trainable=trainable, **initializer_helper
-            )
-            la = tf.layers.dense(
-                a_input, 128, activation=tf.nn.tanh,
-                trainable=trainable, **initializer_helper
-            )
-            l = tf.concat([ls, la], 1)
-            l = tf.layers.dense(l, 128, activation=tf.nn.relu, trainable=trainable, **initializer_helper)
-            l = tf.layers.dense(l, 128, activation=tf.nn.relu, trainable=trainable, **initializer_helper)
-            q = tf.layers.dense(l, 1, **initializer_helper, trainable=trainable)
+class ModelPrediction(tf.keras.Model):
+    def __init__(self, state_dim, encoded_state_dim, action_dim):
+        super(ModelTest, self).__init__()
+        self.seq = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(state_dim, **initializer_helper)
+        ])
 
-            variables = tf.get_variable_scope().global_variables()
+        self(tf.keras.Input(shape=(encoded_state_dim,)), tf.keras.Input(shape=(action_dim,)))
 
-        return q, variables
+    def call(self, inputs_s, inputs_a):
+        return self.seq(tf.concat([inputs_s, inputs_a], -1))
 
-    def _build_policy_net(self, s_inputs, scope, trainable=True, reuse=False):
-        with tf.variable_scope(scope, reuse=reuse):
-            l = tf.layers.dense(s_inputs, 128, tf.nn.relu, **initializer_helper, trainable=trainable)
-            l = tf.layers.dense(l, 128, tf.nn.relu, **initializer_helper, trainable=trainable)
 
-            mu = tf.layers.dense(l, 128, tf.nn.relu, **initializer_helper, trainable=trainable)
-            mu = tf.layers.dense(mu, self.a_dim, tf.nn.tanh, **initializer_helper, trainable=trainable)
+class ModelQ(tf.keras.Model):
+    def __init__(self, state_dim, action_dim):
+        super(ModelQ, self).__init__()
+        self.layer_s = tf.keras.layers.Dense(128, activation=tf.nn.tanh, **initializer_helper)
+        self.layer_a = tf.keras.layers.Dense(128, activation=tf.nn.tanh, **initializer_helper)
+        self.sequential_model = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(1, **initializer_helper)
+        ])
 
-            sigma = tf.layers.dense(l, 128, tf.nn.relu, **initializer_helper, trainable=trainable)
-            sigma = tf.layers.dense(sigma, self.a_dim, tf.nn.sigmoid, **initializer_helper, trainable=trainable)
-            sigma = sigma + .1
+        self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(action_dim,)))
 
-            policy = tfp.distributions.Normal(loc=mu, scale=sigma)
-            action = policy.sample()
+    def call(self, inputs_s, inputs_a):
+        ls = self.layer_s(inputs_s)
+        la = self.layer_a(inputs_a)
+        l = ls + la
 
-            variables = tf.get_variable_scope().global_variables()
+        q = self.sequential_model(l)
+        return q
 
-        return policy, action, variables
+
+class ModelPolicy(tf.keras.Model):
+    def __init__(self, state_dim, action_dim):
+        super(ModelPolicy, self).__init__()
+        self.common_model = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper)
+        ])
+        self.mu_model = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(action_dim, activation=tf.nn.tanh, **initializer_helper)
+        ])
+        self.sigma_model = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(action_dim, activation=tf.nn.sigmoid, **initializer_helper)
+        ])
+
+        self.tfpd = tfp.layers.DistributionLambda(make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
+
+        self(tf.keras.Input(shape=(state_dim,)))
+
+    def call(self, inputs_s):
+        l = self.common_model(inputs_s)
+
+        mu = self.mu_model(l)
+
+        sigma = self.sigma_model(l)
+        sigma = sigma + .1
+
+        return self.tfpd([mu, sigma])

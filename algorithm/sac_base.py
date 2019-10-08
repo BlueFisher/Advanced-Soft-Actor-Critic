@@ -9,17 +9,13 @@ import tensorflow_probability as tfp
 
 from .replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 
-# logger = logging.getLogger('sac.base')
-# logger.propagate = False
-# fh = logging.handlers.RotatingFileHandler('test.txt', maxBytes=1024 * 10240, backupCount=100000)
-# fh.setLevel(logging.INFO)
-
-# # add handler and formatter to logger
-# fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
-# logger.addHandler(fh)
-
-logger = logging.getLogger('sac')
+logger = logging.getLogger('sac.base')
 logger.setLevel(level=logging.INFO)
+
+initializer_helper = {
+    'kernel_initializer': tf.keras.initializers.TruncatedNormal(0, .1),
+    'bias_initializer': tf.keras.initializers.Constant(0.1)
+}
 
 
 class SAC_Base(object):
@@ -27,10 +23,8 @@ class SAC_Base(object):
                  state_dim,
                  action_dim,
                  model_root_path,
-                 ModelQ,
-                 ModelPolicy,
+                 model,
                  use_rnn=False,
-                 ModelLSTM=None,
 
                  write_summary_graph=False,
                  seed=None,
@@ -61,6 +55,8 @@ class SAC_Base(object):
         self.n_step = n_step
         self.use_priority = use_priority
         self.use_n_step_is = use_n_step_is
+        self.zero_init_states = False
+        self.use_prediction = False
 
         replay_config = {} if replay_config is None else replay_config
         if self.use_priority:
@@ -77,44 +73,45 @@ class SAC_Base(object):
         if seed is not None:
             tf.random.set_seed(seed)
 
-        self._build_model(lr, init_log_alpha, ModelQ, ModelPolicy, ModelLSTM)
+        self._build_model(lr, init_log_alpha, model)
         self._init_or_restore(model_root_path)
 
         summary_path = f'{model_root_path}/log'
         self.summary_writer = tf.summary.create_file_writer(summary_path)
 
-    def _build_model(self, lr, init_log_alpha, ModelQ, ModelPolicy, ModelLSTM=None):
+    def _build_model(self, lr, init_log_alpha, model):
         self.log_alpha = tf.Variable(init_log_alpha, dtype=tf.float32, name='log_alpha')
         self.global_step = tf.Variable(0, dtype=tf.int64, name='global_step')
 
-        self.optimizer_q1 = tf.keras.optimizers.Adam(lr)
-        self.optimizer_q2 = tf.keras.optimizers.Adam(lr)
+        self.optimizer_q = tf.keras.optimizers.Adam(lr)
         self.optimizer_policy = tf.keras.optimizers.Adam(lr)
         self.optimizer_alpha = tf.keras.optimizers.Adam(lr)
 
         if self.use_rnn:
-            self.model_lstm = ModelLSTM(self.state_dim)
-            self.model_target_lstm = ModelLSTM(self.state_dim)
+            self.model_lstm = model.ModelLSTM(self.state_dim)
+            self.model_target_lstm = model.ModelLSTM(self.state_dim)
 
             tmp_state, tmp_lstm_state_h, tmp_lstm_state_c = self.model_lstm.get_call_result_tensors()
             state_dim = tmp_state.shape[-1]
             self._initial_lstm_state_h = np.zeros(tmp_lstm_state_h.shape[-1], dtype=np.float32)
             self._initial_lstm_state_c = np.zeros(tmp_lstm_state_c.shape[-1], dtype=np.float32)
+
+            if self.use_prediction:
+                self.model_prediction = model.ModelPrediction(self.state_dim, state_dim, self.action_dim)
         else:
             state_dim = self.state_dim
 
-        self.model_q1 = ModelQ(state_dim, self.action_dim)
-        self.model_target_q1 = ModelQ(state_dim, self.action_dim)
-        self.model_q2 = ModelQ(state_dim, self.action_dim)
-        self.model_target_q2 = ModelQ(state_dim, self.action_dim)
-        self.model_policy = ModelPolicy(state_dim, self.action_dim)
+        self.model_q1 = model.ModelQ(state_dim, self.action_dim)
+        self.model_target_q1 = model.ModelQ(state_dim, self.action_dim)
+        self.model_q2 = model.ModelQ(state_dim, self.action_dim)
+        self.model_target_q2 = model.ModelQ(state_dim, self.action_dim)
+        self.model_policy = model.ModelPolicy(state_dim, self.action_dim)
 
     def _init_or_restore(self, model_path):
         ckpt = tf.train.Checkpoint(log_alpha=self.log_alpha,
                                    global_step=self.global_step,
 
-                                   optimizer_q1=self.optimizer_q1,
-                                   optimizer_q2=self.optimizer_q2,
+                                   optimizer_q=self.optimizer_q,
                                    optimizer_policy=self.optimizer_policy,
                                    optimizer_alpha=self.optimizer_alpha,
 
@@ -174,18 +171,26 @@ class SAC_Base(object):
     def _train(self, n_states, n_actions, reward, state_, done,
                n_step_is=None, priority_is=None,
                initial_state_h=None, initial_state_c=None):
-               
+
         with tf.GradientTape(persistent=True) as tape:
             if self.use_rnn:
                 m_states = tf.concat([n_states, tf.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)
-                m_states, *_ = self.model_target_lstm(m_states,
-                                                      initial_state_h, initial_state_c)
-                state_ = m_states[:, -1, :]
+                encoded_m_target_states, *_ = self.model_target_lstm(m_states,
+                                                                     initial_state_h, initial_state_c)
+                state_ = encoded_m_target_states[:, -1, :]
 
-                n_states, *_ = self.model_lstm(n_states,
-                                               initial_state_h, initial_state_c)
+                encoded_n_states, *_ = self.model_lstm(n_states,
+                                                       initial_state_h, initial_state_c)
+                state = encoded_n_states[:, self.burn_in_step, :]
 
-            state = n_states[:, self.burn_in_step, :]
+                if self.use_prediction:
+                    approx_next_states = self.model_prediction(encoded_n_states[:, self.burn_in_step:, :],
+                                                               n_actions[:, self.burn_in_step:, :])
+                    loss_prediction = tf.math.squared_difference(approx_next_states,
+                                                                 m_states[:, self.burn_in_step + 1:, :])
+            else:
+                state = n_states[:, self.burn_in_step, :]
+
             action = n_actions[:, self.burn_in_step, :]
 
             alpha = tf.exp(self.log_alpha)
@@ -202,31 +207,32 @@ class SAC_Base(object):
             loss_q1 = tf.math.squared_difference(q1, y)
             loss_q2 = tf.math.squared_difference(q2, y)
 
+            loss_q = loss_q1 + loss_q2
+
             if self.use_n_step_is and n_step_is is not None:
-                loss_q1 *= n_step_is
-                loss_q2 *= n_step_is
+                loss_q *= n_step_is
 
             if self.use_priority and priority_is is not None:
-                loss_q1 *= priority_is
-                loss_q2 *= priority_is
+                loss_q *= priority_is
+
+            if self.use_rnn and self.use_prediction:
+                loss_prediction = tf.reshape(tf.reduce_mean(loss_prediction, axis=[1, 2]), [-1, 1])
+                loss_q += loss_prediction
 
             loss_policy = alpha * policy.log_prob(action_sampled) - q1_for_gradient
             loss_alpha = -self.log_alpha * policy.log_prob(action_sampled) + self.log_alpha * self.action_dim
 
-        q1_variables = self.model_q1.trainable_variables
-        q2_variables = self.model_q2.trainable_variables
+        q_variables = self.model_q1.trainable_variables + self.model_q2.trainable_variables
         if self.use_rnn:
-            q1_variables = q1_variables + self.model_lstm.trainable_variables
-            q2_variables = q2_variables + self.model_lstm.trainable_variables
-            # TODO: could combine the training of q1 and q2
+            q_variables = q_variables + self.model_lstm.trainable_variables
+            if self.use_prediction:
+                q_variables = q_variables + self.model_prediction.trainable_variables
 
-        grads_q1 = tape.gradient(loss_q1, q1_variables)
-        grads_q2 = tape.gradient(loss_q2, q2_variables)
+        grads_q = tape.gradient(loss_q, q_variables)
         grads_policy = tape.gradient(loss_policy, self.model_policy.trainable_variables)
         grads_alpha = tape.gradient(loss_alpha, self.log_alpha)
 
-        self.optimizer_q1.apply_gradients(zip(grads_q1, q1_variables))
-        self.optimizer_q2.apply_gradients(zip(grads_q2, q2_variables))
+        self.optimizer_q.apply_gradients(zip(grads_q, q_variables))
         self.optimizer_policy.apply_gradients(zip(grads_policy, self.model_policy.trainable_variables))
         self.optimizer_alpha.apply_gradients([(grads_alpha, self.log_alpha)])
 
@@ -234,8 +240,9 @@ class SAC_Base(object):
 
         if self.global_step % self.write_summary_per_step == 0:
             with self.summary_writer.as_default():
-                tf.summary.scalar('loss/Q1', tf.reduce_mean(loss_q1), step=self.global_step)
-                tf.summary.scalar('loss/Q2', tf.reduce_mean(loss_q2), step=self.global_step)
+                tf.summary.scalar('loss/Q', tf.reduce_mean(loss_q), step=self.global_step)
+                if self.use_rnn and self.use_prediction:
+                    tf.summary.scalar('loss/prediction', tf.reduce_mean(loss_prediction), step=self.global_step)
                 tf.summary.scalar('loss/policy', tf.reduce_mean(loss_policy), step=self.global_step)
                 tf.summary.scalar('loss/entropy', tf.reduce_mean(policy.entropy()), step=self.global_step)
                 tf.summary.scalar('loss/alpha', alpha, step=self.global_step)
@@ -350,6 +357,8 @@ class SAC_Base(object):
             assert lstm_state_c is None
 
         if self.use_rnn:
+            if self.zero_init_states:
+                lstm_state_h, lstm_state_c = self.get_initial_lstm_state(len(n_states))
             mu_n_probs = self.get_n_step_probs(n_states, n_actions,  # TODO: only need [:, burn_in_step:, :]
                                                lstm_state_h, lstm_state_c).numpy()
             self.replay_buffer.add(n_states, n_actions, n_rewards, state_, done, mu_n_probs,
