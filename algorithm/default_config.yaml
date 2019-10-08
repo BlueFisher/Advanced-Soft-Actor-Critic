@@ -6,10 +6,12 @@ scene: scene
 name: {time}
 sac: sac
 max_iter: 1000
+max_step: -1
 agents_num: 1
 save_model_per_iter: 500
 reset_on_iteration: true
 gamma: 0.99
+burn_in_step: 0
 n_step: 1
 use_rnn: false
 

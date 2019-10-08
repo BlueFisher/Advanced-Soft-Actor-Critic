@@ -4,7 +4,7 @@ build_path:
 scene: ContinousHardRoller
 
 sac: sac_hard
-max_iter: 600
+max_iter: 150
 # agents_num: 1
 save_model_per_iter: 100
 reset_on_iteration: false
