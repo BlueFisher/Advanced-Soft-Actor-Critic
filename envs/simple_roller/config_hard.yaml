@@ -24,7 +24,6 @@ use_rnn: true
 #   use_mongodb: false
 
 sac_config:
-  write_summary_graph: true
   seed: 42
   tau: 0.9
   # write_summary_per_step: 20
