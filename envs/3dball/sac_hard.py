@@ -9,31 +9,30 @@ initializer_helper = {
 }
 
 
-class ModelLSTM(tf.keras.Model):
+class ModelRNN(tf.keras.Model):
     def __init__(self, state_dim):
-        super(ModelLSTM, self).__init__()
+        super(ModelRNN, self).__init__()
         self.state_dim = state_dim
-        self.lstm_units = state_dim
-        self.layer_lstm = tf.keras.layers.LSTM(self.lstm_units, return_sequences=True, return_state=True)
+        self.rnn_units = 64
+        self.layer_rnn = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
 
         self.get_call_result_tensors()
 
-    def call(self, inputs_s, initial_state_h, initial_state_c):
-        outputs, state_h, state_c = self.layer_lstm(inputs_s, initial_state=[initial_state_h, initial_state_c])
+    def call(self, inputs_s, initial_state):
+        outputs, next_state = self.layer_rnn(inputs_s, initial_state=[initial_state])
 
-        outputs = inputs_s + outputs
+        outputs = tf.concat([inputs_s, outputs], -1)
 
-        return outputs, state_h, state_c
+        return outputs, next_state
 
     def get_call_result_tensors(self):
         return self(tf.keras.Input(shape=(None, self.state_dim,), dtype=tf.float32),
-                    tf.keras.Input(shape=(self.lstm_units,), dtype=tf.float32),
-                    tf.keras.Input(shape=(self.lstm_units,), dtype=tf.float32))
+                    tf.keras.Input(shape=(self.rnn_units,), dtype=tf.float32))
 
 
 class ModelPrediction(tf.keras.Model):
     def __init__(self, state_dim, encoded_state_dim, action_dim):
-        super(ModelTest, self).__init__()
+        super(ModelPrediction, self).__init__()
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
             tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),

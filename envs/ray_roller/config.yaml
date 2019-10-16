@@ -4,12 +4,12 @@ build_path:
 scene: RayRoller
 
 # sac: sac
-max_iter: 1000
+max_iter: 10000
 # agents_num: 1
 save_model_per_iter: 100
 reset_on_iteration: false
 # gamma: 0.99
-burn_in_step: 50
+burn_in_step: 15
 n_step: 5
 stagger: 1
 use_rnn: true
@@ -24,11 +24,10 @@ use_rnn: true
 #   use_mongodb: false
 
 sac_config:
-  write_summary_graph: true
   seed: 42
-  tau: 0.5
+  tau: 1.
   # write_summary_per_step: 20
-  # update_target_per_step: 1
+  update_target_per_step: 100
   init_log_alpha: -2.3
   # use_auto_alpha: true
   # lr: 3e-4
