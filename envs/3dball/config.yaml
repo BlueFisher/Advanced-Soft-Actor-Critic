@@ -1,7 +1,7 @@
 build_path: 
   win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
   linux: /data/linux-RL-Envs/RL-Envs.x86_64
-scene: 3DBall
+scene: 3DBall9
 
 # sac: sac
 max_iter: 300
@@ -20,7 +20,6 @@ n_step: 5
 #   alpha: 0.9
 
 sac_config:
-  write_summary_graph: true
   # seed: None
   # tau: 0.005
   # write_summary_per_step: 20

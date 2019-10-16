@@ -9,25 +9,40 @@ initializer_helper = {
 }
 
 
-class ModelLSTM(tf.keras.Model):
+class ModelRNN(tf.keras.Model):
     def __init__(self, state_dim):
-        super(ModelLSTM, self).__init__()
+        super(ModelRNN, self).__init__()
         self.state_dim = state_dim
         self.lstm_units = 32
-        self.layer_lstm = tf.keras.layers.LSTM(self.lstm_units, return_sequences=True, return_state=True)
+        self.layer_lstm = tf.keras.layers.GRU(self.lstm_units, return_sequences=True, return_state=True)
 
         self.get_call_result_tensors()
 
-    def call(self, inputs_s, initial_state_h, initial_state_c):
-        outputs, state_h, state_c = self.layer_lstm(inputs_s, initial_state=[initial_state_h, initial_state_c])
+    def call(self, inputs_s, initial_state):
+        outputs, next_state = self.layer_lstm(inputs_s, initial_state=[initial_state])
 
         encoded_s = tf.concat([inputs_s, outputs], -1)
-        return encoded_s, state_h, state_c
+        return encoded_s, next_state
 
     def get_call_result_tensors(self):
         return self(tf.keras.Input(shape=(None, self.state_dim,), dtype=tf.float32),
-                    tf.keras.Input(shape=(self.lstm_units,), dtype=tf.float32),
                     tf.keras.Input(shape=(self.lstm_units,), dtype=tf.float32))
+
+
+class ModelPrediction(tf.keras.Model):
+    def __init__(self, state_dim, encoded_state_dim, action_dim):
+        super(ModelPrediction, self).__init__()
+        self.seq = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(state_dim, **initializer_helper)
+        ])
+
+        self(tf.keras.Input(shape=(encoded_state_dim,)), tf.keras.Input(shape=(action_dim,)))
+
+    def call(self, inputs_s, inputs_a):
+        return self.seq(tf.concat([inputs_s, inputs_a], -1))
 
 
 class ModelQ(tf.keras.Model):
