@@ -430,4 +430,4 @@ class SAC_Base(object):
             else:
                 pi_n_probs = self.get_n_step_probs(n_states, n_actions).numpy()
 
-            self.replay_buffer.update_transitions(5, points, pi_n_probs)
+            self.replay_buffer.update_transitions(points, 5, pi_n_probs)
