@@ -43,6 +43,11 @@ class DataStorage:
     def get(self, pointers):
         return [data[pointers] for data in self._buffer]
 
+    def clear(self):
+        self._size = 0
+        self._pointer = 0
+        self._buffer = None
+
     @property
     def size(self):
         return self._size
@@ -149,8 +154,7 @@ class SumTree(object):
         return leaf_idx - self.capacity + 1
 
     def clear(self):
-        for i in range(len(self._tree)):
-            self._tree[i] = 0
+        self._tree[:] = 0
 
     @property
     def total_p(self):
@@ -248,6 +252,7 @@ class PrioritizedReplayBuffer(object):
         self._trans_storage.update(data_pointers, index, data)
 
     def clear(self):
+        self._trans_storage.clear()
         self._sum_tree.clear()
 
     @property

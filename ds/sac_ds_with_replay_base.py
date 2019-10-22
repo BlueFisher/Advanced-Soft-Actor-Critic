@@ -17,112 +17,112 @@ class SAC_DS_with_Replay_Base(SAC_DS_Base):
                  state_dim,
                  action_dim,
                  model_root_path,
+                 model,
 
-                 write_summary_graph=False,
+                 burn_in_step=0,
+                 n_step=1,
+                 use_rnn=False,
+
                  seed=None,
-                 tau=0.005,
                  save_model_per_step=5000,
                  write_summary_per_step=20,
+                 tau=0.005,
                  update_target_per_step=1,
-                 init_log_alpha=-4.6,
+                 init_log_alpha=-2.3,
                  use_auto_alpha=True,
                  lr=3e-4,
-                 use_n_step_is=True,
+                 gamma=0.99,
 
                  replay_config=None):
 
         replay_config = {} if replay_config is None else replay_config
         self.replay_buffer = PrioritizedReplayBuffer(**replay_config)
+
         super().__init__(state_dim,
                          action_dim,
                          model_root_path,
-                         write_summary_graph,
+                         model,
+
+                         burn_in_step,
+                         n_step,
+                         use_rnn,
+
                          seed,
-                         tau,
                          save_model_per_step,
                          write_summary_per_step,
+                         tau,
                          update_target_per_step,
                          init_log_alpha,
                          use_auto_alpha,
                          lr,
-                         use_n_step_is)
+                         gamma)
 
-    def add(self, s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs):
-        self.replay_buffer.add(s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs)
+    def add(self, n_states, n_actions, n_rewards, state_, done, mu_n_probs,
+            rnn_state=None):
+        if self.use_rnn:
+            self.replay_buffer.add(n_states, n_actions, n_rewards, state_, done, mu_n_probs,
+                                   rnn_state)
+        else:
+            self.replay_buffer.add(n_states, n_actions, n_rewards, state_, done, mu_n_probs)
 
-    def add_with_td_errors(self, td_errors, s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs):
-        self.replay_buffer.add_with_td_errors(td_errors, s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs)
+    def add_with_td_errors(self, td_errors,
+                           n_states, n_actions, n_rewards, state_, done, mu_n_probs,
+                           rnn_state=None):
+        if self.use_rnn:
+            self.replay_buffer.add_with_td_errors(td_errors,
+                                                  n_states, n_actions, n_rewards, state_, done, mu_n_probs,
+                                                  rnn_state)
+        else:
+            self.replay_buffer.add_with_td_errors(td_errors,
+                                                  n_states, n_actions, n_rewards, state_, done, mu_n_probs)
 
     def train(self):
-        assert self.model_root_path is not None
-
+        # sample from replay buffer
         sampled = self.replay_buffer.sample()
         if sampled is None:
             return
 
-        global_step = self.sess.run(self.global_step)
+        pointers, trans, priority_is = sampled
 
-        points, (s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs), priority_is = sampled
-
-        if self.use_n_step_is:
-            pi_n_probs = self.get_probs(n_states, n_actions)
-            n_step_is = self._get_n_step_is(pi_n_probs, mu_n_probs)
+        if self.use_rnn:
+            n_states, n_actions, n_rewards, state_, done, mu_n_probs, rnn_state = trans
         else:
-            n_step_is = np.ones((len(s), 1))
+            n_states, n_actions, n_rewards, state_, done, mu_n_probs = trans
 
-        if global_step % self.write_summary_per_step == 0:
-            summaries = self.sess.run(self.summaries, {
-                self.pl_s: s,
-                self.pl_a: a,
-                self.pl_r: r,
-                self.pl_s_: s_,
-                self.pl_done: done,
-                self.pl_gamma: gamma,
-                self.pl_n_step_is: n_step_is,
-                self.pl_priority_is: priority_is
-            })
-            self.summary_writer.add_summary(summaries, global_step)
+        reward = self._get_n_reward_gamma_sum(n_rewards[:, self.burn_in_step:])
 
-        # update target networks
-        if global_step % self.update_target_per_step == 0:
-            self.sess.run(self.update_target_op)
+        if self.use_rnn:
+            pi_n_probs = self.get_n_step_probs(n_states, n_actions,  # TODO: only need [:, burn_in_step:, :]
+                                               rnn_state).numpy()
+        else:
+            pi_n_probs = self.get_n_step_probs(n_states, n_actions).numpy()
 
-        if global_step % self.save_model_per_step == 0:
-            self.saver.save(global_step)
+        n_step_is = self._get_n_step_is(pi_n_probs[:, self.burn_in_step:, :],
+                                        mu_n_probs[:, self.burn_in_step:, :])
 
-        self.sess.run(self.train_q_ops, {
-            self.pl_s: s,
-            self.pl_a: a,
-            self.pl_r: r,
-            self.pl_s_: s_,
-            self.pl_done: done,
-            self.pl_gamma: gamma,
-            self.pl_n_step_is: n_step_is,
-            self.pl_priority_is: priority_is
-        })
+        self._train(n_states, n_actions, reward, state_, done,
+                    n_step_is=n_step_is,
+                    priority_is=priority_is,
+                    initial_rnn_state=rnn_state if self.use_rnn else None)
 
-        self.sess.run(self.train_policy_op, {
-            self.pl_s: s,
-        })
+        # update td_error
+        if self.use_rnn:
+            td_error = self.get_td_error(n_states, n_actions, reward, state_, done,
+                                         rnn_state).numpy()
+        else:
+            td_error = self.get_td_error(n_states, n_actions, reward, state_, done).numpy()
 
-        if self.use_auto_alpha:
-            self.sess.run(self.train_alpha_op, {
-                self.pl_s: s,
-            })
+        self.replay_buffer.update(pointers, td_error.flatten())
 
-        td_error = self.sess.run(self.td_error, {
-            self.pl_s: s,
-            self.pl_a: a,
-            self.pl_r: r,
-            self.pl_s_: s_,
-            self.pl_done: done,
-            self.pl_gamma: gamma
-        })
+        # update mu_n_probs
+        if self.use_rnn:
+            pi_n_probs = self.get_n_step_probs(n_states, n_actions,
+                                               rnn_state).numpy()
+        else:
+            pi_n_probs = self.get_n_step_probs(n_states, n_actions).numpy()
 
-        self.replay_buffer.update(points, td_error.flatten())
+        self.replay_buffer.update_transitions(pointers, 5, pi_n_probs)
 
-        if self.use_n_step_is:
-            pi_n_probs = self.get_probs(n_states, n_actions)
-            self.replay_buffer.update_transitions(8, points, pi_n_probs)
+        self.save_model()
 
-        return global_step
+        return True
