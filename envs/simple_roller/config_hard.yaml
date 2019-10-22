@@ -5,10 +5,8 @@ scene: ContinousHardRoller
 
 sac: sac_hard
 max_iter: 150
-# agents_num: 1
 save_model_per_iter: 100
 reset_on_iteration: false
-# gamma: 0.99
 burn_in_step: 10
 n_step: 5
 stagger: 1
@@ -31,5 +29,6 @@ sac_config:
   init_log_alpha: -4.6
   # use_auto_alpha: true
   # lr: 3e-4
+  # gamma: 0.99
   use_priority: true
   # use_n_step_is: true

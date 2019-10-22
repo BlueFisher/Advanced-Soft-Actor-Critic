@@ -5,6 +5,7 @@ import importlib
 import json
 import logging
 import os
+import shutil
 import sys
 import threading
 import time
@@ -15,105 +16,83 @@ from flask import Flask, jsonify, request
 import requests
 
 import numpy as np
-import tensorflow as tf
 
 from sac_ds_base import SAC_DS_Base
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from mlagents.envs import UnityEnvironment
+from mlagents.envs.environment import UnityEnvironment
 from algorithm.agent import Agent
 
 
 class Learner(object):
-    _replay_host = '127.0.0.1'
-    _replay_port = 61000
-    _learner_port = 61001
-    _websocket_port = 61002
-    _build_path = None
-    _build_port = 5006
-    _scene = None
+    _training_lock = threading.Lock()
 
     def __init__(self, argv, agent_class=Agent):
         self._agent_class = agent_class
         self._now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
-        self._config, self._reset_config, _, sac_config = self._init_config(argv)
-        self._init_env(self._config['sac'], self._config['name'], sac_config)
+        (self.config,
+         self.net_config,
+         self.reset_config,
+         _,
+         sac_config,
+         model_root_path) = self._init_config(argv)
+
+        self.replay_base_url = f'http://{self.net_config["replay_host"]}:{self.net_config["replay_port"]}'
+
+        self._init_env(sac_config, model_root_path)
         self._run()
 
     def _init_config(self, argv):
-        config = {
-            'name': self._now,
-            'sac': 'sac',
-            'save_model_per_step': 10000,
-            'update_policy_variables_per_step': 100,
-            'add_trans_threshold': 100,
-            'reset_on_iteration': True,
-            'gamma': 0.99,
-            'n_step': 1
-        }
-        reset_config = {
-            'copy': 1
-        }
-        replay_config = dict()
-        sac_config = dict()
+        config = dict()
 
+        with open(f'{Path(__file__).resolve().parent}/default_config.yaml') as f:
+            default_config_file = yaml.load(f, Loader=yaml.FullLoader)
+            config = default_config_file
+
+        # define command line arguments
         try:
-            opts, args = getopt.getopt(argv, 'c:en:n:', ['config=',
-                                                         'replay_host',
-                                                         'replay_port',
-                                                         'learner_port=',
-                                                         'build_port=',
-                                                         'name=',
-                                                         'sac='])
+            opts, args = getopt.getopt(argv, 'c:', ['run',
+                                                    'config=',
+                                                    'build_path=',
+                                                    'build_port=',
+                                                    'logger_file=',
+                                                    'sac=',
+                                                    'agents='])
         except getopt.GetoptError:
             raise Exception('ARGS ERROR')
 
-        # config from file
+        # initialize config from config.yaml
         for opt, arg in opts:
             if opt in ('-c', '--config'):
                 with open(arg) as f:
                     config_file = yaml.load(f, Loader=yaml.FullLoader)
                     for k, v in config_file.items():
-                        if k == 'replay_host':
-                            self._replay_host = v
-                        elif k == 'replay_port':
-                            self._replay_port = v
-                        elif k == 'learner_port':
-                            self._learner_port = v
-                        elif k == 'websocket_port':
-                            self._websocket_port = v
-                        elif k == 'build_path':
-                            self._build_path = v[sys.platform]
-                        elif k == 'scene':
-                            self._scene = v
-
-                        elif k == 'reset_config':
-                            reset_config = dict(reset_config, **({} if v is None else v))
-
-                        elif k == 'replay_config':
-                            replay_config = {} if v is None else v
-
-                        elif k == 'sac_config':
-                            sac_config = {} if v is None else v
-
-                        elif k in config.keys():
-                            config[k] = v
+                        if v is not None:
+                            for kk, vv in v.items():
+                                config[k][kk] = vv
                 break
 
-        # config from console
+        config['base_config']['build_path'] = config['base_config']['build_path'][sys.platform]
+
+        logger_file = None
         for opt, arg in opts:
-            if opt == 'learner_port':
-                config['learner_port'] == int(arg)
+            if opt == '--run':
+                self._train_mode = False
+            elif opt == '--build_path':
+                config['base_config']['build_path'] = arg
             elif opt == '--build_port':
-                self._build_port = int(arg)
-            elif opt in ('-n', '--name'):
-                config['name'] = arg.replace('{time}', NOW)
+                config['base_config']['build_port'] = int(arg)
+            elif opt == '--logger_file':
+                logger_file = arg
             elif opt == '--sac':
-                config['sac'] = arg
+                config['base_config']['sac'] = arg
+            elif opt == '--agents':
+                config['reset_config']['copy'] = int(arg)
 
         # logger config
         _log = logging.getLogger()
+        _log.setLevel(logging.INFO)
         # remove default root logger handler
         _log.handlers = []
 
@@ -131,77 +110,110 @@ class Learner(object):
         self.logger = logging.getLogger('sac.ds.learner')
         self.logger.setLevel(level=logging.INFO)
 
-        self.model_root_path = f'models/{config["name"]}'
+        if logger_file is not None:
+            # create file handler
+            fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=1024 * 100, backupCount=5)
+            fh.setLevel(logging.INFO)
 
-        if not os.path.exists(self.model_root_path):
-            os.makedirs(self.model_root_path)
-        with open(f'{self.model_root_path}/config.yaml', 'w') as f:
-            yaml.dump({**config,
-                       'reset_config': {**reset_config},
-                       'replay_config': {**replay_config},
-                       'sac_config': {**sac_config}
-                       }, f, default_flow_style=False)
+            # add handler and formatter to logger
+            fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
+            self.logger.addHandler(fh)
 
-        config_str = '\ncommon_config'
+        config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now)
+        model_root_path = f'models/{config["base_config"]["name"]}'
+
+        # save config
+        if not os.path.exists(model_root_path):
+            os.makedirs(model_root_path)
+        with open(f'{model_root_path}/config.yaml', 'w') as f:
+            yaml.dump(config, f, default_flow_style=False)
+
+        # display config
+        config_str = ''
         for k, v in config.items():
-            config_str += f'\n{k:>25}: {v}'
-
-        config_str += '\nreset_config:'
-        for k, v in reset_config.items():
-            config_str += f'\n{k:>25}: {v}'
-
-        config_str += '\nreplay_config:'
-        for k, v in replay_config.items():
-            config_str += f'\n{k:>25}: {v}'
-
-        config_str += '\nsac_config:'
-        for k, v in sac_config.items():
-            config_str += f'\n{k:>25}: {v}'
+            config_str += f'\n{k}'
+            for kk, vv in v.items():
+                config_str += f'\n{kk:>25}: {vv}'
         self.logger.info(config_str)
 
-        return config, reset_config, replay_config, sac_config
+        return (config['base_config'],
+                config['net_config'],
+                config['reset_config'],
+                config['replay_config'],
+                config['sac_config'],
+                model_root_path)
 
-    def _init_env(self, sac, name, sac_config):
-        self.env = UnityEnvironment(file_name=self._build_path,
-                                    args=['--scene', self._scene])
+    def _init_env(self, sac_config, model_root_path):
+        if self.config['build_path'] is None or self.config['build_path'] == '':
+            self.env = UnityEnvironment()
+        else:
+            self.env = UnityEnvironment(file_name=self.config['build_path'],
+                                        no_graphics=True,
+                                        base_port=self.config['build_port'],
+                                        args=['--scene', self.config['scene']])
+
+        self.logger.info(f'{self.config["build_path"]} initialized')
 
         self.default_brain_name = self.env.brain_names[0]
 
         brain_params = self.env.brains[self.default_brain_name]
-        state_dim = brain_params.vector_observation_space_size
+        state_dim = brain_params.vector_observation_space_size * brain_params.num_stacked_vector_observations
         action_dim = brain_params.vector_action_space_size[0]
 
-        class SAC(importlib.import_module(sac).SAC_Custom, SAC_DS_Base):
-            pass
+        custom_sac_model = importlib.import_module(self.config['sac'])
+        shutil.copyfile(f'{self.config["sac"]}.py', f'{model_root_path}/{self.config["sac"]}.py')
 
-        self.sac = SAC(state_dim=state_dim,
-                       action_dim=action_dim,
-                       model_root_path=self.model_root_path,
-                       **sac_config)
+        self.sac = SAC_DS_Base(state_dim=state_dim,
+                               action_dim=action_dim,
+                               model_root_path=model_root_path,
+                               model=custom_sac_model,
+                               use_rnn=self.config['use_rnn'],
+
+                               burn_in_step=self.config['burn_in_step'],
+                               n_step=self.config['n_step'],
+                               **sac_config)
 
     def _start_policy_evaluation(self):
-        eval_step = 0
+        iteration = 0
         start_time = time.time()
-        brain_info = self.env.reset(train_mode=False, config=self._reset_config)[self.default_brain_name]
+
+        brain_info = self.env.reset(train_mode=False, config=self.reset_config)[self.default_brain_name]
+        if self.config['use_rnn']:
+            initial_rnn_state = self.sac.get_initial_rnn_state(len(brain_info.agents))
+            rnn_state = initial_rnn_state
 
         while True:
-            if self.env.global_done or self._config['reset_on_iteration']:
+            if self.config['reset_on_iteration']:
                 brain_info = self.env.reset(train_mode=False)[self.default_brain_name]
 
             agents = [self._agent_class(i,
-                                        self._config['gamma'],
-                                        self._config['n_step'])
+                                        tran_len=self.config['burn_in_step'] + self.config['n_step'],
+                                        stagger=self.config['stagger'],
+                                        use_rnn=self.config['use_rnn'])
                       for i in brain_info.agents]
 
             states = brain_info.vector_observations
+            step = 0
 
-            while False in [a.done for a in agents] and not self.env.global_done:
-                actions = self.sac.choose_action(states)
+            while False in [a.done for a in agents]:
+                with self._training_lock:
+                    if self.config['use_rnn']:
+                        actions, next_rnn_state = self.sac.choose_rnn_action(states.astype(np.float32),
+                                                                             rnn_state)
+                        next_rnn_state = next_rnn_state.numpy()
+                    else:
+                        actions = self.sac.choose_action(states.astype(np.float32))
+
+                actions = actions.numpy()
+
                 brain_info = self.env.step({
                     self.default_brain_name: actions
                 })[self.default_brain_name]
 
                 states_ = brain_info.vector_observations
+                if step == self.config['max_step']:
+                    brain_info.local_done = [True] * len(brain_info.agents)
+                    brain_info.max_reached = [True] * len(brain_info.agents)
 
                 for i, agent in enumerate(agents):
                     agent.add_transition(states[i],
@@ -209,46 +221,60 @@ class Learner(object):
                                          brain_info.rewards[i],
                                          brain_info.local_done[i],
                                          brain_info.max_reached[i],
-                                         states_[i])
+                                         states_[i],
+                                         rnn_state[i] if self.config['use_rnn'] else None)
 
                 states = states_
+                if self.config['use_rnn']:
+                    rnn_state = next_rnn_state
+                    rnn_state[brain_info.local_done] = initial_rnn_state[brain_info.local_done]
 
-            self._log_episode_info(eval_step, start_time, agents)
-            eval_step += 1
+                step += 1
 
-    def _log_episode_info(self, eval_step, start_time, agents):
+            with self._training_lock:
+                self._log_episode_info(iteration, start_time, agents)
+
+            iteration += 1
+
+    def _log_episode_info(self, iteration, start_time, agents):
         rewards = np.array([a.reward for a in agents])
 
         self.sac.write_constant_summaries([
             {'tag': 'reward/mean', 'simple_value': rewards.mean()},
             {'tag': 'reward/max', 'simple_value': rewards.max()},
             {'tag': 'reward/min', 'simple_value': rewards.min()}
-        ], eval_step)
+        ], iteration)
 
         time_elapse = (time.time() - start_time) / 60
         rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(rewards)])
-        self.logger.info(f'{eval_step}, {time_elapse:.2f}min, rewards {rewards_sorted}')
+        self.logger.info(f'{iteration}, {time_elapse:.2f}min, rewards {rewards_sorted}')
 
     def _run_learner_server(self):
         app = Flask('learner')
 
         @app.route('/get_policy_variables')
         def get_policy_variables():
-            variables = self.sac.get_policy_variables()
+            with self._training_lock:
+                variables = self.sac.get_policy_variables()
+
             return jsonify(variables)
 
         @app.route('/get_td_errors', methods=['POST'])
         def get_td_errors():
             trans = request.get_json()
-            td_errors = self.sac.get_td_error(*trans)
-            return jsonify(td_errors.flatten().tolist())
+            trans = [np.array(t, dtype=np.float32) for t in trans]
 
-        app.run(host='0.0.0.0', port=self._learner_port)
+            with self._training_lock:
+                td_errors = self.sac.get_td_error(*trans)
+
+            return jsonify(td_errors.numpy().flatten().tolist())
+
+        app.run(host='0.0.0.0', port=self.net_config['learner_port'])
 
     def _get_sampled_data(self):
         while True:
             try:
-                r = requests.get(f'http://{self._replay_host}:{self._replay_port}/sample')
+                r = requests.get(f'{self.replay_base_url}/sample')
             except requests.ConnectionError:
                 self.logger.error(f'get_sampled_data connecting error')
                 time.sleep(1)
@@ -259,12 +285,12 @@ class Learner(object):
                 break
         return r.json()
 
-    def _update_td_errors(self, points, td_errors):
+    def _update_td_errors(self, pointers, td_errors):
         while True:
             try:
-                requests.post(f'http://{self._replay_host}:{self._replay_port}/update',
+                requests.post(f'{self.replay_base_url}/update',
                               json={
-                                  'points': points,
+                                  'pointers': pointers,
                                   'td_errors': td_errors
                               })
             except requests.ConnectionError:
@@ -276,13 +302,13 @@ class Learner(object):
             else:
                 break
 
-    def _update_transitions(self, transition_idx, points, data):
+    def _update_transitions(self, pointers, index, data):
         while True:
             try:
-                requests.post(f'http://{self._replay_host}:{self._replay_port}/update_transitions',
+                requests.post(f'{self.replay_base_url}/update_transitions',
                               json={
-                                  'transition_idx': transition_idx,
-                                  'points': points,
+                                  'pointers': pointers,
+                                  'index': index,
                                   'data': data
                               })
             except requests.ConnectionError:
@@ -297,7 +323,7 @@ class Learner(object):
     def _clear_replay_buffer(self):
         while True:
             try:
-                requests.get(f'http://{self._replay_host}:{self._replay_port}/clear')
+                requests.get(f'{self.replay_base_url}/clear')
             except requests.ConnectionError:
                 self.logger.error(f'clear_replay_buffer connecting error')
                 time.sleep(1)
@@ -309,43 +335,49 @@ class Learner(object):
 
     def _run_training_client(self):
         # asyncio.run(self._websocket_server.send_to_all('aaa'))
-        t_evaluation = threading.Thread(target=self._start_policy_evaluation)
         self._clear_replay_buffer()
 
         while True:
             data = self._get_sampled_data()
 
             if data:
-                if not t_evaluation.is_alive():
-                    t_evaluation.start()
+                pointers = data['pointers']
+                trans = [np.array(t, dtype=np.float32) for t in data['trans']]
+                priority_is = np.array(data['priority_is'], dtype=np.float32)
 
-                points = data['points']
-                trans = data['trans']
-                is_weights = data['is_weights']
+                if self.config['use_rnn']:
+                    n_states, n_actions, n_rewards, state_, done, mu_n_probs, rnn_state = trans
+                else:
+                    n_states, n_actions, n_rewards, state_, done, mu_n_probs = trans
 
-                s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs = trans
-                curr_step, td_errors, pi_n_probs = self.sac.train(s, a, r, s_, done, gamma,
-                                                                  n_states, n_actions, mu_n_probs,
-                                                                  is_weights)
-                self._update_td_errors(points, td_errors.tolist())
-                self._update_transitions(8, points, pi_n_probs)
+                with self._training_lock:
+                    td_errors, pi_n_probs = self.sac.train(n_states,
+                                                           n_actions,
+                                                           n_rewards,
+                                                           state_,
+                                                           done,
+                                                           mu_n_probs,
+                                                           priority_is,
+                                                           rnn_state if self.config['use_rnn'] else None)
+
+                self._update_td_errors(pointers, td_errors.tolist())
+                if self.config['use_rnn']:
+                    self._update_transitions(pointers, 5, pi_n_probs.tolist())
             else:
                 self.logger.warn('no data sampled')
                 time.sleep(1)
 
     def _run(self):
-        sac_reset_config = {
-            'update_policy_variables_per_step': self._config['update_policy_variables_per_step'],
-            'add_trans_threshold': self._config['add_trans_threshold'],
-            'gamma': self._config['gamma'],
-            'n_step': self._config['n_step'],
-        }
-        self._websocket_server = WebsocketServer(sac_reset_config, self._websocket_port)
+        # TODO
+        self._websocket_server = WebsocketServer({}, self.net_config['websocket_port'])
 
         t_learner = threading.Thread(target=self._run_learner_server)
         t_training = threading.Thread(target=self._run_training_client)
+        t_evaluation = threading.Thread(target=self._start_policy_evaluation)
+
         t_learner.start()
         t_training.start()
+        t_evaluation.start()
 
         asyncio.get_event_loop().run_forever()
 
@@ -353,7 +385,7 @@ class Learner(object):
 class WebsocketServer:
     _websocket_clients = set()
 
-    def __init__(self, sac_reset_config, port=61002):
+    def __init__(self, sac_reset_config, port):
         self._sac_reset_config = sac_reset_config
 
         start_server = websockets.serve(self._websocket_open, '0.0.0.0', port)
@@ -374,7 +406,7 @@ class WebsocketServer:
                     self.print_websocket_clients()
                     message = {
                         'cmd': 'reset',
-                        'config': self._sac_reset_config
+                        'config': {}
                     }
                     await websocket.send(json.dumps(message))
         except websockets.ConnectionClosed:

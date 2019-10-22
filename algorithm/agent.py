@@ -7,10 +7,9 @@ class Agent(object):
     done = False
 
     def __init__(self, agent_id,
-                 gamma=0.99, tran_len=1, stagger=1,
+                 tran_len=1, stagger=1,
                  use_rnn=False):
         self.agent_id = agent_id
-        self.gamma = gamma
         self.deque_maxlen = tran_len
         self._curr_stagger = self.stagger = stagger
         self.use_rnn = use_rnn
@@ -82,6 +81,7 @@ class Agent(object):
         if self.use_rnn:
             rnn_state = self._tmp_trans[0]['rnn_state']
 
+            # n_states, n_actions, n_rewards, state_, done, rnn_state
             return ([t['state'] for t in self._tmp_trans],
                     [t['action'] for t in self._tmp_trans],
                     [t['reward'] for t in self._tmp_trans],

@@ -9,24 +9,31 @@ from flask import Flask, jsonify, request
 import requests
 import numpy as np
 
+from trans_cache import TransCache
+
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from algorithm.replay_buffer import PrioritizedReplayBuffer
 
 
 class Replay(object):
-    _replay_port = 61000
-    _learner_host = '127.0.0.1'
-    _learner_port = 61001
-    _replay_config = {}
-
     def __init__(self, argv):
-        self._init_config(argv)
+        self.config, self.net_config, self.replay_config = self._init_config(argv)
+        self.learner_base_url = f'http://{self.net_config["learner_host"]}:{self.net_config["learner_port"]}'
+
         self._run()
 
     def _init_config(self, argv):
+        config = dict()
+
+        with open(f'{Path(__file__).resolve().parent}/default_config.yaml') as f:
+            default_config_file = yaml.load(f, Loader=yaml.FullLoader)
+            config = default_config_file
+
+        # define command line arguments
         try:
             opts, args = getopt.getopt(argv, 'c:p:', ['config=',
-                                                      'replay_port='])
+                                                      'replay_port=',
+                                                      'logger_file='])
         except getopt.GetoptError:
             raise Exception('ARGS ERROR')
 
@@ -35,58 +42,81 @@ class Replay(object):
                 with open(arg) as f:
                     config_file = yaml.load(f, Loader=yaml.FullLoader)
                     for k, v in config_file.items():
-                        if k == 'replay_port':
-                            self._replay_port = v
-                        elif k == 'learner_host':
-                            self._learner_host = v
-                        elif k == 'learner_port':
-                            self._learner_port = v
+                        if v is not None:
+                            for kk, vv in v.items():
+                                config[k][kk] = vv
+                break
 
-                        elif k == 'replay_config':
-                            self._replay_config = {} if v is None else v
-                            
-            elif opt in ('-p', '--replay_port'):
-                self._replay_port = int(arg)
+        logger_file = None
+        for opt, arg in opts:
+            if opt == '--replay_port':
+                config['net_config']['replay_port'] = int(arg)
+            elif opt == '--logger_file':
+                logger_file = arg
 
-            # logger config
-            _log = logging.getLogger()
-            # remove default root logger handler
-            _log.handlers = []
+        # logger config
+        _log = logging.getLogger()
+        _log.setLevel(logging.INFO)
+        # remove default root logger handler
+        _log.handlers = []
 
-            # create stream handler
-            sh = logging.StreamHandler()
-            sh.setLevel(logging.INFO)
+        # create stream handler
+        sh = logging.StreamHandler()
+        sh.setLevel(logging.INFO)
+
+        # add handler and formatter to logger
+        sh.setFormatter(logging.Formatter('[%(levelname)s] - [%(name)s] - %(message)s'))
+        _log.addHandler(sh)
+
+        _log = logging.getLogger('werkzeug')
+        _log.setLevel(level=logging.ERROR)
+
+        self.logger = logging.getLogger('sac.ds.replay')
+        self.logger.setLevel(level=logging.INFO)
+
+        if logger_file is not None:
+            # create file handler
+            fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=1024 * 100, backupCount=5)
+            fh.setLevel(logging.INFO)
 
             # add handler and formatter to logger
-            sh.setFormatter(logging.Formatter('[%(levelname)s] - [%(name)s] - %(message)s'))
-            _log.addHandler(sh)
+            fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
+            self.logger.addHandler(fh)
 
-            _log = logging.getLogger('werkzeug')
-            _log.setLevel(level=logging.ERROR)
+        # display config
+        config_str = ''
+        for k, v in config.items():
+            config_str += f'\n{k}'
+            for kk, vv in v.items():
+                config_str += f'\n{kk:>25}: {vv}'
+        self.logger.info(config_str)
 
-            self.logger = logging.getLogger('sac.ds.replay')
-            self.logger.setLevel(level=logging.INFO)
+        return config['base_config'], config['net_config'], config['replay_config']
 
     def _run(self):
         app = Flask('replay')
 
-        _tmp_trans_arr_lock = threading.Lock()
+        replay_buffer = PrioritizedReplayBuffer(**self.replay_config)
 
-        replay_buffer = PrioritizedReplayBuffer(self._replay_config['batch_size'],
-                                                self._replay_config['capacity'],
-                                                self._replay_config['alpha'])
-        _tmp_trans_arr = []
+        trans_cache_lock = threading.Lock()
+        trans_cache = TransCache()
+        cache_max_size = 256
 
         def _add_trans(*trans):
-            # s, a, r, s_, done, gamma, n_states, n_actions, mu_n_probs
-            while True:
-                try:
-                    r = requests.post(f'http://{self._learner_host}:{self._learner_port}/get_td_errors',
-                                      json=trans[:6])
-                except Exception as e:
-                    self.logger.error(f'_clear_replay_buffer: {str(e)}')
-                else:
-                    break
+            # n_states, n_actions, n_rewards, state_, done, mu_n_probs, rnn_state
+            trans = list(trans)
+            if self.config['use_rnn']:
+                tmp_trans = [t.tolist() for t in trans[:5] + [trans[6]]]
+            else:
+                tmp_trans = [t.tolist() for t in trans[:5]]
+
+            # get td_errors
+            try:
+                r = requests.post(f'{self.learner_base_url}/get_td_errors',
+                                  json=tmp_trans, timeout=2)
+            except Exception as e:
+                self.logger.error(f'_add_trans: {str(e)}')
+                return
 
             td_errors = r.json()
 
@@ -97,16 +127,11 @@ class Replay(object):
         @app.route('/update', methods=['POST'])
         def update():
             data = request.get_json()
-            points = data['points']
+
+            pointers = data['pointers']
             td_errors = data['td_errors']
 
-            replay_buffer.update(points, td_errors)
-
-            _tmp_trans_arr_lock.acquire()
-            for trans in _tmp_trans_arr:
-                _add_trans(*trans)
-            _tmp_trans_arr.clear()
-            _tmp_trans_arr_lock.release()
+            replay_buffer.update(pointers, td_errors)
 
             return jsonify({
                 'succeeded': True
@@ -115,41 +140,42 @@ class Replay(object):
         @app.route('/update_transitions', methods=['POST'])
         def update_transitions():
             data = request.get_json()
-            transition_idx = data['transition_idx']
-            points = data['points']
+
+            pointers = data['pointers']
+            index = data['index']
             transition_data = data['data']
 
-            replay_buffer.update_transitions(transition_idx, points, transition_data)
+            replay_buffer.update_transitions(pointers, index, transition_data)
 
             return jsonify({
                 'succeeded': True
             })
 
-        learning_starts = 2048
-
         @app.route('/sample')
         def sample():
-            if replay_buffer.size < learning_starts:
+            sampled = replay_buffer.sample()
+            if sampled is None:
                 return jsonify({})
 
-            points, trans, is_weights = replay_buffer.sample()
+            points, trans, priority_is = sampled
+            trans = [t.tolist() for t in trans]
 
             return jsonify({
-                'points': points.tolist(),
+                'pointers': points.tolist(),
                 'trans': trans,
-                'is_weights': is_weights.tolist()
+                'priority_is': priority_is.tolist()
             })
 
         @app.route('/add', methods=['POST'])
         def add():
             trans = request.get_json()
+            trans = [np.array(t, dtype=np.float32) for t in trans]
 
-            if replay_buffer.size < learning_starts:
-                _add_trans(*trans)
-            else:
-                _tmp_trans_arr_lock.acquire()
-                _tmp_trans_arr.append(trans)
-                _tmp_trans_arr_lock.release()
+            with trans_cache_lock:
+                trans_cache.add(*trans)
+                if trans_cache.size >= cache_max_size:
+                    trans = trans_cache.get_trans_and_clear()
+                    _add_trans(*trans)
 
             return jsonify({
                 'succeeded': True
@@ -163,4 +189,4 @@ class Replay(object):
                 'succeeded': True
             })
 
-        app.run(host='0.0.0.0', port=self._replay_port)
+        app.run(host='0.0.0.0', port=self.net_config['replay_port'])
