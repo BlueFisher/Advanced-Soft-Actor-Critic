@@ -1,22 +1,30 @@
-build_path: 
-  win32: path_win32
-  linux: path_linux
-scene: scene
+base_config:
+  build_path: 
+    win32: path_win32
+    linux: path_linux
+  build_port: 7000
+  scene: scene
 
-replay_host: 127.0.0.1
-replay_port: 61000
-learner_host: 127.0.0.1
-learner_port: 61001
-websocket_host: 127.0.0.1
-websocket_port: 61002
+  name: "{time}"
+  sac: sac
+  update_policy_variables_per_step: 100
+  add_trans_threshold: 100
+  max_step: -1
+  reset_on_iteration: true
+  
+  burn_in_step: 0
+  n_step: 1
+  stagger: 1
+  use_rnn: false
+  
 
-name: {time}
-sac: sac
-update_policy_variables_per_step: 100
-add_trans_threshold: 100
-reset_on_iteration: true
-gamma: 0.99
-n_step: 3
+net_config:
+  replay_host: 127.0.0.1
+  replay_port: 61000
+  learner_host: 127.0.0.1
+  learner_port: 61001
+  websocket_host: 127.0.0.1
+  websocket_port: 61002
 
 reset_config:
   copy: 1
@@ -28,7 +36,6 @@ replay_config:
   use_mongodb: false
 
 sac_config:
-  write_summary_graph: false
   seed: null
   tau: 0.005
   save_model_per_step: 5000
@@ -37,4 +44,4 @@ sac_config:
   init_log_alpha: -2.3
   use_auto_alpha: true
   lr: 0.0003
-  use_n_step_is: true
+  gamma: 0.99

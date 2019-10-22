@@ -25,18 +25,19 @@ class SAC_Base(object):
                  model_root_path,
                  model,
                  train_mode=True,
+
+                 burn_in_step=0,
+                 n_step=1,
                  use_rnn=False,
 
                  seed=None,
-                 tau=0.005,
                  write_summary_per_step=20,
+                 tau=0.005,
                  update_target_per_step=1,
                  init_log_alpha=-2.3,
                  use_auto_alpha=True,
                  lr=3e-4,
                  gamma=0.99,
-                 burn_in_step=0,
-                 n_step=1,
                  use_priority=False,
                  use_n_step_is=True,
 
@@ -52,23 +53,23 @@ class SAC_Base(object):
         if len(physical_devices) > 0:
             tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
-        self.use_rnn = use_rnn
-
-        self.tau = tau
-        self.use_auto_alpha = use_auto_alpha
-        self.gamma = gamma
-        self.burn_in_step = burn_in_step
-        self.n_step = n_step
-        self.use_priority = use_priority
-        self.use_n_step_is = use_n_step_is
-        self.zero_init_states = False
-        self.use_prediction = True
-
         self.state_dim = state_dim
         self.action_dim = action_dim
 
+        self.burn_in_step = burn_in_step
+        self.n_step = n_step
+        self.use_rnn = use_rnn
+
         self.write_summary_per_step = write_summary_per_step
+        self.tau = tau
         self.update_target_per_step = update_target_per_step
+        self.use_auto_alpha = use_auto_alpha
+        self.gamma = gamma
+        self.use_priority = use_priority
+        self.use_n_step_is = use_n_step_is
+
+        self.zero_init_states = False
+        self.use_prediction = True
 
         if seed is not None:
             tf.random.set_seed(seed)
@@ -170,6 +171,10 @@ class SAC_Base(object):
 
     @tf.function
     def _get_y(self, reward, state_, done):
+        """
+        tf.function
+        get target value
+        """
         alpha = tf.exp(self.log_alpha)
 
         next_policy = self.model_policy(state_)
@@ -252,7 +257,7 @@ class SAC_Base(object):
 
         del tape
 
-        if self.global_step % self.write_summary_per_step == 0:
+        if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             with self.summary_writer.as_default():
                 tf.summary.scalar('loss/Q', tf.reduce_mean(loss_q), step=self.global_step)
                 if self.use_rnn and self.use_prediction:
@@ -266,20 +271,19 @@ class SAC_Base(object):
 
         self.global_step.assign_add(1)
 
-    @tf.function
+    @tf.function()
     def choose_action(self, state):
-        assert len(state.shape) == 2
-        assert not self.use_rnn
-
+        """
+        tf.function
+        """
         policy = self.model_policy(state)
-
         return tf.clip_by_value(policy.sample(), -1, 1)
 
     @tf.function
     def choose_rnn_action(self, state, rnn_state):
-        assert len(state.shape) == 2
-        assert self.use_rnn
-
+        """
+        tf.function
+        """
         state = tf.reshape(state, (-1, 1, state.shape[-1]))
         encoded_state, next_rnn_state, = self.model_rnn(state, rnn_state)
         policy = self.model_policy(encoded_state)
@@ -290,6 +294,9 @@ class SAC_Base(object):
     @tf.function
     def get_td_error(self, n_states, n_actions, reward, state_, done,
                      rnn_state=None):
+        """
+        tf.function
+        """
         if self.use_rnn:
             m_states = tf.concat([n_states, tf.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)
             m_states, *_ = self.model_target_rnn(m_states,
@@ -316,6 +323,9 @@ class SAC_Base(object):
     @tf.function
     def get_n_step_probs(self, n_states, n_actions,
                          rnn_state=None):
+        """
+        tf.function
+        """
         if self.use_rnn:
             n_states, *_ = self.model_rnn(n_states,
                                           rnn_state)
@@ -331,7 +341,7 @@ class SAC_Base(object):
         with self.summary_writer.as_default():
             for s in constant_summaries:
                 tf.summary.scalar(s['tag'], s['simple_value'], step=iteration + self.init_iteration)
-            self.summary_writer.flush()
+        self.summary_writer.flush()
 
     def _get_n_step_is(self, pi_n_probs, mu_n_probs):
         """
@@ -384,9 +394,9 @@ class SAC_Base(object):
             return
 
         if self.use_priority:
-            points, trans, priority_is = sampled
+            pointers, trans, priority_is = sampled
         else:
-            points, trans = sampled
+            pointers, trans = sampled
 
         if self.use_rnn:
             n_states, n_actions, n_rewards, state_, done, mu_n_probs, rnn_state = trans
@@ -416,11 +426,11 @@ class SAC_Base(object):
         if self.use_priority:
             if self.use_rnn:
                 td_error = self.get_td_error(n_states, n_actions, reward, state_, done,
-                                             rnn_state)
+                                             rnn_state).numpy()
             else:
-                td_error = self.get_td_error(n_states, n_actions, reward, state_, done)
+                td_error = self.get_td_error(n_states, n_actions, reward, state_, done).numpy()
 
-            self.replay_buffer.update(points, td_error.numpy().flatten())
+            self.replay_buffer.update(pointers, td_error.flatten())
 
         # update mu_n_probs
         if self.use_n_step_is:
@@ -430,4 +440,4 @@ class SAC_Base(object):
             else:
                 pi_n_probs = self.get_n_step_probs(n_states, n_actions).numpy()
 
-            self.replay_buffer.update_transitions(points, 5, pi_n_probs)
+            self.replay_buffer.update_transitions(pointers, 5, pi_n_probs)

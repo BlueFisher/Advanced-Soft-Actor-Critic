@@ -33,28 +33,11 @@ class Main(object):
         self._run()
 
     def _init_config(self, argv):
-        config = {
-            'name': self._now,
-            'build_path': None,
-            'scene': None,
-            'port': 7000,
-            'sac': 'sac',
-            'max_iter': 1000,
-            'max_step': -1,
-            'agents_num': 1,
-            'save_model_per_iter': 500,
-            'reset_on_iteration': True,
-            'gamma': 0.99,
-            'burn_in_step': 0,
-            'n_step': 1,
-            'stagger': 1,
-            'use_rnn': False
-        }
-        reset_config = {
-            'copy': 1
-        }
-        replay_config = dict()
-        sac_config = dict()
+        config = dict()
+
+        with open(f'{Path(__file__).resolve().parent}/default_config.yaml') as f:
+            default_config_file = yaml.load(f, Loader=yaml.FullLoader)
+            config = default_config_file
 
         # define command line arguments
         try:
@@ -76,21 +59,12 @@ class Main(object):
                 with open(arg) as f:
                     config_file = yaml.load(f, Loader=yaml.FullLoader)
                     for k, v in config_file.items():
-                        if k == 'build_path':
-                            config['build_path'] = v[sys.platform]
-
-                        elif k == 'reset_config':
-                            reset_config = dict(reset_config, **({} if v is None else v))
-
-                        elif k == 'replay_config':
-                            replay_config = {} if v is None else v
-
-                        elif k == 'sac_config':
-                            sac_config = {} if v is None else v
-
-                        else:
-                            config[k] = v
+                        if v is not None:
+                            for kk, vv in v.items():
+                                config[k][kk] = vv
                 break
+
+        config['base_config']['build_path'] = config['base_config']['build_path'][sys.platform]
 
         # initialize config from command line arguments
         logger_file = None
@@ -98,19 +72,19 @@ class Main(object):
             if opt in ('-r', '--run'):
                 self.train_mode = False
             elif opt in ('-n', '--name'):
-                config['name'] = arg
+                config['base_config']['name'] = arg
             elif opt in ('-b', '--build'):
-                config['build_path'] = arg
+                config['base_config']['build_path'] = arg
             elif opt in ('-p', '--port'):
-                config['port'] = int(arg)
+                config['base_config']['port'] = int(arg)
             elif opt == '--logger_file':
                 logger_file = arg
             elif opt == '--seed':
-                sac_config['seed'] = int(arg)
+                config['sac_config']['seed'] = int(arg)
             elif opt == '--sac':
-                config['sac'] = arg
+                config['base_config']['sac'] = arg
             elif opt == '--agents':
-                reset_config['copy'] = int(arg)
+                config['reset_config']['copy'] = int(arg)
 
         # logger config
         _log = logging.getLogger()
@@ -141,37 +115,29 @@ class Main(object):
             fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
             self.logger.addHandler(fh)
 
-        config['name'] = config['name'].replace('{time}', self._now)
-        model_root_path = f'models/{config["name"]}'
+        config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now)
+        model_root_path = f'models/{config["base_config"]["name"]}'
 
         # save config
         if self.train_mode:
             if not os.path.exists(model_root_path):
                 os.makedirs(model_root_path)
             with open(f'{model_root_path}/config.yaml', 'w') as f:
-                yaml.dump({**config,
-                           'sac_config': {**sac_config}
-                           }, f, default_flow_style=False)
+                yaml.dump(config, f, default_flow_style=False)
 
         # display config
-        config_str = '\ncommon_config'
+        config_str = ''
         for k, v in config.items():
-            config_str += f'\n{k:>25}: {v}'
-
-        config_str += '\nreset_config:'
-        for k, v in reset_config.items():
-            config_str += f'\n{k:>25}: {v}'
-
-        config_str += '\nreplay_config:'
-        for k, v in replay_config.items():
-            config_str += f'\n{k:>25}: {v}'
-
-        config_str += '\nsac_config:'
-        for k, v in sac_config.items():
-            config_str += f'\n{k:>25}: {v}'
+            config_str += f'\n{k}'
+            for kk, vv in v.items():
+                config_str += f'\n{kk:>25}: {vv}'
         self.logger.info(config_str)
 
-        return config, reset_config, replay_config, sac_config, model_root_path
+        return (config['base_config'],
+                config['reset_config'],
+                config['replay_config'],
+                config['sac_config'],
+                model_root_path)
 
     def _init_env(self, replay_config, sac_config, model_root_path):
         if self.config['build_path'] is None or self.config['build_path'] == '':
@@ -200,7 +166,6 @@ class Main(object):
 
                             replay_config=replay_config,
 
-                            gamma=self.config['gamma'],
                             burn_in_step=self.config['burn_in_step'],
                             n_step=self.config['n_step'],
                             **sac_config)
@@ -218,7 +183,6 @@ class Main(object):
                     rnn_state = initial_rnn_state
 
             agents = [self._agent_class(i,
-                                        gamma=self.config['gamma'],
                                         tran_len=self.config['burn_in_step'] + self.config['n_step'],
                                         stagger=self.config['stagger'],
                                         use_rnn=self.config['use_rnn'])
@@ -238,12 +202,12 @@ class Main(object):
 
             while False in [a.done for a in agents]:
                 if self.config['use_rnn']:
-                    actions, next_rnn_state = self.sac.choose_rnn_action(states,
+                    actions, next_rnn_state = self.sac.choose_rnn_action(states.astype(np.float32),
                                                                          rnn_state)
                     next_rnn_state = next_rnn_state.numpy()
                 else:
-                    actions = self.sac.choose_action(states)
-
+                    actions = self.sac.choose_action(states.astype(np.float32))
+                
                 actions = actions.numpy()
 
                 brain_info = self.env.step({
