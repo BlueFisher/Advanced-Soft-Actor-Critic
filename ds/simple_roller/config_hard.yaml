@@ -2,12 +2,19 @@ base_config:
   build_path: 
     win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
-  scene: ContinousSimpleRoller
+  scene: ContinousHardRoller
+
+  sac: sac_hard
   reset_on_iteration: false
+
+  burn_in_step: 10
+  n_step: 5
+  stagger: 1
+  use_rnn: true
 
 net_config:
   replay_host: 58.199.162.110
-  replay_port: 61000
+  replay_port: 61001
   learner_host: 58.199.162.110
   learner_port: 61001
   websocket_host: 58.199.162.110

@@ -7,7 +7,7 @@ base_config:
 
   name: "{time}"
   sac: sac
-  update_policy_variables_per_step: 100
+  update_policy_variables_per_step: -1
   add_trans_threshold: 100
   max_step: -1
   reset_on_iteration: true

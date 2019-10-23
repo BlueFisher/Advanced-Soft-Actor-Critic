@@ -66,8 +66,10 @@ class Actor(object):
                 with open(arg) as f:
                     config_file = yaml.load(f, Loader=yaml.FullLoader)
                     for k, v in config_file.items():
+                        assert k in config.keys(), f'{k} is invalid'
                         if v is not None:
                             for kk, vv in v.items():
+                                assert kk in config[k].keys(), f'{kk} is invalid in {k}'
                                 config[k][kk] = vv
                 break
 
@@ -257,8 +259,11 @@ class Actor(object):
             states = brain_info.vector_observations
             step = 0
 
+            if self.config['update_policy_variables_per_step'] == -1:
+                self._update_policy_variables()
+
             while False in [a.done for a in agents] and self._websocket_connected:
-                if iteration % self.config['update_policy_variables_per_step'] == 0:
+                if self.config['update_policy_variables_per_step'] != -1 and step % self.config['update_policy_variables_per_step'] == 0:
                     self._update_policy_variables()
 
                 if self.config['use_rnn']:
