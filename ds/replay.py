@@ -42,8 +42,10 @@ class Replay(object):
                 with open(arg) as f:
                     config_file = yaml.load(f, Loader=yaml.FullLoader)
                     for k, v in config_file.items():
+                        assert k in config.keys(), f'{k} is invalid'
                         if v is not None:
                             for kk, vv in v.items():
+                                assert kk in config[k].keys(), f'{kk} is invalid in {k}'
                                 config[k][kk] = vv
                 break
 
