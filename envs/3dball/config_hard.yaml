@@ -1,19 +1,19 @@
-build_path: 
-  win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
-  linux: /data/linux-RL-Envs/RL-Envs.x86_64
-scene: 3DBall9Hard
+base_config:
+  build_path: 
+    win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
+    linux: /data/linux-RL-Envs/RL-Envs.x86_64
+  scene: 3DBall9Hard
 
-sac: sac_hard
-max_iter: 500
-max_step: 500
-# agents_num: 1
-save_model_per_iter: 50
-# reset_on_iteration: true
-# gamma: 0.99
-burn_in_step: 20
-n_step: 5
-stagger: 1
-use_rnn: true
+  sac: sac_hard
+  max_iter: 500
+  max_step: 500
+  # agents_num: 1
+  save_model_per_iter: 50
+  # reset_on_iteration: true
+  burn_in_step: 10
+  n_step: 5
+  stagger: 1
+  use_rnn: true
 
 # reset_config:
 #   copy: 1
@@ -25,9 +25,9 @@ use_rnn: true
 
 sac_config:
   seed: 42
-  tau: 1.0
+  tau: 0.9
   # write_summary_per_step: 20
-  update_target_per_step: 100
+  update_target_per_step: 50
   init_log_alpha: -4.6
   # use_auto_alpha: true
   # lr: 3e-4

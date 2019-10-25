@@ -6,7 +6,7 @@ base_config:
 
   sac: sac_hard
   max_iter: 150
-  save_model_per_iter: 100
+  save_model_per_iter: 50
   reset_on_iteration: false
   burn_in_step: 10
   n_step: 5
