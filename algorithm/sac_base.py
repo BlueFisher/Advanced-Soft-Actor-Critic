@@ -96,7 +96,8 @@ class SAC_Base(object):
 
         self.optimizer_q = tf.keras.optimizers.Adam(lr)
         self.optimizer_policy = tf.keras.optimizers.Adam(lr)
-        self.optimizer_alpha = tf.keras.optimizers.Adam(lr)
+        if self.use_auto_alpha:
+            self.optimizer_alpha = tf.keras.optimizers.Adam(lr)
 
         if self.use_rnn:
             self.model_rnn = model.ModelRNN(self.state_dim)
@@ -126,7 +127,6 @@ class SAC_Base(object):
 
                                    optimizer_q=self.optimizer_q,
                                    optimizer_policy=self.optimizer_policy,
-                                   optimizer_alpha=self.optimizer_alpha,
 
                                    model_q1=self.model_q1,
                                    model_target_q1=self.model_target_q1,
@@ -138,6 +138,9 @@ class SAC_Base(object):
             ckpt.model_target_rnn = self.model_target_rnn
             if self.use_prediction:
                 ckpt.model_prediction = self.model_prediction
+
+        if self.use_auto_alpha:
+            ckpt.optimizer_alpha = self.optimizer_alpha
 
         self.ckpt_manager = tf.train.CheckpointManager(ckpt, f'{model_path}/model', max_to_keep=10)
 
@@ -248,12 +251,14 @@ class SAC_Base(object):
                 q_variables = q_variables + self.model_prediction.trainable_variables
 
         grads_q = tape.gradient(loss_q, q_variables)
-        grads_policy = tape.gradient(loss_policy, self.model_policy.trainable_variables)
-        grads_alpha = tape.gradient(loss_alpha, self.log_alpha)
-
         self.optimizer_q.apply_gradients(zip(grads_q, q_variables))
+
+        grads_policy = tape.gradient(loss_policy, self.model_policy.trainable_variables)
         self.optimizer_policy.apply_gradients(zip(grads_policy, self.model_policy.trainable_variables))
-        self.optimizer_alpha.apply_gradients([(grads_alpha, self.log_alpha)])
+
+        if self.use_auto_alpha:
+            grads_alpha = tape.gradient(loss_alpha, self.log_alpha)
+            self.optimizer_alpha.apply_gradients([(grads_alpha, self.log_alpha)])
 
         del tape
 
