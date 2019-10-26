@@ -25,9 +25,9 @@ base_config:
 
 sac_config:
   seed: 42
-  tau: 0.9
+  tau: 1
   # write_summary_per_step: 20
-  update_target_per_step: 50
+  update_target_per_step: 100
   init_log_alpha: -4.6
   # use_auto_alpha: true
   # lr: 3e-4
