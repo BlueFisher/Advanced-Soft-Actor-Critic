@@ -94,7 +94,8 @@ class SAC_Base(object):
         self.log_alpha = tf.Variable(init_log_alpha, dtype=tf.float32, name='log_alpha')
         self.global_step = tf.Variable(0, dtype=tf.int64, name='global_step')
 
-        self.optimizer_q = tf.keras.optimizers.Adam(lr)
+        self.optimizer_q1 = tf.keras.optimizers.Adam(lr)
+        self.optimizer_q2 = tf.keras.optimizers.Adam(lr)
         self.optimizer_policy = tf.keras.optimizers.Adam(lr)
         if self.use_auto_alpha:
             self.optimizer_alpha = tf.keras.optimizers.Adam(lr)
@@ -106,6 +107,8 @@ class SAC_Base(object):
             tmp_state, tmp_rnn_state = self.model_rnn.get_call_result_tensors()
             state_dim = tmp_state.shape[-1]
             self._initial_rnn_state = np.zeros(tmp_rnn_state.shape[-1], dtype=np.float32)
+
+            self.optimizer_rnn = tf.keras.optimizers.Adam(lr)
 
             if self.use_prediction:
                 self.model_prediction = model.ModelPrediction(self.state_dim, state_dim, self.action_dim)
@@ -125,7 +128,8 @@ class SAC_Base(object):
         ckpt = tf.train.Checkpoint(log_alpha=self.log_alpha,
                                    global_step=self.global_step,
 
-                                   optimizer_q=self.optimizer_q,
+                                   optimizer_q1=self.optimizer_q1,
+                                   oprimizer_q2=self.optimizer_q2,
                                    optimizer_policy=self.optimizer_policy,
 
                                    model_q1=self.model_q1,
@@ -229,29 +233,37 @@ class SAC_Base(object):
             loss_q1 = tf.math.squared_difference(q1, y)
             loss_q2 = tf.math.squared_difference(q2, y)
 
-            loss_q = loss_q1 + loss_q2
-
             if self.use_n_step_is and n_step_is is not None:
-                loss_q *= n_step_is
+                loss_q1 *= n_step_is
+                loss_q2 *= n_step_is
 
             if self.use_priority and priority_is is not None:
-                loss_q *= priority_is
+                loss_q1 *= priority_is
+                loss_q2 *= priority_is
+
+            loss_rnn = loss_q1 + loss_q2
 
             if self.use_rnn and self.use_prediction:
                 loss_prediction = tf.reshape(tf.reduce_mean(loss_prediction, axis=[1, 2]), [-1, 1])
-                loss_q += loss_prediction
+                loss_rnn += loss_prediction
 
             loss_policy = alpha * policy.log_prob(action_sampled) - q1_for_gradient
             loss_alpha = -self.log_alpha * policy.log_prob(action_sampled) + self.log_alpha * self.action_dim
 
-        q_variables = self.model_q1.trainable_variables + self.model_q2.trainable_variables
         if self.use_rnn:
-            q_variables = q_variables + self.model_rnn.trainable_variables
+            rnn_variables = self.model_rnn.trainable_variables
             if self.use_prediction:
-                q_variables = q_variables + self.model_prediction.trainable_variables
+                rnn_variables = rnn_variables + self.model_prediction.trainable_variables
 
-        grads_q = tape.gradient(loss_q, q_variables)
-        self.optimizer_q.apply_gradients(zip(grads_q, q_variables))
+        grads_q1 = tape.gradient(loss_q1, self.model_q1.trainable_variables)
+        self.optimizer_q1.apply_gradients(zip(grads_q1, self.model_q1.trainable_variables))
+
+        grads_q2 = tape.gradient(loss_q2, self.model_q2.trainable_variables)
+        self.optimizer_q1.apply_gradients(zip(grads_q2, self.model_q2.trainable_variables))
+
+        if self.use_rnn:
+            grads_rnn = tape.gradient(loss_rnn, rnn_variables)
+            self.optimizer_rnn.apply_gradients(zip(grads_rnn, rnn_variables))
 
         grads_policy = tape.gradient(loss_policy, self.model_policy.trainable_variables)
         self.optimizer_policy.apply_gradients(zip(grads_policy, self.model_policy.trainable_variables))
@@ -264,7 +276,8 @@ class SAC_Base(object):
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             with self.summary_writer.as_default():
-                tf.summary.scalar('loss/Q', tf.reduce_mean(loss_q), step=self.global_step)
+                tf.summary.scalar('loss/Q1', tf.reduce_mean(loss_q1), step=self.global_step)
+                tf.summary.scalar('loss/Q2', tf.reduce_mean(loss_q2), step=self.global_step)
                 if self.use_rnn and self.use_prediction:
                     tf.summary.scalar('loss/prediction', tf.reduce_mean(loss_prediction), step=self.global_step)
                 tf.summary.scalar('loss/policy', tf.reduce_mean(loss_policy), step=self.global_step)
