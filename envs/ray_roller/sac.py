@@ -19,7 +19,7 @@ class ModelRNN(tf.keras.Model):
         self.get_call_result_tensors()
 
     def call(self, inputs_s, initial_state):
-        outputs, next_state = self.layer_rnn(inputs_s, initial_state=[initial_state])
+        outputs, next_state = self.layer_rnn(inputs_s, initial_state=initial_state)
 
         return outputs, next_state
 
@@ -32,9 +32,9 @@ class ModelPrediction(tf.keras.Model):
     def __init__(self, state_dim, encoded_state_dim, action_dim):
         super(ModelPrediction, self).__init__()
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(256, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(256, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(256, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(512, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(512, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(512, activation=tf.nn.relu, **initializer_helper),
             tf.keras.layers.Dense(state_dim, **initializer_helper)
         ])
 
@@ -47,11 +47,11 @@ class ModelPrediction(tf.keras.Model):
 class ModelQ(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
         super(ModelQ, self).__init__()
-        self.layer_s = tf.keras.layers.Dense(256, activation=tf.nn.relu, **initializer_helper)
-        self.layer_a = tf.keras.layers.Dense(256, activation=tf.nn.relu, **initializer_helper)
+        self.layer_s = tf.keras.layers.Dense(512, activation=tf.nn.relu, **initializer_helper)
+        self.layer_a = tf.keras.layers.Dense(512, activation=tf.nn.relu, **initializer_helper)
         self.sequential_model = tf.keras.Sequential([
-            tf.keras.layers.Dense(256, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(256, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(512, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(512, activation=tf.nn.relu, **initializer_helper),
             tf.keras.layers.Dense(1, **initializer_helper)
         ])
 
@@ -60,7 +60,7 @@ class ModelQ(tf.keras.Model):
     def call(self, inputs_s, inputs_a):
         ls = self.layer_s(inputs_s)
         la = self.layer_a(inputs_a)
-        l = tf.concat([ls, la], -1)
+        l = ls + la
 
         q = self.sequential_model(l)
         return q
@@ -70,15 +70,15 @@ class ModelPolicy(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
         super(ModelPolicy, self).__init__()
         self.common_model = tf.keras.Sequential([
-            tf.keras.layers.Dense(256, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(256, activation=tf.nn.relu, **initializer_helper)
+            tf.keras.layers.Dense(512, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(512, activation=tf.nn.relu, **initializer_helper)
         ])
         self.mu_model = tf.keras.Sequential([
-            tf.keras.layers.Dense(256, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(512, activation=tf.nn.relu, **initializer_helper),
             tf.keras.layers.Dense(action_dim, activation=tf.nn.tanh, **initializer_helper)
         ])
         self.sigma_model = tf.keras.Sequential([
-            tf.keras.layers.Dense(256, activation=tf.nn.relu, **initializer_helper),
+            tf.keras.layers.Dense(512, activation=tf.nn.relu, **initializer_helper),
             tf.keras.layers.Dense(action_dim, activation=tf.nn.sigmoid, **initializer_helper)
         ])
 

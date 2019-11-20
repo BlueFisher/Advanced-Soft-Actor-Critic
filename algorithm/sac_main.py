@@ -102,9 +102,6 @@ class Main(object):
         sh.setFormatter(logging.Formatter('[%(levelname)s] - [%(name)s] - %(message)s'))
         _log.addHandler(sh)
 
-        _log = logging.getLogger('tensorflow')
-        _log.setLevel(level=logging.ERROR)
-
         self.logger = logging.getLogger('sac')
         self.logger.setLevel(level=logging.INFO)
 
@@ -156,20 +153,26 @@ class Main(object):
         state_dim = brain_params.vector_observation_space_size * brain_params.num_stacked_vector_observations
         action_dim = brain_params.vector_action_space_size[0]
 
-        custom_sac_model = importlib.import_module(self.config['sac'])
-        shutil.copyfile(f'{self.config["sac"]}.py', f'{model_root_path}/{self.config["sac"]}.py')
+        # if model exists, load saved model, else, copy a new one
+        if os.path.isfile(f'{model_root_path}/sac_model.py'):
+            custom_sac_model = importlib.import_module(f'{model_root_path.replace("/",".")}.sac_model')
+        else:
+            custom_sac_model = importlib.import_module(self.config['sac'])
+            shutil.copyfile(f'{self.config["sac"]}.py', f'{model_root_path}/sac_model.py')
 
         self.sac = SAC_Base(state_dim=state_dim,
                             action_dim=action_dim,
                             model_root_path=model_root_path,
                             model=custom_sac_model,
                             train_mode=self.train_mode,
-                            use_rnn=self.config['use_rnn'],
-
-                            replay_config=replay_config,
 
                             burn_in_step=self.config['burn_in_step'],
                             n_step=self.config['n_step'],
+                            use_rnn=self.config['use_rnn'],
+                            use_prediction=self.config['use_prediction'],
+
+                            replay_config=replay_config,
+
                             **sac_config)
 
     def _run(self):
@@ -221,23 +224,32 @@ class Main(object):
                     brain_info.local_done = [True] * len(brain_info.agents)
                     brain_info.max_reached = [True] * len(brain_info.agents)
 
-                trans_list = [agents[i].add_transition(states[i],
-                                                       actions[i],
-                                                       brain_info.rewards[i],
-                                                       brain_info.local_done[i],
-                                                       brain_info.max_reached[i],
-                                                       states_[i],
-                                                       rnn_state[i] if self.config['use_rnn'] else None)
-                              for i in range(len(agents))]
+                tmp_results = [agents[i].add_transition(states[i],
+                                                        actions[i],
+                                                        brain_info.rewards[i],
+                                                        brain_info.local_done[i],
+                                                        brain_info.max_reached[i],
+                                                        states_[i],
+                                                        rnn_state[i] if self.config['use_rnn'] else None)
+                               for i in range(len(agents))]
 
-                trans_list = [t for t in trans_list if t is not None]
-                if len(trans_list) != 0:
-                    # n_states, n_actions, n_rewards, done, rnn_state
-                    trans = [np.concatenate(t, axis=0) for t in zip(*trans_list)]
+                if self.train_mode:
+                    trans_list, episode_trans_list = zip(*tmp_results)
 
-                    if self.train_mode:
+                    trans_list = [t for t in trans_list if t is not None]
+                    if len(trans_list) != 0:
+                        # n_states, n_actions, n_rewards, done, rnn_state
+                        trans = [np.concatenate(t, axis=0) for t in zip(*trans_list)]
                         self.sac.fill_replay_buffer(*trans)
-                        self.sac.train()
+
+                    if self.config['use_rnn'] and self.config['use_prediction']:
+                        episode_trans_list = [t for t in episode_trans_list if t is not None]
+                        if len(episode_trans_list) != 0:
+                            # n_states, n_actions, n_rewards, done, rnn_state
+                            for episode_trans in episode_trans_list:
+                                self.sac.fill_episode_replay_buffer(*episode_trans)
+
+                    self.sac.train()
 
                 states = states_
                 if self.config['use_rnn']:

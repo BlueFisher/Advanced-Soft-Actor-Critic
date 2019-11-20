@@ -1,18 +1,17 @@
-build_path: 
-  win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
-  linux: /data/linux-RL-Envs/RL-Envs.x86_64
-scene: RayRoller
+base_config:
+  build_path: 
+    win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
+    linux: /data/linux-RL-Envs/RL-Envs.x86_64
+  scene: RayRoller
 
-# sac: sac
-max_iter: 10000
-# agents_num: 1
-save_model_per_iter: 100
-reset_on_iteration: false
-# gamma: 0.99
-burn_in_step: 15
-n_step: 5
-stagger: 1
-use_rnn: true
+  max_iter: 10000
+  save_model_per_iter: 100
+  reset_on_iteration: false
+  burn_in_step: 10
+  n_step: 3
+  stagger: 1
+  use_rnn: true
+  use_prediction: true
 
 # reset_config:
 #   copy: 1
@@ -25,7 +24,7 @@ use_rnn: true
 
 sac_config:
   seed: 42
-  tau: 1.
+  tau: 0.9
   # write_summary_per_step: 20
   update_target_per_step: 100
   init_log_alpha: -2.3

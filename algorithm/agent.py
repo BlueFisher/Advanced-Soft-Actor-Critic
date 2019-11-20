@@ -10,11 +10,12 @@ class Agent(object):
                  tran_len=1, stagger=1,
                  use_rnn=False):
         self.agent_id = agent_id
-        self.deque_maxlen = tran_len
+        self.tran_len = tran_len
         self._curr_stagger = self.stagger = stagger
         self.use_rnn = use_rnn
 
-        self._tmp_trans = deque(maxlen=self.deque_maxlen)
+        self._tmp_trans = deque(maxlen=self.tran_len)
+        self._tmp_episode_trans = list()
 
     def add_transition(self,
                        state,
@@ -25,7 +26,7 @@ class Agent(object):
                        state_,
                        rnn_state=None):
 
-        self._tmp_trans.append({
+        transition = {
             'state': state,
             'action': action,
             'reward': reward,
@@ -33,7 +34,9 @@ class Agent(object):
             'max_reached': max_reached,
             'state_': state_,
             'rnn_state': rnn_state
-        })
+        }
+        self._tmp_trans.append(transition)
+        self._tmp_episode_trans.append(transition)
 
         if not self.done:
             self.reward += reward
@@ -45,16 +48,23 @@ class Agent(object):
                         max_reached,
                         state_)
 
-        trans_list = self._get_trans()
-        if trans_list is not None:
-            trans_list = [np.asarray([t], dtype=np.float32) for t in trans_list]
+        trans = self._get_trans()
+        if trans is not None:
+            trans = [np.asarray([t], dtype=np.float32) for t in trans]
+
+        episode_trans = None
 
         if local_done:
             self.done = True
+
             self._tmp_trans.clear()
             self._curr_stagger = self.stagger
 
-        return trans_list
+            episode_trans = self._get_episode_trans()
+            episode_trans = [np.asarray([t], dtype=np.float32) for t in episode_trans]
+            self._tmp_episode_trans.clear()
+
+        return trans, episode_trans
 
     def _extra_log(self,
                    state,
@@ -66,7 +76,7 @@ class Agent(object):
         pass
 
     def _get_trans(self):
-        if len(self._tmp_trans) < self.deque_maxlen:
+        if len(self._tmp_trans) < self.tran_len:
             return None
 
         if self._curr_stagger != self.stagger:
@@ -94,3 +104,25 @@ class Agent(object):
                     [t['reward'] for t in self._tmp_trans],
                     state_,
                     [done])
+
+    def _get_episode_trans(self):
+        state_ = self._tmp_episode_trans[-1]['state_']
+        done = self._tmp_episode_trans[-1]['local_done'] and not self._tmp_episode_trans[-1]['max_reached']
+        
+        return ([t['state'] for t in self._tmp_episode_trans],
+                [t['action'] for t in self._tmp_episode_trans],
+                [t['reward'] for t in self._tmp_episode_trans],
+                state_,
+                [done])
+
+
+if __name__ == "__main__":
+    agent = Agent(0, 6)
+    for i in range(20):
+        print(i, '===')
+        a, b = agent.add_transition(np.random.randn(4), np.random.randn(2), 1, False, False, np.random.randn(4))
+        print(a, b)
+
+    print(20, '===')
+    a, b = agent.add_transition(np.random.randn(4), np.random.randn(2), 1, True, False, np.random.randn(4))
+    print(a, b)
