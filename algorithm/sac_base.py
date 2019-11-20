@@ -7,15 +7,10 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from .replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
+from .replay_buffer import ReplayBuffer, PrioritizedReplayBuffer, EpisodeBuffer
 
 logger = logging.getLogger('sac.base')
 logger.setLevel(level=logging.INFO)
-
-initializer_helper = {
-    'kernel_initializer': tf.keras.initializers.TruncatedNormal(0, .1),
-    'bias_initializer': tf.keras.initializers.Constant(0.1)
-}
 
 
 class SAC_Base(object):
@@ -29,6 +24,7 @@ class SAC_Base(object):
                  burn_in_step=0,
                  n_step=1,
                  use_rnn=False,
+                 use_prediction=True,
 
                  seed=None,
                  write_summary_per_step=20,
@@ -59,6 +55,7 @@ class SAC_Base(object):
         self.burn_in_step = burn_in_step
         self.n_step = n_step
         self.use_rnn = use_rnn
+        self.use_prediction = use_prediction
 
         self.write_summary_per_step = write_summary_per_step
         self.tau = tau
@@ -69,7 +66,6 @@ class SAC_Base(object):
         self.use_n_step_is = use_n_step_is
 
         self.zero_init_states = False
-        self.use_prediction = True
 
         if seed is not None:
             tf.random.set_seed(seed)
@@ -86,6 +82,11 @@ class SAC_Base(object):
                 self.replay_buffer = PrioritizedReplayBuffer(**replay_config)
             else:
                 self.replay_buffer = ReplayBuffer(**replay_config)
+
+            if self.use_rnn and self.use_prediction:
+                self.episode_buffer = EpisodeBuffer(16, 32, 50)
+
+            self._init_train_concrete_function()
 
     def _build_model(self, lr, init_log_alpha, model):
         """
@@ -112,6 +113,10 @@ class SAC_Base(object):
 
             if self.use_prediction:
                 self.model_prediction = model.ModelPrediction(self.state_dim, state_dim, self.action_dim)
+                self.optimizer_prediction = tf.keras.optimizers.Adam(lr)
+                # # avoid ValueError: tf.function-decorated function tried to create variables on non-first call.
+                # zero_grads = [np.zeros_like(v.numpy()) for v in self.model_prediction.trainable_variables]
+                # self.optimizer_prediction.apply_gradients(zip(zero_grads, self.model_prediction.trainable_variables))
         else:
             state_dim = self.state_dim
 
@@ -129,7 +134,7 @@ class SAC_Base(object):
                                    global_step=self.global_step,
 
                                    optimizer_q1=self.optimizer_q1,
-                                   oprimizer_q2=self.optimizer_q2,
+                                   optimizer_q2=self.optimizer_q2,
                                    optimizer_policy=self.optimizer_policy,
 
                                    model_q1=self.model_q1,
@@ -141,6 +146,7 @@ class SAC_Base(object):
             ckpt.model_rnn = self.model_rnn
             ckpt.model_target_rnn = self.model_target_rnn
             if self.use_prediction:
+                ckpt.optimizer_prediction = self.optimizer_prediction
                 ckpt.model_prediction = self.model_prediction
 
         if self.use_auto_alpha:
@@ -156,6 +162,32 @@ class SAC_Base(object):
             logger.info('Initializing from scratch')
             self.init_iteration = 0
             self._update_target_variables()
+
+    def _init_train_concrete_function(self):
+        batch_size = self.replay_buffer.batch_size
+        step_size = self.burn_in_step + self.n_step
+
+        args = {
+            'n_states': tf.TensorSpec(shape=[batch_size, step_size, self.state_dim], dtype=tf.float32),
+            'n_actions': tf.TensorSpec(shape=[batch_size, step_size, self.action_dim], dtype=tf.float32),
+            'reward': tf.TensorSpec(shape=[batch_size, 1], dtype=tf.float32),
+            'state_': tf.TensorSpec(shape=[batch_size, self.state_dim], dtype=tf.float32),
+            'done': tf.TensorSpec(shape=[batch_size, 1], dtype=tf.float32)
+        }
+        if self.use_n_step_is:
+            args['n_step_is'] = tf.TensorSpec(shape=[batch_size, 1], dtype=tf.float32)
+        if self.use_priority:
+            args['priority_is'] = tf.TensorSpec(shape=[batch_size, 1], dtype=tf.float32)
+        if self.use_rnn:
+            args['initial_rnn_state'] = tf.TensorSpec(shape=[batch_size, self._initial_rnn_state.shape[-1]], dtype=tf.float32)
+
+            if self.use_prediction:
+                episode_batch_size = self.episode_buffer.batch_size
+                args['ep_m_states'] = tf.TensorSpec(shape=[episode_batch_size, None, self.state_dim], dtype=tf.float32)
+                args['ep_n_actions'] = tf.TensorSpec(shape=[episode_batch_size, None, self.action_dim], dtype=tf.float32)
+                args['ep_rnn_state'] = tf.TensorSpec(shape=[episode_batch_size, self._initial_rnn_state.shape[-1]], dtype=tf.float32)
+
+        self._train_fn = self._train.get_concrete_function(**args)
 
     def get_initial_rnn_state(self, batch_size):
         assert self.use_rnn
@@ -198,7 +230,8 @@ class SAC_Base(object):
     @tf.function
     def _train(self, n_states, n_actions, reward, state_, done,
                n_step_is=None, priority_is=None,
-               initial_rnn_state=None):
+               initial_rnn_state=None,
+               ep_m_states=None, ep_n_actions=None, ep_rnn_state=None):
 
         with tf.GradientTape(persistent=True) as tape:
             if self.use_rnn:
@@ -208,12 +241,6 @@ class SAC_Base(object):
 
                 encoded_n_states, *_ = self.model_rnn(n_states, initial_rnn_state)
                 state = encoded_n_states[:, self.burn_in_step, :]
-
-                if self.use_prediction:
-                    approx_next_states = self.model_prediction(encoded_n_states[:, self.burn_in_step:, :],
-                                                               n_actions[:, self.burn_in_step:, :])
-                    loss_prediction = tf.math.squared_difference(approx_next_states,
-                                                                 m_states[:, self.burn_in_step + 1:, :])
             else:
                 state = n_states[:, self.burn_in_step, :]
 
@@ -233,27 +260,28 @@ class SAC_Base(object):
             loss_q1 = tf.math.squared_difference(q1, y)
             loss_q2 = tf.math.squared_difference(q2, y)
 
-            if self.use_n_step_is and n_step_is is not None:
+            if self.use_n_step_is:
                 loss_q1 *= n_step_is
                 loss_q2 *= n_step_is
 
-            if self.use_priority and priority_is is not None:
+            if self.use_priority:
                 loss_q1 *= priority_is
                 loss_q2 *= priority_is
 
-            loss_rnn = loss_q1 + loss_q2
+            if self.use_rnn:
+                loss_rnn = loss_q1 + loss_q2
 
-            if self.use_rnn and self.use_prediction:
-                loss_prediction = tf.reshape(tf.reduce_mean(loss_prediction, axis=[1, 2]), [-1, 1])
-                loss_rnn += loss_prediction
+                if self.use_prediction:
+                    encoded_ep_n_states, *_ = self.model_rnn(ep_m_states[:, :-1, :], ep_rnn_state)
+                    approx_ep_next_states = self.model_prediction(encoded_ep_n_states,
+                                                                  ep_n_actions)
+                    loss_prediction = tf.math.squared_difference(approx_ep_next_states,
+                                                                 ep_m_states[:, 1:, :])
+
+                    loss_rnn = tf.reduce_mean(loss_rnn) + tf.reduce_mean(loss_prediction)
 
             loss_policy = alpha * policy.log_prob(action_sampled) - q1_for_gradient
             loss_alpha = -self.log_alpha * policy.log_prob(action_sampled) + self.log_alpha * self.action_dim
-
-        if self.use_rnn:
-            rnn_variables = self.model_rnn.trainable_variables
-            if self.use_prediction:
-                rnn_variables = rnn_variables + self.model_prediction.trainable_variables
 
         grads_q1 = tape.gradient(loss_q1, self.model_q1.trainable_variables)
         self.optimizer_q1.apply_gradients(zip(grads_q1, self.model_q1.trainable_variables))
@@ -262,8 +290,12 @@ class SAC_Base(object):
         self.optimizer_q1.apply_gradients(zip(grads_q2, self.model_q2.trainable_variables))
 
         if self.use_rnn:
-            grads_rnn = tape.gradient(loss_rnn, rnn_variables)
-            self.optimizer_rnn.apply_gradients(zip(grads_rnn, rnn_variables))
+            grads_rnn = tape.gradient(loss_rnn, self.model_rnn.trainable_variables)
+            self.optimizer_rnn.apply_gradients(zip(grads_rnn, self.model_rnn.trainable_variables))
+
+            if self.use_prediction:
+                grads_pred = tape.gradient(loss_prediction, self.model_prediction.trainable_variables)
+                self.optimizer_prediction.apply_gradients(zip(grads_pred, self.model_prediction.trainable_variables))
 
         grads_policy = tape.gradient(loss_policy, self.model_policy.trainable_variables)
         self.optimizer_policy.apply_gradients(zip(grads_policy, self.model_policy.trainable_variables))
@@ -290,6 +322,21 @@ class SAC_Base(object):
         self.global_step.assign_add(1)
 
     @tf.function()
+    def _get_next_rnn_state(self, n_states, rnn_state):
+        _, next_rnn_state = self.model_rnn(n_states, [rnn_state])
+        return next_rnn_state
+
+    def get_next_rnn_state(self, n_states):
+        fn = self._get_next_rnn_state.get_concrete_function(tf.TensorSpec(shape=[None, None, self.state_dim], dtype=tf.float32),
+                                                            tf.TensorSpec(shape=[None, len(self._initial_rnn_state)], dtype=tf.float32))
+
+        rnn_state = self.get_initial_rnn_state(1)
+        if n_states.shape[1] == 0:
+            return rnn_state
+        else:
+            return fn(tf.constant(n_states), tf.constant(rnn_state)).numpy()
+
+    @tf.function()
     def choose_action(self, state):
         """
         tf.function
@@ -303,7 +350,7 @@ class SAC_Base(object):
         tf.function
         """
         state = tf.reshape(state, (-1, 1, state.shape[-1]))
-        encoded_state, next_rnn_state, = self.model_rnn(state, rnn_state)
+        encoded_state, next_rnn_state, = self.model_rnn(state, [rnn_state])
         policy = self.model_policy(encoded_state)
         action = policy.sample()
         action = tf.reshape(action, (-1, action.shape[-1]))
@@ -318,11 +365,11 @@ class SAC_Base(object):
         if self.use_rnn:
             m_states = tf.concat([n_states, tf.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)
             m_states, *_ = self.model_target_rnn(m_states,
-                                                 rnn_state)
+                                                 [rnn_state])
             state_ = m_states[:, -1, :]
 
             n_states, *_ = self.model_rnn(n_states,
-                                          rnn_state)
+                                          [rnn_state])
 
         state = n_states[:, self.burn_in_step, :]
         action = n_actions[:, self.burn_in_step, :]
@@ -346,7 +393,7 @@ class SAC_Base(object):
         """
         if self.use_rnn:
             n_states, *_ = self.model_rnn(n_states,
-                                          rnn_state)
+                                          [rnn_state])
         policy = self.model_policy(n_states)
         policy_prob = policy.prob(n_actions)
 
@@ -375,7 +422,7 @@ class SAC_Base(object):
 
     def _get_n_reward_gamma_sum(self, n_rewards):
         # [None, n_step]
-        assert n_rewards.shape[1] == self.n_step
+        assert n_rewards.shape[1] == self.n_step, f'n_rewards: {n_rewards.shape}, n_step: {self.n_step}'
 
         n_gamma = np.array([self.gamma**i for i in range(self.n_step)], dtype=np.float32)
         n_rewards_gamma = n_rewards * n_gamma
@@ -405,11 +452,29 @@ class SAC_Base(object):
             mu_n_probs = self.get_n_step_probs(n_states, n_actions).numpy()
             self.replay_buffer.add(n_states, n_actions, n_rewards, state_, done, mu_n_probs)
 
+    def fill_episode_replay_buffer(self, n_states, n_actions, n_rewards, state_, done):
+        """
+        n_states: [1, burn_in_step + n_step, state_dim]
+        n_states: [1, burn_in_step + n_step, state_dim]
+        n_rewards: [1, burn_in_step + n_step]
+        state_: [1, state_dim]
+        done: [1, 1]
+        """
+        assert self.use_rnn and self.use_prediction
+        assert len(n_states) == len(n_actions) == len(n_rewards) == len(state_) == len(done)
+
+        self.episode_buffer.add(n_states, n_actions, n_rewards, state_, done)
+
     def train(self):
         # sample from replay buffer
         sampled = self.replay_buffer.sample()
         if sampled is None:
             return
+
+        if self.use_rnn and self.use_prediction:
+            ep_sampled = self.episode_buffer.sample(self.get_next_rnn_state)
+            if ep_sampled is None:
+                return
 
         if self.use_priority:
             pointers, trans, priority_is = sampled
@@ -433,10 +498,27 @@ class SAC_Base(object):
             n_step_is = self._get_n_step_is(pi_n_probs[:, self.burn_in_step:, :],
                                             mu_n_probs[:, self.burn_in_step:, :])
 
-        self._train(n_states, n_actions, reward, state_, done,
-                    n_step_is=n_step_is if self.use_n_step_is else None,
-                    priority_is=priority_is if self.use_priority else None,
-                    initial_rnn_state=rnn_state if self.use_rnn else None)
+        fn_args = {
+            'n_states': n_states,
+            'n_actions': n_actions,
+            'reward': reward,
+            'state_': state_,
+            'done': done
+        }
+        if self.use_n_step_is:
+            fn_args['n_step_is'] = n_step_is
+        if self.use_priority:
+            fn_args['priority_is'] = priority_is
+        if self.use_rnn:
+            fn_args['initial_rnn_state'] = rnn_state
+
+            if self.use_rnn and self.use_prediction:
+                ep_m_states, ep_n_actions, ep_rnn_state = ep_sampled
+                fn_args['ep_m_states'] = ep_m_states
+                fn_args['ep_n_actions'] = ep_n_actions
+                fn_args['ep_rnn_state'] = ep_rnn_state
+
+        self._train_fn(**{k: tf.constant(fn_args[k], dtype=tf.float32) for k in fn_args})
 
         self.summary_writer.flush()
 

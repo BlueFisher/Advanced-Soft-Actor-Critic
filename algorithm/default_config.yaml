@@ -16,6 +16,7 @@ base_config:
   n_step: 1
   stagger: 1
   use_rnn: false
+  use_prediction: true
 
 reset_config:
   copy: 1
