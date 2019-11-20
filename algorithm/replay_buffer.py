@@ -1,8 +1,60 @@
+from collections import deque
 import math
 import random
 import time
 
 import numpy as np
+
+
+class EpisodeBuffer:
+    def __init__(self, batch_step_size=16, batch_size=32, capacity=50):
+        self.batch_step_size = batch_step_size
+        self.batch_size = batch_size
+        self.capacity = capacity
+        self._buffer = deque(maxlen=capacity)
+
+    def add(self, *episode):
+        # n_states, n_actions, n_rewards, state_, done
+        self._buffer.append(episode)
+
+    @property
+    def max_episode_len(self):
+        lens = [t[0].shape[1] for t in self._buffer]
+        return max(lens)
+
+    def get_min_episode_len(self, buffer):
+        lens = [t[0].shape[1] for t in buffer]
+        return min(lens)
+
+    def sample(self, fn_get_next_rnn_state):
+        if len(self._buffer) < self.batch_size:
+            return None
+
+        buffer_sampled = random.sample(self._buffer, self.batch_size)
+
+        batch_step_size = min(self.get_min_episode_len(buffer_sampled), self.batch_step_size)
+        results = None
+
+        for episode in buffer_sampled:
+            n_states, n_actions, state_ = episode[0], episode[1], episode[3]
+
+            episode_len = n_states.shape[1]
+            start = np.random.randint(0, episode_len - batch_step_size + 1)
+
+            rnn_state = fn_get_next_rnn_state(n_states[:, 0:start, :])
+
+            m_states = np.concatenate([n_states, np.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)
+            m_states = m_states[:, start:start + batch_step_size + 1, :]
+            n_actions = n_actions[:, start:start + batch_step_size, :]
+
+            if results is None:
+                results = [m_states, n_actions, rnn_state]
+            else:
+                results[0] = np.concatenate([results[0], m_states], axis=0)
+                results[1] = np.concatenate([results[1], n_actions], axis=0)
+                results[2] = np.concatenate([results[2], rnn_state], axis=0)
+
+        return results
 
 
 class DataStorage:
@@ -57,7 +109,7 @@ class DataStorage:
         return self._size == self.capacity
 
 
-class ReplayBuffer(object):
+class ReplayBuffer:
     _data_pointer = 0
 
     def __init__(self, batch_size=256, capacity=1e6):
@@ -96,7 +148,7 @@ class ReplayBuffer(object):
         return self._trans_storage.size > self.batch_size
 
 
-class SumTree(object):
+class SumTree:
     def __init__(self, batch_size, capacity):
         self.capacity = capacity  # for all priority values
 
@@ -165,7 +217,7 @@ class SumTree(object):
         return self._tree[self.capacity - 1:].max()
 
 
-class PrioritizedReplayBuffer(object):
+class PrioritizedReplayBuffer:
     epsilon = 0.01  # small amount to avoid zero priority
     alpha = 0.9  # [0~1] convert the importance of TD error to priority
     beta = 0.4  # importance-sampling, from initial value increasing to 1
