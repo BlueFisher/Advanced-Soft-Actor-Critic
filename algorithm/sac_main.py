@@ -146,8 +146,9 @@ class Main(object):
                                         no_graphics=self.train_mode,
                                         base_port=self.config['port'],
                                         args=['--scene', self.config['scene']])
-
-        self.default_brain_name = self.env.brain_names[0]
+        
+        self.env.reset()
+        self.default_brain_name = self.env.external_brain_names[0]
 
         brain_params = self.env.brains[self.default_brain_name]
         state_dim = brain_params.vector_observation_space_size * brain_params.num_stacked_vector_observations

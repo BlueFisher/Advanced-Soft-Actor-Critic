@@ -10,7 +10,7 @@ base_config:
   save_model_per_iter: 200
   reset_on_iteration: false
   # burn_in_step: 0
-  n_step: 3
+  n_step: 5
   # stagger: 1
   use_rnn: false
 
