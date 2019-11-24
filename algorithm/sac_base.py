@@ -34,6 +34,7 @@ class SAC_Base(object):
                  use_auto_alpha=True,
                  lr=3e-4,
                  gamma=0.99,
+                 _lambda=0.9,
                  use_priority=False,
                  use_n_step_is=True,
 
@@ -62,7 +63,7 @@ class SAC_Base(object):
         self.update_target_per_step = update_target_per_step
         self.use_auto_alpha = use_auto_alpha
         self.gamma = gamma
-        self._lambda = 0.9
+        self._lambda = _lambda
         self.use_priority = use_priority
         self.use_n_step_is = use_n_step_is
 
