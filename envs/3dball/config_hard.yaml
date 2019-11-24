@@ -2,7 +2,7 @@ base_config:
   build_path: 
     win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
-  scene: 3DBall9Hard
+  scene: 3DBallHard
 
   sac: sac_hard
   max_iter: 500
