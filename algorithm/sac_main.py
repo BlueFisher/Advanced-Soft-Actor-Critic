@@ -140,7 +140,7 @@ class Main(object):
 
     def _init_env(self, replay_config, sac_config, model_root_path):
         if self.config['build_path'] is None or self.config['build_path'] == '':
-            self.env = UnityEnvironment()
+            self.env = UnityEnvironment(base_port=5004)
         else:
             self.env = UnityEnvironment(file_name=self.config['build_path'],
                                         no_graphics=self.train_mode,
@@ -151,7 +151,7 @@ class Main(object):
         self.default_brain_name = self.env.external_brain_names[0]
 
         brain_params = self.env.brains[self.default_brain_name]
-        state_dim = brain_params.vector_observation_space_size * brain_params.num_stacked_vector_observations
+        state_dim = brain_params.vector_observation_space_size
         action_dim = brain_params.vector_action_space_size[0]
 
         # if model exists, load saved model, else, copy a new one
