@@ -112,7 +112,7 @@ class DataStorage:
 class ReplayBuffer:
     _data_pointer = 0
 
-    def __init__(self, batch_size=256, capacity=1e6):
+    def __init__(self, batch_size=256, capacity=1e6, **kwargs):
         self.batch_size = int(batch_size)
         self.capacity = int(capacity)
 

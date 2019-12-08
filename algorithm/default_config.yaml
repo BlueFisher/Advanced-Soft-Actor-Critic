@@ -2,7 +2,7 @@ base_config:
   build_path: 
     win32: path_win32
     linux: path_linux
-  port: 7000
+  port: 5005
   scene: scene
 
   name: "{time}"
