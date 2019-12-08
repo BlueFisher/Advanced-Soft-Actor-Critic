@@ -240,11 +240,12 @@ class SAC_Base(object):
         next_q1 = tf.squeeze(next_q1, [-1])
         next_q2 = tf.squeeze(next_q2, [-1])
 
-        r = n_rewards + self.gamma * (1 - n_dones) * tf.minimum(next_q1, next_q2) - tf.minimum(q1, q2) + alpha * n_actions_log_prob - alpha * self.gamma * next_n_actions_log_prob
-        r = ratio * r
+        td_error = n_rewards + self.gamma * (1 - n_dones) * (tf.minimum(next_q1, next_q2) - alpha * next_n_actions_log_prob) - (tf.minimum(q1, q2) - alpha * n_actions_log_prob)
+        td_error = ratio * td_error
         if self.use_n_step_is:
-            r = n_step_is * r
-        r = tf.reduce_sum(r, axis=1, keepdims=True)
+            cumulative_n_step_is = tf.concat([tf.reduce_prod(n_step_is[:, 0:i + 1], axis=1, keepdims=True) for i in range(n_step_is.shape[1])], axis=1)
+            td_error = n_step_is * cumulative_n_step_is * td_error
+        r = tf.reduce_sum(td_error, axis=1, keepdims=True)
 
         y = tf.minimum(q1[:, 0:1], q2[:, 0:1]) - alpha * n_actions_log_prob[:, 0:1] + r
 
@@ -263,6 +264,7 @@ class SAC_Base(object):
                 state_ = encoded_m_target_states[:, -1, :]
 
                 encoded_n_states, *_ = self.model_rnn(n_states, initial_rnn_state)
+                n_states = encoded_n_states
                 state = encoded_n_states[:, self.burn_in_step, :]
             else:
                 state = n_states[:, self.burn_in_step, :]
@@ -285,10 +287,6 @@ class SAC_Base(object):
 
             loss_q1 = tf.math.squared_difference(q1, y)
             loss_q2 = tf.math.squared_difference(q2, y)
-
-            if self.use_n_step_is:
-                loss_q1 *= n_step_is
-                loss_q2 *= n_step_is
 
             if self.use_priority:
                 loss_q1 *= priority_is
@@ -402,7 +400,10 @@ class SAC_Base(object):
 
         q1 = self.model_q1(state, action)
         q2 = self.model_q2(state, action)
-        y = self._get_y(n_states, n_actions, n_rewards, state_, done, n_step_is)
+        y = self._get_y(n_states[:, self.burn_in_step:, :],
+                        n_actions[:, self.burn_in_step:, :],
+                        n_rewards[:, self.burn_in_step:],
+                        state_, done, n_step_is)
 
         q1_td_error = tf.abs(q1 - y)
         q2_td_error = tf.abs(q2 - y)
@@ -444,18 +445,8 @@ class SAC_Base(object):
             tmp_is[~np.isfinite(tmp_is)] = 1.
             tmp_is = np.clip(tmp_is, 0., 1.)
             n_step_is = np.prod(tmp_is, axis=2)  # [None, n_step]
-            for i in range(1, n_step_is.shape[1]):
-                n_step_is[:, i] = n_step_is[:, i] * n_step_is[:, i - 1]
 
         return n_step_is  # [None, n_step]
-
-    # def _get_n_reward_gamma_sum(self, n_rewards):
-    #     # [None, n_step]
-    #     assert n_rewards.shape[1] == self.n_step, f'n_rewards: {n_rewards.shape}, n_step: {self.n_step}'
-
-    #     n_gamma = np.array([self.gamma**i for i in range(self.n_step)], dtype=np.float32)
-    #     n_rewards_gamma = n_rewards * n_gamma
-    #     return n_rewards_gamma.sum(axis=1, keepdims=True)  # [None, 1]
 
     def fill_replay_buffer(self, n_states, n_actions, n_rewards, state_, done,
                            rnn_state=None):
@@ -555,11 +546,11 @@ class SAC_Base(object):
         if self.use_priority:
             if self.use_rnn:
                 td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, done,
-                                             n_step_is,
+                                             n_step_is if self.use_n_step_is else None,
                                              rnn_state).numpy()
             else:
                 td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, done,
-                                             n_step_is).numpy()
+                                             n_step_is if self.use_n_step_is else None).numpy()
 
             self.replay_buffer.update(pointers, td_error.flatten())
 
