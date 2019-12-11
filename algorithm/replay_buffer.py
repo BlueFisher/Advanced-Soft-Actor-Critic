@@ -63,6 +63,7 @@ class DataStorage:
     _buffer = None
 
     def __init__(self, capacity):
+        # TODO: MongoDB
         self.capacity = capacity
 
     def add(self, args):
@@ -300,7 +301,7 @@ class PrioritizedReplayBuffer:
     def update_transitions(self, leaf_pointers, index, data):
         assert len(leaf_pointers) == len(data)
 
-        data_pointers = [self._sum_tree.leaf_idx_to_data_idx(p) for p in leaf_pointers]
+        data_pointers = self._sum_tree.leaf_idx_to_data_idx(leaf_pointers)
         self._trans_storage.update(data_pointers, index, data)
 
     def clear(self):

@@ -17,7 +17,6 @@ import tensorflow as tf
 from .sac_base import SAC_Base
 from .agent import Agent
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 from mlagents.envs.environment import UnityEnvironment
 
 
@@ -25,68 +24,48 @@ class Main(object):
     train_mode = True
     _agent_class = Agent
 
-    def __init__(self, argv):
+    def __init__(self, config_path, args):
         self._now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
-        self.config, self.reset_config, replay_config, sac_config, model_root_path = self._init_config(argv)
-        self._init_env(replay_config, sac_config, model_root_path)
+        self.config, self.reset_config, replay_config, sac_config, model_root_path = self._init_config(config_path, args)
+        self._init_env(config_path, replay_config, sac_config, model_root_path)
         self._run()
 
-    def _init_config(self, argv):
+    def _init_config(self, config_path, args):
         config = dict()
 
         with open(f'{Path(__file__).resolve().parent}/default_config.yaml') as f:
             default_config_file = yaml.load(f, Loader=yaml.FullLoader)
             config = default_config_file
 
-        # define command line arguments
-        try:
-            opts, args = getopt.getopt(argv, 'rc:n:b:p:', ['run',
-                                                           'config=',
-                                                           'name=',
-                                                           'build=',
-                                                           'port=',
-                                                           'logger_file=',
-                                                           'seed=',
-                                                           'sac=',
-                                                           'agents='])
-        except getopt.GetoptError:
-            raise Exception('ARGS ERROR')
-
         # initialize config from config.yaml
-        for opt, arg in opts:
-            if opt in ('-c', '--config'):
-                with open(arg) as f:
-                    config_file = yaml.load(f, Loader=yaml.FullLoader)
-                    for k, v in config_file.items():
-                        assert k in config.keys(), f'{k} is invalid'
-                        if v is not None:
-                            for kk, vv in v.items():
-                                assert kk in config[k].keys(), f'{kk} is invalid in {k}'
-                                config[k][kk] = vv
-                break
+        if args.config is not None:
+            with open(f'{config_path}/{args.config}') as f:
+                config_file = yaml.load(f, Loader=yaml.FullLoader)
+                for k, v in config_file.items():
+                    assert k in config.keys(), f'{k} is invalid'
+                    if v is not None:
+                        for kk, vv in v.items():
+                            assert kk in config[k].keys(), f'{kk} is invalid in {k}'
+                            config[k][kk] = vv
 
         config['base_config']['build_path'] = config['base_config']['build_path'][sys.platform]
 
         # initialize config from command line arguments
-        logger_file = None
-        for opt, arg in opts:
-            if opt in ('-r', '--run'):
-                self.train_mode = False
-            elif opt in ('-n', '--name'):
-                config['base_config']['name'] = arg
-            elif opt in ('-b', '--build'):
-                config['base_config']['build_path'] = arg
-            elif opt in ('-p', '--port'):
-                config['base_config']['port'] = int(arg)
-            elif opt == '--logger_file':
-                logger_file = arg
-            elif opt == '--seed':
-                config['sac_config']['seed'] = int(arg)
-            elif opt == '--sac':
-                config['base_config']['sac'] = arg
-            elif opt == '--agents':
-                config['reset_config']['copy'] = int(arg)
+        self.train_mode = not args.run
+        self.run_in_editor = args.editor
+        logger_file = args.logger_file
+
+        if args.name is not None:
+            config['base_config']['name'] = args.name
+        if args.port is not None:
+            config['base_config']['port'] = args.port
+        if args.seed is not None:
+            config['sac_config']['seed'] = args.seed
+        if args.sac is not None:
+            config['base_config']['sac'] = args.sac
+        if args.agents is not None:
+            config['reset_config']['copy'] = args.agents
 
         # logger config
         _log = logging.getLogger()
@@ -115,7 +94,7 @@ class Main(object):
             self.logger.addHandler(fh)
 
         config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now)
-        model_root_path = f'models/{config["base_config"]["name"]}'
+        model_root_path = f'models/{config["base_config"]["scene"]}/{config["base_config"]["name"]}'
 
         # save config
         if self.train_mode:
@@ -138,15 +117,15 @@ class Main(object):
                 config['sac_config'],
                 model_root_path)
 
-    def _init_env(self, replay_config, sac_config, model_root_path):
-        if self.config['build_path'] is None or self.config['build_path'] == '':
+    def _init_env(self, config_path, replay_config, sac_config, model_root_path):
+        if self.run_in_editor:
             self.env = UnityEnvironment(base_port=5004)
         else:
             self.env = UnityEnvironment(file_name=self.config['build_path'],
                                         no_graphics=self.train_mode,
                                         base_port=self.config['port'],
                                         args=['--scene', self.config['scene']])
-        
+
         self.env.reset()
         self.default_brain_name = self.env.external_brain_names[0]
 
@@ -158,8 +137,8 @@ class Main(object):
         if os.path.isfile(f'{model_root_path}/sac_model.py'):
             custom_sac_model = importlib.import_module(f'{model_root_path.replace("/",".")}.sac_model')
         else:
-            custom_sac_model = importlib.import_module(self.config['sac'])
-            shutil.copyfile(f'{self.config["sac"]}.py', f'{model_root_path}/sac_model.py')
+            custom_sac_model = importlib.import_module(f'{config_path.replace("/",".")}.{self.config["sac"]}')
+            shutil.copyfile(f'{config_path}/{self.config["sac"]}.py', f'{model_root_path}/sac_model.py')
 
         self.sac = SAC_Base(state_dim=state_dim,
                             action_dim=action_dim,
