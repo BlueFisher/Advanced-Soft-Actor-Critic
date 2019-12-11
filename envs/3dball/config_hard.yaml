@@ -5,13 +5,13 @@ base_config:
   scene: 3DBallHard
 
   sac: sac_hard
-  max_iter: 500
+  max_iter: 200
   max_step: 500
   # agents_num: 1
-  save_model_per_iter: 20
+  save_model_per_iter: 50
   # reset_on_iteration: true
   burn_in_step: 10
-  n_step: 3
+  n_step: 5
   stagger: 1
   use_rnn: true
   use_prediction: true
@@ -27,6 +27,7 @@ base_config:
 sac_config:
   seed: 42
   tau: 0.9
+  _lambda: 1
   # write_summary_per_step: 20
   update_target_per_step: 100
   init_log_alpha: -4.6
