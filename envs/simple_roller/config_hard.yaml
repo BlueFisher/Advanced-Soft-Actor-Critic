@@ -12,7 +12,7 @@ base_config:
   n_step: 5
   stagger: 1
   use_rnn: true
-  use_prediction: true
+  use_prediction: false
 
 sac_config:
   seed: 42

@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+import "ndarray.proto";
+import "pingpong.proto";
+
+service ReplayService {
+  rpc Persistence(stream Ping) returns (stream Pong);
+
+  rpc Add(AddRequest) returns (Empty);
+  rpc AddEpisode(AddEpisodeRequest) returns (Empty);
+  rpc Sample(Empty) returns (SampledData);
+  rpc UpdateTDError(UpdateTDErrorRequest) returns (Empty);
+  rpc UpdateTransitions(UpdateTransitionsRequest) returns (Empty);
+  rpc Clear(Empty) returns (Empty);
+}
+
+message AddRequest {
+  repeated NDarray transitions = 1;
+}
+
+message AddEpisodeRequest {
+  repeated NDarray transitions = 1;
+}
+
+message SampledData {
+  NDarray pointers = 1;
+  repeated NDarray transitions = 2;
+  NDarray priority_is = 3;
+  bool has_data = 4;
+
+  repeated NDarray n_states_for_next_rnn_state_list = 5;
+  repeated NDarray episode_transitions = 6;
+  bool has_episode_data = 7;
+}
+
+message UpdateTDErrorRequest {
+  NDarray pointers = 1;
+  NDarray td_error = 2;
+}
+
+message UpdateTransitionsRequest {
+  NDarray pointers = 1;
+  int32 index = 2;
+  NDarray data = 3;
+}

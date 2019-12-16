@@ -1,194 +1,190 @@
+from concurrent import futures
 from pathlib import Path
-import getopt
 import logging
 import sys
 import threading
+import time
 import yaml
 
-from flask import Flask, jsonify, request
-import requests
 import numpy as np
+import grpc
 
-from trans_cache import TransCache
+from .proto import replay_pb2, replay_pb2_grpc
+from .proto import learner_pb2, learner_pb2_grpc
+from .proto.ndarray_pb2 import Empty
+from .proto.numproto import ndarray_to_proto, proto_to_ndarray
+from .proto.pingpong_pb2 import Ping, Pong
+from .peer_set import PeerSet
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-from algorithm.replay_buffer import PrioritizedReplayBuffer
+
+from algorithm.trans_cache import TransCache
+from algorithm.replay_buffer import PrioritizedReplayBuffer, EpisodeBuffer
+import algorithm.config_helper as config_helper
 
 
 class Replay(object):
-    def __init__(self, argv):
-        self.config, self.net_config, self.replay_config = self._init_config(argv)
-        self.learner_base_url = f'http://{self.net_config["learner_host"]}:{self.net_config["learner_port"]}'
+    def __init__(self, config_path, args):
+        self.config, net_config, replay_config = self._init_config(config_path, args)
 
-        self._run()
+        self._replay_buffer = PrioritizedReplayBuffer(**replay_config)
+        if self.config['use_rnn'] and self.config['use_prediction']:
+            self._episode_buffer = EpisodeBuffer(16, 32, 50)  # TODO
 
-    def _init_config(self, argv):
-        config = dict()
+        self._trans_cache_lock = threading.Lock()
+        self._trans_cache = TransCache(self.config['get_td_error_batch'])
 
-        with open(f'{Path(__file__).resolve().parent}/default_config.yaml') as f:
-            default_config_file = yaml.load(f, Loader=yaml.FullLoader)
-            config = default_config_file
+        self._stub = StubController(net_config)
 
-        # define command line arguments
-        try:
-            opts, args = getopt.getopt(argv, 'c:p:', ['config=',
-                                                      'replay_port=',
-                                                      'logger_file='])
-        except getopt.GetoptError:
-            raise Exception('ARGS ERROR')
+        self._run_replay_server(net_config)
 
-        for opt, arg in opts:
-            if opt in ('-c', '--config'):
-                with open(arg) as f:
-                    config_file = yaml.load(f, Loader=yaml.FullLoader)
-                    for k, v in config_file.items():
-                        assert k in config.keys(), f'{k} is invalid'
-                        if v is not None:
-                            for kk, vv in v.items():
-                                assert kk in config[k].keys(), f'{kk} is invalid in {k}'
-                                config[k][kk] = vv
-                break
+    def _init_config(self, config_path, args):
+        config_file_path = f'{config_path}/{args.config}' if args.config is not None else None
+        config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
+                                                           config_file_path)
 
-        logger_file = None
-        for opt, arg in opts:
-            if opt == '--replay_port':
-                config['net_config']['replay_port'] = int(arg)
-            elif opt == '--logger_file':
-                logger_file = arg
+        self.logger = config_helper.set_logger('ds.replay', args.logger_file)
 
-        # logger config
-        _log = logging.getLogger()
-        _log.setLevel(logging.INFO)
-        # remove default root logger handler
-        _log.handlers = []
-
-        # create stream handler
-        sh = logging.StreamHandler()
-        sh.setLevel(logging.INFO)
-
-        # add handler and formatter to logger
-        sh.setFormatter(logging.Formatter('[%(levelname)s] - [%(name)s] - %(message)s'))
-        _log.addHandler(sh)
-
-        _log = logging.getLogger('werkzeug')
-        _log.setLevel(level=logging.ERROR)
-
-        self.logger = logging.getLogger('sac.ds.replay')
-        self.logger.setLevel(level=logging.INFO)
-
-        if logger_file is not None:
-            # create file handler
-            fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=1024 * 100, backupCount=5)
-            fh.setLevel(logging.INFO)
-
-            # add handler and formatter to logger
-            fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
-            self.logger.addHandler(fh)
-
-        # display config
-        config_str = ''
-        for k, v in config.items():
-            config_str += f'\n{k}'
-            for kk, vv in v.items():
-                config_str += f'\n{kk:>25}: {vv}'
-        self.logger.info(config_str)
+        config_helper.display_config(config, self.logger)
 
         return config['base_config'], config['net_config'], config['replay_config']
 
-    def _run(self):
-        app = Flask('replay')
-
-        replay_buffer = PrioritizedReplayBuffer(**self.replay_config)
-
-        trans_cache_lock = threading.Lock()
-        trans_cache = TransCache()
-        cache_max_size = 256
-
-        def _add_trans(*trans):
+    def _add(self, *transitions):
+        with self._trans_cache_lock:
             # n_states, n_actions, n_rewards, state_, done, mu_n_probs, rnn_state
-            trans = list(trans)
-            if self.config['use_rnn']:
-                tmp_trans = [t.tolist() for t in trans[:5] + [trans[6]]]
+            self._trans_cache.add(*transitions)
+            trans = self._trans_cache.get_batch_trans()
+
+        if trans is not None:
+            td_error = self._stub.get_td_error(*trans[:7])
+            if td_error is not None:
+                self._replay_buffer.add_with_td_error(td_error, *trans)
+
+                percent = self._replay_buffer.size / self._replay_buffer.capacity * 100
+                print(f'buffer size, {percent:.2f}%', end='\r')
+
+    def _add_episode(self, *transitions):
+        assert self.config['use_rnn'] and self.config['use_prediction']
+
+        self._episode_buffer.add(*transitions)
+
+    def _sample(self):
+        sampled = self._replay_buffer.sample()
+        if self.config['use_rnn'] and self.config['use_prediction']:
+            episode_sampled = self._episode_buffer.sample_without_rnn_state()
+
+            # transitions and episode_transitions should appear at the same time
+            if episode_sampled is None:
+                sampled = None
+        else:
+            episode_sampled = None
+
+        return sampled, episode_sampled
+
+    def _update_td_error(self, pointers, td_error):
+        self._replay_buffer.update(pointers, td_error)
+
+    def _update_transitions(self, pointers, index, data):
+        self._replay_buffer.update_transitions(pointers, index, data)
+
+    def _clear(self):
+        self._replay_buffer.clear()
+        self.logger.info('replay buffer cleared')
+
+    def _run_replay_server(self, net_config):
+        servicer = ReplayService(self._add,
+                                 self._add_episode,
+                                 self._sample,
+                                 self._update_td_error,
+                                 self._update_transitions,
+                                 self._clear)
+        server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+        replay_pb2_grpc.add_ReplayServiceServicer_to_server(servicer, server)
+        server.add_insecure_port(f'[::]:{net_config["replay_port"]}')
+        server.start()
+        self.logger.info(f'replay server is running on [{net_config["replay_port"]}]...')
+        server.wait_for_termination()
+
+
+class ReplayService(replay_pb2_grpc.ReplayServiceServicer):
+    def __init__(self,
+                 add, add_episode, sample, update_td_error, update_transitions, clear):
+        self._add = add
+        self._add_episode = add_episode
+        self._sample = sample
+        self._update_td_error = update_td_error
+        self._update_transitions = update_transitions
+        self._clear = clear
+
+        self._peer_set = PeerSet(logging.getLogger('ds.replay.service'))
+
+    def _record_peer(self, context):
+        def _unregister_peer():
+            self._peer_set.disconnect(context.peer())
+        context.add_callback(_unregister_peer)
+        self._peer_set.connect(context.peer())
+
+    def Persistence(self, request_iterator, context):
+        self._record_peer(context)
+        for request in request_iterator:
+            yield Pong(time=int(time.time() * 1000))
+
+    def Add(self, request: replay_pb2.AddRequest, context):
+        self._add(*[proto_to_ndarray(t) for t in request.transitions])
+        return Empty()
+
+    def AddEpisode(self, request: replay_pb2.AddEpisodeRequest, context):
+        self._add_episode(*[proto_to_ndarray(t) for t in request.transitions])
+        return Empty()
+
+    def Sample(self, request, context):
+        sampled, episode_sampled = self._sample()
+        if sampled is None:
+            return replay_pb2.SampledData(has_data=False)
+        else:
+            pointers, transitions, priority_is = sampled
+            if episode_sampled is None:
+                return replay_pb2.SampledData(pointers=ndarray_to_proto(pointers),
+                                              transitions=[ndarray_to_proto(t) for t in transitions],
+                                              priority_is=ndarray_to_proto(priority_is),
+                                              has_data=True)
             else:
-                tmp_trans = [t.tolist() for t in trans[:5]]
+                n_states_for_next_rnn_state_list, episode_transitions = episode_sampled
+                return replay_pb2.SampledData(pointers=ndarray_to_proto(pointers),
+                                              transitions=[ndarray_to_proto(t) for t in transitions],
+                                              priority_is=ndarray_to_proto(priority_is),
+                                              has_data=True,
 
-            # get td_errors
-            try:
-                r = requests.post(f'{self.learner_base_url}/get_td_errors',
-                                  json=tmp_trans, timeout=2)
-            except Exception as e:
-                self.logger.error(f'_add_trans: {str(e)}')
-                return
+                                              n_states_for_next_rnn_state_list=[ndarray_to_proto(t) for t in n_states_for_next_rnn_state_list],
+                                              episode_transitions=[ndarray_to_proto(t) for t in episode_transitions],
+                                              has_episode_data=True)
 
-            td_errors = r.json()
+    def UpdateTDError(self, request: replay_pb2.UpdateTDErrorRequest, context):
+        self._update_td_error(proto_to_ndarray(request.pointers),
+                              proto_to_ndarray(request.td_error))
+        return Empty()
 
-            replay_buffer.add_with_td_errors(td_errors, *trans)
+    def UpdateTransitions(self, request: replay_pb2.UpdateTransitionsRequest, context):
+        self._update_transitions(proto_to_ndarray(request.pointers),
+                                 request.index,
+                                 proto_to_ndarray(request.data))
+        return Empty()
 
-            self.logger.info(f'buffer_size: {replay_buffer.size}/{replay_buffer.capacity}, {replay_buffer.size/replay_buffer.capacity*100:.2f}%')
+    def Clear(self, request, context):
+        self._clear()
+        return Empty()
 
-        @app.route('/update', methods=['POST'])
-        def update():
-            data = request.get_json()
 
-            pointers = data['pointers']
-            td_errors = data['td_errors']
+class StubController:
+    def __init__(self, net_config):
+        self._learner_channel = grpc.insecure_channel(f'{net_config["learner_host"]}:{net_config["learner_port"]}')
+        self._learner_stub = learner_pb2_grpc.LearnerServiceStub(self._learner_channel)
 
-            replay_buffer.update(pointers, td_errors)
+        self._logger = logging.getLogger('ds.replay.stub')
 
-            return jsonify({
-                'succeeded': True
-            })
-
-        @app.route('/update_transitions', methods=['POST'])
-        def update_transitions():
-            data = request.get_json()
-
-            pointers = data['pointers']
-            index = data['index']
-            transition_data = data['data']
-
-            replay_buffer.update_transitions(pointers, index, transition_data)
-
-            return jsonify({
-                'succeeded': True
-            })
-
-        @app.route('/sample')
-        def sample():
-            sampled = replay_buffer.sample()
-            if sampled is None:
-                return jsonify({})
-
-            points, trans, priority_is = sampled
-            trans = [t.tolist() for t in trans]
-
-            return jsonify({
-                'pointers': points.tolist(),
-                'trans': trans,
-                'priority_is': priority_is.tolist()
-            })
-
-        @app.route('/add', methods=['POST'])
-        def add():
-            trans = request.get_json()
-            trans = [np.array(t, dtype=np.float32) for t in trans]
-
-            with trans_cache_lock:
-                trans_cache.add(*trans)
-                if trans_cache.size >= cache_max_size:
-                    trans = trans_cache.get_trans_and_clear()
-                    _add_trans(*trans)
-
-            return jsonify({
-                'succeeded': True
-            })
-
-        @app.route('/clear')
-        def clear():
-            replay_buffer.clear()
-            self.logger.info('replay buffer cleared')
-            return jsonify({
-                'succeeded': True
-            })
-
-        app.run(host='0.0.0.0', port=self.net_config['replay_port'])
+    def get_td_error(self, *transitions):
+        try:
+            response = self._learner_stub.GetTDError(
+                learner_pb2.GetTDErrorRequest(transitions=[ndarray_to_proto(t) for t in transitions]))
+            return proto_to_ndarray(response.td_error)
+        except grpc.RpcError:
+            self._logger.error('connection lost in "get_td_error"')

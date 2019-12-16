@@ -8,6 +8,7 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 
 from .replay_buffer import ReplayBuffer, PrioritizedReplayBuffer, EpisodeBuffer
+from .trans_cache import TransCache
 
 logger = logging.getLogger('sac.base')
 logger.setLevel(level=logging.INFO)
@@ -86,9 +87,12 @@ class SAC_Base(object):
                 self.replay_buffer = ReplayBuffer(**replay_config)
 
             if self.use_rnn and self.use_prediction:
-                self.episode_buffer = EpisodeBuffer(16, 32, 50)
+                self.episode_buffer = EpisodeBuffer(16, 32, 50)  # TODO
 
-            self._init_train_concrete_function()
+            self._trans_cache = TransCache(56)
+
+            self._init_train_concrete_function(self.replay_buffer.batch_size,
+                                               self.episode_buffer.batch_size if self.use_rnn and self.use_prediction else None)
 
     def _build_model(self, lr, init_log_alpha, model):
         """
@@ -165,10 +169,9 @@ class SAC_Base(object):
             self.init_iteration = 0
             self._update_target_variables()
 
-    def _init_train_concrete_function(self):
-        batch_size = self.replay_buffer.batch_size
+    def _init_train_concrete_function(self, batch_size, episode_batch_size=None):
+        batch_size = None
         step_size = self.burn_in_step + self.n_step
-
         args = {
             'n_states': tf.TensorSpec(shape=[batch_size, step_size, self.state_dim], dtype=tf.float32),
             'n_actions': tf.TensorSpec(shape=[batch_size, step_size, self.action_dim], dtype=tf.float32),
@@ -177,16 +180,15 @@ class SAC_Base(object):
             'done': tf.TensorSpec(shape=[batch_size, 1], dtype=tf.float32)
         }
         if self.use_n_step_is:
-            args['n_step_is'] = tf.TensorSpec(shape=[batch_size, self.n_step], dtype=tf.float32)
+            args['mu_n_probs'] = tf.TensorSpec(shape=[batch_size, step_size, self.action_dim], dtype=tf.float32)
         if self.use_priority:
             args['priority_is'] = tf.TensorSpec(shape=[batch_size, 1], dtype=tf.float32)
         if self.use_rnn:
             args['initial_rnn_state'] = tf.TensorSpec(shape=[batch_size, self._initial_rnn_state.shape[-1]], dtype=tf.float32)
 
             if self.use_prediction:
-                episode_batch_size = self.episode_buffer.batch_size
-                args['ep_m_states'] = tf.TensorSpec(shape=[episode_batch_size, None, self.state_dim], dtype=tf.float32)
-                args['ep_n_actions'] = tf.TensorSpec(shape=[episode_batch_size, None, self.action_dim], dtype=tf.float32)
+                args['ep_m_states'] = tf.TensorSpec(shape=[episode_batch_size, batch_size, self.state_dim], dtype=tf.float32)
+                args['ep_n_actions'] = tf.TensorSpec(shape=[episode_batch_size, batch_size, self.action_dim], dtype=tf.float32)
                 args['ep_rnn_state'] = tf.TensorSpec(shape=[episode_batch_size, self._initial_rnn_state.shape[-1]], dtype=tf.float32)
 
         self._train_fn = self._train.get_concrete_function(**args)
@@ -211,14 +213,15 @@ class SAC_Base(object):
         [t.assign(tau * e + (1. - tau) * t) for t, e in zip(target_variables, eval_variables)]
 
     @tf.function
-    def _get_y(self, n_states, n_actions, n_rewards, state_, done, n_step_is=None):
+    def _get_y(self, n_states, n_actions, n_rewards, state_, done,
+               mu_n_probs=None):
         """
         tf.function
         get target value
         """
 
         ratio = [[(self.gamma * self._lambda)**i for i in range(self.n_step)]]
-        n_dones = tf.concat([tf.zeros([n_states.shape[0], self.n_step - 1]), done], axis=1)
+        n_dones = tf.concat([tf.zeros([tf.shape(n_states)[0], self.n_step - 1]), done], axis=1)
         alpha = tf.exp(self.log_alpha)
 
         policy = self.model_policy(n_states)
@@ -243,6 +246,10 @@ class SAC_Base(object):
         td_error = n_rewards + self.gamma * (1 - n_dones) * (tf.minimum(next_q1, next_q2) - alpha * next_n_actions_log_prob) - (tf.minimum(q1, q2) - alpha * n_actions_log_prob)
         td_error = ratio * td_error
         if self.use_n_step_is:
+            pi_n_probs = self.get_n_step_probs(n_states, n_actions)
+            n_step_is = tf.clip_by_value(pi_n_probs / mu_n_probs, 0, 1.)
+            n_step_is = tf.reduce_prod(n_step_is, axis=2)
+
             cumulative_n_step_is = tf.concat([tf.reduce_prod(n_step_is[:, 0:i + 1], axis=1, keepdims=True) for i in range(n_step_is.shape[1])], axis=1)
             td_error = n_step_is * cumulative_n_step_is * td_error
         r = tf.reduce_sum(td_error, axis=1, keepdims=True)
@@ -253,9 +260,12 @@ class SAC_Base(object):
 
     @tf.function
     def _train(self, n_states, n_actions, n_rewards, state_, done,
-               n_step_is=None, priority_is=None,
+               mu_n_probs=None, priority_is=None,
                initial_rnn_state=None,
                ep_m_states=None, ep_n_actions=None, ep_rnn_state=None):
+        """
+        tf.function
+        """
 
         with tf.GradientTape(persistent=True) as tape:
             if self.use_rnn:
@@ -283,7 +293,8 @@ class SAC_Base(object):
             y = tf.stop_gradient(self._get_y(n_states[:, self.burn_in_step:, :],
                                              n_actions[:, self.burn_in_step:, :],
                                              n_rewards[:, self.burn_in_step:],
-                                             state_, done, n_step_is))
+                                             state_, done,
+                                             mu_n_probs[:, self.burn_in_step:]))
 
             loss_q1 = tf.math.squared_difference(q1, y)
             loss_q2 = tf.math.squared_difference(q2, y)
@@ -347,18 +358,26 @@ class SAC_Base(object):
 
     @tf.function()
     def _get_next_rnn_state(self, n_states, rnn_state):
+        """
+        tf.function
+        """
         _, next_rnn_state = self.model_rnn(n_states, [rnn_state])
         return next_rnn_state
 
-    def get_next_rnn_state(self, n_states):
+    def get_next_rnn_state(self, n_states_list):
         fn = self._get_next_rnn_state.get_concrete_function(tf.TensorSpec(shape=[None, None, self.state_dim], dtype=tf.float32),
                                                             tf.TensorSpec(shape=[None, len(self._initial_rnn_state)], dtype=tf.float32))
 
-        rnn_state = self.get_initial_rnn_state(1)
-        if n_states.shape[1] == 0:
-            return rnn_state
-        else:
-            return fn(tf.constant(n_states), tf.constant(rnn_state)).numpy()
+        init_rnn_state = self.get_initial_rnn_state(1)
+        next_rnn_state = np.empty((len(n_states_list), init_rnn_state.shape[1]))
+        for i, n_states in enumerate(n_states_list):
+            if n_states.shape[1] == 0:
+                next_rnn_state[i] = init_rnn_state
+            else:
+                next_rnn_state[i] = fn(tf.constant(n_states), tf.constant(init_rnn_state)).numpy()
+
+        return next_rnn_state
+
 
     @tf.function()
     def choose_action(self, state):
@@ -382,7 +401,7 @@ class SAC_Base(object):
 
     @tf.function
     def get_td_error(self, n_states, n_actions, n_rewards, state_, done,
-                     n_step_is=None, rnn_state=None):
+                     mu_n_probs=None, rnn_state=None):
         """
         tf.function
         """
@@ -403,7 +422,8 @@ class SAC_Base(object):
         y = self._get_y(n_states[:, self.burn_in_step:, :],
                         n_actions[:, self.burn_in_step:, :],
                         n_rewards[:, self.burn_in_step:],
-                        state_, done, n_step_is)
+                        state_, done,
+                        mu_n_probs[:, self.burn_in_step:])
 
         q1_td_error = tf.abs(q1 - y)
         q2_td_error = tf.abs(q2 - y)
@@ -413,18 +433,22 @@ class SAC_Base(object):
         return td_error
 
     @tf.function
-    def get_n_step_probs(self, n_states, n_actions,
-                         rnn_state=None):
+    def get_n_step_probs(self, n_states, n_actions):
         """
         tf.function
         """
-        if self.use_rnn:
-            n_states, *_ = self.model_rnn(n_states,
-                                          [rnn_state])
         policy = self.model_policy(n_states)
         policy_prob = policy.prob(n_actions)
 
         return policy_prob
+
+    @tf.function
+    def get_rnn_n_step_probs(self, n_states, n_actions, rnn_state):
+        """
+        tf.function
+        """
+        n_states, *_ = self.model_rnn(n_states, [rnn_state])
+        return self.get_n_step_probs(n_states, n_actions)
 
     def save_model(self, iteration):
         self.ckpt_manager.save(iteration + self.init_iteration)
@@ -434,19 +458,6 @@ class SAC_Base(object):
             for s in constant_summaries:
                 tf.summary.scalar(s['tag'], s['simple_value'], step=iteration + self.init_iteration)
         self.summary_writer.flush()
-
-    def _get_n_step_is(self, pi_n_probs, mu_n_probs):
-        """
-        get n-step importance sampling ratio
-        pi_n_probs, mu_n_probs: [None, n_step, length of action space]
-        """
-        with np.errstate(divide='ignore', invalid='ignore'):
-            tmp_is = np.true_divide(pi_n_probs, mu_n_probs)
-            tmp_is[~np.isfinite(tmp_is)] = 1.
-            tmp_is = np.clip(tmp_is, 0., 1.)
-            n_step_is = np.prod(tmp_is, axis=2)  # [None, n_step]
-
-        return n_step_is  # [None, n_step]
 
     def fill_replay_buffer(self, n_states, n_actions, n_rewards, state_, done,
                            rnn_state=None):
@@ -462,13 +473,25 @@ class SAC_Base(object):
             assert rnn_state is None
 
         if self.use_rnn:
+            self._trans_cache.add(n_states, n_actions, n_rewards, state_, done, rnn_state)
+        else:
+            self._trans_cache.add(n_states, n_actions, n_rewards, state_, done)
+
+        trans = self._trans_cache.get_batch_trans()
+        if trans is None:
+            return
+
+        if self.use_rnn:
+            n_states, n_actions, n_rewards, state_, done, rnn_state = trans
+
             if self.zero_init_states:
                 rnn_state = self.get_initial_rnn_state(len(n_states))
-            mu_n_probs = self.get_n_step_probs(n_states, n_actions,  # TODO: only need [:, burn_in_step:, :]
-                                               rnn_state).numpy()
-            self.replay_buffer.add(n_states, n_actions, n_rewards, state_, done, mu_n_probs,
-                                   rnn_state)
+            mu_n_probs = self.get_rnn_n_step_probs(n_states, n_actions,  # TODO: only need [:, burn_in_step:, :]
+                                                   rnn_state).numpy()
+            self.replay_buffer.add(n_states, n_actions, n_rewards, state_, done, mu_n_probs, rnn_state)
         else:
+            n_states, n_actions, n_rewards, state_, done = trans
+
             mu_n_probs = self.get_n_step_probs(n_states, n_actions).numpy()
             self.replay_buffer.add(n_states, n_actions, n_rewards, state_, done, mu_n_probs)
 
@@ -492,8 +515,8 @@ class SAC_Base(object):
             return
 
         if self.use_rnn and self.use_prediction:
-            ep_sampled = self.episode_buffer.sample(self.get_next_rnn_state)
-            if ep_sampled is None:
+            ep_trans = self.episode_buffer.sample(self.get_next_rnn_state)
+            if ep_trans is None:
                 return
 
         if self.use_priority:
@@ -506,18 +529,6 @@ class SAC_Base(object):
         else:
             n_states, n_actions, n_rewards, state_, done, mu_n_probs = trans
 
-        # reward = self._get_n_reward_gamma_sum(n_rewards[:, self.burn_in_step:])
-
-        if self.use_n_step_is:
-            if self.use_rnn:
-                pi_n_probs = self.get_n_step_probs(n_states, n_actions,  # TODO: only need [:, burn_in_step:, :]
-                                                   rnn_state).numpy()
-            else:
-                pi_n_probs = self.get_n_step_probs(n_states, n_actions).numpy()
-
-            n_step_is = self._get_n_step_is(pi_n_probs[:, self.burn_in_step:, :],
-                                            mu_n_probs[:, self.burn_in_step:, :])
-
         fn_args = {
             'n_states': n_states,
             'n_actions': n_actions,
@@ -526,14 +537,14 @@ class SAC_Base(object):
             'done': done
         }
         if self.use_n_step_is:
-            fn_args['n_step_is'] = n_step_is
+            fn_args['mu_n_probs'] = mu_n_probs
         if self.use_priority:
             fn_args['priority_is'] = priority_is
         if self.use_rnn:
             fn_args['initial_rnn_state'] = rnn_state
 
             if self.use_rnn and self.use_prediction:
-                ep_m_states, ep_n_actions, ep_rnn_state = ep_sampled
+                ep_m_states, ep_n_actions, ep_rnn_state = ep_trans
                 fn_args['ep_m_states'] = ep_m_states
                 fn_args['ep_n_actions'] = ep_n_actions
                 fn_args['ep_rnn_state'] = ep_rnn_state
@@ -542,24 +553,25 @@ class SAC_Base(object):
 
         self.summary_writer.flush()
 
+        if self.use_n_step_is or self.use_priority:
+            if self.use_rnn:
+                pi_n_probs = self.get_rnn_n_step_probs(n_states, n_actions,
+                                                       rnn_state).numpy()
+            else:
+                pi_n_probs = self.get_n_step_probs(n_states, n_actions).numpy()
+
         # update td_error
         if self.use_priority:
             if self.use_rnn:
                 td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, done,
-                                             n_step_is if self.use_n_step_is else None,
+                                             pi_n_probs if self.use_n_step_is else None,
                                              rnn_state).numpy()
             else:
                 td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, done,
-                                             n_step_is if self.use_n_step_is else None).numpy()
+                                             pi_n_probs if self.use_n_step_is else None).numpy()
 
             self.replay_buffer.update(pointers, td_error.flatten())
 
         # update mu_n_probs
         if self.use_n_step_is:
-            if self.use_rnn:
-                pi_n_probs = self.get_n_step_probs(n_states, n_actions,
-                                                   rnn_state).numpy()
-            else:
-                pi_n_probs = self.get_n_step_probs(n_states, n_actions).numpy()
-
             self.replay_buffer.update_transitions(pointers, 5, pi_n_probs)

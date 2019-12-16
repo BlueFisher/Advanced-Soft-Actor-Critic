@@ -13,20 +13,20 @@ class ModelRNN(tf.keras.Model):
     def __init__(self, state_dim):
         super(ModelRNN, self).__init__()
         self.state_dim = state_dim
-        self.lstm_units = 32
-        self.layer_lstm = tf.keras.layers.GRU(self.lstm_units, return_sequences=True, return_state=True)
+        self.rnn_units = 32
+        self.layer_lstm = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
 
         self.get_call_result_tensors()
 
     def call(self, inputs_s, initial_state):
-        outputs, next_state = self.layer_lstm(inputs_s, initial_state=[initial_state])
+        outputs, next_state = self.layer_lstm(inputs_s, initial_state=initial_state)
 
         encoded_s = tf.concat([inputs_s, outputs], -1)
         return encoded_s, next_state
 
     def get_call_result_tensors(self):
         return self(tf.keras.Input(shape=(None, self.state_dim,), dtype=tf.float32),
-                    tf.keras.Input(shape=(self.lstm_units,), dtype=tf.float32))
+                    tf.keras.Input(shape=(self.rnn_units,), dtype=tf.float32))
 
 
 class ModelPrediction(tf.keras.Model):
