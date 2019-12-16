@@ -30,7 +30,7 @@ class Replay(object):
         if self.config['use_rnn'] and self.config['use_prediction']:
             self._episode_buffer = EpisodeBuffer(16, 32, 50)  # TODO
 
-        self._trans_cache_lock = threading.Lock()
+        self._replay_buffer_lock = threading.Lock()
         self._trans_cache = TransCache(self.config['get_td_error_batch'])
 
         self._stub = StubController(net_config)
@@ -49,18 +49,14 @@ class Replay(object):
         return config['base_config'], config['net_config'], config['replay_config']
 
     def _add(self, *transitions):
-        with self._trans_cache_lock:
-            # n_states, n_actions, n_rewards, state_, done, mu_n_probs, rnn_state
-            self._trans_cache.add(*transitions)
-            trans = self._trans_cache.get_batch_trans()
+        # n_states, n_actions, n_rewards, state_, done, mu_n_probs, rnn_state
+        td_error = self._stub.get_td_error(*transitions[:7])
+        if td_error is not None:
+            with self._replay_buffer_lock:
+                self._replay_buffer.add_with_td_error(td_error, *transitions)
 
-        if trans is not None:
-            td_error = self._stub.get_td_error(*trans[:7])
-            if td_error is not None:
-                self._replay_buffer.add_with_td_error(td_error, *trans)
-
-                percent = self._replay_buffer.size / self._replay_buffer.capacity * 100
-                print(f'buffer size, {percent:.2f}%', end='\r')
+            percent = self._replay_buffer.size / self._replay_buffer.capacity * 100
+            print(f'buffer size, {percent:.2f}%', end='\r')
 
     def _add_episode(self, *transitions):
         assert self.config['use_rnn'] and self.config['use_prediction']
@@ -81,10 +77,12 @@ class Replay(object):
         return sampled, episode_sampled
 
     def _update_td_error(self, pointers, td_error):
-        self._replay_buffer.update(pointers, td_error)
+        with self._replay_buffer_lock:
+            self._replay_buffer.update(pointers, td_error)
 
     def _update_transitions(self, pointers, index, data):
-        self._replay_buffer.update_transitions(pointers, index, data)
+        with self._replay_buffer_lock:
+            self._replay_buffer.update_transitions(pointers, index, data)
 
     def _clear(self):
         self._replay_buffer.clear()

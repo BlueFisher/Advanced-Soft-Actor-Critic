@@ -5,6 +5,7 @@ base_config:
   scene: 3DBall
 
   max_iter: 150
+  max_step: 500
   save_model_per_iter: 50
   n_step: 3
 
