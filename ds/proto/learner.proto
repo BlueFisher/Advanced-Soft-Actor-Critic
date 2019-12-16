@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+import "ndarray.proto";
+import "pingpong.proto";
+
+service LearnerService {
+  rpc Persistence(stream Ping) returns (stream Pong);
+
+  rpc GetPolicyVariables(Empty) returns (PolicyVariables);
+  rpc GetTDError(GetTDErrorRequest) returns (TDError);
+}
+
+message PolicyVariables {
+  repeated NDarray variables = 1;
+}
+
+message GetTDErrorRequest {
+  repeated NDarray transitions = 1;
+}
+message TDError {
+  NDarray td_error = 1;
+}

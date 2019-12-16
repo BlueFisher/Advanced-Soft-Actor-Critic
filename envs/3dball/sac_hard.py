@@ -21,7 +21,7 @@ class ModelRNN(tf.keras.Model):
     def call(self, inputs_s, initial_state):
         outputs, next_state = self.layer_rnn(inputs_s, initial_state=initial_state)
 
-        # outputs = tf.concat([inputs_s, outputs], -1)
+        outputs = tf.concat([inputs_s, outputs], -1)
 
         return outputs, next_state
 
@@ -62,7 +62,7 @@ class ModelQ(tf.keras.Model):
     def call(self, inputs_s, inputs_a):
         ls = self.layer_s(inputs_s)
         la = self.layer_a(inputs_a)
-        l = tf.concat([ls, la], -1)
+        l = ls + la
 
         q = self.sequential_model(l)
         return q

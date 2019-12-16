@@ -33,6 +33,48 @@ class EpisodeBuffer:
         buffer_sampled = random.sample(self._buffer, self.batch_size)
 
         batch_step_size = min(self.get_min_episode_len(buffer_sampled), self.batch_step_size)
+
+        start_list = list()
+        n_states_for_next_rnn_state_list = list()
+        for episode in buffer_sampled:
+            n_states, n_actions, state_ = episode[0], episode[1], episode[3]
+
+            episode_len = n_states.shape[1]
+            start = np.random.randint(0, episode_len - batch_step_size + 1)
+            start_list.append(start)
+            n_states_for_next_rnn_state_list.append(n_states[:, 0:start, :])
+
+        rnn_state = fn_get_next_rnn_state(n_states_for_next_rnn_state_list)
+        if rnn_state is None:
+            return None
+
+        results = None
+        for i, episode in enumerate(buffer_sampled):
+            n_states, n_actions, state_ = episode[0], episode[1], episode[3]
+            start = start_list[i]
+
+            m_states = np.concatenate([n_states, np.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)
+            m_states = m_states[:, start:start + batch_step_size + 1, :]
+            n_actions = n_actions[:, start:start + batch_step_size, :]
+
+            if results is None:
+                results = [m_states, n_actions]
+            else:
+                results[0] = np.concatenate([results[0], m_states], axis=0)
+                results[1] = np.concatenate([results[1], n_actions], axis=0)
+
+        # m_states, n_actions, rnn_state
+        return results[0], results[1], rnn_state
+
+    def sample_without_rnn_state(self):
+        if len(self._buffer) < self.batch_size:
+            return None
+
+        buffer_sampled = random.sample(self._buffer, self.batch_size)
+
+        batch_step_size = min(self.get_min_episode_len(buffer_sampled), self.batch_step_size)
+
+        n_states_for_next_rnn_state_list = list()
         results = None
 
         for episode in buffer_sampled:
@@ -41,20 +83,20 @@ class EpisodeBuffer:
             episode_len = n_states.shape[1]
             start = np.random.randint(0, episode_len - batch_step_size + 1)
 
-            rnn_state = fn_get_next_rnn_state(n_states[:, 0:start, :])
+            n_states_for_next_rnn_state_list.append(n_states[:, 0:start, :])
 
             m_states = np.concatenate([n_states, np.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)
             m_states = m_states[:, start:start + batch_step_size + 1, :]
             n_actions = n_actions[:, start:start + batch_step_size, :]
 
             if results is None:
-                results = [m_states, n_actions, rnn_state]
+                results = [m_states, n_actions]
             else:
                 results[0] = np.concatenate([results[0], m_states], axis=0)
                 results[1] = np.concatenate([results[1], n_actions], axis=0)
-                results[2] = np.concatenate([results[2], rnn_state], axis=0)
 
-        return results
+        # n_states_list, m_states, n_actions
+        return n_states_for_next_rnn_state_list, results
 
 
 class DataStorage:
@@ -247,13 +289,13 @@ class PrioritizedReplayBuffer:
         for data_pointer in data_pointers:
             self._sum_tree.add(data_pointer, max_p)
 
-    def add_with_td_errors(self, td_errors, *transitions):
-        td_errors = np.asarray(td_errors)
-        if len(td_errors.shape) == 2:
-            td_errors = td_errors.flatten()
+    def add_with_td_error(self, td_error, *transitions):
+        td_error = np.asarray(td_error)
+        if len(td_error.shape) == 2:
+            td_error = td_error.flatten()
 
-        td_errors += self.epsilon  # convert to abs and avoid 0
-        clipped_errors = np.minimum(td_errors, self.td_err_upper)
+        td_error = np.maximum(td_error, 0) + self.epsilon  # convert to abs and avoid 0
+        clipped_errors = np.minimum(td_error, self.td_err_upper)
         probs = np.power(clipped_errors, self.alpha)
 
         data_pointers = self._trans_storage.add(transitions)
@@ -286,13 +328,13 @@ class PrioritizedReplayBuffer:
 
         return leaf_pointers, transitions, is_weights
 
-    def update(self, leaf_pointers, td_errors):
-        td_errors = np.asarray(td_errors)
-        if len(td_errors.shape) == 2:
-            td_errors = td_errors.flatten()
+    def update(self, leaf_pointers, td_error):
+        td_error = np.asarray(td_error)
+        if len(td_error.shape) == 2:
+            td_error = td_error.flatten()
 
-        td_errors += self.epsilon  # convert to abs and avoid 0
-        clipped_errors = np.minimum(td_errors, self.td_err_upper)
+        td_error += self.epsilon  # convert to abs and avoid 0
+        clipped_errors = np.minimum(td_error, self.td_err_upper)
         probs = np.power(clipped_errors, self.alpha)
 
         for leaf_pointer, p in zip(leaf_pointers, probs):

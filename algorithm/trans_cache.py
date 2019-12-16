@@ -1,7 +1,11 @@
 import numpy as np
 
+
 class TransCache:
     _buffer = None
+
+    def __init__(self, batch_size):
+        self.batch_size = batch_size
 
     def add(self, *trans):
         if self._buffer is None:
@@ -10,15 +14,13 @@ class TransCache:
             for i, tran in enumerate(trans):
                 self._buffer[i] = np.concatenate([self._buffer[i], tran], axis=0)
 
-    def get_trans_list_and_clear(self):
-        trans = [t.tolist() for t in self._buffer]
-        self.clear()
-        return trans
-
-    def get_trans_and_clear(self):
-        trans = self._buffer
-        self.clear()
-        return trans
+    def get_batch_trans(self):
+        if self.size >= self.batch_size:
+            trans = [t[:self.batch_size] for t in self._buffer]
+            self._buffer = [t[self.batch_size:] for t in self._buffer]
+            return trans
+        else:
+            return None
 
     def clear(self):
         self._buffer = None
