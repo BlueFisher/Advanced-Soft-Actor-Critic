@@ -127,6 +127,7 @@ class Actor(object):
             # replay or learner is offline, waiting...
             if not self._stub.connected:
                 iteration = 0
+                self.logger.warning('waiting for connection')
                 time.sleep(2)
                 continue
 
@@ -223,12 +224,10 @@ class StubController:
     def __init__(self, net_config):
         self._replay_channel = grpc.insecure_channel(f'{net_config["replay_host"]}:{net_config["replay_port"]}',
                                                      [('grpc.max_reconnect_backoff_ms', 5000)])
-        self._replay_channel.subscribe(self._on_replay_channel_state)
         self._replay_stub = replay_pb2_grpc.ReplayServiceStub(self._replay_channel)
 
         self._learner_channel = grpc.insecure_channel(f'{net_config["learner_host"]}:{net_config["learner_port"]}',
                                                       [('grpc.max_reconnect_backoff_ms', 5000)])
-        self._learner_channel.subscribe(self._on_learner_channel_state)
         self._learner_stub = learner_pb2_grpc.LearnerServiceStub(self._learner_channel)
 
         self._replay_connected = False
@@ -265,35 +264,12 @@ class StubController:
         except grpc.RpcError:
             self._logger.error('connection lost in "update_policy_variables"')
 
-    def _on_replay_channel_state(self, state):
-        if state == grpc.ChannelConnectivity.CONNECTING:
-            self._logger.info('replay connecting...')
-        elif state == grpc.ChannelConnectivity.READY:
-            if not self._replay_connected:
-                self._replay_connected = True
-                self._logger.info('replay connected')
-        elif state == grpc.ChannelConnectivity.TRANSIENT_FAILURE:
-            if self._replay_connected:
-                self._replay_connected = False
-                self._logger.error('replay disconnected')
-
-    def _on_learner_channel_state(self, state):
-        if state == grpc.ChannelConnectivity.CONNECTING:
-            self._logger.info('learner connecting...')
-        elif state == grpc.ChannelConnectivity.READY:
-            if not self._learner_connected:
-                self._learner_connected = True
-                self._logger.info('learner connected')
-        elif state == grpc.ChannelConnectivity.TRANSIENT_FAILURE:
-            if self._learner_connected:
-                self._learner_connected = False
-                self._logger.error('learner disconnected')
 
     def _start_replay_persistence(self):
         def request_messages():
             while True:
                 yield Ping(time=int(time.time() * 1000))
-                time.sleep(10)
+                time.sleep(5)
                 if not self._replay_connected:
                     break
 
@@ -301,9 +277,13 @@ class StubController:
             try:
                 reponse_iterator = self._replay_stub.Persistence(request_messages())
                 for response in reponse_iterator:
-                    pass
+                    if not self._replay_connected:
+                        self._replay_connected = True
+                        self._logger.info('replay connected')
             except grpc.RpcError:
-                pass
+                if self._replay_connected:
+                    self._replay_connected = False
+                    self._logger.error('replay disconnected')
             finally:
                 time.sleep(2)
 
@@ -311,7 +291,7 @@ class StubController:
         def request_messages():
             while True:
                 yield Ping(time=int(time.time() * 1000))
-                time.sleep(10)
+                time.sleep(5)
                 if not self._learner_connected:
                     break
 
@@ -319,8 +299,12 @@ class StubController:
             try:
                 reponse_iterator = self._learner_stub.Persistence(request_messages())
                 for response in reponse_iterator:
-                    pass
+                    if not self._learner_connected:
+                        self._learner_connected = True
+                        self._logger.info('learner connected')
             except grpc.RpcError:
-                pass
+                if self._learner_connected:
+                    self._learner_connected = False
+                    self._logger.error('learner disconnected')
             finally:
                 time.sleep(2)

@@ -327,7 +327,7 @@ class StubController:
                     episode_transitions = [proto_to_ndarray(t) for t in response.episode_transitions]
                     return pointers, transitions, priority_is, n_states_for_next_rnn_state_list, episode_transitions
                 else:
-                    return pointers, transitions, priority_is, None
+                    return pointers, transitions, priority_is, None, None
             else:
                 return None
 
