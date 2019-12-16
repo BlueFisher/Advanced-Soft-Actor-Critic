@@ -11,7 +11,7 @@ base_config:
   # for actor, the number of transitions sent to replay
   add_trans_batch: 56
   # for replay, the number of transitions sent to learner to get td-error
-  get_td_error_batch: 128
+  get_td_error_batch: 56
   max_step: -1
   reset_on_iteration: true
   
