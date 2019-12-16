@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+message Ping {
+  int64 time = 1;
+}
+
+message Pong {
+  int64 time = 1;
+}

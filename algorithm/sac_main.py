@@ -17,6 +17,7 @@ import tensorflow as tf
 from .sac_base import SAC_Base
 from .agent import Agent
 
+import algorithm.config_helper as config_helper
 from mlagents.envs.environment import UnityEnvironment
 
 
@@ -32,29 +33,13 @@ class Main(object):
         self._run()
 
     def _init_config(self, config_path, args):
-        config = dict()
-
-        with open(f'{Path(__file__).resolve().parent}/default_config.yaml') as f:
-            default_config_file = yaml.load(f, Loader=yaml.FullLoader)
-            config = default_config_file
-
-        # initialize config from config.yaml
-        if args.config is not None:
-            with open(f'{config_path}/{args.config}') as f:
-                config_file = yaml.load(f, Loader=yaml.FullLoader)
-                for k, v in config_file.items():
-                    assert k in config.keys(), f'{k} is invalid'
-                    if v is not None:
-                        for kk, vv in v.items():
-                            assert kk in config[k].keys(), f'{kk} is invalid in {k}'
-                            config[k][kk] = vv
-
-        config['base_config']['build_path'] = config['base_config']['build_path'][sys.platform]
+        config_file_path = f'{config_path}/{args.config}' if args.config is not None else None
+        config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
+                                                           config_file_path)
 
         # initialize config from command line arguments
         self.train_mode = not args.run
         self.run_in_editor = args.editor
-        logger_file = args.logger_file
 
         if args.name is not None:
             config['base_config']['name'] = args.name
@@ -67,49 +52,16 @@ class Main(object):
         if args.agents is not None:
             config['reset_config']['copy'] = args.agents
 
-        # logger config
-        _log = logging.getLogger()
-        _log.setLevel(logging.INFO)
-        # remove default root logger handler
-        _log.handlers = []
-
-        # create stream handler
-        sh = logging.StreamHandler()
-        sh.setLevel(logging.INFO)
-
-        # add handler and formatter to logger
-        sh.setFormatter(logging.Formatter('[%(levelname)s] - [%(name)s] - %(message)s'))
-        _log.addHandler(sh)
-
-        self.logger = logging.getLogger('sac')
-        self.logger.setLevel(level=logging.INFO)
-
-        if logger_file is not None:
-            # create file handler
-            fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=1024 * 100, backupCount=5)
-            fh.setLevel(logging.INFO)
-
-            # add handler and formatter to logger
-            fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
-            self.logger.addHandler(fh)
-
         config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now)
         model_root_path = f'models/{config["base_config"]["scene"]}/{config["base_config"]["name"]}'
 
-        # save config
-        if self.train_mode:
-            if not os.path.exists(model_root_path):
-                os.makedirs(model_root_path)
-            with open(f'{model_root_path}/config.yaml', 'w') as f:
-                yaml.dump(config, f, default_flow_style=False)
+        logger_file = f'{model_root_path}/{args.logger_file}' if args.logger_file is not None else None
+        self.logger = config_helper.set_logger('sac', logger_file)
 
-        # display config
-        config_str = ''
-        for k, v in config.items():
-            config_str += f'\n{k}'
-            for kk, vv in v.items():
-                config_str += f'\n{kk:>25}: {vv}'
-        self.logger.info(config_str)
+        if self.train_mode:
+            config_helper.save_config(config, model_root_path, 'config.yaml')
+
+        config_helper.display_config(config, self.logger)
 
         return (config['base_config'],
                 config['reset_config'],
