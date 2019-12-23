@@ -2,17 +2,20 @@ base_config:
   build_path: 
     win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
-  scene: ContinousHardRoller
+  scene: 3DBallHard
 
   sac: sac_hard
-  max_iter: 150
-  save_model_per_iter: 50
-  reset_on_iteration: false
+  max_step: 500
+  update_policy_variables_per_step: 50
   burn_in_step: 10
-  n_step: 5
+  n_step: 3
   stagger: 1
   use_rnn: true
   use_prediction: true
+
+net_config:
+  replay_host: 58.199.162.110
+  learner_host: 58.199.162.110
 
 sac_config:
   seed: 42
@@ -20,5 +23,3 @@ sac_config:
   _lambda: 1
   update_target_per_step: 100
   init_log_alpha: -4.6
-  use_priority: true
-  use_n_step_is: true

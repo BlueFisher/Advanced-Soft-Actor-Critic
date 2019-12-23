@@ -6,8 +6,20 @@ import "pingpong.proto";
 service LearnerService {
   rpc Persistence(stream Ping) returns (stream Pong);
 
+  rpc GetAction(GetActionRequest) returns (Action);
   rpc GetPolicyVariables(Empty) returns (PolicyVariables);
   rpc GetTDError(GetTDErrorRequest) returns (TDError);
+}
+
+message GetActionRequest {
+  NDarray state = 1;
+  bool has_rnn_state = 2;
+  NDarray rnn_state = 3;
+}
+message Action {
+  NDarray action = 1;
+  bool has_rnn_state = 2;
+  NDarray rnn_state = 3;
 }
 
 message PolicyVariables {

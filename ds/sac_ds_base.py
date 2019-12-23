@@ -74,14 +74,23 @@ class SAC_DS_Base(SAC_Base):
             self.summary_writer = tf.summary.create_file_writer(summary_path)
             self._init_train_concrete_function(replay_batch_size, None)
 
+    # learner to actor
     @tf.function
     def get_policy_variables(self):
-        return self.model_policy.trainable_variables
+        variables = self.model_policy.trainable_variables
+        if self.use_rnn:
+            variables += self.model_rnn.trainable_variables
 
-    # for actor
+        return variables
+
+    # for actor to update its own network
     @tf.function
     def update_policy_variables(self, policy_variables):
-        for v, n_v in zip(self.model_policy.trainable_variables, policy_variables):
+        variables = self.model_policy.trainable_variables
+        if self.use_rnn:
+            variables += self.model_rnn.trainable_variables
+
+        for v, n_v in zip(variables, policy_variables):
             v.assign(n_v)
 
     def save_model(self):
