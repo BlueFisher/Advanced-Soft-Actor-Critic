@@ -17,7 +17,6 @@ from .proto.pingpong_pb2 import Ping, Pong
 from .peer_set import PeerSet
 
 
-from algorithm.trans_cache import TransCache
 from algorithm.replay_buffer import PrioritizedReplayBuffer, EpisodeBuffer
 import algorithm.config_helper as config_helper
 
@@ -31,7 +30,6 @@ class Replay(object):
             self._episode_buffer = EpisodeBuffer(16, 32, 50)  # TODO
 
         self._replay_buffer_lock = threading.Lock()
-        self._trans_cache = TransCache(self.config['get_td_error_batch'])
 
         self._stub = StubController(net_config)
 

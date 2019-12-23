@@ -127,6 +127,19 @@ class Learner(object):
 
         return [v.numpy() for v in variables]
 
+    def _get_action(self, state, rnn_state=None):
+        if self.config['use_rnn']:
+            assert rnn_state is not None
+
+        with self._training_lock:
+            if self.config['use_rnn']:
+                action, next_rnn_state = self.sac.choose_rnn_action(state, rnn_state)
+                next_rnn_state = next_rnn_state
+                return action.numpy(), next_rnn_state.numpy()
+            else:
+                action = self.sac.choose_action(state)
+                return action.numpy()
+
     def _get_td_error(self, *trans):
         with self._training_lock:
             td_error = self.sac.get_td_error(*trans)
@@ -264,7 +277,8 @@ class Learner(object):
             self._stub.update_transitions(pointers, 5, pi_n_probs)
 
     def _run(self):
-        servicer = LearnerService(self._get_policy_variables,
+        servicer = LearnerService(self._get_action,
+                                  self._get_policy_variables,
                                   self._get_td_error,
                                   self._get_next_rnn_state)
         server = grpc.server(futures.ThreadPoolExecutor(max_workers=20))
@@ -281,7 +295,8 @@ class Learner(object):
 
 class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
     def __init__(self,
-                 get_policy_variables, get_td_error, get_next_rnn_state):
+                 get_action, get_policy_variables, get_td_error, get_next_rnn_state):
+        self._get_action = get_action
         self._get_policy_variables = get_policy_variables
         self._get_td_error = get_td_error
         self._get_next_rnn_state = get_next_rnn_state
@@ -298,6 +313,17 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
         self._record_peer(context)
         for request in request_iterator:
             yield Pong(time=int(time.time() * 1000))
+
+    def GetAction(self, request: learner_pb2.GetActionRequest, context):
+        if request.has_rnn_state:
+            action, next_rnn_state = self._get_action(proto_to_ndarray(request.state),
+                                                      proto_to_ndarray(request.rnn_state))
+            return learner_pb2.Action(action=ndarray_to_proto(action),
+                                      has_rnn_state=True,
+                                      rnn_state=ndarray_to_proto(next_rnn_state))
+        else:
+            action = self._get_action(proto_to_ndarray(request.state))
+            return learner_pb2.Action(action=ndarray_to_proto(action))
 
     def GetPolicyVariables(self, request, context):
         variables = self._get_policy_variables()

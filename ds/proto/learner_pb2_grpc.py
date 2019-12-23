@@ -21,6 +21,11 @@ class LearnerServiceStub(object):
         request_serializer=pingpong__pb2.Ping.SerializeToString,
         response_deserializer=pingpong__pb2.Pong.FromString,
         )
+    self.GetAction = channel.unary_unary(
+        '/LearnerService/GetAction',
+        request_serializer=learner__pb2.GetActionRequest.SerializeToString,
+        response_deserializer=learner__pb2.Action.FromString,
+        )
     self.GetPolicyVariables = channel.unary_unary(
         '/LearnerService/GetPolicyVariables',
         request_serializer=ndarray__pb2.Empty.SerializeToString,
@@ -38,6 +43,13 @@ class LearnerServiceServicer(object):
   pass
 
   def Persistence(self, request_iterator, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def GetAction(self, request, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -65,6 +77,11 @@ def add_LearnerServiceServicer_to_server(servicer, server):
           servicer.Persistence,
           request_deserializer=pingpong__pb2.Ping.FromString,
           response_serializer=pingpong__pb2.Pong.SerializeToString,
+      ),
+      'GetAction': grpc.unary_unary_rpc_method_handler(
+          servicer.GetAction,
+          request_deserializer=learner__pb2.GetActionRequest.FromString,
+          response_serializer=learner__pb2.Action.SerializeToString,
       ),
       'GetPolicyVariables': grpc.unary_unary_rpc_method_handler(
           servicer.GetPolicyVariables,

@@ -7,11 +7,12 @@ base_config:
 
   name: "{time}"
   sac: sac
+  # update policy variables each "update_policy_variables_per_step" 
+  # or get action from learner each step
+  update_policy_mode: true 
   update_policy_variables_per_step: -1
   # for actor, the number of transitions sent to replay
   add_trans_batch: 56
-  # for replay, the number of transitions sent to learner to get td-error
-  get_td_error_batch: 56
   max_step: -1
   reset_on_iteration: true
   
@@ -46,4 +47,4 @@ sac_config:
   use_auto_alpha: true
   lr: 0.0003
   gamma: 0.99
-  _lambda: 0.9
+  _lambda: 1.0
