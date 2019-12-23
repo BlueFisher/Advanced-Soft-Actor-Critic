@@ -152,40 +152,51 @@ class Actor(object):
                                         use_rnn=self.config['use_rnn'])
                       for i in brain_info.agents]
 
-            states = brain_info.vector_observations
+            state = brain_info.vector_observations
             step = 0
 
-            if self.config['update_policy_variables_per_step'] == -1:
+            if self.config['update_policy_mode'] and self.config['update_policy_variables_per_step'] == -1:
                 self._update_policy_variables()
 
             while False in [a.done for a in agents] and self._stub.connected:
-                if self.config['update_policy_variables_per_step'] != -1 and step % self.config['update_policy_variables_per_step'] == 0:
-                    self._update_policy_variables()
+                if self.config['update_policy_mode']:
+                    if self.config['update_policy_variables_per_step'] != -1 and step % self.config['update_policy_variables_per_step'] == 0:
+                        self._update_policy_variables()
 
-                if self.config['use_rnn']:
-                    actions, next_rnn_state = self.sac_actor.choose_rnn_action(states.astype(np.float32),
-                                                                               rnn_state)
-                    next_rnn_state = next_rnn_state.numpy()
+                    if self.config['use_rnn']:
+                        action, next_rnn_state = self.sac_actor.choose_rnn_action(state.astype(np.float32),
+                                                                                  rnn_state)
+                        next_rnn_state = next_rnn_state.numpy()
+                    else:
+                        action = self.sac_actor.choose_action(state.astype(np.float32))
+
+                    action = action.numpy()
                 else:
-                    actions = self.sac_actor.choose_action(states.astype(np.float32))
-
-                actions = actions.numpy()
+                    if self.config['use_rnn']:
+                        action_rnn_state = self._stub.get_action(state.astype(np.float32), rnn_state)
+                        if action_rnn_state is None:
+                            break
+                        action, next_rnn_state = action_rnn_state
+                    else:
+                        action = self._stub.get_action(state.astype(np.float32))
+                        if action is None:
+                            break
 
                 brain_info = self.env.step({
-                    self.default_brain_name: actions
+                    self.default_brain_name: action
                 })[self.default_brain_name]
 
-                states_ = brain_info.vector_observations
+                state_ = brain_info.vector_observations
                 if step == self.config['max_step']:
                     brain_info.local_done = [True] * len(brain_info.agents)
                     brain_info.max_reached = [True] * len(brain_info.agents)
 
-                tmp_results = [agents[i].add_transition(states[i],
-                                                        actions[i],
+                tmp_results = [agents[i].add_transition(state[i],
+                                                        action[i],
                                                         brain_info.rewards[i],
                                                         brain_info.local_done[i],
                                                         brain_info.max_reached[i],
-                                                        states_[i],
+                                                        state_[i],
                                                         rnn_state[i] if self.config['use_rnn'] else None)
                                for i in range(len(agents))]
 
@@ -204,7 +215,7 @@ class Actor(object):
                         for episode_trans in episode_trans_list:
                             self._stub.add_episode_trans(*episode_trans)
 
-                states = states_
+                state = state_
                 if self.config['use_rnn']:
                     rnn_state = next_rnn_state
                     rnn_state[brain_info.local_done] = initial_rnn_state[brain_info.local_done]
@@ -257,13 +268,25 @@ class StubController:
         except grpc.RpcError:
             self._logger.error('connection lost in "add_episode_trans"')
 
+    def get_action(self, state, rnn_state=None):
+        try:
+            if rnn_state is None:
+                response = self._learner_stub.GetAction(learner_pb2.GetActionRequest(state=ndarray_to_proto(state)))
+                return proto_to_ndarray(response.action)
+            else:
+                response = self._learner_stub.GetAction(learner_pb2.GetActionRequest(state=ndarray_to_proto(state),
+                                                                                     has_rnn_state=True,
+                                                                                     rnn_state=ndarray_to_proto(rnn_state)))
+                return proto_to_ndarray(response.action), proto_to_ndarray(response.rnn_state)
+        except grpc.RpcError:
+            self._logger.error('connection lost in "get_action"')
+
     def update_policy_variables(self):
         try:
             response = self._learner_stub.GetPolicyVariables(Empty())
             return [proto_to_ndarray(v) for v in response.variables]
         except grpc.RpcError:
             self._logger.error('connection lost in "update_policy_variables"')
-
 
     def _start_replay_persistence(self):
         def request_messages():

@@ -28,8 +28,13 @@ class Main(object):
     def __init__(self, config_path, args):
         self._now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
-        self.config, self.reset_config, replay_config, sac_config, model_root_path = self._init_config(config_path, args)
-        self._init_env(config_path, replay_config, sac_config, model_root_path)
+        (self.config, self.reset_config,
+         replay_config, episode_buffer_config,
+         sac_config,
+         model_root_path) = self._init_config(config_path, args)
+        self._init_env(model_root_path, config_path,
+                       sac_config,
+                       replay_config, episode_buffer_config)
         self._run()
 
     def _init_config(self, config_path, args):
@@ -66,10 +71,14 @@ class Main(object):
         return (config['base_config'],
                 config['reset_config'],
                 config['replay_config'],
+                config['episode_buffer_config'],
                 config['sac_config'],
                 model_root_path)
 
-    def _init_env(self, config_path, replay_config, sac_config, model_root_path):
+    def _init_env(self, model_root_path, config_path,
+                  sac_config,
+                  replay_config,
+                  episode_buffer_config):
         if self.run_in_editor:
             self.env = UnityEnvironment(base_port=5004)
         else:
@@ -82,8 +91,8 @@ class Main(object):
         self.default_brain_name = self.env.external_brain_names[0]
 
         brain_params = self.env.brains[self.default_brain_name]
-        state_dim = brain_params.vector_observation_space_size
-        action_dim = brain_params.vector_action_space_size[0]
+        self.state_dim = brain_params.vector_observation_space_size
+        self.action_dim = brain_params.vector_action_space_size[0]
 
         # if model exists, load saved model, else, copy a new one
         if os.path.isfile(f'{model_root_path}/sac_model.py'):
@@ -92,8 +101,8 @@ class Main(object):
             custom_sac_model = importlib.import_module(f'{config_path.replace("/",".")}.{self.config["sac"]}')
             shutil.copyfile(f'{config_path}/{self.config["sac"]}.py', f'{model_root_path}/sac_model.py')
 
-        self.sac = SAC_Base(state_dim=state_dim,
-                            action_dim=action_dim,
+        self.sac = SAC_Base(state_dim=self.state_dim,
+                            action_dim=self.action_dim,
                             model_root_path=model_root_path,
                             model=custom_sac_model,
                             train_mode=self.train_mode,
@@ -104,6 +113,7 @@ class Main(object):
                             use_prediction=self.config['use_prediction'],
 
                             replay_config=replay_config,
+                            episode_buffer_config=episode_buffer_config,
 
                             **sac_config)
 
@@ -134,34 +144,44 @@ class Main(object):
              stagger
             """
 
-            states = brain_info.vector_observations
+            # burn in padding
+            if self.config['use_rnn']:
+                for _ in range(self.config['burn_in_step']):
+                    for agent in agents:
+                        agent.add_transition(np.zeros(self.state_dim),
+                                             np.zeros(self.action_dim),
+                                             0, False, False,
+                                             np.zeros(self.state_dim),
+                                             initial_rnn_state[0])
+
+            state = brain_info.vector_observations
             step = 0
 
             while False in [a.done for a in agents]:
                 if self.config['use_rnn']:
-                    actions, next_rnn_state = self.sac.choose_rnn_action(states.astype(np.float32),
-                                                                         rnn_state)
+                    action, next_rnn_state = self.sac.choose_rnn_action(state.astype(np.float32),
+                                                                        rnn_state)
                     next_rnn_state = next_rnn_state.numpy()
                 else:
-                    actions = self.sac.choose_action(states.astype(np.float32))
+                    action = self.sac.choose_action(state.astype(np.float32))
 
-                actions = actions.numpy()
+                action = action.numpy()
 
                 brain_info = self.env.step({
-                    self.default_brain_name: actions
+                    self.default_brain_name: action
                 })[self.default_brain_name]
 
-                states_ = brain_info.vector_observations
+                state_ = brain_info.vector_observations
                 if step == self.config['max_step']:
                     brain_info.local_done = [True] * len(brain_info.agents)
                     brain_info.max_reached = [True] * len(brain_info.agents)
 
-                tmp_results = [agents[i].add_transition(states[i],
-                                                        actions[i],
+                tmp_results = [agents[i].add_transition(state[i],
+                                                        action[i],
                                                         brain_info.rewards[i],
                                                         brain_info.local_done[i],
                                                         brain_info.max_reached[i],
-                                                        states_[i],
+                                                        state_[i],
                                                         rnn_state[i] if self.config['use_rnn'] else None)
                                for i in range(len(agents))]
 
@@ -183,7 +203,7 @@ class Main(object):
 
                     self.sac.train()
 
-                states = states_
+                state = state_
                 if self.config['use_rnn']:
                     rnn_state = next_rnn_state
                     rnn_state[brain_info.local_done] = initial_rnn_state[brain_info.local_done]

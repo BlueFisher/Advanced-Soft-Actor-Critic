@@ -6,7 +6,7 @@ base_config:
 
   sac: sac_hard
   reset_on_iteration: false
-
+  update_policy_variables_per_step: -1
   burn_in_step: 10
   n_step: 5
   stagger: 1
@@ -20,5 +20,6 @@ net_config:
 sac_config:
   seed: 42
   tau: 0.9
+  _lambda: 1
   update_target_per_step: 100
   init_log_alpha: -4.6
