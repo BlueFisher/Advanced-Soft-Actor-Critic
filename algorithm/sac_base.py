@@ -371,10 +371,6 @@ class SAC_Base(object):
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             with self.summary_writer.as_default():
-                tf.summary.scalar('loss/y_max', tf.reduce_max(y), step=self.global_step)
-                tf.summary.scalar('loss/y_mean', tf.reduce_mean(y), step=self.global_step)
-                tf.summary.scalar('loss/y_min', tf.reduce_min(y), step=self.global_step)
-
                 tf.summary.scalar('loss/Q1', tf.reduce_mean(loss_q1), step=self.global_step)
                 tf.summary.scalar('loss/Q2', tf.reduce_mean(loss_q2), step=self.global_step)
                 if self.use_rnn and self.use_prediction:
