@@ -7,23 +7,6 @@ initializer_helper = {
     'bias_initializer': tf.keras.initializers.Constant(0.1)
 }
 
-class ModelQTest(tf.keras.Model):
-    def __init__(self, state_dim, action_dim):
-        super(ModelQTest, self).__init__()
-        self.sequential_model = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(1, **initializer_helper)
-        ])
-
-        self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(action_dim,)))
-
-    def call(self, inputs_s, inputs_a):
-        l = tf.concat([inputs_s, inputs_a], -1)
-
-        q = self.sequential_model(l)
-        return q
 
 class ModelQ(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
