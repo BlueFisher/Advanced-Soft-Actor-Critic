@@ -2,8 +2,11 @@ base_config:
   build_path: 
     win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
-  scene: ContinousSimpleRoller
-  reset_on_iteration: false
+  scene: 3DBall
+
+  max_step: 500
+  update_policy_variables_per_step: 50
+  n_step: 5
 
 net_config:
   replay_host: 58.199.162.110
@@ -11,6 +14,6 @@ net_config:
 
 sac_config:
   seed: 42
-  tau: 0.9
-  update_target_per_step: 100
   init_log_alpha: -4.6
+  _lambda: 1
+  use_auto_alpha: true
