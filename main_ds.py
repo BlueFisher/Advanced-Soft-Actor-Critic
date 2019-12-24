@@ -20,7 +20,7 @@ if __name__ == '__main__':
     parser.add_argument('--agents', type=int, default=1, help='number of agents')
     args = parser.parse_args()
 
-    config_path = f'ds/envs/{args.env}'
+    config_path = f'envs/{args.env}'
 
     if args.process_type in ['replay', 'r']:
         from ds.replay import Replay
