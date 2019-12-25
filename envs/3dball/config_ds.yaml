@@ -5,12 +5,15 @@ base_config:
   scene: 3DBall
 
   max_step: 500
-  update_policy_variables_per_step: 50
+  # update_policy_variables_per_step: 50
   n_step: 5
 
 net_config:
   replay_host: 58.199.162.110
   learner_host: 58.199.162.110
+
+replay_config:
+  capacity: 1000000
 
 sac_config:
   seed: 42
