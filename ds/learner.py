@@ -146,11 +146,8 @@ class Learner(object):
 
         return td_error.numpy()
 
-    def _get_next_rnn_state(self, n_states):
-        with self._training_lock:
-            rnn_state = self.sac.get_next_rnn_state(n_states)
-
-        return rnn_state
+    def _post_reward(self, peer, reward):
+        self.logger.info(f'{peer}: min {np.min(reward):.1f}, mean {np.mean(reward):.1f}, max {np.max(reward):.1f}')
 
     def _policy_evaluation(self):
         iteration = 0
@@ -217,7 +214,8 @@ class Learner(object):
 
             with self._training_lock:
                 self._log_episode_info(iteration, start_time, agents)
-
+                self.sac.save_model(iteration)
+            
             iteration += 1
             time.sleep(10)
 
@@ -280,7 +278,7 @@ class Learner(object):
         servicer = LearnerService(self._get_action,
                                   self._get_policy_variables,
                                   self._get_td_error,
-                                  self._get_next_rnn_state)
+                                  self._post_reward)
         server = grpc.server(futures.ThreadPoolExecutor(max_workers=20))
         learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, server)
         server.add_insecure_port(f'[::]:{self.net_config["learner_port"]}')
@@ -295,11 +293,11 @@ class Learner(object):
 
 class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
     def __init__(self,
-                 get_action, get_policy_variables, get_td_error, get_next_rnn_state):
+                 get_action, get_policy_variables, get_td_error, post_reward):
         self._get_action = get_action
         self._get_policy_variables = get_policy_variables
         self._get_td_error = get_td_error
-        self._get_next_rnn_state = get_next_rnn_state
+        self._post_reward = post_reward
 
         self._peer_set = PeerSet(logging.getLogger('ds.learner.service'))
 
@@ -332,6 +330,11 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
     def GetTDError(self, request: learner_pb2.GetTDErrorRequest, context):
         td_error = self._get_td_error(*[proto_to_ndarray(t) for t in request.transitions])
         return learner_pb2.TDError(td_error=ndarray_to_proto(td_error))
+
+    def PostReward(self, request: learner_pb2.PostRewardRequest, context):
+        reward = proto_to_ndarray(request.reward)
+        self._post_reward(context.peer(), reward)
+        return Empty()
 
 
 class StubController:

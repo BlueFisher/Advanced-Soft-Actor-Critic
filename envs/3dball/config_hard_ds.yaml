@@ -3,20 +3,21 @@ base_config:
     win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
   scene: 3DBallHard
-
+  
   sac: sac_hard
-  max_iter: 500
   max_step: 500
-  save_model_per_iter: 50
+  # update_policy_variables_per_step: 100
   burn_in_step: 10
   n_step: 3
   stagger: 1
   use_rnn: true
   use_prediction: true
 
+net_config:
+  replay_host: 58.199.162.110
+  learner_host: 58.199.162.110
+
 sac_config:
   seed: 42
   init_log_alpha: -4.6
   _lambda: 0.99
-  use_priority: true
-  use_n_step_is: true

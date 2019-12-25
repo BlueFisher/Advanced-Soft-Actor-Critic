@@ -9,7 +9,8 @@ base_config:
   sac: sac
   # update policy variables each "update_policy_variables_per_step" 
   # or get action from learner each step
-  update_policy_mode: true 
+  update_policy_mode: true
+  # -1 for policy variables being updated each iteration
   update_policy_variables_per_step: -1
   # for actor, the number of transitions sent to replay
   add_trans_batch: 56
@@ -39,7 +40,6 @@ replay_config:
 
 sac_config:
   seed: null
-  save_model_per_step: 5000
   write_summary_per_step: 20
   tau: 0.005
   update_target_per_step: 1
