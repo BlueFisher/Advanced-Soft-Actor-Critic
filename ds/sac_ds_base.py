@@ -24,7 +24,6 @@ class SAC_DS_Base(SAC_Base):
                  use_prediction=True,
 
                  seed=None,
-                 save_model_per_step=5000,
                  write_summary_per_step=20,
                  tau=0.005,
                  update_target_per_step=1,
@@ -48,7 +47,6 @@ class SAC_DS_Base(SAC_Base):
         self.use_rnn = use_rnn
         self.use_prediction = use_prediction
 
-        self.save_model_per_step = save_model_per_step
         self.write_summary_per_step = write_summary_per_step
         self.tau = tau
         self.update_target_per_step = update_target_per_step
@@ -93,11 +91,6 @@ class SAC_DS_Base(SAC_Base):
         for v, n_v in zip(variables, policy_variables):
             v.assign(n_v)
 
-    def save_model(self):
-        global_step = self.global_step.numpy() + self.init_iteration
-        if global_step % self.save_model_per_step == 0:
-            self.ckpt_manager.save(global_step)
-
     def train(self, n_states, n_actions, n_rewards, state_, done,
               mu_n_probs,
               priority_is,
@@ -138,7 +131,5 @@ class SAC_DS_Base(SAC_Base):
             pi_n_probs = self.get_n_step_probs(n_states, n_actions).numpy()
             td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, done,
                                          pi_n_probs if self.use_n_step_is else None).numpy()
-
-        self.save_model()
 
         return td_error.flatten(), pi_n_probs

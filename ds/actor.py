@@ -34,38 +34,42 @@ class Actor(object):
 
     def __init__(self, config_path, args):
         self.config_path = config_path
-        self.config, net_config, self.reset_config = self._init_config(self.config_path, args)
+        self.cmd_args = args
+        net_config = self._init_constant_config(self.config_path, args)
 
-        self._init_env(net_config)
-        self._trans_cache = TransCache(self.config['add_trans_batch'])
+        self._stub = StubController(net_config)
         self._run()
 
-    def _init_config(self, config_path, args):
+    def _init_constant_config(self, config_path, args):
         config_file_path = f'{config_path}/{args.config}' if args.config is not None else None
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
                                                            config_file_path)
 
-        # initialize config from command line arguments
+        self.config_file_path = config_file_path
         self.train_mode = not args.run
         self.run_in_editor = args.editor
 
-        if args.build_port is not None:
-            config['base_config']['build_port'] = args.build_port
-        if args.seed is not None:
-            config['sac_config']['seed'] = args.seed
-        if args.sac is not None:
-            config['base_config']['sac'] = args.sac
-        if args.agents is not None:
-            config['reset_config']['copy'] = args.agents
-
         self.logger = config_helper.set_logger('ds.actor', args.logger_file)
 
-        config_helper.display_config(config, self.logger)
+        return config['net_config']
 
-        return config['base_config'], config['net_config'], config['reset_config']
+    def _init_env(self):
+        # initialize config
+        config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
+                                                           self.config_file_path)
 
-    def _init_env(self, net_config):
-        self._stub = StubController(net_config)
+        if self.cmd_args.build_port is not None:
+            config['base_config']['build_port'] = self.cmd_args.build_port
+        if self.cmd_args.sac is not None:
+            config['base_config']['sac'] = self.cmd_args.sac
+        if self.cmd_args.agents is not None:
+            config['reset_config']['copy'] = self.cmd_args.agents
+
+        self.config = config['base_config']
+        self.reset_config = config['reset_config']
+
+        # initialize Unity environment
+        self._trans_cache = TransCache(self.config['add_trans_batch'])
 
         if self.run_in_editor:
             self.env = UnityEnvironment(base_port=5004)
@@ -80,7 +84,7 @@ class Actor(object):
 
         self.logger.info(f'{self.config["build_path"]} initialized')
 
-    def _init_sac(self):
+        # initialize SAC
         brain_params = self.env.brains[self.default_brain_name]
         state_dim = brain_params.vector_observation_space_size
         action_dim = brain_params.vector_action_space_size[0]
@@ -126,15 +130,19 @@ class Actor(object):
         while True:
             # replay or learner is offline, waiting...
             if not self._stub.connected:
-                iteration = 0
+                if iteration != 0:
+                    self._trans_cache.clear()
+                    self.env.close()
+                    self.logger.info(f'{self.config["build_path"]} closed')
+                    iteration = 0
+
                 self.logger.warning('waiting for connection')
                 time.sleep(2)
                 continue
 
             # learner is online, reset all settings
             if iteration == 0 and self._stub.connected:
-                self._trans_cache.clear()
-                self._init_sac()
+                self._init_env()
 
                 brain_info = self.env.reset(train_mode=self.train_mode, config=self.reset_config)[self.default_brain_name]
                 if self.config['use_rnn']:
@@ -222,6 +230,8 @@ class Actor(object):
 
                 step += 1
 
+            reward = np.array([a.reward for a in agents])
+            self._stub.post_reward(reward)
             self._log_episode_info(iteration, agents)
             iteration += 1
 
@@ -287,6 +297,12 @@ class StubController:
             return [proto_to_ndarray(v) for v in response.variables]
         except grpc.RpcError:
             self._logger.error('connection lost in "update_policy_variables"')
+
+    def post_reward(self, reward):
+        try:
+            response = self._learner_stub.PostReward(learner_pb2.PostRewardRequest(reward=ndarray_to_proto(reward)))
+        except grpc.RpcError:
+            self._logger.error('connection lost in "post_reward"')
 
     def _start_replay_persistence(self):
         def request_messages():
