@@ -86,13 +86,13 @@ class Actor(object):
 
         # initialize SAC
         brain_params = self.env.brains[self.default_brain_name]
-        state_dim = brain_params.vector_observation_space_size
-        action_dim = brain_params.vector_action_space_size[0]
+        self.state_dim = brain_params.vector_observation_space_size
+        self.action_dim = brain_params.vector_action_space_size[0]
 
         custom_sac_model = importlib.import_module(f'{self.config_path.replace("/",".")}.{self.config["sac"]}')
 
-        self.sac_actor = SAC_DS_Base(state_dim=state_dim,
-                                     action_dim=action_dim,
+        self.sac_actor = SAC_DS_Base(state_dim=self.state_dim,
+                                     action_dim=self.action_dim,
                                      model_root_path=None,
                                      model=custom_sac_model,
                                      train_mode=False,
@@ -160,6 +160,16 @@ class Actor(object):
                                         use_rnn=self.config['use_rnn'])
                       for i in brain_info.agents]
 
+            # burn in padding
+            if self.config['use_rnn']:
+                for _ in range(self.config['burn_in_step']):
+                    for agent in agents:
+                        agent.add_transition(np.zeros(self.state_dim),
+                                             np.zeros(self.action_dim),
+                                             0, False, False,
+                                             np.zeros(self.state_dim),
+                                             initial_rnn_state[0])
+
             state = brain_info.vector_observations
             step = 0
 
@@ -210,18 +220,19 @@ class Actor(object):
 
                 trans_list, episode_trans_list = zip(*tmp_results)
 
-                trans_list = [t for t in trans_list if t is not None]
-                if len(trans_list) != 0:
-                    # n_states, n_actions, n_rewards, state_, done, rnn_state
-                    trans = [np.concatenate(t, axis=0) for t in zip(*trans_list)]
-                    self._add_trans(*trans)
+                if self.train_mode:
+                    trans_list = [t for t in trans_list if t is not None]
+                    if len(trans_list) != 0:
+                        # n_states, n_actions, n_rewards, state_, done, rnn_state
+                        trans = [np.concatenate(t, axis=0) for t in zip(*trans_list)]
+                        self._add_trans(*trans)
 
-                if self.config['use_rnn'] and self.config['use_prediction']:
-                    episode_trans_list = [t for t in episode_trans_list if t is not None]
-                    if len(episode_trans_list) != 0:
-                        # n_states, n_actions, n_rewards, done, rnn_state
-                        for episode_trans in episode_trans_list:
-                            self._stub.add_episode_trans(*episode_trans)
+                    if self.config['use_rnn'] and self.config['use_prediction']:
+                        episode_trans_list = [t for t in episode_trans_list if t is not None]
+                        if len(episode_trans_list) != 0:
+                            # n_states, n_actions, n_rewards, done, rnn_state
+                            for episode_trans in episode_trans_list:
+                                self._stub.add_episode_trans(*episode_trans)
 
                 state = state_
                 if self.config['use_rnn']:

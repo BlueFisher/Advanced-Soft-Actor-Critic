@@ -1,37 +1,23 @@
-build_path: 
-  win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
-  linux: /data/linux-RL-Envs/RL-Envs.x86_64
-scene: RayRoller
+base_config:
+  build_path: 
+    win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
+    linux: /data/linux-RL-Envs/RL-Envs.x86_64
+  scene: RayRoller
 
-replay_host: 58.199.160.89
-replay_port: 61001
-learner_host: 58.199.160.89
-learner_port: 61001
-websocket_host: 58.199.160.89
-websocket_port: 61002
-
-# name: {time}
-# sac: sac
-# update_policy_variables_per_step: 100
-# add_trans_threshold: 100
-reset_on_iteration: false
-# gamma: 0.99
-n_step: 5
-
-replay_config:
-  batch_size: 256
-  capacity: 1000000
-  alpha: 0.9
-  use_mongodb: true
+  max_iter: 150
+  save_model_per_iter: 50
+  reset_on_iteration: false
+  burn_in_step: 10
+  n_step: 5
+  stagger: 1
+  use_rnn: true
+  use_prediction: true
 
 sac_config:
-  write_summary_graph: true
-  # seed: null
-  # tau: 0.005
-  # save_model_per_step: 5000
-  # write_summary_per_step: 20
-  # update_target_per_step: 1
-  # init_log_alpha: -2.3
-  # use_auto_alpha: true
-  # lr: 0.0003
-  # use_n_step_is: true
+  seed: 42
+  tau: 0.9
+  _lambda: 1
+  update_target_per_step: 100
+  init_log_alpha: -4.6
+  use_priority: true
+  use_n_step_is: true

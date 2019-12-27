@@ -23,11 +23,11 @@ import algorithm.config_helper as config_helper
 
 class Replay(object):
     def __init__(self, config_path, args):
-        self.config, net_config, replay_config = self._init_config(config_path, args)
+        self.config, net_config, replay_config, episode_buffer_config = self._init_config(config_path, args)
 
         self._replay_buffer = PrioritizedReplayBuffer(**replay_config)
         if self.config['use_rnn'] and self.config['use_prediction']:
-            self._episode_buffer = EpisodeBuffer(16, 32, 50)  # TODO
+            self._episode_buffer = EpisodeBuffer(**episode_buffer_config)
 
         self._replay_buffer_lock = threading.Lock()
 
@@ -44,7 +44,7 @@ class Replay(object):
 
         config_helper.display_config(config, self.logger)
 
-        return config['base_config'], config['net_config'], config['replay_config']
+        return config['base_config'], config['net_config'], config['replay_config'], config['episode_buffer_config']
 
     def _add(self, *transitions):
         # n_states, n_actions, n_rewards, state_, done, mu_n_probs, rnn_state
