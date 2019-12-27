@@ -38,6 +38,11 @@ replay_config:
   alpha: 0.9
   use_mongodb: false
 
+episode_buffer_config:
+  batch_step_size: 16
+  batch_size: 32
+  capacity: 50
+
 sac_config:
   seed: null
   write_summary_per_step: 20
