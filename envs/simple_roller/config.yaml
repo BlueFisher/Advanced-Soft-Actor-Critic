@@ -7,7 +7,7 @@ base_config:
   max_iter: 200
   save_model_per_iter: 200
   reset_on_iteration: false
-  n_step: 5
+  n_step: 10
 
 sac_config:
   seed: 42
