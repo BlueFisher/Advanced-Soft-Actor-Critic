@@ -8,20 +8,7 @@ from .learner import Learner
 from .actor import Actor
 
 from algorithm.agent import Agent
-
-
-class AgentHitted(Agent):
-    hitted = 0
-
-    def _extra_log(self,
-                   state,
-                   action,
-                   reward,
-                   local_done,
-                   max_reached,
-                   state_):
-        if not self.done and reward >= 1:
-            self.hitted += 1
+from algorithm.sac_main_hitted import AgentHitted
 
 
 class LearnerHitted(Learner):

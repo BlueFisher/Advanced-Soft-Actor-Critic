@@ -119,6 +119,12 @@ class Main(object):
 
     def _run(self):
         brain_info = self.env.reset(train_mode=self.train_mode, config=self.reset_config)[self.default_brain_name]
+        agents = [self._agent_class(i,
+                                    tran_len=self.config['burn_in_step'] + self.config['n_step'],
+                                    stagger=self.config['stagger'],
+                                    use_rnn=self.config['use_rnn'])
+                  for i in brain_info.agents]
+
         if self.config['use_rnn']:
             initial_rnn_state = self.sac.get_initial_rnn_state(len(brain_info.agents))
             rnn_state = initial_rnn_state
@@ -126,15 +132,14 @@ class Main(object):
         for iteration in range(self.config['max_iter'] + 1):
             if self.config['reset_on_iteration']:
                 brain_info = self.env.reset(train_mode=self.train_mode)[self.default_brain_name]
+                for agent in agents:
+                    agent.clear()
+
                 if self.config['use_rnn']:
                     rnn_state = initial_rnn_state
-
-            agents = [self._agent_class(i,
-                                        tran_len=self.config['burn_in_step'] + self.config['n_step'],
-                                        stagger=self.config['stagger'],
-                                        use_rnn=self.config['use_rnn'])
-                      for i in brain_info.agents]
-
+            else:
+                for agent in agents:
+                    agent.reset()
             """
             s0    s1    s2    s3    s4    s5    s6
              └──burn_in_step───┘     └───n_step──┘
@@ -146,13 +151,14 @@ class Main(object):
 
             # burn in padding
             if self.config['use_rnn']:
-                for _ in range(self.config['burn_in_step']):
-                    for agent in agents:
-                        agent.add_transition(np.zeros(self.state_dim),
-                                             np.zeros(self.action_dim),
-                                             0, False, False,
-                                             np.zeros(self.state_dim),
-                                             initial_rnn_state[0])
+                for agent in agents:
+                    if agent.is_empty():
+                        for _ in range(self.config['burn_in_step']):
+                            agent.add_transition(np.zeros(self.state_dim),
+                                                np.zeros(self.action_dim),
+                                                0, False, False,
+                                                np.zeros(self.state_dim),
+                                                initial_rnn_state[0])
 
             state = brain_info.vector_observations
             step = 0
