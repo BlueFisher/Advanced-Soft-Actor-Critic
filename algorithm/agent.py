@@ -4,6 +4,7 @@ import numpy as np
 
 class Agent(object):
     reward = 0
+    last_reward = 0
     done = False
 
     def __init__(self, agent_id,
@@ -40,6 +41,7 @@ class Agent(object):
 
         if not self.done:
             self.reward += reward
+        self.last_reward += reward
 
         self._extra_log(state,
                         action,
@@ -56,6 +58,7 @@ class Agent(object):
 
         if local_done:
             self.done = True
+            self.last_reward = 0
 
             self._tmp_trans.clear()
             self._curr_stagger = self.stagger
@@ -108,12 +111,25 @@ class Agent(object):
     def _get_episode_trans(self):
         state_ = self._tmp_episode_trans[-1]['state_']
         done = self._tmp_episode_trans[-1]['local_done'] and not self._tmp_episode_trans[-1]['max_reached']
-        
+
         return ([t['state'] for t in self._tmp_episode_trans],
                 [t['action'] for t in self._tmp_episode_trans],
                 [t['reward'] for t in self._tmp_episode_trans],
                 state_,
                 [done])
+
+    def is_empty(self):
+        return len(self._tmp_episode_trans) == 0
+
+    def clear(self):
+        self.reward = 0
+        self.done = False
+        self._tmp_trans.clear()
+        self._tmp_episode_trans.clear()
+    
+    def reset(self):
+        self.reward = self.last_reward
+        self.done = False
 
 
 if __name__ == "__main__":
