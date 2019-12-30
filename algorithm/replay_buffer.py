@@ -192,8 +192,12 @@ class ReplayBuffer:
 
 
 class SumTree:
-    def __init__(self, batch_size, capacity):
+    def __init__(self, capacity):
+        capacity = int(capacity)
+        assert capacity & (capacity - 1) == 0
+
         self.capacity = capacity  # for all priority values
+        self.depth = int(math.log2(capacity)) + 1
 
         self._tree = np.zeros(2 * capacity - 1)
         # [--------------Parent nodes-------------][-------leaves to recode priority-------]
@@ -204,15 +208,18 @@ class SumTree:
         self.update(tree_idx, p)  # update tree_frame
 
     def update(self, tree_idx, p):
-
-        change = p - self._tree[tree_idx]
         self._tree[tree_idx] = p
-        # then propagate the change through tree
-        while tree_idx != 0:    # this method is faster than the recursive loop in the reference code
-            tree_idx = (tree_idx - 1) // 2
-            self._tree[tree_idx] += change
 
-    def get_leaf(self, v):
+        for i in range(self.depth - 2, -1, -1):
+            parent_idx = (tree_idx - 1) // 2
+            parent_idx = np.unique(parent_idx)
+            node1 = self._tree[parent_idx * 2 + 1]
+            node2 = self._tree[parent_idx * 2 + 2]
+            self._tree[parent_idx] = node1 + node2
+
+            tree_idx = parent_idx
+
+    def sample(self, batch_size):
         """
         Tree structure and array storage:
         Tree index:
@@ -224,23 +231,21 @@ class SumTree:
         Array type for storing:
         [0,1,2,3,4,5,6]
         """
-        parent_idx = 0
-        while True:     # the while loop is faster than the method in the reference code
-            cl_idx = 2 * parent_idx + 1         # this leaf's left and right kids
-            cr_idx = cl_idx + 1
-            if cl_idx >= len(self._tree):        # reach bottom, end search
-                leaf_idx = parent_idx
-                break
-            else:       # downward search, always search for a higher priority node
-                if v <= self._tree[cl_idx]:
-                    parent_idx = cl_idx
-                else:
-                    v -= self._tree[cl_idx]
-                    parent_idx = cr_idx
+        pri_seg = self.total_p / batch_size       # priority segment
+        pri_seg_low = np.arange(batch_size)
+        pri_seg_high = pri_seg_low + 1
+        v = np.random.uniform(pri_seg_low * pri_seg, pri_seg_high * pri_seg)
+        leaf_idx = np.zeros(batch_size, dtype=np.int32)
 
-        data_idx = self.leaf_idx_to_data_idx(leaf_idx)
+        for _ in range(self.depth - 1):
+            node1 = leaf_idx * 2 + 1
+            node2 = leaf_idx * 2 + 2
+            t = v <= self._tree[node1]
+            leaf_idx[t] = node1[t]
+            leaf_idx[~t] = node2[~t]
+            v[~t] -= self._tree[node1[~t]]
 
-        return leaf_idx, self._tree[leaf_idx], data_idx
+        return leaf_idx, self._tree[leaf_idx]
 
     def data_idx_to_leaf_idx(self, data_idx):
         return data_idx + self.capacity - 1
@@ -275,7 +280,7 @@ class PrioritizedReplayBuffer:
         self.batch_size = batch_size
         self.capacity = int(2**math.floor(math.log2(capacity)))
         self.alpha = alpha
-        self._sum_tree = SumTree(self.batch_size, self.capacity)
+        self._sum_tree = SumTree(self.capacity)
         self._trans_storage = DataStorage(self.capacity)
 
     def add(self, *transitions):
@@ -285,9 +290,7 @@ class PrioritizedReplayBuffer:
             max_p = self._sum_tree.max
 
         data_pointers = self._trans_storage.add(transitions)
-
-        for data_pointer in data_pointers:
-            self._sum_tree.add(data_pointer, max_p)
+        self._sum_tree.add(data_pointers, max_p)
 
     def add_with_td_error(self, td_error, *transitions):
         td_error = np.asarray(td_error)
@@ -299,31 +302,19 @@ class PrioritizedReplayBuffer:
         probs = np.power(clipped_errors, self.alpha)
 
         data_pointers = self._trans_storage.add(transitions)
-        for data_pointer, p in zip(data_pointers, probs):
-            self._sum_tree.add(data_pointer, p)
+        self._sum_tree.add(data_pointers, probs)
 
     def sample(self):
         if not self.is_lg_batch_size:
             return None
 
-        leaf_pointers = np.empty((self.batch_size,), dtype=np.int32)
-        trans_pointers = np.empty((self.batch_size,), dtype=np.int32)
-        is_weights = np.empty((self.batch_size, 1), dtype=np.float32)
+        leaf_pointers, p = self._sum_tree.sample(self.batch_size)
 
-        pri_seg = self._sum_tree.total_p / self.batch_size       # priority segment
-        self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
-
-        for i in range(self.batch_size):
-            a, b = pri_seg * i, pri_seg * (i + 1)
-
-            v = np.random.uniform(a, b)
-            leaf_pointer, p, data_pointer = self._sum_tree.get_leaf(v)
-
-            leaf_pointers[i] = leaf_pointer
-            trans_pointers[i] = data_pointer
-            is_weights[i] = p / self._sum_tree.total_p
-
+        trans_pointers = self._sum_tree.leaf_idx_to_data_idx(leaf_pointers)
         transitions = self._trans_storage.get(trans_pointers)
+
+        is_weights = p / self._sum_tree.total_p
+        self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
         is_weights = np.power(is_weights / is_weights.min(), -self.beta)
 
         return leaf_pointers, transitions, is_weights
@@ -337,8 +328,7 @@ class PrioritizedReplayBuffer:
         clipped_errors = np.minimum(td_error, self.td_err_upper)
         probs = np.power(clipped_errors, self.alpha)
 
-        for leaf_pointer, p in zip(leaf_pointers, probs):
-            self._sum_tree.update(leaf_pointer, p)
+        self._sum_tree.update(leaf_pointers, probs)
 
     def update_transitions(self, leaf_pointers, index, data):
         assert len(leaf_pointers) == len(data)
