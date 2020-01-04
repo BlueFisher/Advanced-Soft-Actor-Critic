@@ -267,7 +267,7 @@ class SumTree:
     def update(self, tree_idx, p):
         self._tree[tree_idx] = p
 
-        for i in range(self.depth - 2, -1, -1):
+        for _ in range(self.depth - 1):
             parent_idx = (tree_idx - 1) // 2
             parent_idx = np.unique(parent_idx)
             node1 = self._tree[parent_idx * 2 + 1]
@@ -297,7 +297,7 @@ class SumTree:
         for _ in range(self.depth - 1):
             node1 = leaf_idx * 2 + 1
             node2 = leaf_idx * 2 + 2
-            t = v <= self._tree[node1]
+            t = np.logical_or(v <= self._tree[node1], self._tree[node2]==0)
             leaf_idx[t] = node1[t]
             leaf_idx[~t] = node2[~t]
             v[~t] -= self._tree[node1[~t]]
@@ -312,6 +312,10 @@ class SumTree:
 
     def clear(self):
         self._tree[:] = 0
+
+    def display(self):
+        for i in range(self.depth):
+            print(self._tree[2**i - 1:2**(i + 1) - 1])
 
     @property
     def total_p(self):
@@ -347,8 +351,6 @@ class PrioritizedReplayBuffer:
             max_p = self._sum_tree.max
 
         data_pointers = self._trans_storage.add(transitions)
-        if np.isnan(max_p):
-            print(max_p)
         probs = np.full(len(data_pointers), max_p)
         # don't sample last ignore_size transitions
         probs[-1:-1 - ignore_size:-1] = 0
@@ -377,8 +379,6 @@ class PrioritizedReplayBuffer:
         transitions = self._trans_storage.get(trans_pointers)
 
         is_weights = p / self._sum_tree.total_p
-        if np.min(is_weights) == 0:
-            print(np.min(is_weights))
         self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
         is_weights = np.power(is_weights / np.min(is_weights), -self.beta)
 
@@ -393,6 +393,8 @@ class PrioritizedReplayBuffer:
             td_error = td_error.flatten()
 
         clipped_errors = np.clip(td_error, self.epsilon, self.td_err_upper)
+        if np.isnan(np.min(clipped_errors)):
+            raise RuntimeError('td_error has nan')
         probs = np.power(clipped_errors, self.alpha)
 
         self._sum_tree.update(leaf_pointers, probs)
@@ -422,8 +424,8 @@ class PrioritizedReplayBuffer:
 
 if __name__ == "__main__":
     import time
-    replay_buffer = PrioritizedReplayBuffer(8, 32)
-    n_step = 3
+    replay_buffer = PrioritizedReplayBuffer(256, 524288)
+    n_step = 5
 
     while True:
         s = np.random.randint(n_step + 1, 500)
@@ -438,7 +440,5 @@ if __name__ == "__main__":
             for i in range(1, n_step + 1):
                 replay_buffer.get_storage_data(points + i)
             replay_buffer.update(points, np.random.random(len(points)).astype(np.float32))
-            replay_buffer._sum_tree.display()
-            print('=' * 10)
 
         # input()
