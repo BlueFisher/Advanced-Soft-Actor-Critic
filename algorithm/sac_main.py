@@ -44,6 +44,7 @@ class Main(object):
 
         # initialize config from command line arguments
         self.train_mode = not args.run
+        self.render = args.render
         self.run_in_editor = args.editor
 
         if args.name is not None:
@@ -83,7 +84,7 @@ class Main(object):
             self.env = UnityEnvironment(base_port=5004)
         else:
             self.env = UnityEnvironment(file_name=self.config['build_path'],
-                                        no_graphics=self.train_mode,
+                                        no_graphics=not self.render and self.train_mode,
                                         base_port=self.config['port'],
                                         args=['--scene', self.config['scene']])
 
@@ -155,10 +156,10 @@ class Main(object):
                     if agent.is_empty():
                         for _ in range(self.config['burn_in_step']):
                             agent.add_transition(np.zeros(self.state_dim),
-                                                np.zeros(self.action_dim),
-                                                0, False, False,
-                                                np.zeros(self.state_dim),
-                                                initial_rnn_state[0])
+                                                 np.zeros(self.action_dim),
+                                                 0, False, False,
+                                                 np.zeros(self.state_dim),
+                                                 initial_rnn_state[0])
 
             state = brain_info.vector_observations
             step = 0
@@ -194,19 +195,19 @@ class Main(object):
                 if self.train_mode:
                     trans_list, episode_trans_list = zip(*tmp_results)
 
-                    trans_list = [t for t in trans_list if t is not None]
-                    if len(trans_list) != 0:
-                        # n_states, n_actions, n_rewards, done, rnn_state
-                        trans = [np.concatenate(t, axis=0) for t in zip(*trans_list)]
-                        self.sac.fill_replay_buffer(*trans)
+                    # trans_list = [t for t in trans_list if t is not None]
+                    # if len(trans_list) != 0:
+                    #     # n_states, n_actions, n_rewards, done, rnn_state
+                    #     trans = [np.concatenate(t, axis=0) for t in zip(*trans_list)]
+                    #     self.sac.fill_replay_buffer(*trans)
 
-                    if self.config['use_rnn'] and self.config['use_prediction']:
-                        episode_trans_list = [t for t in episode_trans_list if t is not None]
-                        if len(episode_trans_list) != 0:
-                            # n_states, n_actions, n_rewards, done, rnn_state
-                            for episode_trans in episode_trans_list:
-                                self.sac.fill_episode_replay_buffer(*episode_trans)
-
+                    # if self.config['use_rnn'] and self.config['use_prediction']:
+                    episode_trans_list = [t for t in episode_trans_list if t is not None]
+                    if len(episode_trans_list) != 0:
+                        # n_states, n_actions, n_rewards, state_, n_dones, rnn_state
+                        for episode_trans in episode_trans_list:
+                            self.sac.fill_replay_buffer(*episode_trans)
+                            # for _ in range(int(episode_trans[0].shape[1]/10)):
                     self.sac.train()
 
                 state = state_

@@ -4,7 +4,7 @@ base_config:
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
   scene: ContinousSimpleRoller
 
-  max_iter: 200
+  max_iter: 50
   save_model_per_iter: 200
   reset_on_iteration: false
   n_step: 10

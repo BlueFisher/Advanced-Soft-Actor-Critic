@@ -152,6 +152,63 @@ class DataStorage:
         return self._size == self.capacity
 
 
+class EpisodeStorage:
+    _size = 0
+    _pointer = 0
+    _buffer = None
+
+    def __init__(self, capacity):
+        # TODO: MongoDB
+        self.capacity = capacity
+        self.episode_index = list()
+
+    def add(self, args):
+        """
+        args: list
+            The first dimension of each element is the length of an episode
+        """
+        tmp_len = len(args[0])
+
+        if self._buffer is None:
+            self._buffer = [np.empty([self.capacity] + list(a.shape[1:]), dtype=np.float32) for a in args]
+
+        pointers = np.arange(tmp_len) + self._pointer
+        valid_mask = pointers < self.capacity
+        pointers = pointers[valid_mask]
+
+        for i, arg in enumerate(args):
+            self._buffer[i][pointers] = arg[valid_mask]
+
+        self._size += tmp_len
+        if self._size > self.capacity:
+            self._size = self.capacity
+
+        self._pointer = pointers[-1] + 1
+        if self._pointer == self.capacity:
+            self._pointer = 0
+
+        return pointers
+
+    def update(self, pointers, index, data):
+        self._buffer[index][pointers] = data
+
+    def get(self, pointers):
+        return [data[pointers] for data in self._buffer]
+
+    def clear(self):
+        self._size = 0
+        self._pointer = 0
+        self._buffer = None
+
+    @property
+    def size(self):
+        return self._size
+
+    @property
+    def is_full(self):
+        return self._size == self.capacity
+
+
 class ReplayBuffer:
     _data_pointer = 0
 
@@ -159,7 +216,7 @@ class ReplayBuffer:
         self.batch_size = int(batch_size)
         self.capacity = int(capacity)
 
-        self._trans_storage = DataStorage(self.capacity)
+        self._trans_storage = EpisodeStorage(self.capacity)
 
     def add(self, *transitions):
         self._trans_storage.add(transitions)
@@ -199,7 +256,7 @@ class SumTree:
         self.capacity = capacity  # for all priority values
         self.depth = int(math.log2(capacity)) + 1
 
-        self._tree = np.zeros(2 * capacity - 1)
+        self._tree = np.zeros(2 * capacity - 1, dtype=np.float32)
         # [--------------Parent nodes-------------][-------leaves to recode priority-------]
         #             size: capacity - 1                       size: capacity
 
@@ -281,25 +338,31 @@ class PrioritizedReplayBuffer:
         self.capacity = int(2**math.floor(math.log2(capacity)))
         self.alpha = alpha
         self._sum_tree = SumTree(self.capacity)
-        self._trans_storage = DataStorage(self.capacity)
+        self._trans_storage = EpisodeStorage(self.capacity)
 
-    def add(self, *transitions):
+    def add(self, *transitions, ignore_size=0):
         if self._trans_storage.size == 0:
             max_p = self.td_err_upper
         else:
             max_p = self._sum_tree.max
 
         data_pointers = self._trans_storage.add(transitions)
-        self._sum_tree.add(data_pointers, max_p)
+        if np.isnan(max_p):
+            print(max_p)
+        probs = np.full(len(data_pointers), max_p)
+        # don't sample last ignore_size transitions
+        probs[-1:-1 - ignore_size:-1] = 0
+        self._sum_tree.add(data_pointers, probs)
 
-    def add_with_td_error(self, td_error, *transitions):
+    def add_with_td_error(self, td_error, *transitions, ignore_size=0):
         td_error = np.asarray(td_error)
         if len(td_error.shape) == 2:
             td_error = td_error.flatten()
 
-        td_error = np.maximum(td_error, 0) + self.epsilon  # convert to abs and avoid 0
-        clipped_errors = np.minimum(td_error, self.td_err_upper)
+        np.clip(td_error, self.epsilon, self.td_err_upper)
         probs = np.power(clipped_errors, self.alpha)
+        # don't sample last ignore_size transitions
+        probs[-1:-1 - ignore_size:-1] = 0
 
         data_pointers = self._trans_storage.add(transitions)
         self._sum_tree.add(data_pointers, probs)
@@ -314,18 +377,22 @@ class PrioritizedReplayBuffer:
         transitions = self._trans_storage.get(trans_pointers)
 
         is_weights = p / self._sum_tree.total_p
+        if np.min(is_weights) == 0:
+            print(np.min(is_weights))
         self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
-        is_weights = np.power(is_weights / is_weights.min(), -self.beta)
+        is_weights = np.power(is_weights / np.min(is_weights), -self.beta)
 
-        return leaf_pointers, transitions, is_weights
+        return leaf_pointers, transitions, np.expand_dims(is_weights, axis=1)
+
+    def get_storage_data(self, leaf_pointers):
+        return self._trans_storage.get(self._sum_tree.leaf_idx_to_data_idx(leaf_pointers))
 
     def update(self, leaf_pointers, td_error):
         td_error = np.asarray(td_error)
         if len(td_error.shape) == 2:
             td_error = td_error.flatten()
 
-        td_error += self.epsilon  # convert to abs and avoid 0
-        clipped_errors = np.minimum(td_error, self.td_err_upper)
+        clipped_errors = np.clip(td_error, self.epsilon, self.td_err_upper)
         probs = np.power(clipped_errors, self.alpha)
 
         self._sum_tree.update(leaf_pointers, probs)
@@ -355,25 +422,23 @@ class PrioritizedReplayBuffer:
 
 if __name__ == "__main__":
     import time
+    replay_buffer = PrioritizedReplayBuffer(8, 32)
+    n_step = 3
 
-    # replay_buffer = ReplayBuffer()
-    # replay_buffer.add(np.random.randn(200, 3, 2), np.random.randn(200, 5))
-    # replay_buffer.add(np.random.randn(200, 3, 2), np.random.randn(200, 5))
-
-    # replay_buffer.update_transitions([0, 1], 1, np.random.randn(2, 5))
-
-    # pointers, data = replay_buffer.sample()
-    # print(len(pointers))
-
-    # for d in data:
-    #     print(d.shape)
-
-    replay_buffer = PrioritizedReplayBuffer(50, 120)
-
-    for i in range(10):
-        replay_buffer.add(np.random.randn(100, 1), np.random.randn(100, 5))
+    while True:
+        s = np.random.randint(n_step + 1, 500)
+        replay_buffer.add(np.random.randn(s, 1), np.random.randn(s), ignore_size=n_step)
+        # print(replay_buffer._sum_tree._tree[replay_buffer.capacity - 1:])
         sampled = replay_buffer.sample()
         if sampled is None:
             print('None')
         else:
             points, (a, b), ratio = sampled
+            # print(replay_buffer._sum_tree.leaf_idx_to_data_idx(points))
+            for i in range(1, n_step + 1):
+                replay_buffer.get_storage_data(points + i)
+            replay_buffer.update(points, np.random.random(len(points)).astype(np.float32))
+            replay_buffer._sum_tree.display()
+            print('=' * 10)
+
+        # input()

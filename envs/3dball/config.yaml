@@ -4,10 +4,10 @@ base_config:
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
   scene: 3DBall
 
-  max_iter: 500
+  max_iter: 200
   max_step: 500
   save_model_per_iter: 20
-  n_step: 10
+  n_step: 5
 
 sac_config:
   seed: 42
