@@ -109,14 +109,11 @@ class Agent(object):
                     [done])
 
     def _get_episode_trans(self):
-        state_ = self._tmp_episode_trans[-1]['state_']
-        done = self._tmp_episode_trans[-1]['local_done'] and not self._tmp_episode_trans[-1]['max_reached']
-
         return ([t['state'] for t in self._tmp_episode_trans],
                 [t['action'] for t in self._tmp_episode_trans],
                 [t['reward'] for t in self._tmp_episode_trans],
-                state_,
-                [done])
+                self._tmp_episode_trans[-1]['state_'],
+                [t['local_done'] and not t['max_reached'] for t in self._tmp_episode_trans])
 
     def is_empty(self):
         return len(self._tmp_episode_trans) == 0
