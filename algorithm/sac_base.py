@@ -33,7 +33,11 @@ class SAC_Base(object):
                  update_target_per_step=1,
                  init_log_alpha=-2.3,
                  use_auto_alpha=True,
-                 lr=3e-4,
+                 q_lr=3e-4,
+                 policy_lr=1e-4,
+                 alpha_lr=3e-4,
+                 rnn_lr=3e-4,
+                 prediction_lr=3e-4,
                  gamma=0.99,
                  _lambda=0.9,
                  use_priority=False,
@@ -74,7 +78,8 @@ class SAC_Base(object):
         if seed is not None:
             tf.random.set_seed(seed)
 
-        self._build_model(lr, init_log_alpha, model)
+        self._build_model(model, init_log_alpha,
+                          q_lr, policy_lr, alpha_lr, rnn_lr, prediction_lr)
         self._init_or_restore(model_root_path)
 
         if train_mode:
@@ -95,7 +100,9 @@ class SAC_Base(object):
 
             self._init_tf_function()
 
-    def _build_model(self, lr, init_log_alpha, model):
+    def _build_model(self, model, init_log_alpha,
+                     q_lr, policy_lr, alpha_lr,
+                     rnn_lr=None, prediction_lr=None):
         """
         Initialize variables, network models and optimizers
         """
@@ -104,11 +111,11 @@ class SAC_Base(object):
         self.max_reward = tf.Variable(0, dtype=tf.float32, name='max_reward')
         self.global_step = tf.Variable(0, dtype=tf.int64, name='global_step')
 
-        self.optimizer_q1 = tf.keras.optimizers.Adam(lr)
-        self.optimizer_q2 = tf.keras.optimizers.Adam(lr)
-        self.optimizer_policy = tf.keras.optimizers.Adam(lr)
+        self.optimizer_q1 = tf.keras.optimizers.Adam(q_lr)
+        self.optimizer_q2 = tf.keras.optimizers.Adam(q_lr)
+        self.optimizer_policy = tf.keras.optimizers.Adam(policy_lr)
         if self.use_auto_alpha:
-            self.optimizer_alpha = tf.keras.optimizers.Adam(lr)
+            self.optimizer_alpha = tf.keras.optimizers.Adam(alpha_lr)
 
         if self.use_rnn:
             self.model_rnn = model.ModelRNN(self.state_dim)
@@ -119,11 +126,11 @@ class SAC_Base(object):
             self.encoded_state_dim = state_dim = tmp_state.shape[-1]
             self.rnn_state_dim = tmp_rnn_state.shape[-1]
 
-            self.optimizer_rnn = tf.keras.optimizers.Adam(lr)
+            self.optimizer_rnn = tf.keras.optimizers.Adam(rnn_lr)
 
             if self.use_prediction:
                 self.model_prediction = model.ModelPrediction(self.state_dim, state_dim, self.action_dim)
-                self.optimizer_prediction = tf.keras.optimizers.Adam(lr)
+                self.optimizer_prediction = tf.keras.optimizers.Adam(prediction_lr)
                 # # avoid ValueError: tf.function-decorated function tried to create variables on non-first call.
                 # zero_grads = [np.zeros_like(v.numpy()) for v in self.model_prediction.trainable_variables]
                 # self.optimizer_prediction.apply_gradients(zip(zero_grads, self.model_prediction.trainable_variables))
@@ -371,8 +378,8 @@ class SAC_Base(object):
                 if self.use_prediction:
                     approx_n_actions = self.model_prediction(encoded_n_states,
                                                              m_states[:, 1:, :])
-                    loss_prediction = tf.math.squared_difference(approx_n_actions,
-                                                                 n_actions)
+                    loss_prediction = tf.math.squared_difference(approx_n_actions[:, self.burn_in_step:, :],
+                                                                 n_actions[:, self.burn_in_step:, :])
 
                     loss_rnn = tf.reduce_sum(loss_rnn) + tf.reduce_sum(loss_prediction)
 

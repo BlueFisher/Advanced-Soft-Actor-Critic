@@ -37,10 +37,10 @@ class ModelPrediction(tf.keras.Model):
             tf.keras.layers.Dense(64, activation=tf.nn.relu, **initializer_helper),
             tf.keras.layers.Dense(64, activation=tf.nn.relu, **initializer_helper),
             tf.keras.layers.Dense(64, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(state_dim, **initializer_helper)
+            tf.keras.layers.Dense(action_dim, **initializer_helper)
         ])
 
-        self(tf.keras.Input(shape=(encoded_state_dim,)), tf.keras.Input(shape=(action_dim,)))
+        self(tf.keras.Input(shape=(encoded_state_dim,)), tf.keras.Input(shape=(state_dim,)))
 
     def call(self, inputs_s, inputs_a):
         return self.seq(tf.concat([inputs_s, inputs_a], -1))
