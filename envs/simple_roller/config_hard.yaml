@@ -5,7 +5,7 @@ base_config:
   scene: ContinousHardRoller
 
   sac: sac_hard
-  max_iter: 300
+  max_iter: 100
   save_model_per_iter: 50
   reset_on_iteration: false
   burn_in_step: 10
