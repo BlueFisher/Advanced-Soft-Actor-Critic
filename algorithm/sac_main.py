@@ -207,7 +207,6 @@ class Main(object):
                         # n_states, n_actions, n_rewards, state_, n_dones, rnn_state
                         for episode_trans in episode_trans_list:
                             self.sac.fill_replay_buffer(*episode_trans)
-                            # for _ in range(int(episode_trans[0].shape[1]/10)):
                     self.sac.train()
 
                 state = state_

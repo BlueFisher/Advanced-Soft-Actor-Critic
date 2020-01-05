@@ -14,12 +14,12 @@ class ModelRNN(tf.keras.Model):
         super(ModelRNN, self).__init__()
         self.state_dim = state_dim
         self.rnn_units = 32
-        self.layer_lstm = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
+        self.layer_rnn = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
 
         self.get_call_result_tensors()
 
     def call(self, inputs_s, initial_state):
-        outputs, next_state = self.layer_lstm(inputs_s, initial_state=initial_state)
+        outputs, next_state = self.layer_rnn(inputs_s, initial_state=initial_state)
 
         encoded_s = tf.concat([inputs_s, outputs], -1)
         return encoded_s, next_state
@@ -36,13 +36,13 @@ class ModelPrediction(tf.keras.Model):
             tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
             tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
             tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(state_dim, **initializer_helper)
+            tf.keras.layers.Dense(action_dim, **initializer_helper)
         ])
 
-        self(tf.keras.Input(shape=(encoded_state_dim,)), tf.keras.Input(shape=(action_dim,)))
+        self(tf.keras.Input(shape=(encoded_state_dim,)), tf.keras.Input(shape=(state_dim,)))
 
-    def call(self, inputs_s, inputs_a):
-        return self.seq(tf.concat([inputs_s, inputs_a], -1))
+    def call(self, inputs_s, inputs_s_):
+        return self.seq(tf.concat([inputs_s, inputs_s_], -1))
 
 
 class ModelQ(tf.keras.Model):
