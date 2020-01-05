@@ -116,7 +116,7 @@ class SAC_Base(object):
 
             # get encoded state dimension and initial_rnn_state
             tmp_state, tmp_rnn_state = self.model_rnn.get_call_result_tensors()
-            state_dim = tmp_state.shape[-1]
+            self.encoded_state_dim = state_dim = tmp_state.shape[-1]
             self.rnn_state_dim = tmp_rnn_state.shape[-1]
 
             self.optimizer_rnn = tf.keras.optimizers.Adam(lr)
@@ -145,11 +145,19 @@ class SAC_Base(object):
 
             return c
 
-        tmp_get_n_step_probs = self.get_n_step_probs.get_concrete_function(
-            n_states=tf.TensorSpec(shape=(None, None, self.state_dim), dtype=tf.float32),
-            n_actions=tf.TensorSpec(shape=(None, None, self.action_dim), dtype=tf.float32)
-        )
-        self.get_n_step_probs = _np_to_tensor(tmp_get_n_step_probs)
+        if self.use_rnn:
+            tmp_get_rnn_n_step_probs = self.get_rnn_n_step_probs.get_concrete_function(
+                n_states=tf.TensorSpec(shape=(None, None, self.state_dim), dtype=tf.float32),
+                n_actions=tf.TensorSpec(shape=(None, None, self.action_dim), dtype=tf.float32),
+                rnn_state=tf.TensorSpec(shape=(None, self.rnn_state_dim), dtype=tf.float32),
+            )
+            self.get_rnn_n_step_probs = _np_to_tensor(tmp_get_rnn_n_step_probs)
+        else:
+            tmp_get_n_step_probs = self.get_n_step_probs.get_concrete_function(
+                n_states=tf.TensorSpec(shape=(None, None, self.state_dim), dtype=tf.float32),
+                n_actions=tf.TensorSpec(shape=(None, None, self.action_dim), dtype=tf.float32)
+            )
+            self.get_n_step_probs = _np_to_tensor(tmp_get_n_step_probs)
 
         step_size = self.burn_in_step + self.n_step
         # get_td_error
@@ -205,9 +213,6 @@ class SAC_Base(object):
         if self.use_rnn:
             ckpt.model_rnn = self.model_rnn
             ckpt.model_target_rnn = self.model_target_rnn
-            if self.use_prediction:
-                ckpt.optimizer_prediction = self.optimizer_prediction
-                ckpt.model_prediction = self.model_prediction
 
         if self.use_auto_alpha:
             ckpt.optimizer_alpha = self.optimizer_alpha
@@ -271,8 +276,12 @@ class SAC_Base(object):
         next_q1 = tf.squeeze(next_q1, [-1])
         next_q2 = tf.squeeze(next_q2, [-1])
 
-        td_error = n_rewards + self.gamma * (1 - n_dones) * (tf.clip_by_value(tf.minimum(next_q1, next_q2), self.min_reward, self.max_reward) - alpha * next_n_actions_log_prob) \
-            - (tf.clip_by_value(tf.minimum(q1, q2), self.min_reward, self.max_reward) - alpha * n_actions_log_prob)
+        # td_error = n_rewards + self.gamma * (1 - n_dones) * (tf.clip_by_value(tf.minimum(next_q1, next_q2), self.min_reward, self.max_reward) - alpha * next_n_actions_log_prob) \
+        #     - (tf.clip_by_value(tf.minimum(q1, q2), self.min_reward, self.max_reward) - alpha * n_actions_log_prob)
+
+        td_error = n_rewards + self.gamma * (1 - n_dones) * (tf.minimum(next_q1, next_q2) - alpha * next_n_actions_log_prob) \
+            - (tf.minimum(q1, q2) - alpha * n_actions_log_prob)
+
         td_error = gamma_ratio * td_error
         if self.use_n_step_is:
             td_error = lambda_ratio * td_error
@@ -322,7 +331,7 @@ class SAC_Base(object):
                 n_states = encoded_n_states
                 state = encoded_n_states[:, self.burn_in_step, :]
             else:
-                state = n_states[:, self.burn_in_step, :]
+                state = n_states[:, 0, :]
 
             action = n_actions[:, self.burn_in_step, :]
 
@@ -339,7 +348,7 @@ class SAC_Base(object):
             y = tf.stop_gradient(self._get_y(n_states[:, self.burn_in_step:, :],
                                              n_actions[:, self.burn_in_step:, :],
                                              n_rewards[:, self.burn_in_step:],
-                                             state_, n_dones,
+                                             state_, n_dones[:, self.burn_in_step:],
                                              n_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None))
 
             loss_q1 = tf.math.squared_difference(q1, y)
@@ -360,13 +369,12 @@ class SAC_Base(object):
                 loss_rnn = loss_q1 + loss_q2
 
                 if self.use_prediction:
-                    encoded_ep_n_states, *_ = self.model_rnn(ep_m_states[:, :-1, :], ep_rnn_state)
-                    approx_ep_next_states = self.model_prediction(encoded_ep_n_states,
-                                                                  ep_n_actions)
-                    loss_prediction = tf.math.squared_difference(approx_ep_next_states,
-                                                                 ep_m_states[:, 1:, :])
+                    approx_n_actions = self.model_prediction(encoded_n_states,
+                                                             m_states[:, 1:, :])
+                    loss_prediction = tf.math.squared_difference(approx_n_actions,
+                                                                 n_actions)
 
-                    loss_rnn = tf.reduce_mean(loss_rnn) + tf.reduce_mean(loss_prediction)
+                    loss_rnn = tf.reduce_sum(loss_rnn) + tf.reduce_sum(loss_prediction)
 
             log_prob = tf.reduce_sum(policy.log_prob(action_sampled), axis=1, keepdims=True)
             loss_policy = alpha * log_prob - tf.minimum(q1_for_gradient, q2_for_gradient)
@@ -397,9 +405,7 @@ class SAC_Base(object):
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             with self.summary_writer.as_default():
-                tf.summary.scalar('loss/y_min', tf.reduce_min(y), step=self.global_step)
-                tf.summary.scalar('loss/y_mean', tf.reduce_mean(y), step=self.global_step)
-                tf.summary.scalar('loss/y_max', tf.reduce_max(y), step=self.global_step)
+                tf.summary.scalar('loss/y', tf.reduce_mean(y), step=self.global_step)
 
                 tf.summary.scalar('loss/Q1', tf.reduce_mean(loss_q1), step=self.global_step)
                 tf.summary.scalar('loss/Q2', tf.reduce_mean(loss_q2), step=self.global_step)
@@ -476,7 +482,7 @@ class SAC_Base(object):
         y = self._get_y(n_states[:, self.burn_in_step:, :],
                         n_actions[:, self.burn_in_step:, :],
                         n_rewards[:, self.burn_in_step:],
-                        state_, n_dones,
+                        state_, n_dones[:, self.burn_in_step:],
                         n_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
 
         q1_td_error = tf.abs(q1 - y)
@@ -528,7 +534,7 @@ class SAC_Base(object):
         self.summary_writer.flush()
 
     def fill_replay_buffer(self, n_states, n_actions, n_rewards, state_, n_dones,
-                           rnn_state=None):
+                           n_rnn_states=None):
         """
         n_states: [1, episode_len, state_dim]
         n_actions: [1, episode_len, action_dim]
@@ -537,68 +543,79 @@ class SAC_Base(object):
         n_dones: [1, episode_len]
         """
         assert len(n_states) == len(n_actions) == len(n_rewards) == len(state_) == len(n_dones)
-        if not self.use_rnn:
-            assert rnn_state is None
 
-        self.update_reward_bound(n_rewards)
+        # self.update_reward_bound(n_rewards)
 
-        if n_states.shape[1] < self.n_step:
+        if n_states.shape[1] < self.burn_in_step + self.n_step:
             return
 
-        if self.use_rnn:
-            # TODO
-            n_states, n_actions, n_rewards, state_, n_dones, rnn_state = trans
+        state = n_states.reshape([-1, n_states.shape[-1]])
+        action = n_actions.reshape([-1, n_actions.shape[-1]])
+        reward = n_rewards.reshape([-1])
+        done = n_dones.reshape([-1])
 
-            n_mu_probs = self.get_rnn_n_step_probs(n_states, n_actions,  # TODO: only need [:, burn_in_step:, :]
-                                                   rnn_state).numpy()
-            self.replay_buffer.add(n_states, n_actions, n_rewards, state_, done, n_mu_probs, rnn_state)
-        else:
-            n_mu_probs = self.get_n_step_probs(n_states, n_actions).numpy()
+        # padding state_
+        state = np.concatenate([state, state_])
+        action = np.concatenate([action,
+                                 np.empty([1, action.shape[-1]], dtype=np.float32)])
+        reward = np.concatenate([reward,
+                                 np.zeros([1], dtype=np.float32)])
+        done = np.concatenate([done,
+                               np.zeros([1], dtype=np.float32)])
 
-            state = n_states.reshape([-1, n_states.shape[-1]])
-            action = n_actions.reshape([-1, n_actions.shape[-1]])
-            reward = n_rewards.reshape([-1])
-            done = n_dones.reshape([-1])
+        storage_data = {
+            'state': state,
+            'action': action,
+            'reward': reward,
+            'done': done,
+        }
+
+        if self.use_n_step_is:
+            if self.use_rnn:
+                n_mu_probs = self.get_rnn_n_step_probs(n_states, n_actions,
+                                                       n_rnn_states[:, 0, :]).numpy()
+            else:
+                n_mu_probs = self.get_n_step_probs(n_states, n_actions).numpy()
+
             mu_prob = n_mu_probs.reshape([-1, n_mu_probs.shape[-1]])
-
-            # concatenate padding state_
-            state = np.concatenate([state, state_])
-            action = np.concatenate([action,
-                                     np.empty([1, action.shape[-1]], dtype=np.float32)])
-            reward = np.concatenate([reward,
-                                     np.zeros([1], dtype=np.float32)])
-            done = np.concatenate([done,
-                                   np.zeros([1], dtype=np.float32)])
             mu_prob = np.concatenate([mu_prob,
                                       np.empty([1, mu_prob.shape[-1]], dtype=np.float32)])
+            storage_data['mu_prob'] = mu_prob
 
-            """
-            state: [episode_len + 1, state_dim]
-            action: [episode_len + 1, action_dim]
-            reward: [episode_len + 1, ]
-            done: [episode_len + 1, ]
-            mu_prob: [episode_len + 1, action_dim]
-            """
-            # n_step transitions except the first one and the last state_, n_step - 1 + 1
-            if self.use_priority:
-                n_states = np.concatenate([n_states[:, i:i + self.n_step] for i in range(n_states.shape[1] - self.n_step + 1)], axis=0)
-                n_actions = np.concatenate([n_actions[:, i:i + self.n_step] for i in range(n_actions.shape[1] - self.n_step + 1)], axis=0)
-                n_rewards = np.concatenate([n_rewards[:, i:i + self.n_step] for i in range(n_rewards.shape[1] - self.n_step + 1)], axis=0)
-                state_ = state[self.n_step:]
-                n_dones = np.concatenate([n_dones[:, i:i + self.n_step] for i in range(n_dones.shape[1] - self.n_step + 1)], axis=0)
-                n_mu_probs = np.concatenate([n_mu_probs[:, i:i + self.n_step] for i in range(n_mu_probs.shape[1] - self.n_step + 1)], axis=0)
+        if self.use_rnn:
+            rnn_state = n_rnn_states.reshape([-1, n_rnn_states.shape[-1]])
+            rnn_state = np.concatenate([rnn_state,
+                                        np.empty([1, rnn_state.shape[-1]], dtype=np.float32)])
+            storage_data['rnn_state'] = rnn_state
 
-                # td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, n_dones,
-                #                              n_mu_probs=n_mu_probs if self.use_n_step_is else None,
-                #                              rnn_state=rnn_state if self.use_rnn else None).numpy()
-                # td_error = td_error.flatten()
-                # td_error = np.concatenate([td_error,
-                #                            np.zeros(self.n_step, dtype=np.float32)])
+        """
+        state: [episode_len + 1, state_dim]
+        action: [episode_len + 1, action_dim]
+        reward: [episode_len + 1, ]
+        done: [episode_len + 1, ]
+        mu_prob: [episode_len + 1, action_dim]
+        """
 
-                # self.replay_buffer.add_with_td_error(td_error, state, action, reward, done, mu_prob, ignore_size=self.n_step)
-                self.replay_buffer.add(state, action, reward, done, mu_prob, ignore_size=self.n_step)
-            else:
-                self.replay_buffer.add(state, action, reward, done, mu_prob, ignore_size=self.n_step)
+        # n_step transitions except the first one and the last state_, n_step - 1 + 1
+        if self.use_priority:
+            self.replay_buffer.add(storage_data, ignore_size=self.burn_in_step + self.n_step)
+            # n_states = np.concatenate([n_states[:, i:i + self.n_step] for i in range(n_states.shape[1] - self.n_step + 1)], axis=0)
+            # n_actions = np.concatenate([n_actions[:, i:i + self.n_step] for i in range(n_actions.shape[1] - self.n_step + 1)], axis=0)
+            # n_rewards = np.concatenate([n_rewards[:, i:i + self.n_step] for i in range(n_rewards.shape[1] - self.n_step + 1)], axis=0)
+            # state_ = state[self.n_step:]
+            # n_dones = np.concatenate([n_dones[:, i:i + self.n_step] for i in range(n_dones.shape[1] - self.n_step + 1)], axis=0)
+            # n_mu_probs = np.concatenate([n_mu_probs[:, i:i + self.n_step] for i in range(n_mu_probs.shape[1] - self.n_step + 1)], axis=0)
+
+            # td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, n_dones,
+            #                              n_mu_probs=n_mu_probs if self.use_n_step_is else None,
+            #                              rnn_state=rnn_state if self.use_rnn else None).numpy()
+            # td_error = td_error.flatten()
+            # td_error = np.concatenate([td_error,
+            #                            np.zeros(self.n_step, dtype=np.float32)])
+
+            # self.replay_buffer.add_with_td_error(td_error, state, action, reward, done, mu_prob, ignore_size=self.n_step)
+        else:
+            self.replay_buffer.add(storage_data)  # TODO
 
     def train(self):
         # sample from replay buffer
@@ -620,13 +637,15 @@ class SAC_Base(object):
             pointers, trans = sampled
 
         # get n_step transitions
-        trans_list = [trans]  # [[s, a, r, ...], [s, a, r, ...]]
-        for i in range(1, self.n_step + 1):
-            trans_list.append(self.replay_buffer.get_storage_data(pointers + i))
-        trans = list(zip(*trans_list))  # [[s, s, ...], [a, a, ...], [...]]
-        for i, tran in enumerate(trans):
-            tmp_tran = [np.expand_dims(t, 1) for t in tran]
-            trans[i] = np.concatenate(tmp_tran, axis=1)
+        trans = {k: [v] for k, v in trans.items()}
+        # k: [v, v, ...]
+        for i in range(1, self.burn_in_step + self.n_step + 1):
+            t_trans = self.replay_buffer.get_storage_data(pointers + i).items()
+            for k, v in t_trans:
+                trans[k].append(v)
+
+        for k, v in trans.items():
+            trans[k] = np.concatenate([np.expand_dims(t, 1) for t in v], axis=1)
 
         """
         m_states: [None, episode_len + 1, state_dim]
@@ -635,10 +654,11 @@ class SAC_Base(object):
         m_dones: [None, episode_len + 1]
         m_mu_probs: [None, episode_len + 1, action_dim]
         """
-        if self.use_rnn:
-            pass  # TODO
-        else:
-            m_states, m_actions, m_rewards, m_dones, m_mu_probs = trans
+        m_states = trans['state']
+        m_actions = trans['action']
+        m_rewards = trans['reward']
+        m_dones = trans['done']
+        m_mu_probs = trans['mu_prob']
 
         n_states = m_states[:, :-1, :]
         n_actions = m_actions[:, :-1, :]
@@ -647,9 +667,9 @@ class SAC_Base(object):
         n_dones = m_dones[:, :-1]
         n_mu_probs = m_mu_probs[:, :-1, :]
 
-        td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, n_dones,
-                                     n_mu_probs=n_mu_probs if self.use_n_step_is else None,
-                                     rnn_state=rnn_state if self.use_rnn else None).numpy()
+        if self.use_rnn:
+            m_rnn_states = trans['rnn_state']
+            rnn_state = m_rnn_states[:, 0, :]
 
         self._train(n_states=n_states,
                     n_actions=n_actions,
@@ -658,7 +678,7 @@ class SAC_Base(object):
                     n_dones=n_dones,
                     n_mu_probs=n_mu_probs if self.use_n_step_is else None,
                     priority_is=priority_is if self.use_priority else None,
-                    initial_rnn_state=initial_rnn_state if self.use_rnn else None)
+                    initial_rnn_state=rnn_state if self.use_rnn else None)
 
         self.summary_writer.flush()
 
@@ -672,14 +692,14 @@ class SAC_Base(object):
         # update td_error
         if self.use_priority:
             td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, n_dones,
-                                         n_mu_probs=n_pi_probs if self.use_n_step_is else None,
+                                         n_mu_probs=n_mu_probs if self.use_n_step_is else None,
                                          rnn_state=rnn_state if self.use_rnn else None).numpy()
 
-            self.replay_buffer.update(pointers, td_error.flatten())
+            self.replay_buffer.update(pointers, td_error)
 
         # update n_mu_probs
         if self.use_n_step_is:
-            pointers_list = [pointers + i for i in range(self.n_step)]
+            pointers_list = [pointers + i for i in range(self.burn_in_step + self.n_step)]
             pointers = np.stack(pointers_list, axis=1).reshape(-1)
             pi_probs = n_pi_probs.reshape([-1, n_pi_probs.shape[-1]])
-            self.replay_buffer.update_transitions(pointers, 4, pi_probs)
+            self.replay_buffer.update_transitions(pointers, 'mu_prob', pi_probs)

@@ -109,11 +109,15 @@ class Agent(object):
                     [done])
 
     def _get_episode_trans(self):
-        return ([t['state'] for t in self._tmp_episode_trans],
-                [t['action'] for t in self._tmp_episode_trans],
-                [t['reward'] for t in self._tmp_episode_trans],
-                self._tmp_episode_trans[-1]['state_'],
-                [t['local_done'] and not t['max_reached'] for t in self._tmp_episode_trans])
+        trans = [[t['state'] for t in self._tmp_episode_trans],
+                 [t['action'] for t in self._tmp_episode_trans],
+                 [t['reward'] for t in self._tmp_episode_trans],
+                 self._tmp_episode_trans[-1]['state_'],
+                 [t['local_done'] and not t['max_reached'] for t in self._tmp_episode_trans]]
+        if self.use_rnn:
+            trans.append([t['rnn_state'] for t in self._tmp_episode_trans])
+
+        return trans
 
     def is_empty(self):
         return len(self._tmp_episode_trans) == 0
@@ -123,7 +127,7 @@ class Agent(object):
         self.done = False
         self._tmp_trans.clear()
         self._tmp_episode_trans.clear()
-    
+
     def reset(self):
         self.reward = self.last_reward
         self.done = False
