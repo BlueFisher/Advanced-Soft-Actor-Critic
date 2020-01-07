@@ -13,7 +13,7 @@ class ModelRNN(tf.keras.Model):
     def __init__(self, state_dim):
         super(ModelRNN, self).__init__()
         self.state_dim = state_dim
-        self.rnn_units = 64
+        self.rnn_units = 16
         self.layer_rnn = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
 
         self.get_call_result_tensors()
@@ -42,8 +42,8 @@ class ModelPrediction(tf.keras.Model):
 
         self(tf.keras.Input(shape=(encoded_state_dim,)), tf.keras.Input(shape=(state_dim,)))
 
-    def call(self, inputs_s, inputs_a):
-        return self.seq(tf.concat([inputs_s, inputs_a], -1))
+    def call(self, inputs_s, inputs_s_):
+        return self.seq(tf.concat([inputs_s, inputs_s_], -1))
 
 
 class ModelQ(tf.keras.Model):
@@ -88,9 +88,6 @@ class ModelPolicy(tf.keras.Model):
         mu = self.mu_model(l)
 
         sigma = self.sigma_model(l)
-        # sigma = tf.clip_by_value(sigma, -2, 1)
-        # sigma = tf.exp(sigma)
-
         sigma = sigma + .1
 
         return self.tfpd([mu, sigma])

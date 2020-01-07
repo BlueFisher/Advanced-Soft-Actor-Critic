@@ -40,7 +40,7 @@ sac_config:
   init_log_alpha: -2.3
   use_auto_alpha: true
   q_lr: 0.0003
-  policy_lr: 0.0001
+  policy_lr: 0.0003
   alpha_lr: 0.0003
   rnn_lr: 0.0003
   prediction_lr: 0.0003
