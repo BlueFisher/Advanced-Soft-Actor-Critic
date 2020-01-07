@@ -42,6 +42,7 @@ class SAC_Base(object):
                  _lambda=0.9,
                  use_priority=False,
                  use_n_step_is=True,
+                 use_q_clip=True,
 
                  replay_config=None,
                  episode_buffer_config=None):
@@ -72,8 +73,7 @@ class SAC_Base(object):
         self._lambda = _lambda
         self.use_priority = use_priority
         self.use_n_step_is = use_n_step_is
-
-        self.zero_init_states = False
+        self.use_q_clip = use_q_clip
 
         if seed is not None:
             tf.random.set_seed(seed)
@@ -107,8 +107,9 @@ class SAC_Base(object):
         Initialize variables, network models and optimizers
         """
         self.log_alpha = tf.Variable(init_log_alpha, dtype=tf.float32, name='log_alpha')
-        self.min_reward = tf.Variable(0, dtype=tf.float32, name='min_reward')
-        self.max_reward = tf.Variable(0, dtype=tf.float32, name='max_reward')
+        if self.use_q_clip:
+            self.min_q = tf.Variable(0, dtype=tf.float32, name='min_q')
+            self.max_q = tf.Variable(0, dtype=tf.float32, name='max_q')
         self.global_step = tf.Variable(0, dtype=tf.int64, name='global_step')
 
         self.optimizer_q1 = tf.keras.optimizers.Adam(q_lr)
@@ -204,8 +205,6 @@ class SAC_Base(object):
         Initialize network weights from scratch or restore from model_root_path
         """
         ckpt = tf.train.Checkpoint(log_alpha=self.log_alpha,
-                                   min_reward=self.min_reward,
-                                   max_reward=self.max_reward,
                                    global_step=self.global_step,
 
                                    optimizer_q1=self.optimizer_q1,
@@ -223,6 +222,10 @@ class SAC_Base(object):
 
         if self.use_auto_alpha:
             ckpt.optimizer_alpha = self.optimizer_alpha
+
+        if self.use_q_clip:
+            ckpt.min_q = self.min_q
+            ckpt.max_q = self.max_q
 
         self.ckpt_manager = tf.train.CheckpointManager(ckpt, f'{model_path}/model', max_to_keep=10)
 
@@ -283,18 +286,21 @@ class SAC_Base(object):
         next_q1 = tf.squeeze(next_q1, [-1])
         next_q2 = tf.squeeze(next_q2, [-1])
 
-        # td_error = n_rewards + self.gamma * (1 - n_dones) * (tf.clip_by_value(tf.minimum(next_q1, next_q2), self.min_reward, self.max_reward) - alpha * next_n_actions_log_prob) \
-        #     - (tf.clip_by_value(tf.minimum(q1, q2), self.min_reward, self.max_reward) - alpha * n_actions_log_prob)
+        min_next_q = tf.minimum(next_q1, next_q2)
+        min_q = tf.minimum(q1, q2)
+        if self.use_q_clip:
+            min_next_q = tf.clip_by_value(min_next_q, self.min_q, self.max_q)
+            min_q = tf.clip_by_value(min_q, self.min_q, self.max_q)
 
-        td_error = n_rewards + self.gamma * (1 - n_dones) * (tf.minimum(next_q1, next_q2) - alpha * next_n_actions_log_prob) \
-            - (tf.minimum(q1, q2) - alpha * n_actions_log_prob)
+        td_error = n_rewards + self.gamma * (1 - n_dones) * (min_next_q - alpha * next_n_actions_log_prob) \
+            - (min_q - alpha * n_actions_log_prob)
 
         td_error = gamma_ratio * td_error
         if self.use_n_step_is:
             td_error = lambda_ratio * td_error
             n_pi_probs = self.get_n_step_probs(n_states, n_actions)
             # ρ_t
-            n_step_is = tf.clip_by_value(n_pi_probs / n_mu_probs, 0, 1.)
+            n_step_is = tf.clip_by_value(n_pi_probs / n_mu_probs, 0, 1.)  # [None, None, action_dim]
             n_step_is = tf.reduce_prod(n_step_is, axis=2)  # [None, None]
 
             # \prod{c_i}
@@ -376,12 +382,17 @@ class SAC_Base(object):
                 loss_rnn = loss_q1 + loss_q2
 
                 if self.use_prediction:
-                    approx_n_actions = self.model_prediction(encoded_n_states,
-                                                             m_states[:, 1:, :])
-                    loss_prediction = tf.math.squared_difference(approx_n_actions[:, self.burn_in_step:, :],
+                    # approx_next_states = self.model_prediction(encoded_n_states[:, self.burn_in_step:, :],
+                    #                                            n_actions[:, self.burn_in_step:, :])
+                    # loss_prediction = tf.math.squared_difference(approx_next_states,
+                    #                                              m_states[:, self.burn_in_step + 1:, :])
+
+                    approx_actions = self.model_prediction(encoded_n_states[:, self.burn_in_step:, :],
+                                                           m_states[:, self.burn_in_step + 1:, :])
+                    loss_prediction = tf.math.squared_difference(approx_actions,
                                                                  n_actions[:, self.burn_in_step:, :])
 
-                    loss_rnn = tf.reduce_sum(loss_rnn) + tf.reduce_sum(loss_prediction)
+                    loss_rnn = tf.reduce_sum(loss_rnn) + tf.reduce_mean(loss_prediction)
 
             log_prob = tf.reduce_sum(policy.log_prob(action_sampled), axis=1, keepdims=True)
             loss_policy = alpha * log_prob - tf.minimum(q1_for_gradient, q2_for_gradient)
@@ -394,12 +405,12 @@ class SAC_Base(object):
         self.optimizer_q2.apply_gradients(zip(grads_q2, self.model_q2.trainable_variables))
 
         if self.use_rnn:
-            grads_rnn = tape.gradient(loss_rnn, self.model_rnn.trainable_variables)
-            self.optimizer_rnn.apply_gradients(zip(grads_rnn, self.model_rnn.trainable_variables))
-
+            rnn_variables = self.model_rnn.trainable_variables
             if self.use_prediction:
-                grads_pred = tape.gradient(loss_prediction, self.model_prediction.trainable_variables)
-                self.optimizer_prediction.apply_gradients(zip(grads_pred, self.model_prediction.trainable_variables))
+                rnn_variables = rnn_variables + self.model_prediction.trainable_variables
+
+            grads_rnn = tape.gradient(loss_rnn, rnn_variables)
+            self.optimizer_rnn.apply_gradients(zip(grads_rnn, rnn_variables))
 
         grads_policy = tape.gradient(loss_policy, self.model_policy.trainable_variables)
         self.optimizer_policy.apply_gradients(zip(grads_policy, self.model_policy.trainable_variables))
@@ -416,8 +427,6 @@ class SAC_Base(object):
 
                 tf.summary.scalar('loss/Q1', tf.reduce_mean(loss_q1), step=self.global_step)
                 tf.summary.scalar('loss/Q2', tf.reduce_mean(loss_q2), step=self.global_step)
-                if self.use_rnn and self.use_prediction:
-                    tf.summary.scalar('loss/prediction', tf.reduce_mean(loss_prediction), step=self.global_step)
                 tf.summary.scalar('loss/policy', tf.reduce_mean(loss_policy), step=self.global_step)
                 tf.summary.scalar('loss/entropy', tf.reduce_mean(policy.entropy()), step=self.global_step)
                 tf.summary.scalar('loss/alpha', alpha, step=self.global_step)
@@ -519,17 +528,17 @@ class SAC_Base(object):
 
     @tf.function(input_signature=[tf.TensorSpec(shape=None, dtype=tf.float32),
                                   tf.TensorSpec(shape=None, dtype=tf.float32)])
-    def _update_reward_bound(self, min_reward, max_reward):
-        self.min_reward.assign(tf.minimum(self.min_reward, min_reward))
-        self.max_reward.assign(tf.maximum(self.max_reward, max_reward))
+    def _update_q_bound(self, min_reward, max_reward):
+        self.min_q.assign(tf.minimum(self.min_q, min_reward))
+        self.max_q.assign(tf.maximum(self.max_q, max_reward))
 
-    def update_reward_bound(self, n_rewards):
+    def update_q_bound(self, n_rewards):
         cum_n_rewards = np.empty(n_rewards.shape, dtype=np.float32)
         cum_n_rewards[:, -1] = n_rewards[:, -1]
         for i in reversed(range(n_rewards.shape[1] - 1)):
             cum_n_rewards[:, i] = n_rewards[:, i] + self.gamma * cum_n_rewards[:, i + 1]
 
-        self._update_reward_bound(np.min(cum_n_rewards), np.max(cum_n_rewards))
+        self._update_q_bound(np.min(cum_n_rewards), np.max(cum_n_rewards))
 
     def save_model(self, iteration):
         self.ckpt_manager.save(iteration + self.init_iteration)
@@ -551,7 +560,8 @@ class SAC_Base(object):
         """
         assert len(n_states) == len(n_actions) == len(n_rewards) == len(state_) == len(n_dones)
 
-        # self.update_reward_bound(n_rewards)
+        if self.use_q_clip:
+            self.update_q_bound(n_rewards)
 
         if n_states.shape[1] < self.burn_in_step + self.n_step:
             return
