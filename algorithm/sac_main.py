@@ -18,7 +18,7 @@ from .sac_base import SAC_Base
 from .agent import Agent
 
 import algorithm.config_helper as config_helper
-from mlagents.envs.environment import UnityEnvironment
+from algorithm.env_wrapper import EnvWrapper
 
 
 class Main(object):
@@ -29,12 +29,12 @@ class Main(object):
         self._now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
         (self.config, self.reset_config,
-         replay_config, episode_buffer_config,
+         replay_config,
          sac_config,
          model_root_path) = self._init_config(config_path, args)
         self._init_env(model_root_path, config_path,
                        sac_config,
-                       replay_config, episode_buffer_config)
+                       replay_config)
         self._run()
 
     def _init_config(self, config_path, args):
@@ -72,28 +72,22 @@ class Main(object):
         return (config['base_config'],
                 config['reset_config'],
                 config['replay_config'],
-                config['episode_buffer_config'],
                 config['sac_config'],
                 model_root_path)
 
     def _init_env(self, model_root_path, config_path,
                   sac_config,
-                  replay_config,
-                  episode_buffer_config):
+                  replay_config):
         if self.run_in_editor:
-            self.env = UnityEnvironment(base_port=5004)
+            self.env = EnvWrapper(train_mode=self.train_mode, base_port=5004)
         else:
-            self.env = UnityEnvironment(file_name=self.config['build_path'],
-                                        no_graphics=not self.render and self.train_mode,
-                                        base_port=self.config['port'],
-                                        args=['--scene', self.config['scene']])
+            self.env = EnvWrapper(train_mode=self.train_mode,
+                                  file_name=self.config['build_path'],
+                                  no_graphics=not self.render and self.train_mode,
+                                  base_port=self.config['port'],
+                                  args=['--scene', self.config['scene']])
 
-        self.env.reset()
-        self.default_brain_name = self.env.external_brain_names[0]
-
-        brain_params = self.env.brains[self.default_brain_name]
-        self.state_dim = brain_params.vector_observation_space_size
-        self.action_dim = brain_params.vector_action_space_size[0]
+        self.state_dim, self.action_dim = self.env.init()
 
         # if model exists, load saved model, else, copy a new one
         if os.path.isfile(f'{model_root_path}/sac_model.py'):
@@ -114,25 +108,25 @@ class Main(object):
                             use_prediction=self.config['use_prediction'],
 
                             replay_config=replay_config,
-                            episode_buffer_config=episode_buffer_config,
 
                             **sac_config)
 
     def _run(self):
-        brain_info = self.env.reset(train_mode=self.train_mode, config=self.reset_config)[self.default_brain_name]
+        agent_ids, state = self.env.reset(reset_config=self.reset_config)
+
         agents = [self._agent_class(i,
                                     tran_len=self.config['burn_in_step'] + self.config['n_step'],
                                     stagger=self.config['stagger'],
                                     use_rnn=self.config['use_rnn'])
-                  for i in brain_info.agents]
+                  for i in agent_ids]
 
         if self.config['use_rnn']:
-            initial_rnn_state = self.sac.get_initial_rnn_state(len(brain_info.agents))
+            initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))
             rnn_state = initial_rnn_state
 
         for iteration in range(self.config['max_iter'] + 1):
             if self.config['reset_on_iteration']:
-                brain_info = self.env.reset(train_mode=self.train_mode)[self.default_brain_name]
+                _, state = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
 
@@ -161,7 +155,6 @@ class Main(object):
                                                  np.zeros(self.state_dim),
                                                  initial_rnn_state[0])
 
-            state = brain_info.vector_observations
             step = 0
 
             while False in [a.done for a in agents]:
@@ -174,20 +167,17 @@ class Main(object):
 
                 action = action.numpy()
 
-                brain_info = self.env.step({
-                    self.default_brain_name: action
-                })[self.default_brain_name]
+                state_, reward, local_done, max_reached = self.env.step(action)
 
-                state_ = brain_info.vector_observations
                 if step == self.config['max_step']:
-                    brain_info.local_done = [True] * len(brain_info.agents)
-                    brain_info.max_reached = [True] * len(brain_info.agents)
+                    local_done = [True] * len(agents)
+                    max_reached = [True] * len(agents)
 
                 tmp_results = [agents[i].add_transition(state[i],
                                                         action[i],
-                                                        brain_info.rewards[i],
-                                                        brain_info.local_done[i],
-                                                        brain_info.max_reached[i],
+                                                        reward[i],
+                                                        local_done[i],
+                                                        max_reached[i],
                                                         state_[i],
                                                         rnn_state[i] if self.config['use_rnn'] else None)
                                for i in range(len(agents))]
@@ -201,7 +191,6 @@ class Main(object):
                     #     trans = [np.concatenate(t, axis=0) for t in zip(*trans_list)]
                     #     self.sac.fill_replay_buffer(*trans)
 
-                    # if self.config['use_rnn'] and self.config['use_prediction']:
                     episode_trans_list = [t for t in episode_trans_list if t is not None]
                     if len(episode_trans_list) != 0:
                         # n_states, n_actions, n_rewards, state_, n_dones, rnn_state
@@ -212,7 +201,7 @@ class Main(object):
                 state = state_
                 if self.config['use_rnn']:
                     rnn_state = next_rnn_state
-                    rnn_state[brain_info.local_done] = initial_rnn_state[brain_info.local_done]
+                    rnn_state[local_done] = initial_rnn_state[local_done]
 
                 step += 1
 
