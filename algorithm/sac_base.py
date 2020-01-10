@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from .replay_buffer import ReplayBuffer, PrioritizedReplayBuffer, EpisodeBuffer
+from .replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 from .trans_cache import TransCache
 
 logger = logging.getLogger('sac.base')
@@ -96,7 +96,7 @@ class SAC_Base(object):
                 episode_buffer_config = {} if episode_buffer_config is None else episode_buffer_config
                 self.episode_buffer = EpisodeBuffer(**episode_buffer_config)
 
-            self._trans_cache = TransCache(56)
+            # self._trans_cache = TransCache(56)
 
             self._init_tf_function()
 
@@ -132,9 +132,6 @@ class SAC_Base(object):
             if self.use_prediction:
                 self.model_prediction = model.ModelPrediction(self.state_dim, state_dim, self.action_dim)
                 self.optimizer_prediction = tf.keras.optimizers.Adam(prediction_lr)
-                # # avoid ValueError: tf.function-decorated function tried to create variables on non-first call.
-                # zero_grads = [np.zeros_like(v.numpy()) for v in self.model_prediction.trainable_variables]
-                # self.optimizer_prediction.apply_gradients(zip(zero_grads, self.model_prediction.trainable_variables))
         else:
             state_dim = self.state_dim
             self.rnn_state_dim = 1

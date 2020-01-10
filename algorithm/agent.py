@@ -91,22 +91,20 @@ class Agent(object):
         state_ = self._tmp_trans[-1]['state_']
         done = self._tmp_trans[-1]['local_done'] and not self._tmp_trans[-1]['max_reached']
 
-        if self.use_rnn:
-            rnn_state = self._tmp_trans[0]['rnn_state']
+        # n_states, n_actions, n_rewards, state_, done
+        trans = [
+            [t['state'] for t in self._tmp_trans],
+            [t['action'] for t in self._tmp_trans],
+            [t['reward'] for t in self._tmp_trans],
+            state_,
+            [done]
+        ]
 
+        if self.use_rnn:
             # n_states, n_actions, n_rewards, state_, done, rnn_state
-            return ([t['state'] for t in self._tmp_trans],
-                    [t['action'] for t in self._tmp_trans],
-                    [t['reward'] for t in self._tmp_trans],
-                    state_,
-                    [done],
-                    rnn_state)
-        else:
-            return ([t['state'] for t in self._tmp_trans],
-                    [t['action'] for t in self._tmp_trans],
-                    [t['reward'] for t in self._tmp_trans],
-                    state_,
-                    [done])
+            trans.append(self._tmp_trans[0]['rnn_state'])
+
+        return trans
 
     def _get_episode_trans(self):
         trans = [[t['state'] for t in self._tmp_episode_trans],
