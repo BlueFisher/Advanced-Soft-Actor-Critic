@@ -44,8 +44,7 @@ class SAC_Base(object):
                  use_n_step_is=True,
                  use_q_clip=True,
 
-                 replay_config=None,
-                 episode_buffer_config=None):
+                 replay_config=None):
         """
         state_dim: dimension of state
         action_dim: dimension of action
@@ -91,12 +90,6 @@ class SAC_Base(object):
                 self.replay_buffer = PrioritizedReplayBuffer(**replay_config)
             else:
                 self.replay_buffer = ReplayBuffer(**replay_config)
-
-            if self.use_rnn and self.use_prediction:
-                episode_buffer_config = {} if episode_buffer_config is None else episode_buffer_config
-                self.episode_buffer = EpisodeBuffer(**episode_buffer_config)
-
-            # self._trans_cache = TransCache(56)
 
             self._init_tf_function()
 
