@@ -5,7 +5,7 @@ base_config:
   scene: 3DBallHard
 
   sac: sac_hard
-  max_iter: 200
+  max_iter: 300
   max_step: 500
   save_model_per_iter: 50
   burn_in_step: 10
