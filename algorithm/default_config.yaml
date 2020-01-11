@@ -25,12 +25,11 @@ replay_config:
   batch_size: 256
   capacity: 1000000
   alpha: 0.9
+  beta: 0.4
+  beta_increment_per_sampling: 0.001
+  epsilon: 0.01
+  tf_err_upper: 1.
   use_mongodb: false
-
-episode_buffer_config:
-  batch_step_size: 16
-  batch_size: 32
-  capacity: 50
 
 sac_config:
   seed: null
