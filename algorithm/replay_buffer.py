@@ -180,20 +180,22 @@ class SumTree:
 
 
 class PrioritizedReplayBuffer:
-    epsilon = 0.01  # small amount to avoid zero priority
-    alpha = 0.9  # [0~1] convert the importance of TD error to priority
-    beta = 0.4  # importance-sampling, from initial value increasing to 1
-    beta_increment_per_sampling = 0.001
-    td_err_upper = 1.  # clipped abs error
-
     def __init__(self,
                  batch_size=256,
                  capacity=524288,
-                 alpha=0.9,
+                 alpha=0.9,  # [0~1] convert the importance of TD error to priority
+                 beta=0.4,  # importance-sampling, from initial value increasing to 1
+                 beta_increment_per_sampling=0.001,
+                 epsilon=0.01,  # small amount to avoid zero priority
+                 td_err_upper=1.,  # clipped abs error
                  use_mongodb=False):
         self.batch_size = batch_size
         self.capacity = int(2**math.floor(math.log2(capacity)))
         self.alpha = alpha
+        self.beta = beta
+        self.beta_increment_per_sampling = beta_increment_per_sampling
+        self.epsilon = epsilon
+        self.td_err_upper = td_err_upper
         self._sum_tree = SumTree(self.capacity)
         self._trans_storage = DataStorage(self.capacity)
 
@@ -231,9 +233,9 @@ class PrioritizedReplayBuffer:
         trans_pointers = self._sum_tree.leaf_idx_to_data_idx(leaf_pointers)
         transitions = self._trans_storage.get(trans_pointers)
 
-        is_weights = p / self._sum_tree.total_p
+        is_weights = (p / self._sum_tree.total_p) * np.float32(self.size)
         self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
-        is_weights = np.power(is_weights / np.min(is_weights), -self.beta)
+        is_weights = np.power(is_weights, -self.beta).astype(np.float32)
 
         return leaf_pointers, transitions, np.expand_dims(is_weights, axis=1)
 
