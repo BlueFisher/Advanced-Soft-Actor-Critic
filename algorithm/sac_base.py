@@ -42,7 +42,7 @@ class SAC_Base(object):
                  _lambda=0.9,
                  use_priority=False,
                  use_n_step_is=True,
-                 use_q_clip=True,
+                 use_q_clip=False,
 
                  replay_config=None):
         """
