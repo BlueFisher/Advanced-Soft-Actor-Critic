@@ -27,8 +27,8 @@ replay_config:
   alpha: 0.9
   beta: 0.4
   beta_increment_per_sampling: 0.001
-  epsilon: 0.01
-  tf_err_upper: 1.
+  td_error_min: 0.01
+  td_error_max: 1.
   use_mongodb: false
 
 sac_config:
