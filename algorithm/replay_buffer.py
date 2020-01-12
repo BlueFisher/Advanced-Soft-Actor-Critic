@@ -233,9 +233,9 @@ class PrioritizedReplayBuffer:
         trans_pointers = self._sum_tree.leaf_idx_to_data_idx(leaf_pointers)
         transitions = self._trans_storage.get(trans_pointers)
 
-        is_weights = p * np.float32(self.size) / self._sum_tree.total_p
+        is_weights = p / self._sum_tree.total_p
         self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
-        is_weights = np.power(is_weights, -self.beta).astype(np.float32)
+        is_weights = np.power(is_weights / np.min(is_weights), -self.beta).astype(np.float32)
 
         return leaf_pointers, transitions, np.expand_dims(is_weights, axis=1)
 
