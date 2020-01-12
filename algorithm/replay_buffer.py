@@ -186,22 +186,22 @@ class PrioritizedReplayBuffer:
                  alpha=0.9,  # [0~1] convert the importance of TD error to priority
                  beta=0.4,  # importance-sampling, from initial value increasing to 1
                  beta_increment_per_sampling=0.001,
-                 epsilon=0.01,  # small amount to avoid zero priority
-                 td_err_upper=1.,  # clipped abs error
+                 td_error_min=0.01,  # small amount to avoid zero priority
+                 td_error_max=1.,  # clipped abs error
                  use_mongodb=False):
         self.batch_size = batch_size
         self.capacity = int(2**math.floor(math.log2(capacity)))
         self.alpha = alpha
         self.beta = beta
         self.beta_increment_per_sampling = beta_increment_per_sampling
-        self.epsilon = epsilon
-        self.td_err_upper = td_err_upper
+        self.td_error_min = td_error_min
+        self.td_error_max = td_error_max
         self._sum_tree = SumTree(self.capacity)
         self._trans_storage = DataStorage(self.capacity)
 
     def add(self, transitions: dict, ignore_size=0):
         if self._trans_storage.size == 0:
-            max_p = self.td_err_upper
+            max_p = self.td_error_max
         else:
             max_p = self._sum_tree.max
 
@@ -217,7 +217,7 @@ class PrioritizedReplayBuffer:
         td_error = td_error.flatten()
 
         data_pointers = self._trans_storage.add(transitions)
-        clipped_errors = np.clip(td_error, self.epsilon, self.td_err_upper)
+        clipped_errors = np.clip(td_error, self.td_error_min, self.td_error_max)
         probs = np.power(clipped_errors, self.alpha)
         # don't sample last ignore_size transitions
         probs[np.isin(data_pointers, np.arange(self.capacity - ignore_size, self.capacity))] = 0
@@ -233,7 +233,7 @@ class PrioritizedReplayBuffer:
         trans_pointers = self._sum_tree.leaf_idx_to_data_idx(leaf_pointers)
         transitions = self._trans_storage.get(trans_pointers)
 
-        is_weights = (p / self._sum_tree.total_p) * np.float32(self.size)
+        is_weights = p * np.float32(self.size) / self._sum_tree.total_p
         self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
         is_weights = np.power(is_weights, -self.beta).astype(np.float32)
 
@@ -246,7 +246,7 @@ class PrioritizedReplayBuffer:
         td_error = np.asarray(td_error)
         td_error = td_error.flatten()
 
-        clipped_errors = np.clip(td_error, self.epsilon, self.td_err_upper)
+        clipped_errors = np.clip(td_error, self.td_error_min, self.td_error_max)
         if np.isnan(np.min(clipped_errors)):
             raise RuntimeError('td_error has nan')
         probs = np.power(clipped_errors, self.alpha)
@@ -291,7 +291,7 @@ if __name__ == "__main__":
             print('None')
         else:
             points, (a, b), ratio = sampled
-            print(a,b)
+            print(a, b)
             # print(replay_buffer._sum_tree.leaf_idx_to_data_idx(points))
             for i in range(1, n_step + 1):
                 replay_buffer.get_storage_data(points + i)
