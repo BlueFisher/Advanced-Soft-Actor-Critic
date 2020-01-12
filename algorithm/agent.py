@@ -63,8 +63,8 @@ class Agent(object):
             self._tmp_trans.clear()
             self._curr_stagger = self.stagger
 
-            episode_trans = self._get_episode_trans()
-            episode_trans = [np.asarray([t], dtype=np.float32) for t in episode_trans]
+            # episode_trans = self._get_episode_trans()
+            # episode_trans = [np.asarray([t], dtype=np.float32) for t in episode_trans]
             self._tmp_episode_trans.clear()
 
         return trans, episode_trans
