@@ -47,3 +47,4 @@ sac_config:
   _lambda: 1.0
   use_priority: false
   use_n_step_is: true
+  use_q_clip: false
