@@ -34,7 +34,7 @@ class SAC_Base(object):
                  init_log_alpha=-2.3,
                  use_auto_alpha=True,
                  q_lr=3e-4,
-                 policy_lr=1e-4,
+                 policy_lr=3e-4,
                  alpha_lr=3e-4,
                  rnn_lr=3e-4,
                  prediction_lr=3e-4,
@@ -279,11 +279,11 @@ class SAC_Base(object):
 
         min_next_q = tf.minimum(next_q1, next_q2)
         min_q = tf.minimum(q1, q2)
-        if self.use_q_clip:
-            min_next_q = tf.clip_by_value(min_next_q, self.min_q, self.max_q)
-            min_q = tf.clip_by_value(min_q, self.min_q, self.max_q)
+        # if self.use_q_clip:
+        #     min_next_q = tf.clip_by_value(min_next_q, self.min_q - alpha * next_n_actions_log_prob, self.max_q - alpha * next_n_actions_log_prob)
+        #     min_q = tf.clip_by_value(min_q, self.min_q - alpha * n_actions_log_prob, self.max_q - alpha * n_actions_log_prob)
 
-        td_error = n_rewards + self.gamma * (1 - n_dones) * (min_next_q - alpha * next_n_actions_log_prob) \
+        td_error = n_rewards - alpha * n_actions_log_prob + self.gamma * (1 - n_dones) * (min_next_q - alpha * next_n_actions_log_prob) \
             - (min_q - alpha * n_actions_log_prob)
 
         td_error = gamma_ratio * td_error
@@ -302,7 +302,13 @@ class SAC_Base(object):
         r = tf.reduce_sum(td_error, axis=1, keepdims=True)
 
         # V_s + \sum{td_error}
-        y = tf.minimum(q1[:, 0:1], q2[:, 0:1]) - alpha * n_actions_log_prob[:, 0:1] + r
+        min_q = tf.minimum(q1[:, 0:1], q2[:, 0:1])
+        # if self.use_q_clip:
+        #     min_q = tf.clip_by_value(min_q, self.min_q - alpha * n_actions_log_prob[:, 0:1], self.max_q - alpha * n_actions_log_prob[:, 0:1])
+        y = min_q - alpha * n_actions_log_prob[:, 0:1] + r
+
+        if self.use_q_clip:
+            y = tf.clip_by_value(y, self.min_q - alpha * n_actions_log_prob[:, 0:1], self.max_q - alpha * n_actions_log_prob[:, 0:1])
 
         # NO V-TRACE
         # policy = self.model_policy(state_)
@@ -524,11 +530,9 @@ class SAC_Base(object):
         self.max_q.assign(tf.maximum(self.max_q, max_reward))
 
     def update_q_bound(self, n_rewards):
-        cum_n_rewards = np.empty(n_rewards.shape, dtype=np.float32)
-        cum_n_rewards[:, -1] = n_rewards[:, -1]
-        for i in reversed(range(n_rewards.shape[1] - 1)):
-            cum_n_rewards[:, i] = n_rewards[:, i] + self.gamma * cum_n_rewards[:, i + 1]
-
+        gamma = np.array([[np.power(self.gamma, i) for i in range(n_rewards.shape[1])]], dtype=np.float32)
+        cum_n_rewards = n_rewards * gamma
+        cum_n_rewards = np.cumsum(cum_n_rewards, axis=1)
         self._update_q_bound(np.min(cum_n_rewards), np.max(cum_n_rewards))
 
     def save_model(self, iteration):
@@ -541,15 +545,24 @@ class SAC_Base(object):
         self.summary_writer.flush()
 
     def fill_replay_buffer(self, n_states, n_actions, n_rewards, state_, done,
-                           rnn_state=None):
+                           rnn_state=None,
+                           ep_rewards_list=None):
         """
         n_states: [None, burn_in_step + n_step, state_dim]
         n_states: [None, burn_in_step + n_step, state_dim]
         n_rewards: [None, burn_in_step + n_step]
         state_: [None, state_dim]
         done: [None, 1]
+        rnn_state: [None, rnn_state_dim]
+        ep_rewards_list: List([1, ep_len])
         """
         assert len(n_states) == len(n_actions) == len(n_rewards) == len(state_) == len(done)
+
+        if self.use_q_clip:
+            self.update_q_bound(n_rewards)
+            if ep_rewards_list is not None:
+                for r in ep_rewards_list:
+                    self.update_q_bound(r)
 
         storage_data = {
             'state': n_states,
