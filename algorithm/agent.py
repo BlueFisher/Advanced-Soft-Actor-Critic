@@ -54,7 +54,8 @@ class Agent(object):
         if trans is not None:
             trans = [np.asarray([t], dtype=np.float32) for t in trans]
 
-        episode_trans = None
+        # episode_trans = None
+        rewards = None
 
         if local_done:
             self.done = True
@@ -65,9 +66,10 @@ class Agent(object):
 
             # episode_trans = self._get_episode_trans()
             # episode_trans = [np.asarray([t], dtype=np.float32) for t in episode_trans]
+            rewards = np.asarray([self._get_rewards()], dtype=np.float32)
             self._tmp_episode_trans.clear()
 
-        return trans, episode_trans
+        return trans, rewards
 
     def _extra_log(self,
                    state,
@@ -77,6 +79,9 @@ class Agent(object):
                    max_reached,
                    state_):
         pass
+
+    def _get_rewards(self):
+        return [t['reward'] for t in self._tmp_episode_trans]
 
     def _get_trans(self):
         if len(self._tmp_trans) < self.tran_len:
@@ -106,16 +111,16 @@ class Agent(object):
 
         return trans
 
-    def _get_episode_trans(self):
-        trans = [[t['state'] for t in self._tmp_episode_trans],
-                 [t['action'] for t in self._tmp_episode_trans],
-                 [t['reward'] for t in self._tmp_episode_trans],
-                 self._tmp_episode_trans[-1]['state_'],
-                 [t['local_done'] and not t['max_reached'] for t in self._tmp_episode_trans]]
-        if self.use_rnn:
-            trans.append([t['rnn_state'] for t in self._tmp_episode_trans])
+    # def _get_episode_trans(self):
+    #     trans = [[t['state'] for t in self._tmp_episode_trans],
+    #              [t['action'] for t in self._tmp_episode_trans],
+    #              [t['reward'] for t in self._tmp_episode_trans],
+    #              self._tmp_episode_trans[-1]['state_'],
+    #              [t['local_done'] and not t['max_reached'] for t in self._tmp_episode_trans]]
+    #     if self.use_rnn:
+    #         trans.append([t['rnn_state'] for t in self._tmp_episode_trans])
 
-        return trans
+    #     return trans
 
     def is_empty(self):
         return len(self._tmp_episode_trans) == 0

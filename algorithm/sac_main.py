@@ -183,13 +183,18 @@ class Main(object):
                                for i in range(len(agents))]
 
                 if self.train_mode:
-                    trans_list, _ = zip(*tmp_results)
+                    trans_list, ep_rewards_list = zip(*tmp_results)
 
                     trans_list = [t for t in trans_list if t is not None]
+                    ep_rewards_list = [t for t in ep_rewards_list if t is not None]
                     if len(trans_list) != 0:
                         # n_states, n_actions, n_rewards, done, rnn_state
                         trans = [np.concatenate(t, axis=0) for t in zip(*trans_list)]
-                        self.sac.fill_replay_buffer(*trans)
+
+                        if len(ep_rewards_list) != 0:
+                            self.sac.fill_replay_buffer(*trans, ep_rewards_list=ep_rewards_list)
+                        else:
+                            self.sac.fill_replay_buffer(*trans)
 
                     # episode_trans_list = [t for t in episode_trans_list if t is not None]
                     # if len(episode_trans_list) != 0:
