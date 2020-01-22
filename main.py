@@ -21,4 +21,5 @@ if __name__ == '__main__':
     else:
         from algorithm.sac_main import Main
 
-    Main(f'envs/{args.env}', args)
+    for _ in range(2):
+        Main(f'envs/{args.env}', args)

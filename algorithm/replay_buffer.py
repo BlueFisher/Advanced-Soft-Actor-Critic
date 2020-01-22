@@ -19,7 +19,7 @@ class DataStorage:
     def add(self, data: dict):
         """
         args: list
-            The first dimension of each element is the length of batch size
+            The first dimension of each element is the length of an episode
         """
         tmp_len = list(data.values())[0].shape[0]
 
@@ -199,7 +199,7 @@ class PrioritizedReplayBuffer:
         self._sum_tree = SumTree(self.capacity)
         self._trans_storage = DataStorage(self.capacity)
 
-    def add(self, transitions: dict):
+    def add(self, transitions: dict, ignore_size=0):
         if self._trans_storage.size == 0:
             max_p = self.td_error_max
         else:
@@ -207,17 +207,21 @@ class PrioritizedReplayBuffer:
 
         data_pointers = self._trans_storage.add(transitions)
         probs = np.full(len(data_pointers), max_p, dtype=np.float32)
-
+        # don't sample last ignore_size transitions
+        probs[np.isin(data_pointers, np.arange(self.capacity - ignore_size, self.capacity))] = 0
+        probs[-ignore_size:] = 0
         self._sum_tree.add(data_pointers, probs)
 
-    def add_with_td_error(self, td_error, transitions: dict):
+    def add_with_td_error(self, td_error, transitions: dict, ignore_size=0):
         td_error = np.asarray(td_error)
         td_error = td_error.flatten()
 
         data_pointers = self._trans_storage.add(transitions)
         clipped_errors = np.clip(td_error, self.td_error_min, self.td_error_max)
         probs = np.power(clipped_errors, self.alpha)
-
+        # don't sample last ignore_size transitions
+        probs[np.isin(data_pointers, np.arange(self.capacity - ignore_size, self.capacity))] = 0
+        probs[-ignore_size:] = 0
         self._sum_tree.add(data_pointers, probs)
 
     def sample(self):
