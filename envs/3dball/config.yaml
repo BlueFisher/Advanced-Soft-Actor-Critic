@@ -16,4 +16,4 @@ sac_config:
   use_n_step_is: true
   use_priority: true
   use_auto_alpha: true
-  use_q_clip: true
+  use_q_clip: false
