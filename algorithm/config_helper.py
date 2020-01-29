@@ -68,5 +68,5 @@ def display_config(config, logger):
     for k, v in config.items():
         config_str += f'\n{k}'
         for kk, vv in v.items():
-            config_str += f'\n{kk:>25}: {vv}'
+            config_str += f'\n{kk:>30}: {vv}'
     logger.info(config_str)

@@ -116,7 +116,7 @@ class SAC_Base(object):
             self.model_target_rnn = model.ModelRNN(self.state_dim)
 
             # get encoded state dimension and initial_rnn_state
-            tmp_state, tmp_rnn_state = self.model_rnn.get_call_result_tensors()
+            tmp_state, tmp_rnn_state, _ = self.model_rnn.get_call_result_tensors()
             self.encoded_state_dim = state_dim = tmp_state.shape[-1]
             self.rnn_state_dim = tmp_rnn_state.shape[-1]
 
@@ -427,26 +427,9 @@ class SAC_Base(object):
         self.global_step.assign_add(1)
 
     @tf.function
-    def _get_next_rnn_state(self, n_states, rnn_state):
-        """
-        tf.function
-        """
-        _, next_rnn_state = self.model_rnn(n_states, [rnn_state])
-        return next_rnn_state
-
-    def get_next_rnn_state(self, n_states_list):
-        fn = self._get_next_rnn_state.get_concrete_function(tf.TensorSpec(shape=[None, None, self.state_dim], dtype=tf.float32),
-                                                            tf.TensorSpec(shape=[None, len(self._initial_rnn_state)], dtype=tf.float32))
-
-        init_rnn_state = self.get_initial_rnn_state(1)
-        next_rnn_state = np.empty((len(n_states_list), init_rnn_state.shape[1]))
-        for i, n_states in enumerate(n_states_list):
-            if n_states.shape[1] == 0:
-                next_rnn_state[i] = init_rnn_state
-            else:
-                next_rnn_state[i] = fn(tf.constant(n_states), tf.constant(init_rnn_state)).numpy()
-
-        return next_rnn_state
+    def get_n_rnn_states(self, n_states, rnn_state):
+        *_, n_rnn_states = self.model_rnn(n_states, [rnn_state])
+        return n_rnn_states
 
     @tf.function
     def choose_action(self, state):
@@ -462,7 +445,7 @@ class SAC_Base(object):
         tf.function
         """
         state = tf.reshape(state, (-1, 1, state.shape[-1]))
-        encoded_state, next_rnn_state, = self.model_rnn(state, [rnn_state])
+        encoded_state, next_rnn_state, _ = self.model_rnn(state, [rnn_state])
         policy = self.model_policy(encoded_state)
         action = policy.sample()
         action = tf.reshape(action, (-1, action.shape[-1]))
@@ -526,12 +509,20 @@ class SAC_Base(object):
         self.max_q.assign(tf.maximum(self.max_q, max_reward))
 
     def update_q_bound(self, n_rewards):
-        cum_n_rewards = np.empty(n_rewards.shape, dtype=np.float32)
-        cum_n_rewards[:, -1] = n_rewards[:, -1]
-        for i in reversed(range(n_rewards.shape[1] - 1)):
-            cum_n_rewards[:, i] = n_rewards[:, i] + self.gamma * cum_n_rewards[:, i + 1]
+        # n_rewards [1, episode_len]
+        ep_len = n_rewards.shape[1]
+        gamma = np.array([[np.power(self.gamma, i)] for i in range(ep_len)], dtype=np.float32)
 
-        self._update_q_bound(np.min(cum_n_rewards), np.max(cum_n_rewards))
+        cum_rewards = np.empty(ep_len, dtype=np.float32)
+        tmp_rewards = n_rewards * gamma
+
+        for i in range(ep_len):
+            cum_rewards[i] = np.sum(tmp_rewards.diagonal(i))
+
+        cum_n_rewards = np.cumsum(tmp_rewards.diagonal(0))
+        cum_rewards = np.concatenate([cum_rewards, cum_n_rewards])
+
+        self._update_q_bound(np.min(cum_rewards), np.max(cum_rewards))
 
     def save_model(self, iteration):
         self.ckpt_manager.save(iteration + self.init_iteration)
@@ -702,14 +693,24 @@ class SAC_Base(object):
         # update td_error
         if self.use_priority:
             td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, n_dones,
-                                         n_mu_probs=n_mu_probs if self.use_n_step_is else None,
+                                         n_mu_probs=n_pi_probs if self.use_n_step_is else None,
                                          rnn_state=rnn_state if self.use_rnn else None).numpy()
 
             self.replay_buffer.update(pointers, td_error)
 
+        # update rnn_state
+        if self.use_rnn:
+            pointers_list = [pointers + i for i in range(1, self.burn_in_step + self.n_step + 1)]
+            tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
+            n_rnn_states = self.get_n_rnn_states(n_states, rnn_state).numpy()
+            # n_rnn_states = n_rnn_states[:, self.burn_in_step - 1:, :]
+            rnn_states = n_rnn_states.reshape(-1, n_rnn_states.shape[-1])
+            self.replay_buffer.update_transitions(tmp_pointers, 'rnn_state', rnn_states)
+
         # update n_mu_probs
         if self.use_n_step_is:
-            pointers_list = [pointers + i for i in range(self.burn_in_step + self.n_step)]
-            pointers = np.stack(pointers_list, axis=1).reshape(-1)
-            pi_probs = n_pi_probs.reshape([-1, n_pi_probs.shape[-1]])
-            self.replay_buffer.update_transitions(pointers, 'mu_prob', pi_probs)
+            pointers_list = [pointers + i for i in range(0, self.burn_in_step + self.n_step)]
+            tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
+            # n_pi_probs = n_pi_probs[:, self.burn_in_step:]
+            pi_probs = n_pi_probs.reshape(-1, n_pi_probs.shape[-1])
+            self.replay_buffer.update_transitions(tmp_pointers, 'mu_prob', pi_probs)
