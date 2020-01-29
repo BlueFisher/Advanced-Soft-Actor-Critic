@@ -19,11 +19,10 @@ class ModelRNN(tf.keras.Model):
         self.get_call_result_tensors()
 
     def call(self, inputs_s, initial_state):
-        outputs, next_state = self.layer_rnn(inputs_s, initial_state=initial_state)
+        outputs, next_rnn_state = self.layer_rnn(inputs_s, initial_state=initial_state)
 
-        outputs = tf.concat([inputs_s, outputs], -1)
-
-        return outputs, next_state
+        encoded_state = tf.concat([inputs_s, outputs], -1)
+        return encoded_state, next_rnn_state, outputs
 
     def get_call_result_tensors(self):
         return self(tf.keras.Input(shape=(None, self.state_dim,), dtype=tf.float32),
