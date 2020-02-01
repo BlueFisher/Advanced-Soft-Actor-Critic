@@ -20,6 +20,7 @@ from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
 
 from .sac_ds_base import SAC_DS_Base
+from .utils import rpc_error_inspector
 
 from algorithm.agent import Agent
 import algorithm.config_helper as config_helper
@@ -263,42 +264,37 @@ class StubController:
     def connected(self):
         return self._replay_connected and self._learner_connected
 
+    @rpc_error_inspector
     def add_transitions(self, n_states, n_actions, n_rewards, state_, n_dones, n_mu_probs,
                         n_rnn_states=None):
-        try:
-            self._replay_stub.Add(replay_pb2.AddRequest(n_states=ndarray_to_proto(n_states),
-                                                        n_actions=ndarray_to_proto(n_actions),
-                                                        n_rewards=ndarray_to_proto(n_rewards),
-                                                        state_=ndarray_to_proto(state_),
-                                                        n_dones=ndarray_to_proto(n_dones),
-                                                        n_mu_probs=ndarray_to_proto(n_mu_probs),
-                                                        n_rnn_states=ndarray_to_proto(n_rnn_states)))
-        except grpc.RpcError:
-            self._logger.error('connection lost in "add_transitions"')
+        self._replay_stub.Add(replay_pb2.AddRequest(n_states=ndarray_to_proto(n_states),
+                                                    n_actions=ndarray_to_proto(n_actions),
+                                                    n_rewards=ndarray_to_proto(n_rewards),
+                                                    state_=ndarray_to_proto(state_),
+                                                    n_dones=ndarray_to_proto(n_dones),
+                                                    n_mu_probs=ndarray_to_proto(n_mu_probs),
+                                                    n_rnn_states=ndarray_to_proto(n_rnn_states)))
 
+    @rpc_error_inspector
     def get_action(self, state, rnn_state=None):
-        try:
-            request = learner_pb2.GetActionRequest(state=ndarray_to_proto(state),
-                                                   rnn_state=ndarray_to_proto(rnn_state))
+        request = learner_pb2.GetActionRequest(state=ndarray_to_proto(state),
+                                               rnn_state=ndarray_to_proto(rnn_state))
 
-            response = self._learner_stub.GetAction(request)
-            action = proto_to_ndarray(response.action)
-            rnn_state = proto_to_ndarray(response.rnn_state)
+        response = self._learner_stub.GetAction(request)
+        action = proto_to_ndarray(response.action)
+        rnn_state = proto_to_ndarray(response.rnn_state)
 
-            if rnn_state is None:
-                return action
-            else:
-                return action, rnn_state
-        except grpc.RpcError:
-            self._logger.error('connection lost in "get_action"')
+        if rnn_state is None:
+            return action
+        else:
+            return action, rnn_state
 
+    @rpc_error_inspector
     def update_policy_variables(self):
-        try:
-            response = self._learner_stub.GetPolicyVariables(Empty())
-            return [proto_to_ndarray(v) for v in response.variables]
-        except grpc.RpcError:
-            self._logger.error('connection lost in "update_policy_variables"')
+        response = self._learner_stub.GetPolicyVariables(Empty())
+        return [proto_to_ndarray(v) for v in response.variables]
 
+    @rpc_error_inspector
     def post_reward(self, reward):
         try:
             response = self._learner_stub.PostReward(learner_pb2.PostRewardRequest(reward=ndarray_to_proto(reward)))
