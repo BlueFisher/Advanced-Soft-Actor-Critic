@@ -14,7 +14,7 @@ from .proto import learner_pb2, learner_pb2_grpc
 from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
-from .peer_set import PeerSet
+from .utils import PeerSet, rpc_error_inspector
 
 
 from algorithm.replay_buffer import PrioritizedReplayBuffer
@@ -253,19 +253,17 @@ class StubController:
 
         self._logger = logging.getLogger('ds.replay.stub')
 
+    @rpc_error_inspector
     def get_td_error(self, n_states, n_actions, n_rewards, state_, n_dones, n_mu_probs,
                      rnn_state=None):
-        try:
-            request = learner_pb2.GetTDErrorRequest(n_states=ndarray_to_proto(n_states),
-                                                    n_actions=ndarray_to_proto(n_actions),
-                                                    n_rewards=ndarray_to_proto(n_rewards),
-                                                    state_=ndarray_to_proto(state_),
-                                                    n_dones=ndarray_to_proto(n_dones),
-                                                    n_mu_probs=ndarray_to_proto(n_mu_probs),
-                                                    rnn_state=ndarray_to_proto(rnn_state))
+        request = learner_pb2.GetTDErrorRequest(n_states=ndarray_to_proto(n_states),
+                                                n_actions=ndarray_to_proto(n_actions),
+                                                n_rewards=ndarray_to_proto(n_rewards),
+                                                state_=ndarray_to_proto(state_),
+                                                n_dones=ndarray_to_proto(n_dones),
+                                                n_mu_probs=ndarray_to_proto(n_mu_probs),
+                                                rnn_state=ndarray_to_proto(rnn_state))
 
-            response = self._learner_stub.GetTDError(request)
+        response = self._learner_stub.GetTDError(request)
 
-            return proto_to_ndarray(response.td_error)
-        except grpc.RpcError:
-            self._logger.error('connection lost in "get_td_error"')
+        return proto_to_ndarray(response.td_error)

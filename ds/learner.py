@@ -17,7 +17,7 @@ from .proto import replay_pb2, replay_pb2_grpc
 from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
-from .peer_set import PeerSet
+from .utils import PeerSet, rpc_error_inspector
 
 from .sac_ds_base import SAC_DS_Base
 
@@ -370,45 +370,35 @@ class StubController:
         self._replay_stub = replay_pb2_grpc.ReplayServiceStub(self._replay_channel)
         self._logger = logging.getLogger('ds.learner.stub')
 
+    @rpc_error_inspector
     def get_sampled_data(self):
-        try:
-            response = self._replay_stub.Sample(Empty())
-            if response.has_data:
-                return (proto_to_ndarray(response.pointers),
-                        proto_to_ndarray(response.n_states),
-                        proto_to_ndarray(response.n_actions),
-                        proto_to_ndarray(response.n_rewards),
-                        proto_to_ndarray(response.state_),
-                        proto_to_ndarray(response.n_dones),
-                        proto_to_ndarray(response.n_mu_probs),
-                        proto_to_ndarray(response.rnn_state),
-                        proto_to_ndarray(response.priority_is))
-            else:
-                return None
-
-        except grpc.RpcError:
-            self._logger.error('connection lost in "get_sampled_data"')
+        response = self._replay_stub.Sample(Empty())
+        if response.has_data:
+            return (proto_to_ndarray(response.pointers),
+                    proto_to_ndarray(response.n_states),
+                    proto_to_ndarray(response.n_actions),
+                    proto_to_ndarray(response.n_rewards),
+                    proto_to_ndarray(response.state_),
+                    proto_to_ndarray(response.n_dones),
+                    proto_to_ndarray(response.n_mu_probs),
+                    proto_to_ndarray(response.rnn_state),
+                    proto_to_ndarray(response.priority_is))
+        else:
             return None
 
+    @rpc_error_inspector
     def update_td_error(self, pointers, td_error):
-        try:
-            self._replay_stub.UpdateTDError(
-                replay_pb2.UpdateTDErrorRequest(pointers=ndarray_to_proto(pointers),
-                                                td_error=ndarray_to_proto(td_error)))
-        except grpc.RpcError:
-            self._logger.error('connection lost in "update_td_error"')
+        self._replay_stub.UpdateTDError(
+            replay_pb2.UpdateTDErrorRequest(pointers=ndarray_to_proto(pointers),
+                                            td_error=ndarray_to_proto(td_error)))
 
+    @rpc_error_inspector
     def update_transitions(self, pointers, key, data):
-        try:
-            self._replay_stub.UpdateTransitions(
-                replay_pb2.UpdateTransitionsRequest(pointers=ndarray_to_proto(pointers),
-                                                    key=key,
-                                                    data=ndarray_to_proto(data)))
-        except grpc.RpcError:
-            self._logger.error('connection lost in "update_transitions"')
+        self._replay_stub.UpdateTransitions(
+            replay_pb2.UpdateTransitionsRequest(pointers=ndarray_to_proto(pointers),
+                                                key=key,
+                                                data=ndarray_to_proto(data)))
 
+    @rpc_error_inspector
     def clear_replay_buffer(self):
-        try:
-            self._replay_stub.Clear(Empty())
-        except grpc.RpcError:
-            self._logger.error('connection lost in "clear_replay_buffer"')
+        self._replay_stub.Clear(Empty())
