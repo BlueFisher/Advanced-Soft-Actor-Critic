@@ -105,7 +105,6 @@ class Main(object):
                             burn_in_step=self.config['burn_in_step'],
                             n_step=self.config['n_step'],
                             use_rnn=self.config['use_rnn'],
-                            use_prediction=self.config['use_prediction'],
 
                             replay_config=replay_config,
 
@@ -193,7 +192,7 @@ class Main(object):
 
                     episode_trans_list = [t for t in episode_trans_list if t is not None]
                     if len(episode_trans_list) != 0:
-                        # n_states, n_actions, n_rewards, state_, n_dones, rnn_state
+                        # n_states, n_actions, n_rewards, state_, n_dones, n_rnn_states
                         for episode_trans in episode_trans_list:
                             self.sac.fill_replay_buffer(*episode_trans)
                     self.sac.train()

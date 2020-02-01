@@ -29,11 +29,14 @@ class SAC_DS_Base(SAC_Base):
                  update_target_per_step=1,
                  init_log_alpha=-2.3,
                  use_auto_alpha=True,
-                 lr=3e-4,
+                 q_lr=3e-4,
+                 policy_lr=3e-4,
+                 alpha_lr=3e-4,
+                 rnn_lr=3e-4,
+                 prediction_lr=3e-4,
                  gamma=0.99,
                  _lambda=0.9,
-
-                 replay_batch_size=None):  # for concrete_function
+                 use_q_clip=False):
 
         physical_devices = tf.config.experimental.list_physical_devices('GPU')
         if len(physical_devices) > 0:
@@ -41,6 +44,7 @@ class SAC_DS_Base(SAC_Base):
 
         self.state_dim = state_dim
         self.action_dim = action_dim
+        self.train_mode = train_mode
 
         self.burn_in_step = burn_in_step
         self.n_step = n_step
@@ -53,24 +57,23 @@ class SAC_DS_Base(SAC_Base):
         self.use_auto_alpha = use_auto_alpha
         self.gamma = gamma
         self._lambda = _lambda
+        self.use_q_clip = use_q_clip
         self.use_priority = True
         self.use_n_step_is = True
-
-        self.zero_init_states = False
 
         if seed is not None:
             tf.random.set_seed(seed)
 
-        self._build_model(lr, init_log_alpha, model)
+        self._build_model(model, init_log_alpha,
+                          q_lr, policy_lr, alpha_lr, rnn_lr, prediction_lr)
         if model_root_path is not None:
             self._init_or_restore(model_root_path)
 
         if train_mode:
-            assert replay_batch_size is not None
-
             summary_path = f'{model_root_path}/log'
             self.summary_writer = tf.summary.create_file_writer(summary_path)
-            self._init_train_concrete_function(replay_batch_size, None)
+
+        self._init_tf_function()
 
     # learner to actor
     @tf.function
@@ -91,45 +94,47 @@ class SAC_DS_Base(SAC_Base):
         for v, n_v in zip(variables, policy_variables):
             v.assign(n_v)
 
-    def train(self, n_states, n_actions, n_rewards, state_, done,
-              mu_n_probs,
+    def train(self, pointers,
+              n_states,
+              n_actions,
+              n_rewards,
+              state_,
+              n_dones,
+              n_mu_probs,
               priority_is,
-              rnn_state=None,
-              n_states_for_next_rnn_state_list=None,
-              episode_trans=None):
+              rnn_state=None):
 
-        fn_args = {
-            'n_states': n_states,
-            'n_actions': n_actions,
-            'n_rewards': n_rewards,
-            'state_': state_,
-            'done': done
-        }
-        if self.use_n_step_is:
-            fn_args['mu_n_probs'] = mu_n_probs
-        if self.use_priority:
-            fn_args['priority_is'] = priority_is
-        if self.use_rnn:
-            fn_args['initial_rnn_state'] = rnn_state
-
-            if self.use_rnn and self.use_prediction:
-                ep_rnn_state = self.get_next_rnn_state(n_states_for_next_rnn_state_list)
-                ep_m_states, ep_n_actions = episode_trans
-                fn_args['ep_m_states'] = ep_m_states
-                fn_args['ep_n_actions'] = ep_n_actions
-                fn_args['ep_rnn_state'] = ep_rnn_state
-
-        self._train_fn(**{k: tf.constant(fn_args[k], dtype=tf.float32) for k in fn_args})
+        self._train(n_states=n_states,
+                    n_actions=n_actions,
+                    n_rewards=n_rewards,
+                    state_=state_,
+                    n_dones=n_dones,
+                    n_mu_probs=n_mu_probs,
+                    priority_is=priority_is,
+                    initial_rnn_state=rnn_state if self.use_rnn else None)
 
         if self.use_rnn:
-            pi_n_probs = self.get_rnn_n_step_probs(n_states, n_actions,
+            n_pi_probs = self.get_rnn_n_step_probs(n_states, n_actions,
                                                    rnn_state).numpy()
-            td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, done,
-                                         pi_n_probs if self.use_n_step_is else None,
-                                         rnn_state).numpy()
+            td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, n_dones,
+                                         n_pi_probs, rnn_state).numpy()
         else:
-            pi_n_probs = self.get_n_step_probs(n_states, n_actions).numpy()
-            td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, done,
-                                         pi_n_probs if self.use_n_step_is else None).numpy()
+            n_pi_probs = self.get_n_step_probs(n_states, n_actions).numpy()
+            td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, n_dones,
+                                         n_pi_probs).numpy()
 
-        return td_error.flatten(), pi_n_probs
+        update_data = list()
+
+        pointers_list = [pointers + i for i in range(0, self.burn_in_step + self.n_step)]
+        tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
+        pi_probs = n_pi_probs.reshape(-1, n_pi_probs.shape[-1])
+        update_data.append((tmp_pointers, 'mu_prob', pi_probs))
+
+        if self.use_rnn:
+            pointers_list = [pointers + i for i in range(1, self.burn_in_step + self.n_step + 1)]
+            tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
+            n_rnn_states = self.get_n_rnn_states(n_states, rnn_state).numpy()
+            rnn_states = n_rnn_states.reshape(-1, n_rnn_states.shape[-1])
+            update_data.append((tmp_pointers, 'rnn_state', rnn_states))
+
+        return td_error.flatten(), update_data

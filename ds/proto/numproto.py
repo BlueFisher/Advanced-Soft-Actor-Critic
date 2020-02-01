@@ -5,6 +5,9 @@ import ndarray_pb2_grpc
 
 
 def ndarray_to_proto(nda: np.ndarray) -> ndarray_pb2.NDarray:
+    if nda is None:
+        nda = np.empty(0)
+
     nda_bytes = BytesIO()
     np.save(nda_bytes, nda, allow_pickle=False)
 
@@ -14,4 +17,8 @@ def ndarray_to_proto(nda: np.ndarray) -> ndarray_pb2.NDarray:
 def proto_to_ndarray(nda_proto: ndarray_pb2.NDarray) -> np.ndarray:
     nda_bytes = BytesIO(nda_proto.data)
 
-    return np.load(nda_bytes, allow_pickle=False)
+    nda = np.load(nda_bytes, allow_pickle=False)
+    if nda.shape[0] == 0:
+        nda = None
+
+    return nda

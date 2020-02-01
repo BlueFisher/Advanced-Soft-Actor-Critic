@@ -58,6 +58,7 @@ class SAC_Base(object):
 
         self.state_dim = state_dim
         self.action_dim = action_dim
+        self.train_mode = train_mode
 
         self.burn_in_step = burn_in_step
         self.n_step = n_step
@@ -81,7 +82,7 @@ class SAC_Base(object):
                           q_lr, policy_lr, alpha_lr, rnn_lr, prediction_lr)
         self._init_or_restore(model_root_path)
 
-        if train_mode:
+        if self.train_mode:
             summary_path = f'{model_root_path}/log'
             self.summary_writer = tf.summary.create_file_writer(summary_path)
 
@@ -91,7 +92,7 @@ class SAC_Base(object):
             else:
                 self.replay_buffer = ReplayBuffer(**replay_config)
 
-            self._init_tf_function()
+        self._init_tf_function()
 
     def _build_model(self, model, init_log_alpha,
                      q_lr, policy_lr, alpha_lr,
@@ -157,38 +158,39 @@ class SAC_Base(object):
             )
             self.get_n_step_probs = _np_to_tensor(tmp_get_n_step_probs)
 
-        step_size = self.burn_in_step + self.n_step
-        # get_td_error
-        kwargs = {
-            'n_states': tf.TensorSpec(shape=[None, step_size, self.state_dim], dtype=tf.float32),
-            'n_actions': tf.TensorSpec(shape=[None, step_size, self.action_dim], dtype=tf.float32),
-            'n_rewards': tf.TensorSpec(shape=[None, step_size], dtype=tf.float32),
-            'state_': tf.TensorSpec(shape=[None, self.state_dim], dtype=tf.float32),
-            'n_dones': tf.TensorSpec(shape=[None, step_size], dtype=tf.float32)
-        }
-        if self.use_n_step_is:
-            kwargs['n_mu_probs'] = tf.TensorSpec(shape=[None, step_size, self.action_dim], dtype=tf.float32)
-        if self.use_rnn:
-            kwargs['rnn_state'] = tf.TensorSpec(shape=[None, self.rnn_state_dim], dtype=tf.float32)
-        tmp_get_td_error = self.get_td_error.get_concrete_function(**kwargs)
-        self.get_td_error = _np_to_tensor(tmp_get_td_error)
+        if self.train_mode:
+            step_size = self.burn_in_step + self.n_step
+            # get_td_error
+            kwargs = {
+                'n_states': tf.TensorSpec(shape=[None, step_size, self.state_dim], dtype=tf.float32),
+                'n_actions': tf.TensorSpec(shape=[None, step_size, self.action_dim], dtype=tf.float32),
+                'n_rewards': tf.TensorSpec(shape=[None, step_size], dtype=tf.float32),
+                'state_': tf.TensorSpec(shape=[None, self.state_dim], dtype=tf.float32),
+                'n_dones': tf.TensorSpec(shape=[None, step_size], dtype=tf.float32)
+            }
+            if self.use_n_step_is:
+                kwargs['n_mu_probs'] = tf.TensorSpec(shape=[None, step_size, self.action_dim], dtype=tf.float32)
+            if self.use_rnn:
+                kwargs['rnn_state'] = tf.TensorSpec(shape=[None, self.rnn_state_dim], dtype=tf.float32)
+            tmp_get_td_error = self.get_td_error.get_concrete_function(**kwargs)
+            self.get_td_error = _np_to_tensor(tmp_get_td_error)
 
-        # _train
-        kwargs = {
-            'n_states': tf.TensorSpec(shape=[None, step_size, self.state_dim], dtype=tf.float32),
-            'n_actions': tf.TensorSpec(shape=[None, step_size, self.action_dim], dtype=tf.float32),
-            'n_rewards': tf.TensorSpec(shape=[None, step_size], dtype=tf.float32),
-            'state_': tf.TensorSpec(shape=[None, self.state_dim], dtype=tf.float32),
-            'n_dones': tf.TensorSpec(shape=[None, step_size], dtype=tf.float32)
-        }
-        if self.use_n_step_is:
-            kwargs['n_mu_probs'] = tf.TensorSpec(shape=[None, step_size, self.action_dim], dtype=tf.float32)
-        if self.use_priority:
-            kwargs['priority_is'] = tf.TensorSpec(shape=[None, 1], dtype=tf.float32)
-        if self.use_rnn:
-            kwargs['initial_rnn_state'] = tf.TensorSpec(shape=[None, self.rnn_state_dim], dtype=tf.float32)
-        tmp_train = self._train.get_concrete_function(**kwargs)
-        self._train = _np_to_tensor(tmp_train)
+            # _train
+            kwargs = {
+                'n_states': tf.TensorSpec(shape=[None, step_size, self.state_dim], dtype=tf.float32),
+                'n_actions': tf.TensorSpec(shape=[None, step_size, self.action_dim], dtype=tf.float32),
+                'n_rewards': tf.TensorSpec(shape=[None, step_size], dtype=tf.float32),
+                'state_': tf.TensorSpec(shape=[None, self.state_dim], dtype=tf.float32),
+                'n_dones': tf.TensorSpec(shape=[None, step_size], dtype=tf.float32)
+            }
+            if self.use_n_step_is:
+                kwargs['n_mu_probs'] = tf.TensorSpec(shape=[None, step_size, self.action_dim], dtype=tf.float32)
+            if self.use_priority:
+                kwargs['priority_is'] = tf.TensorSpec(shape=[None, 1], dtype=tf.float32)
+            if self.use_rnn:
+                kwargs['initial_rnn_state'] = tf.TensorSpec(shape=[None, self.rnn_state_dim], dtype=tf.float32)
+            tmp_train = self._train.get_concrete_function(**kwargs)
+            self._train = _np_to_tensor(tmp_train)
 
     def _init_or_restore(self, model_path):
         """
@@ -600,21 +602,6 @@ class SAC_Base(object):
         # n_step transitions except the first one and the last state_, n_step - 1 + 1
         if self.use_priority:
             self.replay_buffer.add(storage_data, ignore_size=self.burn_in_step + self.n_step)
-            # n_states = np.concatenate([n_states[:, i:i + self.n_step] for i in range(n_states.shape[1] - self.n_step + 1)], axis=0)
-            # n_actions = np.concatenate([n_actions[:, i:i + self.n_step] for i in range(n_actions.shape[1] - self.n_step + 1)], axis=0)
-            # n_rewards = np.concatenate([n_rewards[:, i:i + self.n_step] for i in range(n_rewards.shape[1] - self.n_step + 1)], axis=0)
-            # state_ = state[self.n_step:]
-            # n_dones = np.concatenate([n_dones[:, i:i + self.n_step] for i in range(n_dones.shape[1] - self.n_step + 1)], axis=0)
-            # n_mu_probs = np.concatenate([n_mu_probs[:, i:i + self.n_step] for i in range(n_mu_probs.shape[1] - self.n_step + 1)], axis=0)
-
-            # td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, n_dones,
-            #                              n_mu_probs=n_mu_probs if self.use_n_step_is else None,
-            #                              rnn_state=rnn_state if self.use_rnn else None).numpy()
-            # td_error = td_error.flatten()
-            # td_error = np.concatenate([td_error,
-            #                            np.zeros(self.n_step, dtype=np.float32)])
-
-            # self.replay_buffer.add_with_td_error(td_error, state, action, reward, done, mu_prob, ignore_size=self.n_step)
         else:
             self.replay_buffer.add(storage_data)  # TODO
 

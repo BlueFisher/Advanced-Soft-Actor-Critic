@@ -21,9 +21,9 @@ from .peer_set import PeerSet
 
 from .sac_ds_base import SAC_DS_Base
 
-from mlagents.envs.environment import UnityEnvironment
 from algorithm.agent import Agent
 import algorithm.config_helper as config_helper
+from algorithm.env_wrapper import EnvWrapper
 
 
 class Learner(object):
@@ -84,20 +84,17 @@ class Learner(object):
         self._stub = StubController(self.net_config)
 
         if self.run_in_editor:
-            self.env = UnityEnvironment(base_port=5004)
+            self.env = EnvWrapper(train_mode=self.train_mode, base_port=5004)
         else:
-            self.env = UnityEnvironment(file_name=self.config['build_path'],
-                                        no_graphics=self.train_mode,
-                                        base_port=self.config['build_port'],
-                                        args=['--scene', self.config['scene']])
+            self.env = EnvWrapper(train_mode=self.train_mode,
+                                  file_name=self.config['build_path'],
+                                  no_graphics=self.train_mode,
+                                  base_port=self.config['build_port'],
+                                  args=['--scene', self.config['scene']])
 
-        self.env.reset()
+        state_dim, action_dim = self.env.init()
+
         self.logger.info(f'{self.config["build_path"]} initialized')
-        self.default_brain_name = self.env.external_brain_names[0]
-
-        brain_params = self.env.brains[self.default_brain_name]
-        state_dim = brain_params.vector_observation_space_size
-        action_dim = brain_params.vector_action_space_size[0]
 
         # if model exists, load saved model, else, copy a new one
         if os.path.isfile(f'{model_root_path}/sac_model.py'):
@@ -115,9 +112,6 @@ class Learner(object):
                                burn_in_step=self.config['burn_in_step'],
                                n_step=self.config['n_step'],
                                use_rnn=self.config['use_rnn'],
-                               use_prediction=self.config['use_prediction'],
-
-                               replay_batch_size=replay_config['batch_size'],
 
                                **sac_config)
 
@@ -140,9 +134,21 @@ class Learner(object):
                 action = self.sac.choose_action(state)
                 return action.numpy()
 
-    def _get_td_error(self, *trans):
+    def _get_td_error(self, n_states,
+                      n_actions,
+                      n_rewards,
+                      state_,
+                      n_dones,
+                      n_mu_probs,
+                      rnn_state):
         with self._training_lock:
-            td_error = self.sac.get_td_error(*trans)
+            td_error = self.sac.get_td_error(n_states,
+                                             n_actions,
+                                             n_rewards,
+                                             state_,
+                                             n_dones,
+                                             n_mu_probs,
+                                             rnn_state)
 
         return td_error.numpy()
 
@@ -153,9 +159,16 @@ class Learner(object):
         iteration = 0
         start_time = time.time()
 
-        brain_info = self.env.reset(train_mode=False, config=self.reset_config)[self.default_brain_name]
+        agent_ids, state = self.env.reset(reset_config=self.reset_config)
+
+        agents = [self._agent_class(i,
+                                    tran_len=self.config['burn_in_step'] + self.config['n_step'],
+                                    stagger=self.config['stagger'],
+                                    use_rnn=self.config['use_rnn'])
+                  for i in agent_ids]
+
         if self.config['use_rnn']:
-            initial_rnn_state = self.sac.get_initial_rnn_state(len(brain_info.agents))
+            initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))
             rnn_state = initial_rnn_state
 
         while True:
@@ -165,15 +178,16 @@ class Learner(object):
                 continue
 
             if self.config['reset_on_iteration']:
-                brain_info = self.env.reset(train_mode=False)[self.default_brain_name]
+                _, state = self.env.reset(reset_config=self.reset_config)
+                for agent in agents:
+                    agent.clear()
 
-            agents = [self._agent_class(i,
-                                        tran_len=self.config['burn_in_step'] + self.config['n_step'],
-                                        stagger=self.config['stagger'],
-                                        use_rnn=self.config['use_rnn'])
-                      for i in brain_info.agents]
+                if self.config['use_rnn']:
+                    rnn_state = initial_rnn_state
+            else:
+                for agent in agents:
+                    agent.reset()
 
-            states = brain_info.vector_observations
             step = 0
 
             while False in [a.done for a in agents] and self._is_training:
@@ -187,14 +201,11 @@ class Learner(object):
 
                 actions = actions.numpy()
 
-                brain_info = self.env.step({
-                    self.default_brain_name: actions
-                })[self.default_brain_name]
+                state_, reward, local_done, max_reached = self.env.step(action)
 
-                states_ = brain_info.vector_observations
                 if step == self.config['max_step']:
-                    brain_info.local_done = [True] * len(brain_info.agents)
-                    brain_info.max_reached = [True] * len(brain_info.agents)
+                    local_done = [True] * len(agents)
+                    max_reached = [True] * len(agents)
 
                 for i, agent in enumerate(agents):
                     agent.add_transition(states[i],
@@ -208,14 +219,14 @@ class Learner(object):
                 states = states_
                 if self.config['use_rnn']:
                     rnn_state = next_rnn_state
-                    rnn_state[brain_info.local_done] = initial_rnn_state[brain_info.local_done]
+                    rnn_state[local_done] = initial_rnn_state[local_done]
 
                 step += 1
 
             with self._training_lock:
                 self._log_episode_info(iteration, start_time, agents)
                 self.sac.save_model(iteration)
-            
+
             iteration += 1
             time.sleep(10)
 
@@ -249,30 +260,30 @@ class Learner(object):
         self._stub.clear_replay_buffer()
 
         while True:
-            pointers, trans, priority_is, n_states_for_next_rnn_state_list, episode_trans = self._get_sampled_data()
-
-            if self.config['use_rnn']:
-                n_states, n_actions, n_rewards, state_, done, mu_n_probs, rnn_state = trans
-                if self.config['use_prediction']:
-                    assert n_states_for_next_rnn_state_list is not None and episode_trans is not None
-            else:
-                n_states, n_actions, n_rewards, state_, done, mu_n_probs = trans
-                rnn_state = None
+            (pointers,
+             n_states,
+             n_actions,
+             n_rewards,
+             state_,
+             n_dones,
+             n_mu_probs,
+             rnn_state,
+             priority_is) = self._get_sampled_data()
 
             with self._training_lock:
-                td_error, pi_n_probs = self.sac.train(n_states,
-                                                      n_actions,
-                                                      n_rewards,
-                                                      state_,
-                                                      done,
-                                                      mu_n_probs,
-                                                      priority_is,
-                                                      rnn_state=rnn_state,
-                                                      n_states_for_next_rnn_state_list=n_states_for_next_rnn_state_list,
-                                                      episode_trans=episode_trans)
+                td_error, update_data = self.sac.train(pointers=pointers,
+                                                       n_states=n_states,
+                                                       n_actions=n_actions,
+                                                       n_rewards=n_rewards,
+                                                       state_=state_,
+                                                       n_dones=n_dones,
+                                                       n_mu_probs=n_mu_probs,
+                                                       priority_is=priority_is,
+                                                       rnn_state=rnn_state)
 
             self._stub.update_td_error(pointers, td_error)
-            self._stub.update_transitions(pointers, 5, pi_n_probs)
+            for pointers, key, data in update_data:
+                self._stub.update_transitions(pointers, key, data)
 
     def _run(self):
         servicer = LearnerService(self._get_action,
@@ -285,8 +296,8 @@ class Learner(object):
         server.start()
         self.logger.info(f'learner server is running on [{self.net_config["learner_port"]}]...')
 
-        t_evaluation = threading.Thread(target=self._policy_evaluation)
-        t_evaluation.start()
+        # t_evaluation = threading.Thread(target=self._policy_evaluation)
+        # t_evaluation.start()
 
         self._run_training_client()
 
@@ -313,22 +324,38 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
             yield Pong(time=int(time.time() * 1000))
 
     def GetAction(self, request: learner_pb2.GetActionRequest, context):
-        if request.has_rnn_state:
-            action, next_rnn_state = self._get_action(proto_to_ndarray(request.state),
-                                                      proto_to_ndarray(request.rnn_state))
-            return learner_pb2.Action(action=ndarray_to_proto(action),
-                                      has_rnn_state=True,
-                                      rnn_state=ndarray_to_proto(next_rnn_state))
+        state = proto_to_ndarray(request.state)
+        rnn_state = proto_to_ndarray(request.rnn_state)
+
+        if rnn_state is None:
+            action = self._get_action(state)
+            next_rnn_state = None
         else:
-            action = self._get_action(proto_to_ndarray(request.state))
-            return learner_pb2.Action(action=ndarray_to_proto(action))
+            action, next_rnn_state = self._get_action(state, rnn_state)
+
+        return learner_pb2.Action(action=ndarray_to_proto(action),
+                                  rnn_state=ndarray_to_proto(next_rnn_state))
 
     def GetPolicyVariables(self, request, context):
         variables = self._get_policy_variables()
         return learner_pb2.PolicyVariables(variables=[ndarray_to_proto(v) for v in variables])
 
     def GetTDError(self, request: learner_pb2.GetTDErrorRequest, context):
-        td_error = self._get_td_error(*[proto_to_ndarray(t) for t in request.transitions])
+        n_states = proto_to_ndarray(request.n_states)
+        n_actions = proto_to_ndarray(request.n_actions)
+        n_rewards = proto_to_ndarray(request.n_rewards)
+        state_ = proto_to_ndarray(request.state_)
+        n_dones = proto_to_ndarray(request.n_dones)
+        n_mu_probs = proto_to_ndarray(request.n_mu_probs)
+        rnn_state = proto_to_ndarray(request.rnn_state)
+
+        td_error = self._get_td_error(n_states,
+                                      n_actions,
+                                      n_rewards,
+                                      state_,
+                                      n_dones,
+                                      n_mu_probs,
+                                      rnn_state)
         return learner_pb2.TDError(td_error=ndarray_to_proto(td_error))
 
     def PostReward(self, request: learner_pb2.PostRewardRequest, context):
@@ -347,16 +374,15 @@ class StubController:
         try:
             response = self._replay_stub.Sample(Empty())
             if response.has_data:
-                pointers = proto_to_ndarray(response.pointers)
-                transitions = [proto_to_ndarray(t) for t in response.transitions]
-                priority_is = proto_to_ndarray(response.priority_is)
-
-                if response.has_episode_data:
-                    n_states_for_next_rnn_state_list = [proto_to_ndarray(t) for t in response.n_states_for_next_rnn_state_list]
-                    episode_transitions = [proto_to_ndarray(t) for t in response.episode_transitions]
-                    return pointers, transitions, priority_is, n_states_for_next_rnn_state_list, episode_transitions
-                else:
-                    return pointers, transitions, priority_is, None, None
+                return (proto_to_ndarray(response.pointers),
+                        proto_to_ndarray(response.n_states),
+                        proto_to_ndarray(response.n_actions),
+                        proto_to_ndarray(response.n_rewards),
+                        proto_to_ndarray(response.state_),
+                        proto_to_ndarray(response.n_dones),
+                        proto_to_ndarray(response.n_mu_probs),
+                        proto_to_ndarray(response.rnn_state),
+                        proto_to_ndarray(response.priority_is))
             else:
                 return None
 
@@ -372,11 +398,11 @@ class StubController:
         except grpc.RpcError:
             self._logger.error('connection lost in "update_td_error"')
 
-    def update_transitions(self, pointers, index, data):
+    def update_transitions(self, pointers, key, data):
         try:
             self._replay_stub.UpdateTransitions(
                 replay_pb2.UpdateTransitionsRequest(pointers=ndarray_to_proto(pointers),
-                                                    index=index,
+                                                    key=key,
                                                     data=ndarray_to_proto(data)))
         except grpc.RpcError:
             self._logger.error('connection lost in "update_transitions"')

@@ -26,11 +26,6 @@ class ReplayServiceStub(object):
         request_serializer=replay__pb2.AddRequest.SerializeToString,
         response_deserializer=ndarray__pb2.Empty.FromString,
         )
-    self.AddEpisode = channel.unary_unary(
-        '/ReplayService/AddEpisode',
-        request_serializer=replay__pb2.AddEpisodeRequest.SerializeToString,
-        response_deserializer=ndarray__pb2.Empty.FromString,
-        )
     self.Sample = channel.unary_unary(
         '/ReplayService/Sample',
         request_serializer=ndarray__pb2.Empty.SerializeToString,
@@ -65,13 +60,6 @@ class ReplayServiceServicer(object):
     raise NotImplementedError('Method not implemented!')
 
   def Add(self, request, context):
-    # missing associated documentation comment in .proto file
-    pass
-    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-    context.set_details('Method not implemented!')
-    raise NotImplementedError('Method not implemented!')
-
-  def AddEpisode(self, request, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -117,11 +105,6 @@ def add_ReplayServiceServicer_to_server(servicer, server):
       'Add': grpc.unary_unary_rpc_method_handler(
           servicer.Add,
           request_deserializer=replay__pb2.AddRequest.FromString,
-          response_serializer=ndarray__pb2.Empty.SerializeToString,
-      ),
-      'AddEpisode': grpc.unary_unary_rpc_method_handler(
-          servicer.AddEpisode,
-          request_deserializer=replay__pb2.AddEpisodeRequest.FromString,
           response_serializer=ndarray__pb2.Empty.SerializeToString,
       ),
       'Sample': grpc.unary_unary_rpc_method_handler(
