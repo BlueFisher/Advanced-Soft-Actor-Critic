@@ -26,6 +26,11 @@ import algorithm.config_helper as config_helper
 from algorithm.env_wrapper import EnvWrapper
 
 
+EVALUATION_INTERVAL = 10
+EVALUATION_WAITING_TIME = 1
+RESAMPLE_TIME = 2
+
+
 class Learner(object):
     train_mode = True
     _agent_class = Agent
@@ -174,7 +179,7 @@ class Learner(object):
         while True:
             # not training, waiting...
             if not self._is_training:
-                time.sleep(1)
+                time.sleep(EVALUATION_WAITING_TIME)
                 continue
 
             if self.config['reset_on_iteration']:
@@ -193,13 +198,13 @@ class Learner(object):
             while False in [a.done for a in agents] and self._is_training:
                 with self._training_lock:
                     if self.config['use_rnn']:
-                        actions, next_rnn_state = self.sac.choose_rnn_action(states.astype(np.float32),
-                                                                             rnn_state)
+                        action, next_rnn_state = self.sac.choose_rnn_action(state.astype(np.float32),
+                                                                            rnn_state)
                         next_rnn_state = next_rnn_state.numpy()
                     else:
-                        actions = self.sac.choose_action(states.astype(np.float32))
+                        action = self.sac.choose_action(state.astype(np.float32))
 
-                actions = actions.numpy()
+                action = action.numpy()
 
                 state_, reward, local_done, max_reached = self.env.step(action)
 
@@ -208,15 +213,15 @@ class Learner(object):
                     max_reached = [True] * len(agents)
 
                 for i, agent in enumerate(agents):
-                    agent.add_transition(states[i],
-                                         actions[i],
-                                         brain_info.rewards[i],
-                                         brain_info.local_done[i],
-                                         brain_info.max_reached[i],
-                                         states_[i],
+                    agent.add_transition(state[i],
+                                         action[i],
+                                         reward[i],
+                                         local_done[i],
+                                         max_reached[i],
+                                         state_[i],
                                          rnn_state[i] if self.config['use_rnn'] else None)
 
-                states = states_
+                state = state_
                 if self.config['use_rnn']:
                     rnn_state = next_rnn_state
                     rnn_state[local_done] = initial_rnn_state[local_done]
@@ -228,7 +233,7 @@ class Learner(object):
                 self.sac.save_model(iteration)
 
             iteration += 1
-            time.sleep(10)
+            time.sleep(EVALUATION_INTERVAL)
 
     def _log_episode_info(self, iteration, start_time, agents):
         rewards = np.array([a.reward for a in agents])
@@ -250,7 +255,7 @@ class Learner(object):
             if sampled is None:
                 self.logger.warning('no data sampled')
                 self._is_training = False
-                time.sleep(2)
+                time.sleep(RESAMPLE_TIME)
                 continue
             else:
                 self._is_training = True
@@ -296,8 +301,8 @@ class Learner(object):
         server.start()
         self.logger.info(f'learner server is running on [{self.net_config["learner_port"]}]...')
 
-        # t_evaluation = threading.Thread(target=self._policy_evaluation)
-        # t_evaluation.start()
+        t_evaluation = threading.Thread(target=self._policy_evaluation)
+        t_evaluation.start()
 
         self._run_training_client()
 

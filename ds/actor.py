@@ -27,6 +27,11 @@ import algorithm.config_helper as config_helper
 from algorithm.env_wrapper import EnvWrapper
 
 
+WAITING_CONNECTION_TIME = 2
+PING_INTERVAL = 5
+RECONNECT_TIME = 2
+
+
 class Actor(object):
     train_mode = True
     _websocket_connected = False
@@ -128,7 +133,7 @@ class Actor(object):
                     iteration = 0
 
                 self.logger.warning('waiting for connection')
-                time.sleep(2)
+                time.sleep(WAITING_CONNECTION_TIME)
                 continue
 
             # learner is online, reset all settings
@@ -305,7 +310,7 @@ class StubController:
         def request_messages():
             while True:
                 yield Ping(time=int(time.time() * 1000))
-                time.sleep(5)
+                time.sleep(PING_INTERVAL)
                 if not self._replay_connected:
                     break
 
@@ -321,13 +326,13 @@ class StubController:
                     self._replay_connected = False
                     self._logger.error('replay disconnected')
             finally:
-                time.sleep(2)
+                time.sleep(RECONNECT_TIME)
 
     def _start_learner_persistence(self):
         def request_messages():
             while True:
                 yield Ping(time=int(time.time() * 1000))
-                time.sleep(5)
+                time.sleep(PING_INTERVAL)
                 if not self._learner_connected:
                     break
 
@@ -343,4 +348,4 @@ class StubController:
                     self._learner_connected = False
                     self._logger.error('learner disconnected')
             finally:
-                time.sleep(2)
+                time.sleep(RECONNECT_TIME)
