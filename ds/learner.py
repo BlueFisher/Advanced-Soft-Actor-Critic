@@ -58,6 +58,7 @@ class Learner(object):
 
         # initialize config from command line arguments
         self.train_mode = not args.run
+        self.render = args.render
         self.run_in_editor = args.editor
 
         if args.build_port is not None:
@@ -89,11 +90,11 @@ class Learner(object):
         self._stub = StubController(self.net_config)
 
         if self.run_in_editor:
-            self.env = EnvWrapper(train_mode=self.train_mode, base_port=5004)
+            self.env = EnvWrapper(train_mode=False, base_port=5004)
         else:
-            self.env = EnvWrapper(train_mode=self.train_mode,
+            self.env = EnvWrapper(train_mode=False,
                                   file_name=self.config['build_path'],
-                                  no_graphics=self.train_mode,
+                                  no_graphics=not self.render and self.train_mode,
                                   base_port=self.config['build_port'],
                                   args=['--scene', self.config['scene']])
 

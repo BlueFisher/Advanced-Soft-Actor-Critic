@@ -11,6 +11,7 @@ if __name__ == '__main__':
     parser.add_argument('process_type', choices=['replay', 'r', 'learner', 'l', 'actor', 'a'])
     parser.add_argument('--config', '-c', help='config file')
     parser.add_argument('--run', action='store_true', help='inference mode')
+    parser.add_argument('--render', action='store_true', help='render')
     parser.add_argument('--editor', action='store_true', help='running in Unity Editor')
     parser.add_argument('--logger_file', help='logging into a file')
     parser.add_argument('--name', '-n', help='training name')
