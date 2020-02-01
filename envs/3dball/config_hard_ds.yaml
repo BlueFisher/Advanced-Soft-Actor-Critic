@@ -8,14 +8,13 @@ base_config:
   max_step: 500
   # update_policy_variables_per_step: 100
   burn_in_step: 10
-  n_step: 5
+  n_step: 3
   stagger: 1
   use_rnn: true
-  use_prediction: true
 
 net_config:
-  replay_host: 58.199.162.110
-  learner_host: 58.199.162.110
+  replay_host: 127.0.0.1
+  learner_host: 127.0.0.1
 
 sac_config:
   seed: 42

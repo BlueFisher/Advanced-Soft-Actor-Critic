@@ -12,8 +12,6 @@ base_config:
   update_policy_mode: true
   # -1 for policy variables being updated each iteration
   update_policy_variables_per_step: -1
-  # for actor, the number of transitions sent to replay
-  add_trans_batch: 56
   max_step: -1
   reset_on_iteration: true
   
@@ -21,7 +19,6 @@ base_config:
   n_step: 1
   stagger: 1
   use_rnn: false
-  use_prediction: true
   
 net_config:
   replay_host: 127.0.0.1
@@ -50,6 +47,11 @@ sac_config:
   update_target_per_step: 1
   init_log_alpha: -2.3
   use_auto_alpha: true
-  lr: 0.0003
+  q_lr: 0.0003
+  policy_lr: 0.0003
+  alpha_lr: 0.0003
+  rnn_lr: 0.0003
+  prediction_lr: 0.0003
   gamma: 0.99
   _lambda: 1.0
+  use_q_clip: false
