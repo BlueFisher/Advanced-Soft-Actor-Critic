@@ -9,8 +9,8 @@ base_config:
   n_step: 3
 
 net_config:
-  replay_host: 127.0.0.1
-  learner_host: 127.0.0.1
+  replay_host: 58.199.162.110
+  learner_host: 58.199.162.110
 
 replay_config:
   capacity: 1000000

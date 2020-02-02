@@ -159,6 +159,7 @@ class Learner(object):
         return td_error.numpy()
 
     def _post_reward(self, peer, reward):
+        # TODO q_clip
         self.logger.info(f'{peer}: min {np.min(reward):.1f}, mean {np.mean(reward):.1f}, max {np.max(reward):.1f}')
 
     def _policy_evaluation(self):
