@@ -94,21 +94,23 @@ class Replay(object):
                                            rnn_state=rnn_state if self.config['use_rnn'] else None)
         # td_error = np.abs(np.random.randn(n_states.shape[0], 1).astype(np.float32))
         if td_error is not None:
+            td_error = td_error.flatten()
+            td_error = np.concatenate([td_error,
+                                        np.zeros(ignore_size, dtype=np.float32)])
             with self._replay_buffer_lock:
-                td_error = td_error.flatten()
-                td_error = np.concatenate([td_error,
-                                           np.zeros(ignore_size, dtype=np.float32)])
                 self._replay_buffer.add_with_td_error(td_error, storage_data, ignore_size=ignore_size)
 
             percent = self._replay_buffer.size / self._replay_buffer.capacity * 100
             print(f'buffer size, {percent:.2f}%', end='\r')
 
     def _sample(self):
-        sampled = self._replay_buffer.sample()
+        with self._replay_buffer_lock:
+            sampled = self._replay_buffer.sample()
+
         if sampled is None:
             return None
 
-        pointers, trans, priority_is = self._replay_buffer.sample()
+        pointers, trans, priority_is = sampled
         # get n_step transitions
         trans = {k: [v] for k, v in trans.items()}
         # k: [v, v, ...]

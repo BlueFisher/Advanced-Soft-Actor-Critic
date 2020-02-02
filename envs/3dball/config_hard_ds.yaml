@@ -13,8 +13,8 @@ base_config:
   use_rnn: true
 
 net_config:
-  replay_host: 127.0.0.1
-  learner_host: 127.0.0.1
+  replay_host: 58.199.162.110
+  learner_host: 58.199.162.110
 
 sac_config:
   seed: 42
