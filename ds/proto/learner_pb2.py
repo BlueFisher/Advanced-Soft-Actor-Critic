@@ -22,7 +22,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\rlearner.proto\x1a\rndarray.proto\x1a\x0epingpong.proto\"H\n\x10GetActionRequest\x12\x17\n\x05state\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"?\n\x06\x41\x63tion\x12\x18\n\x06\x61\x63tion\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\".\n\x0fPolicyVariables\x12\x1b\n\tvariables\x18\x01 \x03(\x0b\x32\x08.NDarray\"\xd9\x01\n\x11GetTDErrorRequest\x12\x1a\n\x08n_states\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x18\n\x06state_\x18\x04 \x01(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x07 \x01(\x0b\x32\x08.NDarray\"%\n\x07TDError\x12\x1a\n\x08td_error\x18\x01 \x01(\x0b\x32\x08.NDarray\"-\n\x11PostRewardRequest\x12\x18\n\x06reward\x18\x01 \x01(\x0b\x32\x08.NDarray2\xe0\x01\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\'\n\tGetAction\x12\x11.GetActionRequest\x1a\x07.Action\x12.\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x10.PolicyVariables\x12*\n\nGetTDError\x12\x12.GetTDErrorRequest\x1a\x08.TDError\x12(\n\nPostReward\x12\x12.PostRewardRequest\x1a\x06.Emptyb\x06proto3')
+  serialized_pb=_b('\n\rlearner.proto\x1a\rndarray.proto\x1a\x0epingpong.proto\"H\n\x10GetActionRequest\x12\x17\n\x05state\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"?\n\x06\x41\x63tion\x12\x18\n\x06\x61\x63tion\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\".\n\x0fPolicyVariables\x12\x1b\n\tvariables\x18\x01 \x03(\x0b\x32\x08.NDarray\"\xd9\x01\n\x11GetTDErrorRequest\x12\x1a\n\x08n_states\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x18\n\x06state_\x18\x04 \x01(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x07 \x01(\x0b\x32\x08.NDarray\"%\n\x07TDError\x12\x1a\n\x08td_error\x18\x01 \x01(\x0b\x32\x08.NDarray\"1\n\x12PostRewardsRequest\x12\x1b\n\tn_rewards\x18\x01 \x01(\x0b\x32\x08.NDarray2\xe2\x01\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\'\n\tGetAction\x12\x11.GetActionRequest\x1a\x07.Action\x12.\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x10.PolicyVariables\x12*\n\nGetTDError\x12\x12.GetTDErrorRequest\x1a\x08.TDError\x12*\n\x0bPostRewards\x12\x13.PostRewardsRequest\x1a\x06.Emptyb\x06proto3')
   ,
   dependencies=[ndarray__pb2.DESCRIPTOR,pingpong__pb2.DESCRIPTOR,])
 
@@ -240,15 +240,15 @@ _TDERROR = _descriptor.Descriptor(
 )
 
 
-_POSTREWARDREQUEST = _descriptor.Descriptor(
-  name='PostRewardRequest',
-  full_name='PostRewardRequest',
+_POSTREWARDSREQUEST = _descriptor.Descriptor(
+  name='PostRewardsRequest',
+  full_name='PostRewardsRequest',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='reward', full_name='PostRewardRequest.reward', index=0,
+      name='n_rewards', full_name='PostRewardsRequest.n_rewards', index=0,
       number=1, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
@@ -267,7 +267,7 @@ _POSTREWARDREQUEST = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=494,
-  serialized_end=539,
+  serialized_end=543,
 )
 
 _GETACTIONREQUEST.fields_by_name['state'].message_type = ndarray__pb2._NDARRAY
@@ -283,13 +283,13 @@ _GETTDERRORREQUEST.fields_by_name['n_dones'].message_type = ndarray__pb2._NDARRA
 _GETTDERRORREQUEST.fields_by_name['n_mu_probs'].message_type = ndarray__pb2._NDARRAY
 _GETTDERRORREQUEST.fields_by_name['rnn_state'].message_type = ndarray__pb2._NDARRAY
 _TDERROR.fields_by_name['td_error'].message_type = ndarray__pb2._NDARRAY
-_POSTREWARDREQUEST.fields_by_name['reward'].message_type = ndarray__pb2._NDARRAY
+_POSTREWARDSREQUEST.fields_by_name['n_rewards'].message_type = ndarray__pb2._NDARRAY
 DESCRIPTOR.message_types_by_name['GetActionRequest'] = _GETACTIONREQUEST
 DESCRIPTOR.message_types_by_name['Action'] = _ACTION
 DESCRIPTOR.message_types_by_name['PolicyVariables'] = _POLICYVARIABLES
 DESCRIPTOR.message_types_by_name['GetTDErrorRequest'] = _GETTDERRORREQUEST
 DESCRIPTOR.message_types_by_name['TDError'] = _TDERROR
-DESCRIPTOR.message_types_by_name['PostRewardRequest'] = _POSTREWARDREQUEST
+DESCRIPTOR.message_types_by_name['PostRewardsRequest'] = _POSTREWARDSREQUEST
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 GetActionRequest = _reflection.GeneratedProtocolMessageType('GetActionRequest', (_message.Message,), {
@@ -327,12 +327,12 @@ TDError = _reflection.GeneratedProtocolMessageType('TDError', (_message.Message,
   })
 _sym_db.RegisterMessage(TDError)
 
-PostRewardRequest = _reflection.GeneratedProtocolMessageType('PostRewardRequest', (_message.Message,), {
-  'DESCRIPTOR' : _POSTREWARDREQUEST,
+PostRewardsRequest = _reflection.GeneratedProtocolMessageType('PostRewardsRequest', (_message.Message,), {
+  'DESCRIPTOR' : _POSTREWARDSREQUEST,
   '__module__' : 'learner_pb2'
-  # @@protoc_insertion_point(class_scope:PostRewardRequest)
+  # @@protoc_insertion_point(class_scope:PostRewardsRequest)
   })
-_sym_db.RegisterMessage(PostRewardRequest)
+_sym_db.RegisterMessage(PostRewardsRequest)
 
 
 
@@ -342,8 +342,8 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=542,
-  serialized_end=766,
+  serialized_start=546,
+  serialized_end=772,
   methods=[
   _descriptor.MethodDescriptor(
     name='Persistence',
@@ -382,11 +382,11 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
     serialized_options=None,
   ),
   _descriptor.MethodDescriptor(
-    name='PostReward',
-    full_name='LearnerService.PostReward',
+    name='PostRewards',
+    full_name='LearnerService.PostRewards',
     index=4,
     containing_service=None,
-    input_type=_POSTREWARDREQUEST,
+    input_type=_POSTREWARDSREQUEST,
     output_type=ndarray__pb2._EMPTY,
     serialized_options=None,
   ),
