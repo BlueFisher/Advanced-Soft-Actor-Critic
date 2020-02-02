@@ -36,9 +36,9 @@ class LearnerServiceStub(object):
         request_serializer=learner__pb2.GetTDErrorRequest.SerializeToString,
         response_deserializer=learner__pb2.TDError.FromString,
         )
-    self.PostReward = channel.unary_unary(
-        '/LearnerService/PostReward',
-        request_serializer=learner__pb2.PostRewardRequest.SerializeToString,
+    self.PostRewards = channel.unary_unary(
+        '/LearnerService/PostRewards',
+        request_serializer=learner__pb2.PostRewardsRequest.SerializeToString,
         response_deserializer=ndarray__pb2.Empty.FromString,
         )
 
@@ -75,7 +75,7 @@ class LearnerServiceServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def PostReward(self, request, context):
+  def PostRewards(self, request, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -105,9 +105,9 @@ def add_LearnerServiceServicer_to_server(servicer, server):
           request_deserializer=learner__pb2.GetTDErrorRequest.FromString,
           response_serializer=learner__pb2.TDError.SerializeToString,
       ),
-      'PostReward': grpc.unary_unary_rpc_method_handler(
-          servicer.PostReward,
-          request_deserializer=learner__pb2.PostRewardRequest.FromString,
+      'PostRewards': grpc.unary_unary_rpc_method_handler(
+          servicer.PostRewards,
+          request_deserializer=learner__pb2.PostRewardsRequest.FromString,
           response_serializer=ndarray__pb2.Empty.SerializeToString,
       ),
   }

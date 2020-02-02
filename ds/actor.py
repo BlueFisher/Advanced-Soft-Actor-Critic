@@ -109,6 +109,8 @@ class Actor(object):
     def _add_trans(self, n_states, n_actions, n_rewards, state_, n_dones,
                    n_rnn_states=None):
 
+        self._stub.post_rewards(n_rewards)
+
         if n_states.shape[1] < self.config['burn_in_step'] + self.config['n_step']:
             return
 
@@ -235,8 +237,6 @@ class Actor(object):
 
                 step += 1
 
-            reward = np.array([a.reward for a in agents])
-            self._stub.post_reward(reward)
             self._log_episode_info(iteration, agents)
             iteration += 1
 
@@ -300,11 +300,8 @@ class StubController:
         return [proto_to_ndarray(v) for v in response.variables]
 
     @rpc_error_inspector
-    def post_reward(self, reward):
-        try:
-            response = self._learner_stub.PostReward(learner_pb2.PostRewardRequest(reward=ndarray_to_proto(reward)))
-        except grpc.RpcError:
-            self._logger.error('connection lost in "post_reward"')
+    def post_rewards(self, n_rewards):
+        self._learner_stub.PostRewards(learner_pb2.PostRewardsRequest(n_rewards=ndarray_to_proto(n_rewards)))
 
     def _start_replay_persistence(self):
         def request_messages():

@@ -29,6 +29,7 @@ from algorithm.env_wrapper import EnvWrapper
 EVALUATION_INTERVAL = 10
 EVALUATION_WAITING_TIME = 1
 RESAMPLE_TIME = 2
+DISPLAY_ACTOR_REWARDS_TIME = 5
 
 
 class Learner(object):
@@ -36,6 +37,8 @@ class Learner(object):
     _agent_class = Agent
 
     _training_lock = threading.Lock()
+    _last_display_actor_rewards_time = 0
+    _history_rewards_buffer = list()
     _is_training = False
 
     def __init__(self, config_path, args):
@@ -158,9 +161,22 @@ class Learner(object):
 
         return td_error.numpy()
 
-    def _post_reward(self, peer, reward):
-        # TODO q_clip
-        self.logger.info(f'{peer}: min {np.min(reward):.1f}, mean {np.mean(reward):.1f}, max {np.max(reward):.1f}')
+    def _post_rewards(self, peer, n_rewards):
+        if self.sac.use_q_clip:
+            with self._training_lock:
+                self.sac.update_q_bound(n_rewards)
+
+        self._history_rewards_buffer.append(np.sum(n_rewards))
+        if self._last_display_actor_rewards_time == 0:
+            self._last_display_actor_rewards_time = time.time()
+        if time.time() - self._last_display_actor_rewards_time >= DISPLAY_ACTOR_REWARDS_TIME:
+            rewards_len = len(self._history_rewards_buffer)
+            min_reward = min(self._history_rewards_buffer)
+            mean_reward = sum(self._history_rewards_buffer) / rewards_len
+            max_reward = max(self._history_rewards_buffer)
+            self.logger.info(f'actors: min {min_reward:.1f}, mean {mean_reward:.1f}, max {max_reward:.1f}, ep_len {rewards_len}')
+            self._last_display_actor_rewards_time = time.time()
+            self._history_rewards_buffer.clear()
 
     def _policy_evaluation(self):
         iteration = 0
@@ -296,7 +312,7 @@ class Learner(object):
         servicer = LearnerService(self._get_action,
                                   self._get_policy_variables,
                                   self._get_td_error,
-                                  self._post_reward)
+                                  self._post_rewards)
         server = grpc.server(futures.ThreadPoolExecutor(max_workers=20))
         learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, server)
         server.add_insecure_port(f'[::]:{self.net_config["learner_port"]}')
@@ -311,11 +327,11 @@ class Learner(object):
 
 class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
     def __init__(self,
-                 get_action, get_policy_variables, get_td_error, post_reward):
+                 get_action, get_policy_variables, get_td_error, post_rewards):
         self._get_action = get_action
         self._get_policy_variables = get_policy_variables
         self._get_td_error = get_td_error
-        self._post_reward = post_reward
+        self._post_rewards = post_rewards
 
         self._peer_set = PeerSet(logging.getLogger('ds.learner.service'))
 
@@ -365,9 +381,9 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
                                       rnn_state)
         return learner_pb2.TDError(td_error=ndarray_to_proto(td_error))
 
-    def PostReward(self, request: learner_pb2.PostRewardRequest, context):
-        reward = proto_to_ndarray(request.reward)
-        self._post_reward(context.peer(), reward)
+    def PostRewards(self, request: learner_pb2.PostRewardsRequest, context):
+        n_rewards = proto_to_ndarray(request.n_rewards)
+        self._post_rewards(context.peer(), n_rewards)
         return Empty()
 
 
