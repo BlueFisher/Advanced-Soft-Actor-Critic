@@ -10,27 +10,27 @@ initializer_helper = {
 
 
 class ModelRNN(tf.keras.Model):
-    def __init__(self, state_dim):
+    def __init__(self, obs_dim):
         super(ModelRNN, self).__init__()
-        self.state_dim = state_dim
+        self.obs_dim = obs_dim
         self.rnn_units = 16
         self.layer_rnn = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
 
         self.get_call_result_tensors()
 
-    def call(self, inputs_s, initial_state):
-        outputs, next_rnn_state = self.layer_rnn(inputs_s, initial_state=initial_state)
+    def call(self, obs, initial_state):
+        outputs, next_rnn_state = self.layer_rnn(obs, initial_state=initial_state)
 
-        encoded_state = tf.concat([inputs_s, outputs], -1)
-        return encoded_state, next_rnn_state, outputs
+        state = tf.concat([obs, outputs], -1)
+        return state, next_rnn_state, outputs
 
     def get_call_result_tensors(self):
-        return self(tf.keras.Input(shape=(None, self.state_dim,), dtype=tf.float32),
+        return self(tf.keras.Input(shape=(None, self.obs_dim,), dtype=tf.float32),
                     tf.keras.Input(shape=(self.rnn_units,), dtype=tf.float32))
 
 
 class ModelPrediction(tf.keras.Model):
-    def __init__(self, state_dim, encoded_state_dim, action_dim):
+    def __init__(self, obs_dim, state_dim, action_dim):
         super(ModelPrediction, self).__init__()
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu, **initializer_helper),
@@ -39,10 +39,10 @@ class ModelPrediction(tf.keras.Model):
             tf.keras.layers.Dense(action_dim, **initializer_helper)
         ])
 
-        self(tf.keras.Input(shape=(encoded_state_dim,)), tf.keras.Input(shape=(state_dim,)))
+        self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(obs_dim,)))
 
-    def call(self, inputs_s, inputs_s_):
-        return self.seq(tf.concat([inputs_s, inputs_s_], -1))
+    def call(self, state, obs_):
+        return self.seq(tf.concat([state, obs_], -1))
 
 
 class ModelQ(tf.keras.Model):
@@ -56,8 +56,8 @@ class ModelQ(tf.keras.Model):
 
         self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(action_dim,)))
 
-    def call(self, inputs_s, inputs_a):
-        l = tf.concat([inputs_s, inputs_a], -1)
+    def call(self, state, action):
+        l = tf.concat([state, action], -1)
 
         q = self.sequential_model(l)
         return q
@@ -81,8 +81,8 @@ class ModelPolicy(tf.keras.Model):
 
         self(tf.keras.Input(shape=(state_dim,)))
 
-    def call(self, inputs_s):
-        l = self.common_model(inputs_s)
+    def call(self, state):
+        l = self.common_model(state)
 
         mu = self.mu_model(l)
 

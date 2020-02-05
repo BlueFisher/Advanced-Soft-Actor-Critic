@@ -14,10 +14,10 @@ service ReplayService {
 }
 
 message AddRequest {
-  NDarray n_states = 1;
+  NDarray n_obses = 1;
   NDarray n_actions = 2;
   NDarray n_rewards = 3;
-  NDarray state_ = 4;
+  NDarray obs_ = 4;
   NDarray n_dones = 5;
   NDarray n_mu_probs = 6;
   NDarray n_rnn_states = 7;
@@ -25,10 +25,10 @@ message AddRequest {
 
 message SampledData {
   NDarray pointers = 1;
-  NDarray n_states = 2;
+  NDarray n_obses = 2;
   NDarray n_actions = 3;
   NDarray n_rewards = 4;
-  NDarray state_ = 5;
+  NDarray obs_ = 5;
   NDarray n_dones = 6;
   NDarray n_mu_probs = 7;
   NDarray rnn_state = 8;
