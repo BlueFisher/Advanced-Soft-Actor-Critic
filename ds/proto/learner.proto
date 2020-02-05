@@ -13,7 +13,7 @@ service LearnerService {
 }
 
 message GetActionRequest {
-  NDarray state = 1;
+  NDarray obs = 1;
   NDarray rnn_state = 3;
 }
 message Action {
@@ -26,10 +26,10 @@ message PolicyVariables {
 }
 
 message GetTDErrorRequest {
-  NDarray n_states = 1;
+  NDarray n_obses = 1;
   NDarray n_actions = 2;
   NDarray n_rewards = 3;
-  NDarray state_ = 4;
+  NDarray obs_ = 4;
   NDarray n_dones = 5;
   NDarray n_mu_probs = 6;
   NDarray rnn_state = 7;
