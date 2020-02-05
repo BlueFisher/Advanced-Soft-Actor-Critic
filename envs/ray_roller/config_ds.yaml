@@ -5,7 +5,7 @@ base_config:
   scene: RayRoller
 
   reset_on_iteration: false
-  burn_in_step: 10
+  burn_in_step: 15
   n_step: 5
   use_rnn: true
 
