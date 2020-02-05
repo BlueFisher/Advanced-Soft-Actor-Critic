@@ -19,21 +19,21 @@ class Agent(object):
         self._tmp_episode_trans = list()
 
     def add_transition(self,
-                       state,
+                       obs,
                        action,
                        reward,
                        local_done,
                        max_reached,
-                       state_,
+                       obs_,
                        rnn_state=None):
 
         transition = {
-            'state': state,
+            'obs': obs,
             'action': action,
             'reward': reward,
             'local_done': local_done,
             'max_reached': max_reached,
-            'state_': state_,
+            'obs_': obs_,
             'rnn_state': rnn_state
         }
         self._tmp_trans.append(transition)
@@ -43,12 +43,12 @@ class Agent(object):
             self.reward += reward
         self.last_reward += reward
 
-        self._extra_log(state,
+        self._extra_log(obs,
                         action,
                         reward,
                         local_done,
                         max_reached,
-                        state_)
+                        obs_)
 
         trans = self._get_trans()
         if trans is not None:
@@ -70,12 +70,12 @@ class Agent(object):
         return trans, episode_trans
 
     def _extra_log(self,
-                   state,
+                   obs,
                    action,
                    reward,
                    local_done,
                    max_reached,
-                   state_):
+                   obs_):
         pass
 
     def _get_trans(self):
@@ -88,29 +88,29 @@ class Agent(object):
 
         self._curr_stagger = 1
 
-        state_ = self._tmp_trans[-1]['state_']
+        obs_ = self._tmp_trans[-1]['obs_']
         done = self._tmp_trans[-1]['local_done'] and not self._tmp_trans[-1]['max_reached']
 
-        # n_states, n_actions, n_rewards, state_, done
+        # n_obses, n_actions, n_rewards, obs_, done
         trans = [
-            [t['state'] for t in self._tmp_trans],
+            [t['obs'] for t in self._tmp_trans],
             [t['action'] for t in self._tmp_trans],
             [t['reward'] for t in self._tmp_trans],
-            state_,
+            obs_,
             [done]
         ]
 
         if self.use_rnn:
-            # n_states, n_actions, n_rewards, state_, done, rnn_state
+            # n_obses, n_actions, n_rewards, obs_, done, rnn_state
             trans.append(self._tmp_trans[0]['rnn_state'])
 
         return trans
 
     def _get_episode_trans(self):
-        trans = [[t['state'] for t in self._tmp_episode_trans],
+        trans = [[t['obs'] for t in self._tmp_episode_trans],
                  [t['action'] for t in self._tmp_episode_trans],
                  [t['reward'] for t in self._tmp_episode_trans],
-                 self._tmp_episode_trans[-1]['state_'],
+                 self._tmp_episode_trans[-1]['obs_'],
                  [t['local_done'] and not t['max_reached'] for t in self._tmp_episode_trans]]
         if self.use_rnn:
             trans.append([t['rnn_state'] for t in self._tmp_episode_trans])

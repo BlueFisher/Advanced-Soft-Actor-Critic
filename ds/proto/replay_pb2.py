@@ -22,7 +22,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x0creplay.proto\x1a\rndarray.proto\x1a\x0epingpong.proto\"\xd5\x01\n\nAddRequest\x12\x1a\n\x08n_states\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x18\n\x06state_\x18\x04 \x01(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cn_rnn_states\x18\x07 \x01(\x0b\x32\x08.NDarray\"\xa0\x02\n\x0bSampledData\x12\x1a\n\x08pointers\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1a\n\x08n_states\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x04 \x01(\x0b\x32\x08.NDarray\x12\x18\n\x06state_\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x07 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x08 \x01(\x0b\x32\x08.NDarray\x12\x1d\n\x0bpriority_is\x18\t \x01(\x0b\x32\x08.NDarray\x12\x10\n\x08has_data\x18\n \x01(\x08\"N\n\x14UpdateTDErrorRequest\x12\x1a\n\x08pointers\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1a\n\x08td_error\x18\x02 \x01(\x0b\x32\x08.NDarray\"[\n\x18UpdateTransitionsRequest\x12\x1a\n\x08pointers\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x0b\n\x03key\x18\x02 \x01(\t\x12\x16\n\x04\x64\x61ta\x18\x03 \x01(\x0b\x32\x08.NDarray2\xed\x01\n\rReplayService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\x1a\n\x03\x41\x64\x64\x12\x0b.AddRequest\x1a\x06.Empty\x12\x1e\n\x06Sample\x12\x06.Empty\x1a\x0c.SampledData\x12.\n\rUpdateTDError\x12\x15.UpdateTDErrorRequest\x1a\x06.Empty\x12\x36\n\x11UpdateTransitions\x12\x19.UpdateTransitionsRequest\x1a\x06.Empty\x12\x17\n\x05\x43lear\x12\x06.Empty\x1a\x06.Emptyb\x06proto3')
+  serialized_pb=_b('\n\x0creplay.proto\x1a\rndarray.proto\x1a\x0epingpong.proto\"\xd2\x01\n\nAddRequest\x12\x19\n\x07n_obses\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x16\n\x04obs_\x18\x04 \x01(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cn_rnn_states\x18\x07 \x01(\x0b\x32\x08.NDarray\"\x9d\x02\n\x0bSampledData\x12\x1a\n\x08pointers\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x19\n\x07n_obses\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x04 \x01(\x0b\x32\x08.NDarray\x12\x16\n\x04obs_\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x07 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x08 \x01(\x0b\x32\x08.NDarray\x12\x1d\n\x0bpriority_is\x18\t \x01(\x0b\x32\x08.NDarray\x12\x10\n\x08has_data\x18\n \x01(\x08\"N\n\x14UpdateTDErrorRequest\x12\x1a\n\x08pointers\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1a\n\x08td_error\x18\x02 \x01(\x0b\x32\x08.NDarray\"[\n\x18UpdateTransitionsRequest\x12\x1a\n\x08pointers\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x0b\n\x03key\x18\x02 \x01(\t\x12\x16\n\x04\x64\x61ta\x18\x03 \x01(\x0b\x32\x08.NDarray2\xed\x01\n\rReplayService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\x1a\n\x03\x41\x64\x64\x12\x0b.AddRequest\x1a\x06.Empty\x12\x1e\n\x06Sample\x12\x06.Empty\x1a\x0c.SampledData\x12.\n\rUpdateTDError\x12\x15.UpdateTDErrorRequest\x1a\x06.Empty\x12\x36\n\x11UpdateTransitions\x12\x19.UpdateTransitionsRequest\x1a\x06.Empty\x12\x17\n\x05\x43lear\x12\x06.Empty\x1a\x06.Emptyb\x06proto3')
   ,
   dependencies=[ndarray__pb2.DESCRIPTOR,pingpong__pb2.DESCRIPTOR,])
 
@@ -37,7 +37,7 @@ _ADDREQUEST = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='n_states', full_name='AddRequest.n_states', index=0,
+      name='n_obses', full_name='AddRequest.n_obses', index=0,
       number=1, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
@@ -58,7 +58,7 @@ _ADDREQUEST = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='state_', full_name='AddRequest.state_', index=3,
+      name='obs_', full_name='AddRequest.obs_', index=3,
       number=4, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
@@ -98,7 +98,7 @@ _ADDREQUEST = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=48,
-  serialized_end=261,
+  serialized_end=258,
 )
 
 
@@ -117,7 +117,7 @@ _SAMPLEDDATA = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='n_states', full_name='SampledData.n_states', index=1,
+      name='n_obses', full_name='SampledData.n_obses', index=1,
       number=2, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
@@ -138,7 +138,7 @@ _SAMPLEDDATA = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='state_', full_name='SampledData.state_', index=4,
+      name='obs_', full_name='SampledData.obs_', index=4,
       number=5, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
@@ -191,8 +191,8 @@ _SAMPLEDDATA = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=264,
-  serialized_end=552,
+  serialized_start=261,
+  serialized_end=546,
 )
 
 
@@ -229,8 +229,8 @@ _UPDATETDERRORREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=554,
-  serialized_end=632,
+  serialized_start=548,
+  serialized_end=626,
 )
 
 
@@ -274,22 +274,22 @@ _UPDATETRANSITIONSREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=634,
-  serialized_end=725,
+  serialized_start=628,
+  serialized_end=719,
 )
 
-_ADDREQUEST.fields_by_name['n_states'].message_type = ndarray__pb2._NDARRAY
+_ADDREQUEST.fields_by_name['n_obses'].message_type = ndarray__pb2._NDARRAY
 _ADDREQUEST.fields_by_name['n_actions'].message_type = ndarray__pb2._NDARRAY
 _ADDREQUEST.fields_by_name['n_rewards'].message_type = ndarray__pb2._NDARRAY
-_ADDREQUEST.fields_by_name['state_'].message_type = ndarray__pb2._NDARRAY
+_ADDREQUEST.fields_by_name['obs_'].message_type = ndarray__pb2._NDARRAY
 _ADDREQUEST.fields_by_name['n_dones'].message_type = ndarray__pb2._NDARRAY
 _ADDREQUEST.fields_by_name['n_mu_probs'].message_type = ndarray__pb2._NDARRAY
 _ADDREQUEST.fields_by_name['n_rnn_states'].message_type = ndarray__pb2._NDARRAY
 _SAMPLEDDATA.fields_by_name['pointers'].message_type = ndarray__pb2._NDARRAY
-_SAMPLEDDATA.fields_by_name['n_states'].message_type = ndarray__pb2._NDARRAY
+_SAMPLEDDATA.fields_by_name['n_obses'].message_type = ndarray__pb2._NDARRAY
 _SAMPLEDDATA.fields_by_name['n_actions'].message_type = ndarray__pb2._NDARRAY
 _SAMPLEDDATA.fields_by_name['n_rewards'].message_type = ndarray__pb2._NDARRAY
-_SAMPLEDDATA.fields_by_name['state_'].message_type = ndarray__pb2._NDARRAY
+_SAMPLEDDATA.fields_by_name['obs_'].message_type = ndarray__pb2._NDARRAY
 _SAMPLEDDATA.fields_by_name['n_dones'].message_type = ndarray__pb2._NDARRAY
 _SAMPLEDDATA.fields_by_name['n_mu_probs'].message_type = ndarray__pb2._NDARRAY
 _SAMPLEDDATA.fields_by_name['rnn_state'].message_type = ndarray__pb2._NDARRAY
@@ -340,8 +340,8 @@ _REPLAYSERVICE = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=728,
-  serialized_end=965,
+  serialized_start=722,
+  serialized_end=959,
   methods=[
   _descriptor.MethodDescriptor(
     name='Persistence',

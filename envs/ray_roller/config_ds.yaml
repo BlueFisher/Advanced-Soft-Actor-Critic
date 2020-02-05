@@ -1,0 +1,18 @@
+base_config:
+  build_path: 
+    win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
+    linux: /data/linux-RL-Envs/RL-Envs.x86_64
+  scene: RayRoller
+
+  reset_on_iteration: false
+  burn_in_step: 10
+  n_step: 5
+  use_rnn: true
+
+net_config:
+  replay_host: 58.199.162.110
+  learner_host: 58.199.162.110
+
+sac_config:
+  seed: 42
+  init_log_alpha: -4.6

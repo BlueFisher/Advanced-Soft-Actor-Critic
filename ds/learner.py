@@ -101,7 +101,7 @@ class Learner(object):
                                   base_port=self.config['build_port'],
                                   args=['--scene', self.config['scene']])
 
-        state_dim, action_dim = self.env.init()
+        obs_dim, action_dim = self.env.init()
 
         self.logger.info(f'{self.config["build_path"]} initialized')
 
@@ -112,7 +112,7 @@ class Learner(object):
             custom_sac_model = importlib.import_module(f'{config_path.replace("/",".")}.{self.config["sac"]}')
             shutil.copyfile(f'{config_path}/{self.config["sac"]}.py', f'{model_root_path}/sac_model.py')
 
-        self.sac = SAC_DS_Base(state_dim=state_dim,
+        self.sac = SAC_DS_Base(obs_dim=obs_dim,
                                action_dim=action_dim,
                                model_root_path=model_root_path,
                                model=custom_sac_model,
@@ -130,31 +130,31 @@ class Learner(object):
 
         return [v.numpy() for v in variables]
 
-    def _get_action(self, state, rnn_state=None):
+    def _get_action(self, obs, rnn_state=None):
         if self.config['use_rnn']:
             assert rnn_state is not None
 
         with self._training_lock:
             if self.config['use_rnn']:
-                action, next_rnn_state = self.sac.choose_rnn_action(state, rnn_state)
+                action, next_rnn_state = self.sac.choose_rnn_action(obs, rnn_state)
                 next_rnn_state = next_rnn_state
                 return action.numpy(), next_rnn_state.numpy()
             else:
-                action = self.sac.choose_action(state)
+                action = self.sac.choose_action(obs)
                 return action.numpy()
 
-    def _get_td_error(self, n_states,
+    def _get_td_error(self, n_obses,
                       n_actions,
                       n_rewards,
-                      state_,
+                      obs_,
                       n_dones,
                       n_mu_probs,
                       rnn_state):
         with self._training_lock:
-            td_error = self.sac.get_td_error(n_states,
+            td_error = self.sac.get_td_error(n_obses,
                                              n_actions,
                                              n_rewards,
-                                             state_,
+                                             obs_,
                                              n_dones,
                                              n_mu_probs,
                                              rnn_state)
@@ -182,7 +182,7 @@ class Learner(object):
         iteration = 0
         start_time = time.time()
 
-        agent_ids, state = self.env.reset(reset_config=self.reset_config)
+        agent_ids, obs = self.env.reset(reset_config=self.reset_config)
 
         agents = [self._agent_class(i,
                                     tran_len=self.config['burn_in_step'] + self.config['n_step'],
@@ -201,7 +201,7 @@ class Learner(object):
                 continue
 
             if self.config['reset_on_iteration']:
-                _, state = self.env.reset(reset_config=self.reset_config)
+                _, obs = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
 
@@ -216,30 +216,30 @@ class Learner(object):
             while False in [a.done for a in agents] and self._is_training:
                 with self._training_lock:
                     if self.config['use_rnn']:
-                        action, next_rnn_state = self.sac.choose_rnn_action(state.astype(np.float32),
+                        action, next_rnn_state = self.sac.choose_rnn_action(obs.astype(np.float32),
                                                                             rnn_state)
                         next_rnn_state = next_rnn_state.numpy()
                     else:
-                        action = self.sac.choose_action(state.astype(np.float32))
+                        action = self.sac.choose_action(obs.astype(np.float32))
 
                 action = action.numpy()
 
-                state_, reward, local_done, max_reached = self.env.step(action)
+                obs_, reward, local_done, max_reached = self.env.step(action)
 
                 if step == self.config['max_step']:
                     local_done = [True] * len(agents)
                     max_reached = [True] * len(agents)
 
                 for i, agent in enumerate(agents):
-                    agent.add_transition(state[i],
+                    agent.add_transition(obs[i],
                                          action[i],
                                          reward[i],
                                          local_done[i],
                                          max_reached[i],
-                                         state_[i],
+                                         obs_[i],
                                          rnn_state[i] if self.config['use_rnn'] else None)
 
-                state = state_
+                obs = obs_
                 if self.config['use_rnn']:
                     rnn_state = next_rnn_state
                     rnn_state[local_done] = initial_rnn_state[local_done]
@@ -284,10 +284,10 @@ class Learner(object):
 
         while True:
             (pointers,
-             n_states,
+             n_obses,
              n_actions,
              n_rewards,
-             state_,
+             obs_,
              n_dones,
              n_mu_probs,
              rnn_state,
@@ -295,10 +295,10 @@ class Learner(object):
 
             with self._training_lock:
                 td_error, update_data = self.sac.train(pointers=pointers,
-                                                       n_states=n_states,
+                                                       n_obses=n_obses,
                                                        n_actions=n_actions,
                                                        n_rewards=n_rewards,
-                                                       state_=state_,
+                                                       obs_=obs_,
                                                        n_dones=n_dones,
                                                        n_mu_probs=n_mu_probs,
                                                        priority_is=priority_is,
@@ -347,14 +347,14 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
             yield Pong(time=int(time.time() * 1000))
 
     def GetAction(self, request: learner_pb2.GetActionRequest, context):
-        state = proto_to_ndarray(request.state)
+        obs = proto_to_ndarray(request.obs)
         rnn_state = proto_to_ndarray(request.rnn_state)
 
         if rnn_state is None:
-            action = self._get_action(state)
+            action = self._get_action(obs)
             next_rnn_state = None
         else:
-            action, next_rnn_state = self._get_action(state, rnn_state)
+            action, next_rnn_state = self._get_action(obs, rnn_state)
 
         return learner_pb2.Action(action=ndarray_to_proto(action),
                                   rnn_state=ndarray_to_proto(next_rnn_state))
@@ -364,18 +364,18 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
         return learner_pb2.PolicyVariables(variables=[ndarray_to_proto(v) for v in variables])
 
     def GetTDError(self, request: learner_pb2.GetTDErrorRequest, context):
-        n_states = proto_to_ndarray(request.n_states)
+        n_obses = proto_to_ndarray(request.n_obses)
         n_actions = proto_to_ndarray(request.n_actions)
         n_rewards = proto_to_ndarray(request.n_rewards)
-        state_ = proto_to_ndarray(request.state_)
+        obs_ = proto_to_ndarray(request.obs_)
         n_dones = proto_to_ndarray(request.n_dones)
         n_mu_probs = proto_to_ndarray(request.n_mu_probs)
         rnn_state = proto_to_ndarray(request.rnn_state)
 
-        td_error = self._get_td_error(n_states,
+        td_error = self._get_td_error(n_obses,
                                       n_actions,
                                       n_rewards,
-                                      state_,
+                                      obs_,
                                       n_dones,
                                       n_mu_probs,
                                       rnn_state)
@@ -398,10 +398,10 @@ class StubController:
         response = self._replay_stub.Sample(Empty())
         if response.has_data:
             return (proto_to_ndarray(response.pointers),
-                    proto_to_ndarray(response.n_states),
+                    proto_to_ndarray(response.n_obses),
                     proto_to_ndarray(response.n_actions),
                     proto_to_ndarray(response.n_rewards),
-                    proto_to_ndarray(response.state_),
+                    proto_to_ndarray(response.obs_),
                     proto_to_ndarray(response.n_dones),
                     proto_to_ndarray(response.n_mu_probs),
                     proto_to_ndarray(response.rnn_state),

@@ -12,7 +12,7 @@ from algorithm.sac_base import SAC_Base
 
 class SAC_DS_Base(SAC_Base):
     def __init__(self,
-                 state_dim,
+                 obs_dim,
                  action_dim,
                  model_root_path,  # None in actor
                  model,
@@ -42,7 +42,7 @@ class SAC_DS_Base(SAC_Base):
         if len(physical_devices) > 0:
             tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
-        self.state_dim = state_dim
+        self.obs_dim = obs_dim
         self.action_dim = action_dim
         self.train_mode = train_mode
 
@@ -95,32 +95,32 @@ class SAC_DS_Base(SAC_Base):
             v.assign(n_v)
 
     def train(self, pointers,
-              n_states,
+              n_obses,
               n_actions,
               n_rewards,
-              state_,
+              obs_,
               n_dones,
               n_mu_probs,
               priority_is,
               rnn_state=None):
 
-        self._train(n_states=n_states,
+        self._train(n_obses=n_obses,
                     n_actions=n_actions,
                     n_rewards=n_rewards,
-                    state_=state_,
+                    obs_=obs_,
                     n_dones=n_dones,
                     n_mu_probs=n_mu_probs,
                     priority_is=priority_is,
                     initial_rnn_state=rnn_state if self.use_rnn else None)
 
         if self.use_rnn:
-            n_pi_probs = self.get_rnn_n_step_probs(n_states, n_actions,
+            n_pi_probs = self.get_rnn_n_step_probs(n_obses, n_actions,
                                                    rnn_state).numpy()
-            td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, n_dones,
+            td_error = self.get_td_error(n_obses, n_actions, n_rewards, obs_, n_dones,
                                          n_pi_probs, rnn_state).numpy()
         else:
-            n_pi_probs = self.get_n_step_probs(n_states, n_actions).numpy()
-            td_error = self.get_td_error(n_states, n_actions, n_rewards, state_, n_dones,
+            n_pi_probs = self.get_n_step_probs(n_obses, n_actions).numpy()
+            td_error = self.get_td_error(n_obses, n_actions, n_rewards, obs_, n_dones,
                                          n_pi_probs).numpy()
 
         update_data = list()
@@ -133,7 +133,7 @@ class SAC_DS_Base(SAC_Base):
         if self.use_rnn:
             pointers_list = [pointers + i for i in range(1, self.burn_in_step + self.n_step + 1)]
             tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-            n_rnn_states = self.get_n_rnn_states(n_states, rnn_state).numpy()
+            n_rnn_states = self.get_n_rnn_states(n_obses, rnn_state).numpy()
             rnn_states = n_rnn_states.reshape(-1, n_rnn_states.shape[-1])
             update_data.append((tmp_pointers, 'rnn_state', rnn_states))
 

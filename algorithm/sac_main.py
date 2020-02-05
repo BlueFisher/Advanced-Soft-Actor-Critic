@@ -87,7 +87,7 @@ class Main(object):
                                   base_port=self.config['port'],
                                   args=['--scene', self.config['scene']])
 
-        self.state_dim, self.action_dim = self.env.init()
+        self.obs_dim, self.action_dim = self.env.init()
 
         # if model exists, load saved model, else, copy a new one
         if os.path.isfile(f'{model_root_path}/sac_model.py'):
@@ -96,7 +96,7 @@ class Main(object):
             custom_sac_model = importlib.import_module(f'{config_path.replace("/",".")}.{self.config["sac"]}')
             shutil.copyfile(f'{config_path}/{self.config["sac"]}.py', f'{model_root_path}/sac_model.py')
 
-        self.sac = SAC_Base(state_dim=self.state_dim,
+        self.sac = SAC_Base(obs_dim=self.obs_dim,
                             action_dim=self.action_dim,
                             model_root_path=model_root_path,
                             model=custom_sac_model,
@@ -111,7 +111,7 @@ class Main(object):
                             **sac_config)
 
     def _run(self):
-        agent_ids, state = self.env.reset(reset_config=self.reset_config)
+        agent_ids, obs = self.env.reset(reset_config=self.reset_config)
 
         agents = [self._agent_class(i,
                                     tran_len=self.config['burn_in_step'] + self.config['n_step'],
@@ -125,7 +125,7 @@ class Main(object):
 
         for iteration in range(self.config['max_iter'] + 1):
             if self.config['reset_on_iteration']:
-                _, state = self.env.reset(reset_config=self.reset_config)
+                _, obs = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
 
@@ -148,36 +148,36 @@ class Main(object):
                 for agent in agents:
                     if agent.is_empty():
                         for _ in range(self.config['burn_in_step']):
-                            agent.add_transition(np.zeros(self.state_dim),
+                            agent.add_transition(np.zeros(self.obs_dim),
                                                  np.zeros(self.action_dim),
                                                  0, False, False,
-                                                 np.zeros(self.state_dim),
+                                                 np.zeros(self.obs_dim),
                                                  initial_rnn_state[0])
 
             step = 0
 
             while False in [a.done for a in agents]:
                 if self.config['use_rnn']:
-                    action, next_rnn_state = self.sac.choose_rnn_action(state.astype(np.float32),
+                    action, next_rnn_state = self.sac.choose_rnn_action(obs.astype(np.float32),
                                                                         rnn_state)
                     next_rnn_state = next_rnn_state.numpy()
                 else:
-                    action = self.sac.choose_action(state.astype(np.float32))
+                    action = self.sac.choose_action(obs.astype(np.float32))
 
                 action = action.numpy()
 
-                state_, reward, local_done, max_reached = self.env.step(action)
+                obs_, reward, local_done, max_reached = self.env.step(action)
 
                 if step == self.config['max_step']:
                     local_done = [True] * len(agents)
                     max_reached = [True] * len(agents)
 
-                tmp_results = [agents[i].add_transition(state[i],
+                tmp_results = [agents[i].add_transition(obs[i],
                                                         action[i],
                                                         reward[i],
                                                         local_done[i],
                                                         max_reached[i],
-                                                        state_[i],
+                                                        obs_[i],
                                                         rnn_state[i] if self.config['use_rnn'] else None)
                                for i in range(len(agents))]
 
@@ -186,18 +186,18 @@ class Main(object):
 
                     # trans_list = [t for t in trans_list if t is not None]
                     # if len(trans_list) != 0:
-                    #     # n_states, n_actions, n_rewards, done, rnn_state
+                    #     # n_obses, n_actions, n_rewards, done, rnn_state
                     #     trans = [np.concatenate(t, axis=0) for t in zip(*trans_list)]
                     #     self.sac.fill_replay_buffer(*trans)
 
                     episode_trans_list = [t for t in episode_trans_list if t is not None]
                     if len(episode_trans_list) != 0:
-                        # n_states, n_actions, n_rewards, state_, n_dones, n_rnn_states
+                        # n_obses, n_actions, n_rewards, obs_, n_dones, n_rnn_states
                         for episode_trans in episode_trans_list:
                             self.sac.fill_replay_buffer(*episode_trans)
                     self.sac.train()
 
-                state = state_
+                obs = obs_
                 if self.config['use_rnn']:
                     rnn_state = next_rnn_state
                     rnn_state[local_done] = initial_rnn_state[local_done]

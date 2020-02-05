@@ -19,8 +19,8 @@ class ModelQ(tf.keras.Model):
 
         self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(action_dim,)))
 
-    def call(self, inputs_s, inputs_a):
-        l = tf.concat([inputs_s, inputs_a], -1)
+    def call(self, state, action):
+        l = tf.concat([state, action], -1)
 
         q = self.sequential_model(l)
         return q
@@ -44,15 +44,12 @@ class ModelPolicy(tf.keras.Model):
 
         self(tf.keras.Input(shape=(state_dim,)))
 
-    def call(self, inputs_s):
-        l = self.common_model(inputs_s)
+    def call(self, state):
+        l = self.common_model(state)
 
         mu = self.mu_model(l)
 
         sigma = self.sigma_model(l)
-        # sigma = tf.clip_by_value(sigma, -2, 1)
-        # sigma = tf.exp(sigma)
-
         sigma = sigma + .1
 
         return self.tfpd([mu, sigma])
