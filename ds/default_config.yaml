@@ -13,6 +13,7 @@ base_config:
   # -1 for policy variables being updated each iteration
   update_policy_variables_per_step: -1
   max_step: -1
+  save_model_per_iter: 10
   reset_on_iteration: true
   
   burn_in_step: 0

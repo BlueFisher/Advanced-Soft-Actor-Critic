@@ -16,3 +16,4 @@ net_config:
 sac_config:
   seed: 42
   init_log_alpha: -4.6
+  use_q_clip: true
