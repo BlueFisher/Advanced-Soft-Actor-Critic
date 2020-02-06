@@ -22,14 +22,18 @@ import algorithm.config_helper as config_helper
 
 
 class Replay(object):
+    _replay_buffer_lock = threading.Lock()
+
     def __init__(self, config_path, args):
-        self.config, net_config, replay_config, episode_buffer_config = self._init_config(config_path, args)
+        self.config, net_config, replay_config, sac_config = self._init_config(config_path, args)
 
         self._replay_buffer = PrioritizedReplayBuffer(**replay_config)
 
-        self._replay_buffer_lock = threading.Lock()
-
         self._stub = StubController(net_config)
+
+        self.use_rnn = sac_config['use_rnn']
+        self.burn_in_step = sac_config['burn_in_step']
+        self.n_step = sac_config['n_step']
 
         self._run_replay_server(net_config)
 
@@ -42,7 +46,10 @@ class Replay(object):
 
         config_helper.display_config(config, self.logger)
 
-        return config['base_config'], config['net_config'], config['replay_config'], config['episode_buffer_config']
+        return (config['base_config'],
+                config['net_config'],
+                config['replay_config'],
+                config['sac_config'])
 
     def _add(self, n_obses, n_actions, n_rewards, obs_, n_dones, n_mu_probs,
              n_rnn_states=None):
@@ -72,14 +79,14 @@ class Replay(object):
             'mu_prob': mu_prob
         }
 
-        if self.config['use_rnn']:
+        if self.use_rnn:
             rnn_state = n_rnn_states.reshape([-1, n_rnn_states.shape[-1]])
             rnn_state = np.concatenate([rnn_state,
                                         np.empty([1, rnn_state.shape[-1]], dtype=np.float32)])
             storage_data['rnn_state'] = rnn_state
 
         # get td_error
-        ignore_size = self.config['burn_in_step'] + self.config['n_step']
+        ignore_size = self.burn_in_step + self.n_step
 
         n_obses = np.concatenate([n_obses[:, i:i + ignore_size] for i in range(n_obses.shape[1] - ignore_size + 1)], axis=0)
         n_actions = np.concatenate([n_actions[:, i:i + ignore_size] for i in range(n_actions.shape[1] - ignore_size + 1)], axis=0)
@@ -87,16 +94,16 @@ class Replay(object):
         obs_ = obs[ignore_size:]
         n_dones = np.concatenate([n_dones[:, i:i + ignore_size] for i in range(n_dones.shape[1] - ignore_size + 1)], axis=0)
         n_mu_probs = np.concatenate([n_mu_probs[:, i:i + ignore_size] for i in range(n_mu_probs.shape[1] - ignore_size + 1)], axis=0)
-        if self.config['use_rnn']:
+        if self.use_rnn:
             rnn_state = rnn_state[:-ignore_size]
 
         td_error = self._stub.get_td_error(n_obses, n_actions, n_rewards, obs_, n_dones, n_mu_probs,
-                                           rnn_state=rnn_state if self.config['use_rnn'] else None)
+                                           rnn_state=rnn_state if self.use_rnn else None)
         # td_error = np.abs(np.random.randn(n_obses.shape[0], 1).astype(np.float32))
         if td_error is not None:
             td_error = td_error.flatten()
             td_error = np.concatenate([td_error,
-                                        np.zeros(ignore_size, dtype=np.float32)])
+                                       np.zeros(ignore_size, dtype=np.float32)])
             with self._replay_buffer_lock:
                 self._replay_buffer.add_with_td_error(td_error, storage_data, ignore_size=ignore_size)
 
@@ -114,7 +121,7 @@ class Replay(object):
         # get n_step transitions
         trans = {k: [v] for k, v in trans.items()}
         # k: [v, v, ...]
-        for i in range(1, self.config['burn_in_step'] + self.config['n_step'] + 1):
+        for i in range(1, self.burn_in_step + self.n_step + 1):
             t_trans = self._replay_buffer.get_storage_data(pointers + i).items()
             for k, v in t_trans:
                 trans[k].append(v)
@@ -135,7 +142,7 @@ class Replay(object):
         n_dones = m_dones[:, :-1]
         n_mu_probs = m_mu_probs[:, :-1, :]
 
-        if self.config['use_rnn']:
+        if self.use_rnn:
             m_rnn_states = trans['rnn_state']
             rnn_state = m_rnn_states[:, 0, :]
         else:

@@ -22,13 +22,14 @@ class SAC_Base(object):
                  model,
                  train_mode=True,
 
+                 seed=None,
+                 write_summary_per_step=20,
+
                  burn_in_step=0,
                  n_step=1,
                  use_rnn=False,
                  use_prediction=True,
 
-                 seed=None,
-                 write_summary_per_step=20,
                  tau=0.005,
                  update_target_per_step=1,
                  init_log_alpha=-2.3,

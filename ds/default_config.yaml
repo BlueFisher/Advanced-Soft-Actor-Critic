@@ -16,11 +16,6 @@ base_config:
   save_model_per_iter: 10
   reset_on_iteration: true
   
-  burn_in_step: 0
-  n_step: 1
-  stagger: 1
-  use_rnn: false
-  
 net_config:
   replay_host: 127.0.0.1
   replay_port: 61000
@@ -36,14 +31,15 @@ replay_config:
   alpha: 0.9
   use_mongodb: false
 
-episode_buffer_config:
-  batch_step_size: 16
-  batch_size: 32
-  capacity: 50
-
 sac_config:
   seed: null
   write_summary_per_step: 20
+
+  burn_in_step: 0
+  n_step: 1
+  use_rnn: false
+  use_prediction: true
+
   tau: 0.005
   update_target_per_step: 1
   init_log_alpha: -2.3

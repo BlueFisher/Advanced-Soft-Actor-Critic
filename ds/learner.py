@@ -120,10 +120,6 @@ class Learner(object):
                                model=custom_sac_model,
                                train_mode=self.train_mode,
 
-                               burn_in_step=self.config['burn_in_step'],
-                               n_step=self.config['n_step'],
-                               use_rnn=self.config['use_rnn'],
-
                                **sac_config)
 
     def _get_policy_variables(self):
@@ -133,11 +129,11 @@ class Learner(object):
         return [v.numpy() for v in variables]
 
     def _get_action(self, obs, rnn_state=None):
-        if self.config['use_rnn']:
+        if self.sac.use_rnn:
             assert rnn_state is not None
 
         with self._training_lock:
-            if self.config['use_rnn']:
+            if self.sac.use_rnn:
                 action, next_rnn_state = self.sac.choose_rnn_action(obs, rnn_state)
                 next_rnn_state = next_rnn_state
                 return action.numpy(), next_rnn_state.numpy()
@@ -169,18 +165,17 @@ class Learner(object):
                 self.sac.update_q_bound(n_rewards)
 
     def _policy_evaluation(self):
+        use_rnn = self.sac.use_rnn
+
         iteration = 0
         start_time = time.time()
 
         agent_ids, obs = self.env.reset(reset_config=self.reset_config)
 
-        agents = [self._agent_class(i,
-                                    tran_len=self.config['burn_in_step'] + self.config['n_step'],
-                                    stagger=self.config['stagger'],
-                                    use_rnn=self.config['use_rnn'])
+        agents = [self._agent_class(i, use_rnn=use_rnn)
                   for i in agent_ids]
 
-        if self.config['use_rnn']:
+        if use_rnn:
             initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))
             rnn_state = initial_rnn_state
 
@@ -195,7 +190,7 @@ class Learner(object):
                 for agent in agents:
                     agent.clear()
 
-                if self.config['use_rnn']:
+                if use_rnn:
                     rnn_state = initial_rnn_state
             else:
                 for agent in agents:
@@ -205,7 +200,7 @@ class Learner(object):
 
             while False in [a.done for a in agents] and (not self.train_mode or self._is_training):
                 with self._training_lock:
-                    if self.config['use_rnn']:
+                    if use_rnn:
                         action, next_rnn_state = self.sac.choose_rnn_action(obs.astype(np.float32),
                                                                             rnn_state)
                         next_rnn_state = next_rnn_state.numpy()
@@ -227,10 +222,10 @@ class Learner(object):
                                          local_done[i],
                                          max_reached[i],
                                          obs_[i],
-                                         rnn_state[i] if self.config['use_rnn'] else None)
+                                         rnn_state[i] if use_rnn else None)
 
                 obs = obs_
-                if self.config['use_rnn']:
+                if use_rnn:
                     rnn_state = next_rnn_state
                     rnn_state[local_done] = initial_rnn_state[local_done]
 
@@ -307,6 +302,9 @@ class Learner(object):
                 self._stub.update_transitions(pointers, key, data)
 
     def _run(self):
+        t_evaluation = threading.Thread(target=self._policy_evaluation)
+        t_evaluation.start()
+
         if self.train_mode:
             servicer = LearnerService(self._get_action,
                                       self._get_policy_variables,
@@ -319,9 +317,6 @@ class Learner(object):
             self.logger.info(f'learner server is running on [{self.net_config["learner_port"]}]...')
 
             self._run_training_client()
-
-        t_evaluation = threading.Thread(target=self._policy_evaluation)
-        t_evaluation.start()
 
 
 class LearnerService(learner_pb2_grpc.LearnerServiceServicer):

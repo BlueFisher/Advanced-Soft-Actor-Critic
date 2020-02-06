@@ -8,14 +8,16 @@ base_config:
   max_iter: 100
   save_model_per_iter: 50
   reset_on_iteration: false
-  burn_in_step: 10
-  n_step: 5
-  stagger: 1
-  use_rnn: true
-  use_prediction: true
+  
 
 sac_config:
   seed: 42
+  
+  burn_in_step: 10
+  n_step: 5
+  use_rnn: true
+  use_prediction: true
+
   tau: 0.9
   _lambda: 1
   update_target_per_step: 100

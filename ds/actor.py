@@ -73,6 +73,7 @@ class Actor(object):
             config['reset_config']['copy'] = self.cmd_args.agents
 
         self.config = config['base_config']
+        sac_config = config['sac_config']
         self.reset_config = config['reset_config']
 
         # initialize Unity environment
@@ -96,10 +97,8 @@ class Actor(object):
                                      model_root_path=None,
                                      model=custom_sac_model,
                                      train_mode=False,
-
-                                     burn_in_step=self.config['burn_in_step'],
-                                     n_step=self.config['n_step'],
-                                     use_rnn=self.config['use_rnn'])
+                                     
+                                     **sac_config)
 
         self.logger.info(f'sac_actor initialized')
 
@@ -113,10 +112,10 @@ class Actor(object):
 
         self._stub.post_rewards(n_rewards)
 
-        if n_obses.shape[1] < self.config['burn_in_step'] + self.config['n_step']:
+        if n_obses.shape[1] < self.sac_actor.burn_in_step + self.sac_actor.n_step:
             return
 
-        if self.config['use_rnn']:
+        if self.sac_actor.use_rnn:
             n_mu_probs = self.sac_actor.get_rnn_n_step_probs(n_obses, n_actions,
                                                              n_rnn_states[:, 0, :]).numpy()
             self._stub.add_transitions(n_obses, n_actions, n_rewards, obs_, n_dones, n_mu_probs,
@@ -143,16 +142,14 @@ class Actor(object):
             # learner is online, reset all settings
             if iteration == 0 and self._stub.connected:
                 self._init_env()
+                use_rnn = self.sac_actor.use_rnn
 
                 agent_ids, obs = self.env.reset(reset_config=self.reset_config)
 
-                agents = [self._agent_class(i,
-                                            tran_len=self.config['burn_in_step'] + self.config['n_step'],
-                                            stagger=self.config['stagger'],
-                                            use_rnn=self.config['use_rnn'])
+                agents = [self._agent_class(i, use_rnn=use_rnn)
                           for i in agent_ids]
 
-                if self.config['use_rnn']:
+                if use_rnn:
                     initial_rnn_state = self.sac_actor.get_initial_rnn_state(len(agents))
                     rnn_state = initial_rnn_state
 
@@ -161,17 +158,17 @@ class Actor(object):
                 for agent in agents:
                     agent.clear()
 
-                if self.config['use_rnn']:
+                if use_rnn:
                     rnn_state = initial_rnn_state
             else:
                 for agent in agents:
                     agent.reset()
 
             # burn in padding
-            if self.config['use_rnn']:
+            if use_rnn:
                 for agent in agents:
                     if agent.is_empty():
-                        for _ in range(self.config['burn_in_step']):
+                        for _ in range(self.sac_actor.burn_in_step):
                             agent.add_transition(np.zeros(self.obs_dim),
                                                  np.zeros(self.action_dim),
                                                  0, False, False,
@@ -189,7 +186,7 @@ class Actor(object):
                     if self.config['update_policy_variables_per_step'] != -1 and step % self.config['update_policy_variables_per_step'] == 0:
                         self._update_policy_variables()
 
-                    if self.config['use_rnn']:
+                    if use_rnn:
                         action, next_rnn_state = self.sac_actor.choose_rnn_action(obs.astype(np.float32),
                                                                                   rnn_state)
                         next_rnn_state = next_rnn_state.numpy()
@@ -199,7 +196,7 @@ class Actor(object):
                     action = action.numpy()
                 else:
                     # get action from learner each step
-                    if self.config['use_rnn']:
+                    if use_rnn:
                         action_rnn_state = self._stub.get_action(obs.astype(np.float32), rnn_state)
                         if action_rnn_state is None:
                             break
@@ -215,25 +212,23 @@ class Actor(object):
                     local_done = [True] * len(agents)
                     max_reached = [True] * len(agents)
 
-                tmp_results = [agents[i].add_transition(obs[i],
-                                                        action[i],
-                                                        reward[i],
-                                                        local_done[i],
-                                                        max_reached[i],
-                                                        obs_[i],
-                                                        rnn_state[i] if self.config['use_rnn'] else None)
-                               for i in range(len(agents))]
+                episode_trans_list = [agents[i].add_transition(obs[i],
+                                                               action[i],
+                                                               reward[i],
+                                                               local_done[i],
+                                                               max_reached[i],
+                                                               obs_[i],
+                                                               rnn_state[i] if use_rnn else None)
+                                      for i in range(len(agents))]
 
                 if self.train_mode:
-                    _, episode_trans_list = zip(*tmp_results)
-
                     episode_trans_list = [t for t in episode_trans_list if t is not None]
                     if len(episode_trans_list) != 0:
                         for episode_trans in episode_trans_list:
                             self._add_trans(*episode_trans)
 
                 obs = obs_
-                if self.config['use_rnn']:
+                if use_rnn:
                     rnn_state = next_rnn_state
                     rnn_state[local_done] = initial_rnn_state[local_done]
 

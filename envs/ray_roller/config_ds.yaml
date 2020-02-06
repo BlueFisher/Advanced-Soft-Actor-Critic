@@ -5,9 +5,6 @@ base_config:
   scene: RayRoller
 
   reset_on_iteration: true
-  burn_in_step: 20
-  n_step: 5
-  use_rnn: true
 
 net_config:
   replay_host: 58.199.162.110
@@ -15,5 +12,10 @@ net_config:
 
 sac_config:
   seed: 42
+
+  burn_in_step: 20
+  n_step: 5
+  use_rnn: true
+
   init_log_alpha: -4.6
   use_q_clip: true

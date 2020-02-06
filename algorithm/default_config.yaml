@@ -12,12 +12,6 @@ base_config:
   save_model_per_iter: 500
   reset_on_iteration: true
 
-  burn_in_step: 0
-  n_step: 1
-  stagger: 1
-  use_rnn: false
-  use_prediction: true
-
 reset_config:
   copy: 1
 
@@ -34,6 +28,12 @@ replay_config:
 sac_config:
   seed: null
   write_summary_per_step: 20
+
+  burn_in_step: 0
+  n_step: 1
+  use_rnn: false
+  use_prediction: true
+
   tau: 0.005
   update_target_per_step: 1
   init_log_alpha: -2.3
