@@ -7,13 +7,15 @@ base_config:
   max_iter: 50
   save_model_per_iter: 200
   reset_on_iteration: false
-  n_step: 10
 
 replay_config:
   beta: 0.1
 
 sac_config:
   seed: 42
+
+  n_step: 10
+
   tau: 0.9
   _lambda: 0.99
   init_log_alpha: -4.6

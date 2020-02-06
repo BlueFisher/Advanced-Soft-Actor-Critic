@@ -7,15 +7,10 @@ class Agent(object):
     last_reward = 0
     done = False
 
-    def __init__(self, agent_id,
-                 tran_len=1, stagger=1,
-                 use_rnn=False):
+    def __init__(self, agent_id, use_rnn=False):
         self.agent_id = agent_id
-        self.tran_len = tran_len
-        self._curr_stagger = self.stagger = stagger
         self.use_rnn = use_rnn
 
-        self._tmp_trans = deque(maxlen=self.tran_len)
         self._tmp_episode_trans = list()
 
     def add_transition(self,
@@ -36,7 +31,6 @@ class Agent(object):
             'obs_': obs_,
             'rnn_state': rnn_state
         }
-        self._tmp_trans.append(transition)
         self._tmp_episode_trans.append(transition)
 
         if not self.done:
@@ -50,24 +44,15 @@ class Agent(object):
                         max_reached,
                         obs_)
 
-        trans = self._get_trans()
-        if trans is not None:
-            trans = [np.asarray([t], dtype=np.float32) for t in trans]
-
-        episode_trans = None
-
         if local_done:
             self.done = True
             self.last_reward = 0
-
-            self._tmp_trans.clear()
-            self._curr_stagger = self.stagger
 
             episode_trans = self._get_episode_trans()
             episode_trans = [np.asarray([t], dtype=np.float32) for t in episode_trans]
             self._tmp_episode_trans.clear()
 
-        return trans, episode_trans
+            return episode_trans
 
     def _extra_log(self,
                    obs,
@@ -77,34 +62,6 @@ class Agent(object):
                    max_reached,
                    obs_):
         pass
-
-    def _get_trans(self):
-        if len(self._tmp_trans) < self.tran_len:
-            return None
-
-        if self._curr_stagger != self.stagger:
-            self._curr_stagger += 1
-            return None
-
-        self._curr_stagger = 1
-
-        obs_ = self._tmp_trans[-1]['obs_']
-        done = self._tmp_trans[-1]['local_done'] and not self._tmp_trans[-1]['max_reached']
-
-        # n_obses, n_actions, n_rewards, obs_, done
-        trans = [
-            [t['obs'] for t in self._tmp_trans],
-            [t['action'] for t in self._tmp_trans],
-            [t['reward'] for t in self._tmp_trans],
-            obs_,
-            [done]
-        ]
-
-        if self.use_rnn:
-            # n_obses, n_actions, n_rewards, obs_, done, rnn_state
-            trans.append(self._tmp_trans[0]['rnn_state'])
-
-        return trans
 
     def _get_episode_trans(self):
         trans = [[t['obs'] for t in self._tmp_episode_trans],
@@ -123,7 +80,6 @@ class Agent(object):
     def clear(self):
         self.reward = 0
         self.done = False
-        self._tmp_trans.clear()
         self._tmp_episode_trans.clear()
 
     def reset(self):

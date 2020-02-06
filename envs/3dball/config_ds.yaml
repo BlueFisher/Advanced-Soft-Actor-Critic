@@ -6,7 +6,6 @@ base_config:
 
   max_step: 500
   # update_policy_variables_per_step: 50
-  n_step: 3
 
 net_config:
   replay_host: 58.199.162.110
@@ -17,6 +16,9 @@ replay_config:
 
 sac_config:
   seed: 42
+
+  n_step: 3
+
   init_log_alpha: -4.6
   _lambda: 1
   use_auto_alpha: true
