@@ -102,24 +102,19 @@ class Main(object):
                             model=custom_sac_model,
                             train_mode=self.train_mode,
 
-                            burn_in_step=self.config['burn_in_step'],
-                            n_step=self.config['n_step'],
-                            use_rnn=self.config['use_rnn'],
-
                             replay_config=replay_config,
 
                             **sac_config)
 
     def _run(self):
+        use_rnn = self.sac.use_rnn
+
         agent_ids, obs = self.env.reset(reset_config=self.reset_config)
 
-        agents = [self._agent_class(i,
-                                    tran_len=self.config['burn_in_step'] + self.config['n_step'],
-                                    stagger=self.config['stagger'],
-                                    use_rnn=self.config['use_rnn'])
+        agents = [self._agent_class(i, use_rnn=self.sac.use_rnn)
                   for i in agent_ids]
 
-        if self.config['use_rnn']:
+        if use_rnn:
             initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))
             rnn_state = initial_rnn_state
 
@@ -129,7 +124,7 @@ class Main(object):
                 for agent in agents:
                     agent.clear()
 
-                if self.config['use_rnn']:
+                if use_rnn:
                     rnn_state = initial_rnn_state
             else:
                 for agent in agents:
@@ -144,10 +139,10 @@ class Main(object):
             """
 
             # burn in padding
-            if self.config['use_rnn']:
+            if use_rnn:
                 for agent in agents:
                     if agent.is_empty():
-                        for _ in range(self.config['burn_in_step']):
+                        for _ in range(self.sac.burn_in_step):
                             agent.add_transition(np.zeros(self.obs_dim),
                                                  np.zeros(self.action_dim),
                                                  0, False, False,
@@ -157,7 +152,7 @@ class Main(object):
             step = 0
 
             while False in [a.done for a in agents]:
-                if self.config['use_rnn']:
+                if use_rnn:
                     action, next_rnn_state = self.sac.choose_rnn_action(obs.astype(np.float32),
                                                                         rnn_state)
                     next_rnn_state = next_rnn_state.numpy()
@@ -172,24 +167,16 @@ class Main(object):
                     local_done = [True] * len(agents)
                     max_reached = [True] * len(agents)
 
-                tmp_results = [agents[i].add_transition(obs[i],
-                                                        action[i],
-                                                        reward[i],
-                                                        local_done[i],
-                                                        max_reached[i],
-                                                        obs_[i],
-                                                        rnn_state[i] if self.config['use_rnn'] else None)
-                               for i in range(len(agents))]
+                episode_trans_list = [agents[i].add_transition(obs[i],
+                                                               action[i],
+                                                               reward[i],
+                                                               local_done[i],
+                                                               max_reached[i],
+                                                               obs_[i],
+                                                               rnn_state[i] if use_rnn else None)
+                                      for i in range(len(agents))]
 
                 if self.train_mode:
-                    trans_list, episode_trans_list = zip(*tmp_results)
-
-                    # trans_list = [t for t in trans_list if t is not None]
-                    # if len(trans_list) != 0:
-                    #     # n_obses, n_actions, n_rewards, done, rnn_state
-                    #     trans = [np.concatenate(t, axis=0) for t in zip(*trans_list)]
-                    #     self.sac.fill_replay_buffer(*trans)
-
                     episode_trans_list = [t for t in episode_trans_list if t is not None]
                     if len(episode_trans_list) != 0:
                         # n_obses, n_actions, n_rewards, obs_, n_dones, n_rnn_states
@@ -198,7 +185,7 @@ class Main(object):
                     self.sac.train()
 
                 obs = obs_
-                if self.config['use_rnn']:
+                if use_rnn:
                     rnn_state = next_rnn_state
                     rnn_state[local_done] = initial_rnn_state[local_done]
 
