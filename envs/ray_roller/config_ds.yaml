@@ -4,8 +4,8 @@ base_config:
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
   scene: RayRoller
 
-  reset_on_iteration: false
-  burn_in_step: 15
+  reset_on_iteration: true
+  burn_in_step: 20
   n_step: 5
   use_rnn: true
 

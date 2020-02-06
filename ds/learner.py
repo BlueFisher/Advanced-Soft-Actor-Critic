@@ -37,8 +37,6 @@ class Learner(object):
     _agent_class = Agent
 
     _training_lock = threading.Lock()
-    _last_display_actor_rewards_time = 0
-    _history_rewards_buffer = list()
     _is_training = False
 
     def __init__(self, config_path, args):
@@ -169,18 +167,6 @@ class Learner(object):
         if self.sac.use_q_clip:
             with self._training_lock:
                 self.sac.update_q_bound(n_rewards)
-
-        self._history_rewards_buffer.append(np.sum(n_rewards))
-        if self._last_display_actor_rewards_time == 0:
-            self._last_display_actor_rewards_time = time.time()
-        if time.time() - self._last_display_actor_rewards_time >= DISPLAY_ACTOR_REWARDS_TIME:
-            rewards_len = len(self._history_rewards_buffer)
-            min_reward = min(self._history_rewards_buffer)
-            mean_reward = sum(self._history_rewards_buffer) / rewards_len
-            max_reward = max(self._history_rewards_buffer)
-            self.logger.info(f'actors: min {min_reward:.1f}, mean {mean_reward:.1f}, max {max_reward:.1f}, ep_len {rewards_len}')
-            self._last_display_actor_rewards_time = time.time()
-            self._history_rewards_buffer.clear()
 
     def _policy_evaluation(self):
         iteration = 0

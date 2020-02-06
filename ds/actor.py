@@ -59,6 +59,8 @@ class Actor(object):
         return config['net_config']
 
     def _init_env(self):
+        # each time actor connects to the learner and replay, initialize env
+
         # initialize config
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
                                                            self.config_file_path)
