@@ -64,8 +64,12 @@ class Learner(object):
         self.render = args.render
         self.run_in_editor = args.editor
 
+        if args.name is not None:
+            config['base_config']['name'] = args.name
         if args.build_port is not None:
             config['base_config']['build_port'] = args.build_port
+        if args.seed is not None:
+            config['sac_config']['seed'] = args.seed
         if args.sac is not None:
             config['base_config']['sac'] = args.sac
         if args.agents is not None:
@@ -93,9 +97,9 @@ class Learner(object):
         self._stub = StubController(self.net_config)
 
         if self.run_in_editor:
-            self.env = EnvWrapper(train_mode=False, base_port=5004)
+            self.env = EnvWrapper(train_mode=self.train_mode, base_port=5004)
         else:
-            self.env = EnvWrapper(train_mode=False,
+            self.env = EnvWrapper(train_mode=self.train_mode,
                                   file_name=self.config['build_path'],
                                   no_graphics=not self.render and self.train_mode,
                                   base_port=self.config['build_port'],
@@ -196,7 +200,7 @@ class Learner(object):
 
         while True:
             # not training, waiting...
-            if not self._is_training:
+            if self.train_mode and not self._is_training:
                 time.sleep(EVALUATION_WAITING_TIME)
                 continue
 
@@ -213,7 +217,7 @@ class Learner(object):
 
             step = 0
 
-            while False in [a.done for a in agents] and self._is_training:
+            while False in [a.done for a in agents] and (not self.train_mode or self._is_training):
                 with self._training_lock:
                     if self.config['use_rnn']:
                         action, next_rnn_state = self.sac.choose_rnn_action(obs.astype(np.float32),
@@ -246,23 +250,31 @@ class Learner(object):
 
                 step += 1
 
-            with self._training_lock:
-                self._log_episode_info(iteration, start_time, agents)
-                self.sac.save_model(iteration)
+            if self.train_mode:
+                with self._training_lock:
+                    self._log_episode_summaries(iteration, agents)
+
+                    if iteration % self.config['save_model_per_iter'] == 0:
+                        self.sac.save_model(iteration)
+
+            self._log_episode_info(iteration, start_time, agents)
 
             iteration += 1
-            time.sleep(EVALUATION_INTERVAL)
 
-    def _log_episode_info(self, iteration, start_time, agents):
+            if self.train_mode:
+                time.sleep(EVALUATION_INTERVAL)
+
+    def _log_episode_summaries(self, iteration, agents):
         rewards = np.array([a.reward for a in agents])
-
         self.sac.write_constant_summaries([
             {'tag': 'reward/mean', 'simple_value': rewards.mean()},
             {'tag': 'reward/max', 'simple_value': rewards.max()},
             {'tag': 'reward/min', 'simple_value': rewards.min()}
         ], iteration)
 
+    def _log_episode_info(self, iteration, start_time, agents):
         time_elapse = (time.time() - start_time) / 60
+        rewards = [a.reward for a in agents]
         rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(rewards)])
         self.logger.info(f'{iteration}, {time_elapse:.2f}min, rewards {rewards_sorted}')
 
@@ -309,20 +321,21 @@ class Learner(object):
                 self._stub.update_transitions(pointers, key, data)
 
     def _run(self):
-        servicer = LearnerService(self._get_action,
-                                  self._get_policy_variables,
-                                  self._get_td_error,
-                                  self._post_rewards)
-        server = grpc.server(futures.ThreadPoolExecutor(max_workers=20))
-        learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, server)
-        server.add_insecure_port(f'[::]:{self.net_config["learner_port"]}')
-        server.start()
-        self.logger.info(f'learner server is running on [{self.net_config["learner_port"]}]...')
+        if self.train_mode:
+            servicer = LearnerService(self._get_action,
+                                      self._get_policy_variables,
+                                      self._get_td_error,
+                                      self._post_rewards)
+            server = grpc.server(futures.ThreadPoolExecutor(max_workers=20))
+            learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, server)
+            server.add_insecure_port(f'[::]:{self.net_config["learner_port"]}')
+            server.start()
+            self.logger.info(f'learner server is running on [{self.net_config["learner_port"]}]...')
+
+            self._run_training_client()
 
         t_evaluation = threading.Thread(target=self._policy_evaluation)
         t_evaluation.start()
-
-        self._run_training_client()
 
 
 class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
