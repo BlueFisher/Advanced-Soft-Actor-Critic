@@ -5,7 +5,7 @@ base_config:
   scene: ContinousHardRoller
 
   sac: sac_hard
-  max_iter: 100
+  max_iter: 200
   save_model_per_iter: 50
   reset_on_iteration: false
   
@@ -24,4 +24,4 @@ sac_config:
   init_log_alpha: -4.6
   use_priority: true
   use_n_step_is: true
-  use_q_clip: true
+  use_q_clip: false

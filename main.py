@@ -14,6 +14,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, help='random seed')
     parser.add_argument('--sac', help='neural network model')
     parser.add_argument('--agents', type=int, default=1, help='number of agents')
+    parser.add_argument('--repeat', type=int, default=1, help='number of repeated experiments')
     args = parser.parse_args()
 
     if args.env in ['simple_roller', 'ray_roller']:
@@ -21,4 +22,5 @@ if __name__ == '__main__':
     else:
         from algorithm.sac_main import Main
 
-    Main(f'envs/{args.env}', args)
+    for _ in range(args.repeat):
+        Main(f'envs/{args.env}', args)
