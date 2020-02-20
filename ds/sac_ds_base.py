@@ -33,7 +33,6 @@ class SAC_DS_Base(SAC_Base):
                  policy_lr=3e-4,
                  alpha_lr=3e-4,
                  rnn_lr=3e-4,
-                 prediction_lr=3e-4,
                  gamma=0.99,
                  _lambda=0.9,
                  use_q_clip=False):
@@ -65,7 +64,7 @@ class SAC_DS_Base(SAC_Base):
             tf.random.set_seed(seed)
 
         self._build_model(model, init_log_alpha,
-                          q_lr, policy_lr, alpha_lr, rnn_lr, prediction_lr)
+                          q_lr, policy_lr, alpha_lr, rnn_lr)
         if model_root_path is not None:
             self._init_or_restore(model_root_path)
 
