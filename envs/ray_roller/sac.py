@@ -3,10 +3,40 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 
 
-initializer_helper = {
-    'kernel_initializer': tf.keras.initializers.TruncatedNormal(0, .1),
-    'bias_initializer': tf.keras.initializers.Constant(0.1)
-}
+class ModelTransition(tf.keras.Model):
+    def __init__(self, state_dim, action_dim):
+        super(ModelTransition, self).__init__()
+        self.seq = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(state_dim + state_dim)
+        ])
+
+        self.next_state_tfpd = tfp.layers.DistributionLambda(make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
+
+        self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(action_dim,)))
+
+    def call(self, state, action):
+        next_state = self.seq(tf.concat([state, action], -1))
+        mean, logvar = tf.split(next_state, num_or_size_splits=2, axis=-1)
+        next_state_dist = self.next_state_tfpd([mean, tf.clip_by_value(tf.exp(logvar), 0.1, 1.)])
+
+        return next_state_dist
+
+
+class ModelReward(tf.keras.Model):
+    def __init__(self, state_dim):
+        super(ModelReward, self).__init__()
+        self.seq = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(1)
+        ])
+
+    def call(self, state):
+        reward = self.seq(state)
+
+        return reward
 
 
 class ModelRNN(tf.keras.Model):
@@ -15,6 +45,9 @@ class ModelRNN(tf.keras.Model):
         self.obs_dim = obs_dim
         self.rnn_units = 128
         self.layer_rnn = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
+        self.seq = tf.keras.Sequential([
+            tf.keras.layers.Dense(128)
+        ])
 
         self.get_call_result_tensors()
 
@@ -22,6 +55,8 @@ class ModelRNN(tf.keras.Model):
         outputs, next_rnn_state = self.layer_rnn(obs, initial_state=initial_state)
 
         state = tf.concat([obs, outputs], -1)
+        state = self.seq(state)
+
         return state, next_rnn_state, outputs
 
     def get_call_result_tensors(self):
@@ -29,41 +64,27 @@ class ModelRNN(tf.keras.Model):
                     tf.keras.Input(shape=(self.rnn_units,), dtype=tf.float32))
 
 
-class ModelPrediction(tf.keras.Model):
-    def __init__(self, obs_dim, state_dim, action_dim):
-        super(ModelPrediction, self).__init__()
-        self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(action_dim, **initializer_helper)
-        ])
-
-        self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(obs_dim,)))
-
-    def call(self, state, obs_):
-        return self.seq(tf.concat([state, obs_], -1))
-
-
 class ModelQ(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
         super(ModelQ, self).__init__()
-        self.layer_s = tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper)
-        self.layer_a = tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper)
-        self.sequential_model = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(1, **initializer_helper)
+        self.layer_state = tf.keras.layers.Dense(128, activation=tf.nn.relu)
+        self.layer_action = tf.keras.layers.Dense(128, activation=tf.nn.relu)
+
+        self.seq = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(1)
         ])
 
         self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(action_dim,)))
 
     def call(self, state, action):
-        ls = self.layer_s(state)
-        la = self.layer_a(action)
-        l = tf.concat([ls, la], -1)
+        state = self.layer_state(state)
+        action = self.layer_action(action)
+        l = tf.concat([state, action], -1)
 
-        q = self.sequential_model(l)
+        q = self.seq(l)
         return q
 
 
@@ -71,16 +92,16 @@ class ModelPolicy(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
         super(ModelPolicy, self).__init__()
         self.common_model = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper)
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu)
         ])
-        self.mu_model = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(action_dim, activation=tf.nn.tanh, **initializer_helper)
+        self.mean_model = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(action_dim)
         ])
-        self.sigma_model = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu, **initializer_helper),
-            tf.keras.layers.Dense(action_dim, activation=tf.nn.sigmoid, **initializer_helper)
+        self.logvar_model = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(action_dim)
         ])
 
         self.tfpd = tfp.layers.DistributionLambda(make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
@@ -89,10 +110,8 @@ class ModelPolicy(tf.keras.Model):
 
     def call(self, state):
         l = self.common_model(state)
+        
+        mean = self.mean_model(l)
+        logvar = self.logvar_model(l)
 
-        mu = self.mu_model(l)
-
-        sigma = self.sigma_model(l)
-        sigma = sigma + .1
-
-        return self.tfpd([mu, sigma])
+        return self.tfpd([mean, tf.clip_by_value(tf.exp(logvar), 0.1, 1.0)])

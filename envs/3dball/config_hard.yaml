@@ -5,7 +5,7 @@ base_config:
   scene: 3DBallHard
 
   sac: sac_hard
-  max_iter: 300
+  max_iter: 200
   max_step: 500
   save_model_per_iter: 50
   
@@ -21,4 +21,4 @@ sac_config:
   _lambda: 0.99
   use_priority: true
   use_n_step_is: true
-  use_q_clip: true
+  use_q_clip: false

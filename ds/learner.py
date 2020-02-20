@@ -29,7 +29,6 @@ from algorithm.env_wrapper import EnvWrapper
 EVALUATION_INTERVAL = 10
 EVALUATION_WAITING_TIME = 1
 RESAMPLE_TIME = 2
-DISPLAY_ACTOR_REWARDS_TIME = 5
 
 
 class Learner(object):
