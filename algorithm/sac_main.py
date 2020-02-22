@@ -109,10 +109,10 @@ class Main(object):
     def _run(self):
         use_rnn = self.sac.use_rnn
 
-        agent_ids, obs = self.env.reset(reset_config=self.reset_config)
+        n_agents, obs = self.env.reset(reset_config=self.reset_config)
 
         agents = [self._agent_class(i, use_rnn=self.sac.use_rnn)
-                  for i in agent_ids]
+                  for i in range(n_agents)]
 
         if use_rnn:
             initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))
@@ -129,14 +129,6 @@ class Main(object):
             else:
                 for agent in agents:
                     agent.reset()
-            """
-            s0    s1    s2    s3    s4    s5    s6
-             └──burn_in_step───┘     └───n_step──┘
-             └───────────deque_maxlen────────────┘
-                         s2    s3    s4    s5    s6    s7    s8
-             └─────┘
-             stagger
-            """
 
             # burn in padding
             if use_rnn:
