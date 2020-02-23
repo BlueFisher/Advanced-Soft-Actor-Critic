@@ -23,7 +23,6 @@ from .sac_ds_base import SAC_DS_Base
 
 from algorithm.agent import Agent
 import algorithm.config_helper as config_helper
-from algorithm.env_wrapper import EnvWrapper
 
 
 EVALUATION_INTERVAL = 10
@@ -52,7 +51,9 @@ class Learner(object):
         self._run()
 
     def _init_config(self, config_path, args):
-        config_file_path = f'{config_path}/{args.config}' if args.config is not None else None
+        config_name = 'config.yaml' if args.config is None else args.config
+        config_file_path = f'{config_path}/{config_name}'  # default config.yaml
+        # merge default_config.yaml and custom config.yaml
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
                                                            config_file_path)
 
@@ -93,14 +94,25 @@ class Learner(object):
     def _init_env(self, config_path, replay_config, sac_config, model_root_path):
         self._stub = StubController(self.net_config)
 
-        if self.run_in_editor:
-            self.env = EnvWrapper(train_mode=self.train_mode, base_port=5004)
+        if self.config['env_type'] == 'UNITY':
+            from algorithm.env_wrapper.unity_wrapper import UnityWrapper
+
+            if self.run_in_editor:
+                self.env = UnityWrapper(train_mode=self.train_mode, base_port=5004)
+            else:
+                self.env = UnityWrapper(train_mode=self.train_mode,
+                                        file_name=self.config['build_path'][sys.platform],
+                                        no_graphics=not self.render and self.train_mode,
+                                        base_port=self.config['build_port'],
+                                        args=['--scene', self.config['scene']])
+
+        elif self.config['env_type'] == 'GYM':
+            from algorithm.env_wrapper.gym_wrapper import GymWrapper
+
+            self.env = GymWrapper(train_mode=self.train_mode,
+                                  env_name=self.config['build_path'])
         else:
-            self.env = EnvWrapper(train_mode=self.train_mode,
-                                  file_name=self.config['build_path'],
-                                  no_graphics=not self.render and self.train_mode,
-                                  base_port=self.config['build_port'],
-                                  args=['--scene', self.config['scene']])
+            raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')
 
         obs_dim, action_dim = self.env.init()
 
@@ -169,10 +181,10 @@ class Learner(object):
         iteration = 0
         start_time = time.time()
 
-        agent_ids, obs = self.env.reset(reset_config=self.reset_config)
+        n_agents, obs = self.env.reset(reset_config=self.reset_config)
 
         agents = [self._agent_class(i, use_rnn=use_rnn)
-                  for i in agent_ids]
+                  for i in range(n_agents)]
 
         if use_rnn:
             initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))

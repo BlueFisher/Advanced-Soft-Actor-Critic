@@ -1,10 +1,16 @@
 base_config:
+  env_type: UNITY # UNITY, GYM
+  scene: scene
+
+  # only for Unity Environments
   build_path: 
     win32: path_win32
     linux: path_linux
   build_port: 7000
-  scene: scene
-
+  
+  # only for Gym Enviroments
+  build_path: GymEnv
+  
   name: "{time}"
   sac: sac
   # update policy variables each "update_policy_variables_per_step" 
