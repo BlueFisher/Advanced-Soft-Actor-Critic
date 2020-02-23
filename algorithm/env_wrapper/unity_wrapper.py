@@ -56,6 +56,8 @@ class UnityWrapper:
         step_result = self._env.get_step_result(self.group_name)
         self._agent_ids = step_result.agent_id
 
+        self._addition_action_dim = 0
+
         return step_result.n_agents(), step_result.obs[0]
 
     def step(self, action):
