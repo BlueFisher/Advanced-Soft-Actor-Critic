@@ -18,7 +18,6 @@ from .sac_base import SAC_Base
 from .agent import Agent
 
 import algorithm.config_helper as config_helper
-from algorithm.env_wrapper import EnvWrapper
 
 
 class Main(object):
@@ -78,14 +77,25 @@ class Main(object):
     def _init_env(self, model_root_path, config_path,
                   sac_config,
                   replay_config):
-        if self.run_in_editor:
-            self.env = EnvWrapper(train_mode=self.train_mode, base_port=5004)
+        if self.config['env_type'] == 'UNITY':
+            from algorithm.env_wrapper.unity_wrapper import UnityWrapper
+
+            if self.run_in_editor:
+                self.env = UnityWrapper(train_mode=self.train_mode, base_port=5004)
+            else:
+                self.env = UnityWrapper(train_mode=self.train_mode,
+                                        file_name=self.config['build_path'][sys.platform],
+                                        no_graphics=not self.render and self.train_mode,
+                                        base_port=self.config['port'],
+                                        args=['--scene', self.config['scene']])
+
+        elif self.config['env_type'] == 'GYM':
+            from algorithm.env_wrapper.gym_wrapper import GymWrapper
+
+            self.env = GymWrapper(train_mode=self.train_mode,
+                                  env_name=self.config['build_path'])
         else:
-            self.env = EnvWrapper(train_mode=self.train_mode,
-                                  file_name=self.config['build_path'],
-                                  no_graphics=not self.render and self.train_mode,
-                                  base_port=self.config['port'],
-                                  args=['--scene', self.config['scene']])
+            raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')
 
         self.obs_dim, self.action_dim = self.env.init()
 

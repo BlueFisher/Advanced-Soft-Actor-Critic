@@ -1,0 +1,20 @@
+base_config:
+  env_type: GYM
+  scene: Pendulum
+
+  build_path: Pendulum-v0
+
+  max_step: 200
+  max_iter: 1000
+  save_model_per_iter: 50
+
+sac_config:
+  seed: 42
+
+  n_step: 10
+
+  tau: 0.9
+  _lambda: 0.99
+  init_log_alpha: -4.6
+  use_priority: true
+  use_n_step_is: true
