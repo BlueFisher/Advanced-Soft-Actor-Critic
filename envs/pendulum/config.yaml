@@ -4,7 +4,7 @@ base_config:
 
   build_path: Pendulum-v0
 
-  max_step: 200
+  max_step: -1
   max_iter: 1000
   save_model_per_iter: 50
 
