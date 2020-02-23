@@ -24,7 +24,6 @@ from .utils import rpc_error_inspector
 
 from algorithm.agent import Agent
 import algorithm.config_helper as config_helper
-from algorithm.env_wrapper import EnvWrapper
 
 
 WAITING_CONNECTION_TIME = 2
@@ -46,11 +45,14 @@ class Actor(object):
         self._run()
 
     def _init_constant_config(self, config_path, args):
-        config_file_path = f'{config_path}/{args.config}' if args.config is not None else None
+        config_name = 'config.yaml' if args.config is None else args.config
+        config_file_path = f'{config_path}/{config_name}'  # default config.yaml
+        # merge default_config.yaml and custom config.yaml
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
                                                            config_file_path)
-
         self.config_file_path = config_file_path
+
+        # initialize config from command line arguments
         self.train_mode = not args.run
         self.run_in_editor = args.editor
 
@@ -76,15 +78,26 @@ class Actor(object):
         sac_config = config['sac_config']
         self.reset_config = config['reset_config']
 
-        # initialize Unity environment
-        if self.run_in_editor:
-            self.env = EnvWrapper(train_mode=self.train_mode, base_port=5004)
+        # initialize environment
+        if self.config['env_type'] == 'UNITY':
+            from algorithm.env_wrapper.unity_wrapper import UnityWrapper
+
+            if self.run_in_editor:
+                self.env = UnityWrapper(train_mode=self.train_mode, base_port=5004)
+            else:
+                self.env = UnityWrapper(train_mode=self.train_mode,
+                                        file_name=self.config['build_path'][sys.platform],
+                                        no_graphics=self.train_mode,
+                                        base_port=self.config['build_port'],
+                                        args=['--scene', self.config['scene']])
+
+        elif self.config['env_type'] == 'GYM':
+            from algorithm.env_wrapper.gym_wrapper import GymWrapper
+
+            self.env = GymWrapper(train_mode=self.train_mode,
+                                  env_name=self.config['build_path'])
         else:
-            self.env = EnvWrapper(train_mode=self.train_mode,
-                                  file_name=self.config['build_path'],
-                                  no_graphics=self.train_mode,
-                                  base_port=self.config['build_port'],
-                                  args=['--scene', self.config['scene']])
+            raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')
 
         self.obs_dim, self.action_dim = self.env.init()
 
@@ -97,7 +110,7 @@ class Actor(object):
                                      model_root_path=None,
                                      model=custom_sac_model,
                                      train_mode=False,
-                                     
+
                                      **sac_config)
 
         self.logger.info(f'sac_actor initialized')
@@ -144,10 +157,10 @@ class Actor(object):
                 self._init_env()
                 use_rnn = self.sac_actor.use_rnn
 
-                agent_ids, obs = self.env.reset(reset_config=self.reset_config)
+                n_agents, obs = self.env.reset(reset_config=self.reset_config)
 
                 agents = [self._agent_class(i, use_rnn=use_rnn)
-                          for i in agent_ids]
+                          for i in range(n_agents)]
 
                 if use_rnn:
                     initial_rnn_state = self.sac_actor.get_initial_rnn_state(len(agents))
@@ -164,8 +177,13 @@ class Actor(object):
                 for agent in agents:
                     agent.reset()
 
-            # burn in padding
-            if use_rnn:
+            step = 0
+
+            if self.config['update_policy_mode'] and self.config['update_policy_variables_per_step'] == -1:
+                self._update_policy_variables()
+
+            while False in [a.done for a in agents] and self._stub.connected:
+                # burn in padding
                 for agent in agents:
                     if agent.is_empty():
                         for _ in range(self.sac_actor.burn_in_step):
@@ -175,12 +193,6 @@ class Actor(object):
                                                  np.zeros(self.obs_dim),
                                                  initial_rnn_state[0])
 
-            step = 0
-
-            if self.config['update_policy_mode'] and self.config['update_policy_variables_per_step'] == -1:
-                self._update_policy_variables()
-
-            while False in [a.done for a in agents] and self._stub.connected:
                 if self.config['update_policy_mode']:
                     # update policy variables each "update_policy_variables_per_step"
                     if self.config['update_policy_variables_per_step'] != -1 and step % self.config['update_policy_variables_per_step'] == 0:
