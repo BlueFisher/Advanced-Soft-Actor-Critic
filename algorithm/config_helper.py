@@ -22,8 +22,6 @@ def initialize_config_from_yaml(default_config_path, config_file_path):
                         assert kk in config[k].keys(), f'{kk} is invalid in {k}'
                         config[k][kk] = vv
 
-    config['base_config']['build_path'] = config['base_config']['build_path'][sys.platform]
-
     return config
 
 
@@ -62,6 +60,7 @@ def save_config(config, model_root_path, config_name):
         os.makedirs(model_root_path)
     with open(f'{model_root_path}/{config_name}', 'w') as f:
         yaml.dump(config, f, default_flow_style=False)
+
 
 def display_config(config, logger):
     config_str = ''
