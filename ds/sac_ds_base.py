@@ -35,7 +35,7 @@ class SAC_DS_Base(SAC_Base):
                  rnn_lr=3e-4,
                  gamma=0.99,
                  _lambda=0.9,
-                 use_q_clip=False):
+                 use_reward_squash=False):
 
         physical_devices = tf.config.experimental.list_physical_devices('GPU')
         if len(physical_devices) > 0:
@@ -56,7 +56,7 @@ class SAC_DS_Base(SAC_Base):
         self.use_auto_alpha = use_auto_alpha
         self.gamma = gamma
         self._lambda = _lambda
-        self.use_q_clip = use_q_clip
+        self.use_reward_squash = use_reward_squash
         self.use_priority = True
         self.use_n_step_is = True
 
