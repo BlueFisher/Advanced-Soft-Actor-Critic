@@ -21,4 +21,4 @@ sac_config:
   _lambda: 0.99
   use_priority: true
   use_n_step_is: true
-  use_q_clip: false
+  use_reward_squash: true

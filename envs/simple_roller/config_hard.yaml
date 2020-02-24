@@ -24,4 +24,3 @@ sac_config:
   init_log_alpha: -4.6
   use_priority: true
   use_n_step_is: true
-  use_q_clip: false

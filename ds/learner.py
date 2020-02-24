@@ -171,9 +171,9 @@ class Learner(object):
         return td_error.numpy()
 
     def _post_rewards(self, peer, n_rewards):
-        if self.sac.use_q_clip:
+        if self.sac.use_reward_squash:
             with self._training_lock:
-                self.sac.update_q_bound(n_rewards)
+                self.sac.update_reward_bound(n_rewards)
 
     def _policy_evaluation(self):
         use_rnn = self.sac.use_rnn
