@@ -56,4 +56,4 @@ sac_config:
   rnn_lr: 0.0003
   gamma: 0.99
   _lambda: 1.0
-  use_q_clip: false
+  use_reward_squash: false

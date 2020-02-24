@@ -50,7 +50,7 @@ class SAC_Base(object):
                  _lambda=0.9,
                  use_priority=False,
                  use_n_step_is=True,
-                 use_q_clip=False,
+                 use_reward_squash=False,
 
                  replay_config=None):
         """
@@ -81,7 +81,7 @@ class SAC_Base(object):
         self._lambda = _lambda
         self.use_priority = use_priority
         self.use_n_step_is = use_n_step_is
-        self.use_q_clip = use_q_clip
+        self.use_reward_squash = use_reward_squash
 
         if seed is not None:
             tf.random.set_seed(seed)
@@ -109,9 +109,9 @@ class SAC_Base(object):
         Initialize variables, network models and optimizers
         """
         self.log_alpha = tf.Variable(init_log_alpha, dtype=tf.float32, name='log_alpha')
-        if self.use_q_clip:
-            self.min_q = tf.Variable(0, dtype=tf.float32, name='min_q')
-            self.max_q = tf.Variable(0, dtype=tf.float32, name='max_q')
+        if self.use_reward_squash:
+            self.min_cum_reward = tf.Variable(0, dtype=tf.float32, name='min_q')
+            self.max_cum_reward = tf.Variable(0, dtype=tf.float32, name='max_q')
         self.global_step = tf.Variable(0, dtype=tf.int64, name='global_step')
 
         self.optimizer_q1 = tf.keras.optimizers.Adam(q_lr)
@@ -226,9 +226,9 @@ class SAC_Base(object):
         if self.use_auto_alpha:
             ckpt.optimizer_alpha = self.optimizer_alpha
 
-        if self.use_q_clip:
-            ckpt.min_q = self.min_q
-            ckpt.max_q = self.max_q
+        if self.use_reward_squash:
+            ckpt.min_cum_reward = self.min_cum_reward
+            ckpt.max_cum_reward = self.max_cum_reward
 
         self.ckpt_manager = tf.train.CheckpointManager(ckpt, f'{model_path}/model', max_to_keep=10)
 
@@ -279,11 +279,11 @@ class SAC_Base(object):
 
     @tf.function(input_signature=[tf.TensorSpec(shape=None, dtype=tf.float32),
                                   tf.TensorSpec(shape=None, dtype=tf.float32)])
-    def _update_q_bound(self, min_reward, max_reward):
-        self.min_q.assign(tf.minimum(self.min_q, min_reward))
-        self.max_q.assign(tf.maximum(self.max_q, max_reward))
+    def _update_reward_bound(self, min_reward, max_reward):
+        self.min_cum_reward.assign(tf.minimum(self.min_cum_reward, min_reward))
+        self.max_cum_reward.assign(tf.maximum(self.max_cum_reward, max_reward))
 
-    def update_q_bound(self, n_rewards):
+    def update_reward_bound(self, n_rewards):
         # n_rewards [1, episode_len]
         ep_len = n_rewards.shape[1]
         gamma = np.array([[np.power(self.gamma, i)] for i in range(ep_len)], dtype=np.float32)
@@ -297,7 +297,7 @@ class SAC_Base(object):
         cum_n_rewards = np.cumsum(tmp_rewards.diagonal(0))
         cum_rewards = np.concatenate([cum_rewards, cum_n_rewards])
 
-        self._update_q_bound(np.min(cum_rewards), np.max(cum_rewards))
+        self._update_reward_bound(np.min(cum_rewards), np.max(cum_rewards))
 
     def _get_y(self, n_states, n_actions, n_rewards, state_, n_dones,
                n_mu_probs=None):
@@ -305,8 +305,8 @@ class SAC_Base(object):
         tf.function
         get target value
         """
-        # if self.use_q_clip:
-        #     n_rewards = n_rewards / self.max_q
+        if self.use_reward_squash:
+            n_rewards = n_rewards / tf.maximum(self.max_cum_reward, tf.abs(self.min_cum_reward))
 
         gamma_ratio = [[tf.pow(self.gamma, i) for i in range(self.n_step)]]
         lambda_ratio = [[tf.pow(self._lambda, i) for i in range(self.n_step)]]
@@ -333,9 +333,6 @@ class SAC_Base(object):
 
         min_next_q = tf.minimum(next_q1, next_q2)
         min_q = tf.minimum(q1, q2)
-        if self.use_q_clip:
-            min_next_q = tf.clip_by_value(min_next_q, self.min_q - alpha * next_n_actions_log_prob, self.max_q - alpha * next_n_actions_log_prob)
-            min_q = tf.clip_by_value(min_q, self.min_q - alpha * n_actions_log_prob, self.max_q - alpha * n_actions_log_prob)
 
         td_error = n_rewards + self.gamma * (1 - n_dones) * (min_next_q - alpha * next_n_actions_log_prob) \
             - (min_q - alpha * n_actions_log_prob)
@@ -357,8 +354,6 @@ class SAC_Base(object):
 
         # V_s + \sum{td_error}
         min_q = tf.minimum(q1[:, 0:1], q2[:, 0:1])
-        if self.use_q_clip:
-            min_q = tf.clip_by_value(min_q, self.min_q - alpha * n_actions_log_prob[:, 0:1], self.max_q - alpha * n_actions_log_prob[:, 0:1])
         y = min_q - alpha * n_actions_log_prob[:, 0:1] + r
 
         # NO V-TRACE
@@ -559,8 +554,8 @@ class SAC_Base(object):
         obs_: [1, obs_dim]
         n_dones: [1, episode_len]
         """
-        if self.use_q_clip:
-            self.update_q_bound(n_rewards)
+        if self.use_reward_squash:
+            self.update_reward_bound(n_rewards)
 
         if n_obses.shape[1] < self.burn_in_step + self.n_step:
             return
