@@ -6,7 +6,6 @@ base_config:
 
   max_iter: 5000
   save_model_per_iter: 50
-  reset_on_iteration: true
   
 sac_config:
   seed: 42
@@ -14,7 +13,7 @@ sac_config:
   burn_in_step: 15
   n_step: 5
   use_rnn: true
-  use_prediction: false
+  use_prediction: true
 
   _lambda: 0.99
   init_log_alpha: -4.6

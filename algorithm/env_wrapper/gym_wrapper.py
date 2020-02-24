@@ -44,9 +44,6 @@ class GymWrapper:
         if not self.train_mode:
             self._envs[0].render()
 
-        if self.env_name == 'Pendulum-v0':
-            reward = reward / 10
-
         for i in np.where(done)[0]:
             obs[i] = self._envs[i].reset()
 
