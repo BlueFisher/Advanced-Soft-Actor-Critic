@@ -50,4 +50,5 @@ class GymWrapper:
         return obs, reward, done, max_step
 
     def close(self):
-        self._env.close()
+        for env in self._envs:
+            env.close()
