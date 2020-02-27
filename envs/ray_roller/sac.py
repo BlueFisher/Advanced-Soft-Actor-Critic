@@ -48,6 +48,7 @@ class ModelRNN(tf.keras.Model):
                                              return_sequences=True,
                                              return_state=True)
         self.seq = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(128)
         ])
 
@@ -56,8 +57,8 @@ class ModelRNN(tf.keras.Model):
     def call(self, obs, initial_state):
         outputs, next_rnn_state = self.layer_rnn(obs, initial_state=initial_state)
 
-        state = tf.concat([obs, outputs], -1)
-        state = self.seq(state)
+        # state = tf.concat([obs, outputs], -1)
+        state = self.seq(outputs)
 
         return state, next_rnn_state, outputs
 

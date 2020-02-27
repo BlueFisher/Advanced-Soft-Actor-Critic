@@ -5,7 +5,7 @@ base_config:
   build_path: MountainCarContinuous-v0
 
   max_step: -1
-  max_iter: 1000
+  max_iter: 100
   save_model_per_iter: 50
 
 sac_config:
@@ -15,6 +15,8 @@ sac_config:
 
   tau: 0.9
   _lambda: 0.99
-  # init_log_alpha: -4.6
+  init_log_alpha: 0
   use_priority: true
   use_n_step_is: true
+  use_curiosity: true
+  curiosity_strength: 1

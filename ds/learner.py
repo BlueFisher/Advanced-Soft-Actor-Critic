@@ -171,7 +171,7 @@ class Learner(object):
         return td_error.numpy()
 
     def _post_rewards(self, peer, n_rewards):
-        if self.sac.use_reward_squash:
+        if self.sac.use_reward_normalization:
             with self._training_lock:
                 self.sac.update_reward_bound(n_rewards)
 

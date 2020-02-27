@@ -48,9 +48,12 @@ class SAC_Base(object):
                  rnn_lr=3e-4,
                  gamma=0.99,
                  _lambda=0.9,
+
                  use_priority=False,
                  use_n_step_is=True,
-                 use_reward_squash=False,
+                 use_reward_normalization=False,
+                 use_curiosity=False,
+                 curiosity_strength=1,
 
                  replay_config=None):
         """
@@ -79,9 +82,12 @@ class SAC_Base(object):
         self.use_auto_alpha = use_auto_alpha
         self.gamma = gamma
         self._lambda = _lambda
+
         self.use_priority = use_priority
         self.use_n_step_is = use_n_step_is
-        self.use_reward_squash = use_reward_squash
+        self.use_reward_normalization = use_reward_normalization
+        self.use_curiosity = use_curiosity
+        self.curiosity_strength = curiosity_strength
 
         if seed is not None:
             tf.random.set_seed(seed)
@@ -109,7 +115,7 @@ class SAC_Base(object):
         Initialize variables, network models and optimizers
         """
         self.log_alpha = tf.Variable(init_log_alpha, dtype=tf.float32, name='log_alpha')
-        if self.use_reward_squash:
+        if self.use_reward_normalization:
             self.min_cum_reward = tf.Variable(0, dtype=tf.float32, name='min_q')
             self.max_cum_reward = tf.Variable(0, dtype=tf.float32, name='max_q')
         self.global_step = tf.Variable(0, dtype=tf.int64, name='global_step')
@@ -137,6 +143,10 @@ class SAC_Base(object):
         else:
             state_dim = self.obs_dim
             self.rnn_state_dim = 1
+
+        if self.use_curiosity:
+            self.model_forward = model.ModelForward(state_dim, self.action_dim)
+            self.optimizer_forward = tf.keras.optimizers.Adam(policy_lr)
 
         self.model_q1 = model.ModelQ(state_dim, self.action_dim)
         self.model_target_q1 = model.ModelQ(state_dim, self.action_dim)
@@ -226,9 +236,13 @@ class SAC_Base(object):
         if self.use_auto_alpha:
             ckpt.optimizer_alpha = self.optimizer_alpha
 
-        if self.use_reward_squash:
+        if self.use_reward_normalization:
             ckpt.min_cum_reward = self.min_cum_reward
             ckpt.max_cum_reward = self.max_cum_reward
+
+        if self.use_curiosity:
+            ckpt.model_forward = self.model_forward
+            ckpt.optimizer_forward = self.optimizer_forward
 
         self.ckpt_manager = tf.train.CheckpointManager(ckpt, f'{model_path}/model', max_to_keep=10)
 
@@ -305,7 +319,7 @@ class SAC_Base(object):
         tf.function
         get target value
         """
-        if self.use_reward_squash:
+        if self.use_reward_normalization:
             n_rewards = n_rewards / tf.maximum(self.max_cum_reward, tf.abs(self.min_cum_reward))
 
         gamma_ratio = [[tf.pow(self.gamma, i) for i in range(self.n_step)]]
@@ -333,6 +347,12 @@ class SAC_Base(object):
 
         min_next_q = tf.minimum(next_q1, next_q2)
         min_q = tf.minimum(q1, q2)
+
+        if self.use_curiosity:
+            approx_next_n_states = self.model_forward(n_states, n_actions)
+            in_n_rewards = tf.reduce_sum(tf.math.squared_difference(approx_next_n_states, next_n_states), axis=2) * 0.5
+            in_n_rewards = in_n_rewards * self.curiosity_strength
+            n_rewards = n_rewards + in_n_rewards
 
         td_error = n_rewards + self.gamma * (1 - n_dones) * (min_next_q - alpha * next_n_actions_log_prob) \
             - (min_q - alpha * n_actions_log_prob)
@@ -435,6 +455,11 @@ class SAC_Base(object):
 
                     loss_rnn = loss_rnn + loss_transition + loss_reward
 
+            if self.use_curiosity:
+                approx_next_n_states = self.model_forward(n_states, n_actions)
+                next_n_states = tf.concat([n_obses[:, 1:, :], tf.reshape(obs_, (-1, 1, obs_.shape[-1]))], axis=1)
+                loss_forward = tf.reduce_mean(tf.math.squared_difference(approx_next_n_states, next_n_states))
+
             log_prob = tf.reduce_sum(squash_correction_log_prob(policy, action_sampled), axis=1, keepdims=True)
             loss_policy = alpha * log_prob - tf.minimum(q1_for_gradient, q2_for_gradient)
             loss_alpha = -self.log_alpha * log_prob + self.log_alpha * self.action_dim
@@ -453,6 +478,10 @@ class SAC_Base(object):
             grads_rnn = tape.gradient(loss_rnn, rnn_variables)
             self.optimizer_rnn.apply_gradients(zip(grads_rnn, rnn_variables))
 
+        if self.use_curiosity:
+            grads_forward = tape.gradient(loss_forward, self.model_forward.trainable_variables)
+            self.optimizer_forward.apply_gradients(zip(grads_forward, self.model_forward.trainable_variables))
+
         grads_policy = tape.gradient(loss_policy, self.model_policy.trainable_variables)
         self.optimizer_policy.apply_gradients(zip(grads_policy, self.model_policy.trainable_variables))
 
@@ -465,9 +494,14 @@ class SAC_Base(object):
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             with self.summary_writer.as_default():
                 tf.summary.scalar('loss/y', tf.reduce_mean(y), step=self.global_step)
+
+                if self.use_curiosity:
+                    tf.summary.scalar('loss/forward', tf.reduce_mean(loss_forward), step=self.global_step)
+
                 if self.use_rnn and self.use_prediction:
                     tf.summary.scalar('loss/transition', -tf.reduce_mean(loss_transition), step=self.global_step)
                     tf.summary.scalar('loss/reward', tf.reduce_mean(loss_reward), step=self.global_step)
+
                 tf.summary.scalar('loss/Q1', tf.reduce_mean(loss_q1), step=self.global_step)
                 tf.summary.scalar('loss/Q2', tf.reduce_mean(loss_q2), step=self.global_step)
                 tf.summary.scalar('loss/policy', tf.reduce_mean(loss_policy), step=self.global_step)
@@ -495,6 +529,7 @@ class SAC_Base(object):
         tf.function
         """
         obs = tf.reshape(obs, (-1, 1, obs.shape[-1]))
+        print(obs, rnn_state)
         state, next_rnn_state, _ = self.model_rnn(obs, [rnn_state])
         policy = self.model_policy(state)
         action = policy.sample()
@@ -554,7 +589,7 @@ class SAC_Base(object):
         obs_: [1, obs_dim]
         n_dones: [1, episode_len]
         """
-        if self.use_reward_squash:
+        if self.use_reward_normalization:
             self.update_reward_bound(n_rewards)
 
         if n_obses.shape[1] < self.burn_in_step + self.n_step:
