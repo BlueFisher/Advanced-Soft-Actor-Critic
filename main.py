@@ -1,3 +1,5 @@
+import sys
+
 import argparse
 
 
@@ -22,5 +24,10 @@ if __name__ == '__main__':
     else:
         from algorithm.sac_main import Main
 
-    for _ in range(args.repeat):
-        Main(f'envs/{args.env}', args)
+    if sys.platform == 'win32':
+        for _ in range(args.repeat):
+            Main(f'envs/{args.env}', args)
+    elif sys.platform == 'linux':
+        for i in range(args.repeat):
+            Main(f'envs/{args.env}', args)
+            args.port += 1
