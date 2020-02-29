@@ -19,4 +19,4 @@ sac_config:
   use_priority: true
   use_n_step_is: true
   use_curiosity: true
-  curiosity_strength: 1
+  curiosity_strength: 500
