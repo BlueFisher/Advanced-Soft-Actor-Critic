@@ -529,7 +529,6 @@ class SAC_Base(object):
         tf.function
         """
         obs = tf.reshape(obs, (-1, 1, obs.shape[-1]))
-        print(obs, rnn_state)
         state, next_rnn_state, _ = self.model_rnn(obs, [rnn_state])
         policy = self.model_policy(state)
         action = policy.sample()

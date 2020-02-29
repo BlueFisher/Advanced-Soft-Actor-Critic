@@ -6,7 +6,9 @@ import importlib
 import logging
 import logging.handlers
 import os
+import random
 import shutil
+import string
 import sys
 import time
 import yaml
@@ -63,7 +65,8 @@ class Main(object):
         if args.agents is not None:
             config['reset_config']['copy'] = args.agents
 
-        config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now)
+        rand = ''.join(random.sample(string.ascii_letters + string.digits, 4))
+        config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now + rand)
         model_root_path = f'models/{config["base_config"]["scene"]}/{config["base_config"]["name"]}'
 
         logger_file = f'{model_root_path}/{args.logger_file}' if args.logger_file is not None else None

@@ -98,4 +98,4 @@ class ModelPolicy(tf.keras.Model):
         l = self.seq(state)
         mean, logvar = tf.split(l, num_or_size_splits=2, axis=-1)
 
-        return self.tfpd([mean, tf.clip_by_value(tf.exp(logvar), 0.1, 1.0)])
+        return self.tfpd([tf.tanh(mean), tf.clip_by_value(tf.exp(logvar), 0.1, 1.0)])

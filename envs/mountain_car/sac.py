@@ -7,8 +7,7 @@ class ModelForward(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
         super(ModelForward, self).__init__()
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(state_dim + action_dim, activation=tf.nn.relu),
             tf.keras.layers.Dense(state_dim)
         ])
 
