@@ -137,14 +137,18 @@ class Main(object):
             initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))
             rnn_state = initial_rnn_state
 
+        is_max_reached = False
+
         for iteration in range(self.config['max_iter'] + 1):
-            if self.config['reset_on_iteration']:
+            if self.config['reset_on_iteration'] or is_max_reached:
                 _, obs = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
 
                 if use_rnn:
                     rnn_state = initial_rnn_state
+
+                is_max_reached = False
             else:
                 for agent in agents:
                     agent.reset()
@@ -176,6 +180,7 @@ class Main(object):
                 if step == self.config['max_step']:
                     local_done = [True] * len(agents)
                     max_reached = [True] * len(agents)
+                    is_max_reached = True
 
                 episode_trans_list = [agents[i].add_transition(obs[i],
                                                                action[i],
