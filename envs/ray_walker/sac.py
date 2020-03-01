@@ -43,22 +43,17 @@ class ModelRNN(tf.keras.Model):
     def __init__(self, obs_dim):
         super(ModelRNN, self).__init__()
         self.obs_dim = obs_dim
-        self.rnn_units = 128
+        self.rnn_units = 64
         self.layer_rnn = tf.keras.layers.RNN(tf.keras.layers.GRUCell(self.rnn_units),
                                              return_sequences=True,
                                              return_state=True)
-        self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128)
-        ])
 
         self.get_call_result_tensors()
 
     def call(self, obs, initial_state):
         outputs, next_rnn_state = self.layer_rnn(obs, initial_state=initial_state)
 
-        # state = tf.concat([obs, outputs], -1)
-        state = self.seq(outputs)
+        state = tf.concat([outputs, obs], -1)
 
         return state, next_rnn_state, outputs
 
@@ -117,4 +112,4 @@ class ModelPolicy(tf.keras.Model):
         mean = self.mean_model(l)
         logvar = self.logvar_model(l)
 
-        return self.tfpd([mean, tf.clip_by_value(tf.exp(logvar), 0.1, 1.0)])
+        return self.tfpd([tf.tanh(mean), tf.clip_by_value(tf.exp(logvar), 0.1, 1.0)])

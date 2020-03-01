@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 
 from mlagents_envs.environment import UnityEnvironment
@@ -18,6 +20,8 @@ class UnityWrapper:
                  args=None):
 
         seed = seed if seed is not None else np.random.randint(0, 65536)
+
+        self._logger = logging.getLogger('UnityWrapper')
 
         engine_configuration_channel = EngineConfigurationChannel()
 
@@ -45,7 +49,11 @@ class UnityWrapper:
 
     def init(self):
         group_spec = self._env.get_agent_group_spec(self.group_name)
-        return group_spec.observation_shapes[0][0], group_spec.action_size
+        self._logger.info(f'observation shapes: {group_spec.observation_shapes}')
+        self._logger.info(f'action size: {group_spec.action_size}')
+
+        obs_sizes = [s[0] for s in group_spec.observation_shapes]
+        return sum(obs_sizes), group_spec.action_size
 
     def reset(self, reset_config=None):
         reset_config = {} if reset_config is None else reset_config
@@ -58,7 +66,9 @@ class UnityWrapper:
 
         self._addition_action_dim = 0
 
-        return step_result.n_agents(), step_result.obs[0]
+        obs = np.concatenate(step_result.obs, axis=-1)
+
+        return step_result.n_agents(), obs
 
     def step(self, action):
         if self._addition_action_dim != 0:
@@ -72,6 +82,8 @@ class UnityWrapper:
             self._env.step()
             step_result = self._env.get_step_result(self.group_name)
             agents_len = len(self._agent_ids)
+
+            obs = np.concatenate(step_result.obs, axis=-1)
 
             if step_result.n_agents() < agents_len:
                 true_ids = np.where(np.isin(self._agent_ids, step_result.agent_id))[0]
@@ -87,7 +99,7 @@ class UnityWrapper:
                     done_step_result[true_id] = (step_result.reward[i],
                                                  step_result.done[i],
                                                  step_result.max_step[i])
-                obs = step_result.obs[0][-agents_len:]
+                obs = obs[-agents_len:]
                 reward = step_result.reward[-agents_len:]
                 done = step_result.done[-agents_len:]
                 max_step = step_result.max_step[-agents_len:]
@@ -105,7 +117,6 @@ class UnityWrapper:
                     continue
 
                 else:
-                    obs = step_result.obs[0]
                     reward = step_result.reward
                     done = step_result.done
                     max_step = step_result.max_step
