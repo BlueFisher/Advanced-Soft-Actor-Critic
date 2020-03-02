@@ -18,9 +18,12 @@ def initialize_config_from_yaml(default_config_path, config_file_path):
             for k, v in config_file.items():
                 assert k in config.keys(), f'{k} is invalid'
                 if v is not None:
-                    for kk, vv in v.items():
-                        assert kk in config[k].keys(), f'{kk} is invalid in {k}'
-                        config[k][kk] = vv
+                    if k == 'reset_config':
+                        config[k] = v
+                    else:
+                        for kk, vv in v.items():
+                            assert kk in config[k].keys(), f'{kk} is invalid in {k}'
+                            config[k][kk] = vv
 
     return config
 
@@ -65,7 +68,8 @@ def save_config(config, model_root_path, config_name):
 def display_config(config, logger):
     config_str = ''
     for k, v in config.items():
-        config_str += f'\n{k}'
-        for kk, vv in v.items():
-            config_str += f'\n{kk:>30}: {vv}'
+        if v is not None:
+            config_str += f'\n{k}'
+            for kk, vv in v.items():
+                config_str += f'\n{kk:>30}: {vv}'
     logger.info(config_str)

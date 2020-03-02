@@ -6,10 +6,10 @@ base_config:
 
   max_iter: 500
   save_model_per_iter: 50
-  reset_on_iteration: false
+  reset_on_iteration: true
   
 reset_config:
-  avoid_wall: false
+  avoid_wall: true
 
 sac_config:
   seed: 42

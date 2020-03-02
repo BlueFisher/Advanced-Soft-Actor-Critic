@@ -5,26 +5,24 @@ import gym
 class GymWrapper:
     def __init__(self,
                  train_mode=True,
-                 env_name=None):
+                 env_name=None,
+                 n_agents=1):
         self.train_mode = train_mode
         self.env_name = env_name
+        self.n_agents = n_agents
         self._envs = list()
 
     def init(self):
-        env = gym.make(self.env_name)
+        for _ in range(self.n_agents):
+            self._envs.append(gym.make(self.env_name))
+
+        env = self._envs[0]
         self._state_dim = env.observation_space.shape[0]
         self._action_dim = env.action_space.shape[0]
 
         return self._state_dim, self._action_dim
 
     def reset(self, reset_config=None):
-        if reset_config['copy'] != len(self._envs):
-            for env in self._envs:
-                env.close()
-
-            for _ in range(reset_config['copy']):
-                self._envs.append(gym.make(self.env_name))
-
         obs = np.stack([e.reset() for e in self._envs], axis=0)
 
         return len(self._envs), obs.astype(np.float32)

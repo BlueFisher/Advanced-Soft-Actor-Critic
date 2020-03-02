@@ -13,13 +13,13 @@ base_config:
 
   name: "{time}"
   sac: sac
+  n_agents: 1
   max_iter: 1000
   max_step: -1
   save_model_per_iter: 500
   reset_on_iteration: true
 
-reset_config:
-  copy: 1
+reset_config: null
 
 replay_config:
   batch_size: 256

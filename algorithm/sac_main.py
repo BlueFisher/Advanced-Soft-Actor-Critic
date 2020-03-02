@@ -63,7 +63,7 @@ class Main(object):
         if args.sac is not None:
             config['base_config']['sac'] = args.sac
         if args.agents is not None:
-            config['reset_config']['copy'] = args.agents
+            config['base_config']['n_agents'] = args.agents
 
         rand = ''.join(random.sample(string.ascii_letters + string.digits, 4))
         config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now + rand)
@@ -96,13 +96,15 @@ class Main(object):
                                         file_name=self.config['build_path'][sys.platform],
                                         no_graphics=not self.render and self.train_mode,
                                         base_port=self.config['port'],
-                                        args=['--scene', self.config['scene']])
+                                        args=['--scene', self.config['scene'],
+                                              '--n_agents', str(self.config['n_agents'])])
 
         elif self.config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
 
             self.env = GymWrapper(train_mode=self.train_mode,
-                                  env_name=self.config['build_path'])
+                                  env_name=self.config['build_path'],
+                                  n_agents=self.config['n_agents'])
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')
 
@@ -140,8 +142,9 @@ class Main(object):
         is_max_reached = False
 
         for iteration in range(self.config['max_iter'] + 1):
-            if self.config['reset_on_iteration'] or is_max_reached:
+            if self.config['reset_on_iteration']:
                 _, obs = self.env.reset(reset_config=self.reset_config)
+
                 for agent in agents:
                     agent.clear()
 

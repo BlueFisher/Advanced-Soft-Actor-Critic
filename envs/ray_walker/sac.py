@@ -43,7 +43,7 @@ class ModelRNN(tf.keras.Model):
     def __init__(self, obs_dim):
         super(ModelRNN, self).__init__()
         self.obs_dim = obs_dim
-        self.rnn_units = 64
+        self.rnn_units = 8
         self.layer_rnn = tf.keras.layers.RNN(tf.keras.layers.GRUCell(self.rnn_units),
                                              return_sequences=True,
                                              return_state=True)
@@ -51,7 +51,7 @@ class ModelRNN(tf.keras.Model):
         self.get_call_result_tensors()
 
     def call(self, obs, initial_state):
-        outputs, next_rnn_state = self.layer_rnn(obs, initial_state=initial_state)
+        outputs, next_rnn_state = self.layer_rnn(obs[:, :, -4:], initial_state=initial_state)
 
         state = tf.concat([outputs, obs], -1)
 

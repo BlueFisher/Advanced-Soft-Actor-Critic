@@ -9,6 +9,7 @@ from mlagents_envs.side_channel.float_properties_channel import FloatPropertiesC
 
 class UnityWrapper:
     _agent_ids = None
+    _n_agents = 1
     _addition_action_dim = 0
 
     def __init__(self,
@@ -44,8 +45,9 @@ class UnityWrapper:
                                      side_channels=[engine_configuration_channel, self.float_properties_channel])
 
         self._env.reset()
-
         self.group_name = self._env.get_agent_groups()[0]
+        step_result = self._env.get_step_result(self.group_name)
+        self._n_agents = step_result.n_agents()
 
     def init(self):
         group_spec = self._env.get_agent_group_spec(self.group_name)
@@ -60,8 +62,13 @@ class UnityWrapper:
         for k, v in reset_config.items():
             self.float_properties_channel.set_property(k, v)
 
-        self._env.reset()
-        step_result = self._env.get_step_result(self.group_name)
+        while True:
+            self._env.reset()
+            step_result = self._env.get_step_result(self.group_name)
+            if len(step_result.agent_id) == self._n_agents:
+                break
+            self._logger.warn('reset error')
+
         self._agent_ids = step_result.agent_id
 
         self._addition_action_dim = 0
@@ -81,11 +88,11 @@ class UnityWrapper:
         while True:
             self._env.step()
             step_result = self._env.get_step_result(self.group_name)
-            agents_len = len(self._agent_ids)
+            n = self._n_agents
 
             obs = np.concatenate(step_result.obs, axis=-1)
 
-            if step_result.n_agents() < agents_len:
+            if step_result.n_agents() < n:
                 true_ids = np.where(np.isin(self._agent_ids, step_result.agent_id))[0]
                 for i, true_id in enumerate(true_ids):
                     done_step_result[true_id] = (step_result.reward[i],
@@ -93,18 +100,18 @@ class UnityWrapper:
                                                  step_result.max_step[i])
                 continue
 
-            elif step_result.n_agents() > agents_len:
-                true_ids = np.where(np.isin(self._agent_ids, step_result.agent_id[:-agents_len]))[0]
+            elif step_result.n_agents() > n:
+                true_ids = np.where(np.isin(self._agent_ids, step_result.agent_id[:-n]))[0]
                 for i, true_id in enumerate(true_ids):
                     done_step_result[true_id] = (step_result.reward[i],
                                                  step_result.done[i],
                                                  step_result.max_step[i])
-                obs = obs[-agents_len:]
-                reward = step_result.reward[-agents_len:]
-                done = step_result.done[-agents_len:]
-                max_step = step_result.max_step[-agents_len:]
-                self._agent_ids = step_result.agent_id[-agents_len:]
-                self._addition_action_dim = step_result.n_agents() - agents_len
+                obs = obs[-n:]
+                reward = step_result.reward[-n:]
+                done = step_result.done[-n:]
+                max_step = step_result.max_step[-n:]
+                self._agent_ids = step_result.agent_id[-n:]
+                self._addition_action_dim = step_result.n_agents() - n
                 break
 
             else:
