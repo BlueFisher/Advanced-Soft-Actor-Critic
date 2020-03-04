@@ -45,5 +45,5 @@ class MainHitted(Main):
         rewards = [a.reward for a in agents]
         hitted = sum([a.hitted for a in agents])
 
-        rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(rewards)])
-        self.logger.info(f'iter {iteration}, rewards {rewards_sorted}, hitted {hitted}')
+        rewards = ", ".join([f"{i:6.1f}" for i in rewards])
+        self.logger.info(f'iter {iteration}, rewards {rewards}, hitted {hitted}')

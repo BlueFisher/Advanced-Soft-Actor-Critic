@@ -62,20 +62,23 @@ class UnityWrapper:
         for k, v in reset_config.items():
             self.float_properties_channel.set_property(k, v)
 
-        while True:
-            self._env.reset()
-            step_result = self._env.get_step_result(self.group_name)
-            if len(step_result.agent_id) == self._n_agents:
-                break
-            self._logger.warn('reset error')
-
-        self._agent_ids = step_result.agent_id
-
-        self._addition_action_dim = 0
+        self._env.reset()
+        step_result = self._env.get_step_result(self.group_name)
 
         obs = np.concatenate(step_result.obs, axis=-1)
 
-        return step_result.n_agents(), obs
+        if step_result.n_agents() == self._n_agents:
+            self._agent_ids = step_result.agent_id
+            self._addition_action_dim = 0
+        elif step_result.n_agents() > self._n_agents:
+            obs = obs[-self._n_agents:]
+            self._agent_ids = step_result.agent_id[-self._n_agents:]
+            self._addition_action_dim = step_result.n_agents() - self._n_agents
+        else:
+            self._logger.error('reset error')
+            return self.reset(reset_config)
+
+        return self._n_agents, obs
 
     def step(self, action):
         if self._addition_action_dim != 0:

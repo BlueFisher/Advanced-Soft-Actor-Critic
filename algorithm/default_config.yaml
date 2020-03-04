@@ -2,13 +2,13 @@ base_config:
   env_type: UNITY # UNITY, GYM
   scene: scene
 
-  # only for Unity Environments
+  # Only for Unity Environments
   build_path: 
     win32: path_win32
     linux: path_linux
   port: 5005
   
-  # only for Gym Enviroments
+  # Only for Gym Enviroments
   build_path: GymEnv
 
   name: "{time}"

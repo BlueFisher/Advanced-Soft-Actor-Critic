@@ -457,7 +457,7 @@ class SAC_Base(object):
 
             if self.use_curiosity:
                 approx_next_n_states = self.model_forward(n_states, n_actions)
-                next_n_states = tf.concat([n_obses[:, 1:, :], tf.reshape(obs_, (-1, 1, obs_.shape[-1]))], axis=1)
+                next_n_states = tf.concat([n_states[:, 1:, :], tf.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)
                 loss_forward = tf.reduce_mean(tf.math.squared_difference(approx_next_n_states, next_n_states))
 
             log_prob = tf.reduce_sum(squash_correction_log_prob(policy, action_sampled), axis=1, keepdims=True)
