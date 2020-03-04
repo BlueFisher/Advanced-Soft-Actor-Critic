@@ -142,20 +142,19 @@ class Main(object):
         is_max_reached = False
 
         for iteration in range(self.config['max_iter'] + 1):
-            if self.config['reset_on_iteration']:
-                _, obs = self.env.reset(reset_config=self.reset_config)
 
+            if self.config['reset_on_iteration'] or is_max_reached:
+                _, obs = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
 
                 if use_rnn:
                     rnn_state = initial_rnn_state
-
-                is_max_reached = False
             else:
                 for agent in agents:
                     agent.reset()
 
+            is_max_reached = False
             step = 0
 
             while False in [a.done for a in agents]:
@@ -229,5 +228,5 @@ class Main(object):
 
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]
-        rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(rewards)])
-        self.logger.info(f'iter {iteration}, rewards {rewards_sorted}')
+        rewards = ", ".join([f"{i:6.1f}" for i in rewards])
+        self.logger.info(f'iter {iteration}, rewards {rewards}')
