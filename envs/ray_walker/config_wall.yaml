@@ -4,13 +4,13 @@ base_config:
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
   scene: RayWalker
 
-  max_iter: 500
+  max_iter: 250
   save_model_per_iter: 50
-  reset_on_iteration: true
+  reset_on_iteration: false
   
 reset_config:
   force_reset: true
-  avoid_wall: true
+  avoid_wall: false
 
 sac_config:
   seed: 42
