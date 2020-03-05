@@ -2,9 +2,10 @@ base_config:
   build_path: 
     win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
-  scene: RayWalker
+  scene: RayObstacleWalker
 
-  max_iter: 250
+  name: "obstacle_wall_{time}"
+  max_iter: 1000
   save_model_per_iter: 50
   reset_on_iteration: false
   
@@ -18,7 +19,7 @@ sac_config:
   burn_in_step: 10
   n_step: 5
   use_rnn: true
-  use_prediction: false
+  use_prediction: true
 
   _lambda: 0.99
   use_priority: true
