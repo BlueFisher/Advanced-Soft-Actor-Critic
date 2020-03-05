@@ -8,6 +8,9 @@ base_config:
   save_model_per_iter: 50
   reset_on_iteration: false
 
+reset_config:
+  force_reset: true
+
 replay_config:
   beta: 0.1
 
