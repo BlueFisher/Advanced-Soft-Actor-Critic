@@ -4,7 +4,7 @@ base_config:
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
   scene: RayPyramid
 
-  name: "nopre_{time}"
+  name: "ray20_nopre_{time}"
   max_iter: 200
   save_model_per_iter: 50
   reset_on_iteration: false
