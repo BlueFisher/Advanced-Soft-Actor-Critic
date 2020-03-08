@@ -4,8 +4,8 @@ base_config:
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
   scene: RayPyramid
 
-  name: "ray20_nopre_{time}"
-  max_iter: 200
+  name: "ray10_nopre_{time}"
+  max_iter: 500
   save_model_per_iter: 50
   reset_on_iteration: false
   
@@ -22,5 +22,3 @@ sac_config:
   use_prediction: false
 
   _lambda: 0.99
-  use_priority: true
-  use_n_step_is: true

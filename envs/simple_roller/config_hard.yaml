@@ -22,5 +22,3 @@ sac_config:
   _lambda: 1
   update_target_per_step: 100
   init_log_alpha: -4.6
-  use_priority: true
-  use_n_step_is: true

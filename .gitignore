@@ -115,6 +115,7 @@ dmypy.json
 .pyre/
 
 .vscode
+.history
 models
 models_bak
 csharp_timers.json
