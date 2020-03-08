@@ -50,7 +50,7 @@ sac_config:
   rnn_lr: 0.0003
   gamma: 0.99
   _lambda: 1.0
-  use_priority: false
+  use_priority: true
   use_n_step_is: true
   use_reward_normalization: false
   use_curiosity: false

@@ -49,7 +49,7 @@ class SAC_Base(object):
                  gamma=0.99,
                  _lambda=0.9,
 
-                 use_priority=False,
+                 use_priority=True,
                  use_n_step_is=True,
                  use_reward_normalization=False,
                  use_curiosity=False,
@@ -57,10 +57,19 @@ class SAC_Base(object):
 
                  replay_config=None):
         """
-        obs_dim: dimension of observation
-        action_dim: dimension of action
-        model_root_path: the path that saves summary, checkpoints, config etc.
-        model: custom Model Class
+        obs_dim: Dimension of observation
+        action_dim: Dimension of action
+        model_root_path: The path that saves summary, checkpoints, config etc.
+        model: Custom Model Class
+        train_mode: Is training or inference
+
+        seed: Random seed
+        write_summary_per_step: Write summaries in TensorBoard every N step
+
+        burn_in_step: Burn-in steps in R2D2
+        n_step: Update Q function by N steps
+        use_rnn: If use RNN
+        use_prediction: If train a transition model
         """
 
         physical_devices = tf.config.experimental.list_physical_devices('GPU')
@@ -688,14 +697,16 @@ class SAC_Base(object):
         m_actions = trans['action']
         m_rewards = trans['reward']
         m_dones = trans['done']
-        m_mu_probs = trans['mu_prob']
 
         n_obses = m_obses[:, :-1, :]
         n_actions = m_actions[:, :-1, :]
         n_rewards = m_rewards[:, :-1]
         obs_ = m_obses[:, -1, :]
         n_dones = m_dones[:, :-1]
-        n_mu_probs = m_mu_probs[:, :-1, :]
+
+        if self.use_n_step_is:
+            m_mu_probs = trans['mu_prob']
+            n_mu_probs = m_mu_probs[:, :-1, :]
 
         if self.use_rnn:
             m_rnn_states = trans['rnn_state']
@@ -732,7 +743,6 @@ class SAC_Base(object):
             pointers_list = [pointers + i for i in range(1, self.burn_in_step + self.n_step + 1)]
             tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
             n_rnn_states = self.get_n_rnn_states(n_obses, rnn_state).numpy()
-            # n_rnn_states = n_rnn_states[:, self.burn_in_step - 1:, :]
             rnn_states = n_rnn_states.reshape(-1, n_rnn_states.shape[-1])
             self.replay_buffer.update_transitions(tmp_pointers, 'rnn_state', rnn_states)
 
@@ -740,6 +750,5 @@ class SAC_Base(object):
         if self.use_n_step_is:
             pointers_list = [pointers + i for i in range(0, self.burn_in_step + self.n_step)]
             tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-            # n_pi_probs = n_pi_probs[:, self.burn_in_step:]
             pi_probs = n_pi_probs.reshape(-1, n_pi_probs.shape[-1])
             self.replay_buffer.update_transitions(tmp_pointers, 'mu_prob', pi_probs)
