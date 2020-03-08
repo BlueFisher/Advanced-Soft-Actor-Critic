@@ -18,8 +18,8 @@ class ModelTransition(tf.keras.Model):
 
     def call(self, state, action):
         next_state = self.seq(tf.concat([state, action], -1))
-        mean, logvar = tf.split(next_state, num_or_size_splits=2, axis=-1)
-        next_state_dist = self.next_state_tfpd([mean, tf.clip_by_value(tf.exp(logvar), 0.1, 1.)])
+        mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
+        next_state_dist = self.next_state_tfpd([mean, tf.clip_by_value(tf.exp(logstd), 0.1, 1.)])
 
         return next_state_dist
 
@@ -96,6 +96,6 @@ class ModelPolicy(tf.keras.Model):
 
     def call(self, state):
         l = self.seq(state)
-        mean, logvar = tf.split(l, num_or_size_splits=2, axis=-1)
+        mean, logstd = tf.split(l, num_or_size_splits=2, axis=-1)
 
-        return self.tfpd([tf.tanh(mean), tf.clip_by_value(tf.exp(logvar), 0.1, 1.0)])
+        return self.tfpd([tf.tanh(mean), tf.clip_by_value(tf.exp(logstd), 0.1, 1.0)])

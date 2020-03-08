@@ -19,8 +19,8 @@ class ModelTransition(tf.keras.Model):
 
     def call(self, state, action):
         next_state = self.seq(tf.concat([state, action], -1))
-        mean, logvar = tf.split(next_state, num_or_size_splits=2, axis=-1)
-        next_state_dist = self.next_state_tfpd([mean, tf.clip_by_value(tf.exp(logvar), 0.1, 1.)])
+        mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
+        next_state_dist = self.next_state_tfpd([mean, tf.clip_by_value(tf.exp(logstd), 0.1, 1.)])
 
         return next_state_dist
 
@@ -97,7 +97,7 @@ class ModelPolicy(tf.keras.Model):
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(action_dim)
         ])
-        self.logvar_model = tf.keras.Sequential([
+        self.logstd_model = tf.keras.Sequential([
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(action_dim)
         ])
@@ -110,6 +110,6 @@ class ModelPolicy(tf.keras.Model):
         l = self.common_model(state)
 
         mean = self.mean_model(l)
-        logvar = self.logvar_model(l)
+        logstd = self.logstd_model(l)
 
-        return self.tfpd([tf.tanh(mean), tf.clip_by_value(tf.exp(logvar), 0.1, 1.0)])
+        return self.tfpd([tf.tanh(mean), tf.clip_by_value(tf.exp(logstd), 0.1, 1.0)])
