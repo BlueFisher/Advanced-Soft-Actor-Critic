@@ -22,5 +22,3 @@ sac_config:
   use_prediction: true
 
   _lambda: 0.99
-  use_priority: true
-  use_n_step_is: true
