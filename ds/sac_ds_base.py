@@ -74,7 +74,7 @@ class SAC_DS_Base(SAC_Base):
 
         self._init_tf_function()
 
-    # learner to actor
+    # For learner to send variables to actors
     @tf.function
     def get_policy_variables(self):
         variables = self.model_policy.trainable_variables
@@ -83,7 +83,7 @@ class SAC_DS_Base(SAC_Base):
 
         return variables
 
-    # for actor to update its own network
+    # For actor to update its own network from learner
     @tf.function
     def update_policy_variables(self, policy_variables):
         variables = self.model_policy.trainable_variables

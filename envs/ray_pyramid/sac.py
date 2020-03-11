@@ -69,6 +69,8 @@ class ModelReward(tf.keras.Model):
             tf.keras.layers.Dense(1)
         ])
 
+        self(tf.keras.Input(shape=(state_dim,)))
+
     def call(self, state):
         reward = self.seq(state)
 

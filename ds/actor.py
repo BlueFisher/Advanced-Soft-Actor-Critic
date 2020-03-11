@@ -47,12 +47,12 @@ class Actor(object):
     def _init_constant_config(self, config_path, args):
         config_name = 'config.yaml' if args.config is None else args.config
         config_file_path = f'{config_path}/{config_name}'  # default config.yaml
-        # merge default_config.yaml and custom config.yaml
+        # Merge default_config.yaml and custom config.yaml
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
                                                            config_file_path)
         self.config_file_path = config_file_path
 
-        # initialize config from command line arguments
+        # Initialize config from command line arguments
         self.train_mode = not args.run
         self.run_in_editor = args.editor
 
@@ -61,9 +61,9 @@ class Actor(object):
         return config['net_config']
 
     def _init_env(self):
-        # each time actor connects to the learner and replay, initialize env
+        # Each time actor connects to the learner and replay, initialize env
 
-        # initialize config
+        # Initialize config
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
                                                            self.config_file_path)
 
@@ -78,7 +78,7 @@ class Actor(object):
         sac_config = config['sac_config']
         self.reset_config = config['reset_config']
 
-        # initialize environment
+        # Initialize environment
         if self.config['env_type'] == 'UNITY':
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
@@ -141,7 +141,7 @@ class Actor(object):
         iteration = 0
 
         while True:
-            # replay or learner is offline, waiting...
+            # Replay or learner is offline, waiting...
             if not self._stub.connected:
                 if iteration != 0:
                     self.env.close()
@@ -152,7 +152,7 @@ class Actor(object):
                 time.sleep(WAITING_CONNECTION_TIME)
                 continue
 
-            # learner is online, reset all settings
+            # Learner is online, reset all settings
             if iteration == 0 and self._stub.connected:
                 self._init_env()
                 use_rnn = self.sac_actor.use_rnn
@@ -194,7 +194,7 @@ class Actor(object):
                                                  initial_rnn_state[0])
 
                 if self.config['update_policy_mode']:
-                    # update policy variables each "update_policy_variables_per_step"
+                    # Update policy variables each "update_policy_variables_per_step"
                     if self.config['update_policy_variables_per_step'] != -1 and step % self.config['update_policy_variables_per_step'] == 0:
                         self._update_policy_variables()
 
@@ -207,7 +207,7 @@ class Actor(object):
 
                     action = action.numpy()
                 else:
-                    # get action from learner each step
+                    # Get action from learner each step
                     if use_rnn:
                         action_rnn_state = self._stub.get_action(obs.astype(np.float32), rnn_state)
                         if action_rnn_state is None:
@@ -326,11 +326,11 @@ class StubController:
                 for response in reponse_iterator:
                     if not self._replay_connected:
                         self._replay_connected = True
-                        self._logger.info('replay connected')
+                        self._logger.info('Replay connected')
             except grpc.RpcError:
                 if self._replay_connected:
                     self._replay_connected = False
-                    self._logger.error('replay disconnected')
+                    self._logger.error('Replay disconnected')
             finally:
                 time.sleep(RECONNECT_TIME)
 
@@ -348,10 +348,10 @@ class StubController:
                 for response in reponse_iterator:
                     if not self._learner_connected:
                         self._learner_connected = True
-                        self._logger.info('learner connected')
+                        self._logger.info('Learner connected')
             except grpc.RpcError:
                 if self._learner_connected:
                     self._learner_connected = False
-                    self._logger.error('learner disconnected')
+                    self._logger.error('Learner disconnected')
             finally:
                 time.sleep(RECONNECT_TIME)

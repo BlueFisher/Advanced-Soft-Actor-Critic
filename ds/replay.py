@@ -60,7 +60,7 @@ class Replay(object):
         done = n_dones.reshape([-1])
         mu_prob = n_mu_probs.reshape([-1, n_mu_probs.shape[-1]])
 
-        # padding obs_
+        # Padding obs_
         obs = np.concatenate([obs, obs_])
         action = np.concatenate([action,
                                  np.empty([1, action.shape[-1]], dtype=np.float32)])
@@ -85,7 +85,7 @@ class Replay(object):
                                         np.empty([1, rnn_state.shape[-1]], dtype=np.float32)])
             storage_data['rnn_state'] = rnn_state
 
-        # get td_error
+        # Get td_error
         ignore_size = self.burn_in_step + self.n_step
 
         n_obses = np.concatenate([n_obses[:, i:i + ignore_size] for i in range(n_obses.shape[1] - ignore_size + 1)], axis=0)
@@ -166,7 +166,7 @@ class Replay(object):
 
     def _clear(self):
         self._replay_buffer.clear()
-        self.logger.info('replay buffer cleared')
+        self.logger.info('Replay buffer cleared')
 
     def _run_replay_server(self, net_config):
         servicer = ReplayService(self._add,
@@ -178,7 +178,7 @@ class Replay(object):
         replay_pb2_grpc.add_ReplayServiceServicer_to_server(servicer, server)
         server.add_insecure_port(f'[::]:{net_config["replay_port"]}')
         server.start()
-        self.logger.info(f'replay server is running on [{net_config["replay_port"]}]...')
+        self.logger.info(f'Replay server is running on [{net_config["replay_port"]}]...')
         server.wait_for_termination()
 
 
