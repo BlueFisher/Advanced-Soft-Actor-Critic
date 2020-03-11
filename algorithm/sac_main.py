@@ -24,7 +24,7 @@ import algorithm.config_helper as config_helper
 
 class Main(object):
     train_mode = True
-    _agent_class = Agent  # for different environments
+    _agent_class = Agent  # For different environments
 
     def __init__(self, config_path, args):
         """
@@ -45,11 +45,11 @@ class Main(object):
     def _init_config(self, config_path, args):
         config_name = 'config.yaml' if args.config is None else args.config
         config_file_path = f'{config_path}/{config_name}'  # default config.yaml
-        # merge default_config.yaml and custom config.yaml
+        # Merge default_config.yaml and custom config.yaml
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
                                                            config_file_path)
 
-        # initialize config from command line arguments
+        # Initialize config from command line arguments
         self.train_mode = not args.run
         self.render = args.render
         self.run_in_editor = args.editor
@@ -65,6 +65,7 @@ class Main(object):
         if args.agents is not None:
             config['base_config']['n_agents'] = args.agents
 
+        # Replace {time} from current time and random letters
         rand = ''.join(random.sample(string.ascii_letters + string.digits, 4))
         config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now + rand)
         model_root_path = f'models/{config["base_config"]["scene"]}/{config["base_config"]["name"]}'
@@ -96,8 +97,8 @@ class Main(object):
                                         file_name=self.config['build_path'][sys.platform],
                                         no_graphics=not self.render and self.train_mode,
                                         base_port=self.config['port'],
-                                        args=['--scene', self.config['scene'],
-                                              '--n_agents', str(self.config['n_agents'])])
+                                        scene=self.config['scene'],
+                                        n_agents=self.config['n_agents'])
 
         elif self.config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
@@ -110,7 +111,7 @@ class Main(object):
 
         self.obs_dim, self.action_dim = self.env.init()
 
-        # if model exists, load saved model, else, copy a new one
+        # If model exists, load saved model, or copy a new one
         if os.path.isfile(f'{model_root_path}/sac_model.py'):
             custom_sac_model = importlib.import_module(f'{model_root_path.replace("/",".")}.sac_model')
         else:
@@ -142,7 +143,6 @@ class Main(object):
         is_max_reached = False
 
         for iteration in range(self.config['max_iter'] + 1):
-
             if self.config['reset_on_iteration'] or is_max_reached:
                 _, obs = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
@@ -231,4 +231,4 @@ class Main(object):
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        self.logger.info(f'iter {iteration}, rewards {rewards}')
+        self.logger.info(f'{iteration}, rewards {rewards}')

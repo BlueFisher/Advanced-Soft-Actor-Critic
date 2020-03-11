@@ -53,11 +53,11 @@ class Learner(object):
     def _init_config(self, config_path, args):
         config_name = 'config.yaml' if args.config is None else args.config
         config_file_path = f'{config_path}/{config_name}'  # default config.yaml
-        # merge default_config.yaml and custom config.yaml
+        # Merge default_config.yaml and custom config.yaml
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
                                                            config_file_path)
 
-        # initialize config from command line arguments
+        # Initialize config from command line arguments
         self.train_mode = not args.run
         self.render = args.render
         self.run_in_editor = args.editor
@@ -118,7 +118,7 @@ class Learner(object):
 
         self.logger.info(f'{self.config["build_path"]} initialized')
 
-        # if model exists, load saved model, else, copy a new one
+        # If model exists, load saved model, or copy a new one
         if os.path.isfile(f'{model_root_path}/sac_model.py'):
             custom_sac_model = importlib.import_module(f'{model_root_path.replace("/",".")}.sac_model')
         else:
@@ -325,7 +325,7 @@ class Learner(object):
             learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, server)
             server.add_insecure_port(f'[::]:{self.net_config["learner_port"]}')
             server.start()
-            self.logger.info(f'learner server is running on [{self.net_config["learner_port"]}]...')
+            self.logger.info(f'Learner server is running on [{self.net_config["learner_port"]}]...')
 
             self._run_training_client()
 

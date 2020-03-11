@@ -172,7 +172,56 @@ class SAC_Base(object):
 
         self.cem_rewards = None
 
+    def _init_or_restore(self, model_path):
+        """
+        Initialize network weights from scratch or restore from model_root_path
+        """
+        ckpt = tf.train.Checkpoint(log_alpha=self.log_alpha,
+                                   global_step=self.global_step,
+
+                                   optimizer_q1=self.optimizer_q1,
+                                   optimizer_q2=self.optimizer_q2,
+                                   optimizer_policy=self.optimizer_policy,
+
+                                   model_q1=self.model_q1,
+                                   model_target_q1=self.model_target_q1,
+                                   model_q2=self.model_q2,
+                                   model_target_q2=self.model_target_q2,
+                                   model_policy=self.model_policy)
+        if self.use_rnn:
+            ckpt.model_rnn = self.model_rnn
+            ckpt.model_target_rnn = self.model_target_rnn
+            if self.use_prediction:
+                ckpt.model_transition = self.model_transition
+                ckpt.model_reward = self.model_reward
+                ckpt.model_observation = self.model_observation
+
+        if self.use_auto_alpha:
+            ckpt.optimizer_alpha = self.optimizer_alpha
+
+        if self.use_reward_normalization:
+            ckpt.min_cum_reward = self.min_cum_reward
+            ckpt.max_cum_reward = self.max_cum_reward
+
+        if self.use_curiosity:
+            ckpt.model_forward = self.model_forward
+            ckpt.optimizer_forward = self.optimizer_forward
+
+        self.ckpt_manager = tf.train.CheckpointManager(ckpt, f'{model_path}/model', max_to_keep=10)
+
+        ckpt.restore(self.ckpt_manager.latest_checkpoint)
+        if self.ckpt_manager.latest_checkpoint:
+            logger.info(f'Restored from {self.ckpt_manager.latest_checkpoint}')
+            self.init_iteration = int(self.ckpt_manager.latest_checkpoint.split('-')[1].split('.')[0])
+        else:
+            logger.info('Initializing from scratch')
+            self.init_iteration = 0
+            self._update_target_variables()
+
     def _init_tf_function(self):
+        """
+        Initialize some @tf.function and specify tf.TensorSpec
+        """
         def _np_to_tensor(fn):
             def c(*args, **kwargs):
                 return fn(*[tf.constant(k) if not isinstance(k, tf.Tensor) else k for k in args if k is not None],
@@ -227,52 +276,6 @@ class SAC_Base(object):
                 kwargs['initial_rnn_state'] = tf.TensorSpec(shape=[None, self.rnn_state_dim], dtype=tf.float32)
             tmp_train = self._train.get_concrete_function(**kwargs)
             self._train = _np_to_tensor(tmp_train)
-
-    def _init_or_restore(self, model_path):
-        """
-        Initialize network weights from scratch or restore from model_root_path
-        """
-        ckpt = tf.train.Checkpoint(log_alpha=self.log_alpha,
-                                   global_step=self.global_step,
-
-                                   optimizer_q1=self.optimizer_q1,
-                                   optimizer_q2=self.optimizer_q2,
-                                   optimizer_policy=self.optimizer_policy,
-
-                                   model_q1=self.model_q1,
-                                   model_target_q1=self.model_target_q1,
-                                   model_q2=self.model_q2,
-                                   model_target_q2=self.model_target_q2,
-                                   model_policy=self.model_policy)
-        if self.use_rnn:
-            ckpt.model_rnn = self.model_rnn
-            ckpt.model_target_rnn = self.model_target_rnn
-            if self.use_prediction:
-                ckpt.model_transition = self.model_transition
-                ckpt.model_reward = self.model_reward
-                ckpt.model_observation = self.model_observation
-
-        if self.use_auto_alpha:
-            ckpt.optimizer_alpha = self.optimizer_alpha
-
-        if self.use_reward_normalization:
-            ckpt.min_cum_reward = self.min_cum_reward
-            ckpt.max_cum_reward = self.max_cum_reward
-
-        if self.use_curiosity:
-            ckpt.model_forward = self.model_forward
-            ckpt.optimizer_forward = self.optimizer_forward
-
-        self.ckpt_manager = tf.train.CheckpointManager(ckpt, f'{model_path}/model', max_to_keep=10)
-
-        ckpt.restore(self.ckpt_manager.latest_checkpoint)
-        if self.ckpt_manager.latest_checkpoint:
-            logger.info(f'Restored from {self.ckpt_manager.latest_checkpoint}')
-            self.init_iteration = int(self.ckpt_manager.latest_checkpoint.split('-')[1].split('.')[0])
-        else:
-            logger.info('Initializing from scratch')
-            self.init_iteration = 0
-            self._update_target_variables()
 
     def get_initial_rnn_state(self, batch_size):
         assert self.use_rnn
@@ -336,7 +339,7 @@ class SAC_Base(object):
                n_mu_probs=None):
         """
         tf.function
-        get target value
+        Get target value
         """
         if self.use_reward_normalization:
             n_rewards = n_rewards / tf.maximum(self.max_cum_reward, tf.abs(self.min_cum_reward))
@@ -469,15 +472,15 @@ class SAC_Base(object):
                     loss_transition += tfp.distributions.kl_divergence(approx_next_state_dist, std_normal)
                     loss_transition = tf.reduce_mean(loss_transition)
 
-                    # approx_next_state = self.model_transition(n_states[:, self.burn_in_step:, ...],
-                    #                                           n_actions[:, self.burn_in_step:, ...])
-                    # loss_transition = loss_mse(approx_next_state, m_states[:, self.burn_in_step + 1:, ...])
+                    # approx_next_n_states = self.model_transition(n_states[:, self.burn_in_step:, ...],
+                    #                                              n_actions[:, self.burn_in_step:, ...])
+                    # loss_transition = loss_mse(approx_next_n_states, m_states[:, self.burn_in_step + 1:, ...])
 
-                    approx_reward = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])
-                    loss_reward = loss_mse(approx_reward, tf.expand_dims(n_rewards[:, self.burn_in_step:], 2))
+                    approx_n_rewards = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])
+                    loss_reward = loss_mse(approx_n_rewards, tf.expand_dims(n_rewards[:, self.burn_in_step:], 2))
 
-                    approx_obs = self.model_observation(m_states[:, self.burn_in_step:, ...])
-                    loss_obs = loss_mse(approx_obs, m_obses[:, self.burn_in_step:, ...])
+                    approx_m_obs = self.model_observation(m_states[:, self.burn_in_step:, ...])
+                    loss_obs = loss_mse(approx_m_obs, m_obses[:, self.burn_in_step:, ...])
 
                     loss_rnn = loss_rnn + loss_transition + loss_reward + loss_obs
 
@@ -490,6 +493,7 @@ class SAC_Base(object):
             loss_policy = alpha * log_prob - tf.minimum(q1_for_gradient, q2_for_gradient)
             loss_alpha = -self.log_alpha * log_prob + self.log_alpha * self.action_dim
 
+        # Compute gradients and optimize loss
         grads_q1 = tape.gradient(loss_q1, self.model_q1.trainable_variables)
         self.optimizer_q1.apply_gradients(zip(grads_q1, self.model_q1.trainable_variables))
 
@@ -517,6 +521,7 @@ class SAC_Base(object):
 
         del tape
 
+        # Write summaries
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             with self.summary_writer.as_default():
                 tf.summary.scalar('loss/y', tf.reduce_mean(y), step=self.global_step)
@@ -539,6 +544,9 @@ class SAC_Base(object):
 
     @tf.function
     def get_n_rnn_states(self, n_obses, rnn_state):
+        """
+        tf.function
+        """
         *_, n_rnn_states = self.model_rnn(n_obses, [rnn_state])
         return n_rnn_states
 
@@ -657,6 +665,9 @@ class SAC_Base(object):
         self.ckpt_manager.save(iteration + self.init_iteration)
 
     def write_constant_summaries(self, constant_summaries, iteration):
+        """
+        Write constant information like reward, iteration from sac_main.py
+        """
         with self.summary_writer.as_default():
             for s in constant_summaries:
                 tf.summary.scalar(s['tag'], s['simple_value'], step=iteration + self.init_iteration)
@@ -670,10 +681,12 @@ class SAC_Base(object):
         n_rewards: [1, episode_len]
         obs_: [1, obs_dim]
         n_dones: [1, episode_len]
+        n_rnn_states: [1, episode_len, rnn_state_dim]
         """
         if self.use_reward_normalization:
             self.update_reward_bound(n_rewards)
 
+        # Ignore episodes whose length is too short
         if n_obses.shape[1] < self.burn_in_step + self.n_step:
             return
 
@@ -682,7 +695,7 @@ class SAC_Base(object):
         reward = n_rewards.reshape([-1])
         done = n_dones.reshape([-1])
 
-        # padding obs_
+        # Padding obs_ for episode experience replay
         obs = np.concatenate([obs, obs_])
         action = np.concatenate([action,
                                  np.empty([1, action.shape[-1]], dtype=np.float32)])
@@ -731,7 +744,7 @@ class SAC_Base(object):
             self.replay_buffer.add(storage_data)  # TODO
 
     def train(self):
-        # sample from replay buffer
+        # Sample from replay buffer
         sampled = self.replay_buffer.sample()
         if sampled is None:
             return
@@ -749,7 +762,7 @@ class SAC_Base(object):
         else:
             pointers, trans = sampled
 
-        # get n_step transitions
+        # Get n_step transitions
         trans = {k: [v] for k, v in trans.items()}
         # k: [v, v, ...]
         for i in range(1, self.burn_in_step + self.n_step + 1):
@@ -804,7 +817,7 @@ class SAC_Base(object):
             else:
                 n_pi_probs = self.get_n_step_probs(n_obses, n_actions).numpy()
 
-        # update td_error
+        # Update td_error
         if self.use_priority:
             td_error = self.get_td_error(n_obses, n_actions, n_rewards, obs_, n_dones,
                                          n_mu_probs=n_pi_probs if self.use_n_step_is else None,
@@ -812,7 +825,7 @@ class SAC_Base(object):
 
             self.replay_buffer.update(pointers, td_error)
 
-        # update rnn_state
+        # Update rnn_state
         if self.use_rnn:
             pointers_list = [pointers + i for i in range(1, self.burn_in_step + self.n_step + 1)]
             tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
@@ -820,7 +833,7 @@ class SAC_Base(object):
             rnn_states = n_rnn_states.reshape(-1, n_rnn_states.shape[-1])
             self.replay_buffer.update_transitions(tmp_pointers, 'rnn_state', rnn_states)
 
-        # update n_mu_probs
+        # Update n_mu_probs
         if self.use_n_step_is:
             pointers_list = [pointers + i for i in range(0, self.burn_in_step + self.n_step)]
             tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
