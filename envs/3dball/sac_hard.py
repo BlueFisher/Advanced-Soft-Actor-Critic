@@ -9,7 +9,7 @@ class ModelTransition(tf.keras.Model):
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(state_dim + state_dim)
+            tf.keras.layers.Dense(state_dim)
         ])
 
         self.next_state_tfpd = tfp.layers.DistributionLambda(make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
@@ -18,10 +18,10 @@ class ModelTransition(tf.keras.Model):
 
     def call(self, state, action):
         next_state = self.seq(tf.concat([state, action], -1))
-        mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
-        next_state_dist = self.next_state_tfpd([mean, tf.clip_by_value(tf.exp(logstd), 0.1, 1.)])
+        # mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
+        # next_state_dist = self.next_state_tfpd([mean, tf.exp(logstd)])
 
-        return next_state_dist
+        return next_state
 
 
 class ModelReward(tf.keras.Model):
@@ -37,6 +37,22 @@ class ModelReward(tf.keras.Model):
 
         return reward
 
+
+class ModelObservation(tf.keras.Model):
+    def __init__(self, state_dim, obs_dim):
+        super(ModelObservation, self).__init__()
+        self.seq = tf.keras.Sequential([
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(obs_dim)
+        ])
+
+        self(tf.keras.Input(shape=(state_dim,)))
+
+    def call(self, state):
+        obs = self.seq(state)
+
+        return obs
 
 class ModelRNN(tf.keras.Model):
     def __init__(self, obs_dim):
