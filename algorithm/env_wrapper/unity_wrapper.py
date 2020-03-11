@@ -18,7 +18,8 @@ class UnityWrapper:
                  base_port=5005,
                  seed=None,
                  no_graphics=False,
-                 args=None):
+                 scene=None,
+                 n_agents=1):
 
         seed = seed if seed is not None else np.random.randint(0, 65536)
 
@@ -41,8 +42,9 @@ class UnityWrapper:
                                      base_port=base_port,
                                      seed=seed,
                                      no_graphics=no_graphics,
-                                     args=args,
-                                     side_channels=[engine_configuration_channel, self.float_properties_channel])
+                                     args=['--scene', scene, '--n_agents', str(n_agents)],
+                                     side_channels=[engine_configuration_channel,
+                                                    self.float_properties_channel])
 
         self._env.reset()
         self.group_name = self._env.get_agent_groups()[0]
@@ -51,8 +53,8 @@ class UnityWrapper:
 
     def init(self):
         group_spec = self._env.get_agent_group_spec(self.group_name)
-        self._logger.info(f'observation shapes: {group_spec.observation_shapes}')
-        self._logger.info(f'action size: {group_spec.action_size}')
+        self._logger.info(f'Observation shapes: {group_spec.observation_shapes}')
+        self._logger.info(f'Action size: {group_spec.action_size}')
 
         obs_sizes = [s[0] for s in group_spec.observation_shapes]
         return sum(obs_sizes), group_spec.action_size
