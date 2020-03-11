@@ -19,7 +19,13 @@ def squash_correction_log_prob(dist, x):
 
 
 def debug(x):
-    return tf.print(tf.reduce_min(x), tf.reduce_mean(x), tf.reduce_max(x))
+    tf.print(tf.reduce_min(x), tf.reduce_mean(x), tf.reduce_max(x))
+
+
+def debug_grad(grads):
+    for grad in grads:
+        tf.print(grad.name)
+        debug(grad)
 
 
 class SAC_Base(object):
@@ -64,10 +70,10 @@ class SAC_Base(object):
         train_mode: Is training or inference
 
         seed: Random seed
-        write_summary_per_step: Write summaries in TensorBoard every N step
+        write_summary_per_step: Write summaries in TensorBoard every `write_summary_per_step` step
 
         burn_in_step: Burn-in steps in R2D2
-        n_step: Update Q function by N steps
+        n_step: Update Q function by `n_step` steps
         use_rnn: If use RNN
         use_prediction: If train a transition model
         """
@@ -149,6 +155,7 @@ class SAC_Base(object):
             if self.use_prediction:
                 self.model_transition = model.ModelTransition(state_dim, self.action_dim)
                 self.model_reward = model.ModelReward(state_dim)
+                self.model_observation = model.ModelObservation(state_dim, self.obs_dim)
         else:
             state_dim = self.obs_dim
             self.rnn_state_dim = 1
@@ -162,6 +169,8 @@ class SAC_Base(object):
         self.model_q2 = model.ModelQ(state_dim, self.action_dim)
         self.model_target_q2 = model.ModelQ(state_dim, self.action_dim)
         self.model_policy = model.ModelPolicy(state_dim, self.action_dim)
+
+        self.cem_rewards = None
 
     def _init_tf_function(self):
         def _np_to_tensor(fn):
@@ -241,6 +250,7 @@ class SAC_Base(object):
             if self.use_prediction:
                 ckpt.model_transition = self.model_transition
                 ckpt.model_reward = self.model_reward
+                ckpt.model_observation = self.model_observation
 
         if self.use_auto_alpha:
             ckpt.optimizer_alpha = self.optimizer_alpha
@@ -339,7 +349,7 @@ class SAC_Base(object):
         n_actions_sampled = policy.sample()
         n_actions_log_prob = tf.reduce_sum(squash_correction_log_prob(policy, n_actions_sampled), axis=2)
 
-        next_n_states = tf.concat([n_states[:, 1:, :], tf.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)
+        next_n_states = tf.concat([n_states[:, 1:, ...], tf.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)
         next_policy = self.model_policy(next_n_states)
         next_n_actions_sampled = next_policy.sample()
         next_n_actions_log_prob = tf.reduce_sum(squash_correction_log_prob(next_policy, next_n_actions_sampled), axis=2)
@@ -410,17 +420,17 @@ class SAC_Base(object):
             if self.use_rnn:
                 m_obses = tf.concat([n_obses, tf.reshape(obs_, (-1, 1, obs_.shape[-1]))], axis=1)
                 m_states, *_ = self.model_rnn(m_obses, initial_rnn_state)
-                n_states = m_states[:, :-1, :]
-                state = n_states[:, self.burn_in_step, :]
+                n_states = m_states[:, :-1, ...]
+                state = n_states[:, self.burn_in_step, ...]
 
                 m_target_states, *_ = self.model_target_rnn(m_obses, initial_rnn_state)
-                state_ = m_target_states[:, -1, :]
+                state_ = m_target_states[:, -1, ...]
             else:
                 n_states = n_obses
-                state = n_obses[:, 0, :]
+                state = n_obses[:, 0, ...]
                 state_ = obs_
 
-            action = n_actions[:, self.burn_in_step, :]
+            action = n_actions[:, self.burn_in_step, ...]
 
             alpha = tf.exp(self.log_alpha)
 
@@ -432,8 +442,8 @@ class SAC_Base(object):
             q2 = self.model_q2(state, action)
             q2_for_gradient = self.model_q2(state, tf.tanh(action_sampled))
 
-            y = tf.stop_gradient(self._get_y(n_states[:, self.burn_in_step:, :],
-                                             n_actions[:, self.burn_in_step:, :],
+            y = tf.stop_gradient(self._get_y(n_states[:, self.burn_in_step:, ...],
+                                             n_actions[:, self.burn_in_step:, ...],
                                              n_rewards[:, self.burn_in_step:],
                                              state_, n_dones[:, self.burn_in_step:],
                                              n_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None))
@@ -451,22 +461,29 @@ class SAC_Base(object):
                 loss_rnn = loss_q1 + loss_q2
 
                 if self.use_prediction:
-                    approx_next_state_dist = self.model_transition(n_states[:, self.burn_in_step:, :],
-                                                                   n_actions[:, self.burn_in_step:, :])
-                    loss_transition = -approx_next_state_dist.log_prob(m_states[:, self.burn_in_step + 1:, :])
+                    approx_next_state_dist = self.model_transition(n_states[:, self.burn_in_step:, ...],
+                                                                   n_actions[:, self.burn_in_step:, ...])
+                    loss_transition = -approx_next_state_dist.log_prob(m_states[:, self.burn_in_step + 1:, ...])
                     std_normal = tfp.distributions.Normal(tf.zeros_like(approx_next_state_dist.loc),
                                                           tf.ones_like(approx_next_state_dist.scale))
                     loss_transition += tfp.distributions.kl_divergence(approx_next_state_dist, std_normal)
                     loss_transition = tf.reduce_mean(loss_transition)
 
-                    approx_reward = self.model_reward(m_states[:, self.burn_in_step + 1:, :])
+                    # approx_next_state = self.model_transition(n_states[:, self.burn_in_step:, ...],
+                    #                                           n_actions[:, self.burn_in_step:, ...])
+                    # loss_transition = loss_mse(approx_next_state, m_states[:, self.burn_in_step + 1:, ...])
+
+                    approx_reward = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])
                     loss_reward = loss_mse(approx_reward, tf.expand_dims(n_rewards[:, self.burn_in_step:], 2))
 
-                    loss_rnn = loss_rnn + loss_transition + loss_reward
+                    approx_obs = self.model_observation(m_states[:, self.burn_in_step:, ...])
+                    loss_obs = loss_mse(approx_obs, m_obses[:, self.burn_in_step:, ...])
+
+                    loss_rnn = loss_rnn + loss_transition + loss_reward + loss_obs
 
             if self.use_curiosity:
                 approx_next_n_states = self.model_forward(n_states, n_actions)
-                next_n_states = tf.concat([n_states[:, 1:, :], tf.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)
+                next_n_states = tf.concat([n_states[:, 1:, ...], tf.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)
                 loss_forward = tf.reduce_mean(tf.math.squared_difference(approx_next_n_states, next_n_states))
 
             log_prob = tf.reduce_sum(squash_correction_log_prob(policy, action_sampled), axis=1, keepdims=True)
@@ -510,6 +527,7 @@ class SAC_Base(object):
                 if self.use_rnn and self.use_prediction:
                     tf.summary.scalar('loss/transition', -tf.reduce_mean(loss_transition), step=self.global_step)
                     tf.summary.scalar('loss/reward', tf.reduce_mean(loss_reward), step=self.global_step)
+                    tf.summary.scalar('loss/observation', tf.reduce_mean(loss_obs), step=self.global_step)
 
                 tf.summary.scalar('loss/Q1', tf.reduce_mean(loss_q1), step=self.global_step)
                 tf.summary.scalar('loss/Q2', tf.reduce_mean(loss_q2), step=self.global_step)
@@ -545,6 +563,62 @@ class SAC_Base(object):
         return tf.tanh(action), next_rnn_state
 
     @tf.function
+    def _cal_cem_reward(self, state, action):
+        cem_horizon = 12
+
+        if self.cem_rewards is None:
+            self.cem_rewards = tf.Variable(tf.zeros([state.shape[0], cem_horizon]))
+
+        for j in range(cem_horizon):
+            state_ = self.model_transition(state, action).sample()
+            self.cem_rewards[:, j:j + 1].assign(self.model_reward(state_))
+            state = state_
+            action = tf.tanh(self.model_policy(state).sample())
+
+        return self.cem_rewards
+
+    @tf.function
+    def choose_action_by_cem(self, obs, rnn_state):
+        obs = tf.reshape(obs, (-1, 1, obs.shape[-1]))
+        state, next_rnn_state, _ = self.model_rnn(obs, [rnn_state])
+
+        state = tf.reshape(state, (-1, state.shape[-1]))
+
+        repeat = 1000
+        top = 100
+        iteration = 10
+
+        batch = state.shape[0]
+        dist = self.model_policy(state)
+        mean, std = dist.loc, dist.scale
+
+        for i in range(iteration):
+            state_repeated = tf.repeat(state, repeat, axis=0)
+            mean_repeated = tf.repeat(mean, repeat, axis=0)
+            std_repeated = tf.repeat(std, repeat, axis=0)
+
+            action_repeated = tfp.distributions.Normal(mean_repeated, std_repeated)
+            action_repeated = tf.tanh(action_repeated.sample())
+
+            rewards = self._cal_cem_reward(state_repeated, action_repeated)
+
+            cum_reward = tf.reshape(tf.reduce_sum(rewards, axis=1), [batch, repeat])
+            sorted_index = tf.argsort(cum_reward, axis=1)
+            sorted_index = sorted_index[..., -top:]
+            sorted_index = tf.reshape(sorted_index, [-1])
+            tmp_index = tf.repeat(tf.range(batch), top, axis=0)
+
+            action_repeated = tf.reshape(action_repeated, [batch, repeat, 2])
+            action_repeated = tf.gather_nd(action_repeated, tf.unstack([tmp_index, sorted_index], axis=1))
+            action_repeated = tf.reshape(action_repeated, [batch, top, 2])
+            mean = tf.reduce_mean(tf.atanh(action_repeated * 0.9999), axis=1)
+            std = tf.math.reduce_std(tf.atanh(action_repeated * 0.9999), axis=1)
+
+        action = tfp.distributions.Normal(mean, std)
+        action = tf.tanh(action.sample())
+        return action, next_rnn_state
+
+    @tf.function
     def get_td_error(self, n_obses, n_actions, n_rewards, obs_, n_dones,
                      n_mu_probs=None, rnn_state=None):
         """
@@ -553,7 +627,7 @@ class SAC_Base(object):
         if self.use_rnn:
             m_obses = tf.concat([n_obses, tf.reshape(obs_, (-1, 1, obs_.shape[-1]))], axis=1)
             m_target_states, *_ = self.model_target_rnn(m_obses, [rnn_state])
-            state_ = m_target_states[:, -1, :]
+            state_ = m_target_states[:, -1, ...]
 
             n_states, *_ = self.model_rnn(n_obses,
                                           [rnn_state])
@@ -561,13 +635,13 @@ class SAC_Base(object):
             n_states = n_obses
             state_ = obs_
 
-        state = n_states[:, self.burn_in_step, :]
-        action = n_actions[:, self.burn_in_step, :]
+        state = n_states[:, self.burn_in_step, ...]
+        action = n_actions[:, self.burn_in_step, ...]
 
         q1 = self.model_q1(state, action)
         q2 = self.model_q2(state, action)
-        y = self._get_y(n_states[:, self.burn_in_step:, :],
-                        n_actions[:, self.burn_in_step:, :],
+        y = self._get_y(n_states[:, self.burn_in_step:, ...],
+                        n_actions[:, self.burn_in_step:, ...],
                         n_rewards[:, self.burn_in_step:],
                         state_, n_dones[:, self.burn_in_step:],
                         n_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
@@ -627,7 +701,7 @@ class SAC_Base(object):
         if self.use_n_step_is:
             if self.use_rnn:
                 n_mu_probs = self.get_rnn_n_step_probs(n_obses, n_actions,
-                                                       n_rnn_states[:, 0, :]).numpy()
+                                                       n_rnn_states[:, 0, ...]).numpy()
             else:
                 n_mu_probs = self.get_n_step_probs(n_obses, n_actions).numpy()
 
@@ -698,19 +772,19 @@ class SAC_Base(object):
         m_rewards = trans['reward']
         m_dones = trans['done']
 
-        n_obses = m_obses[:, :-1, :]
-        n_actions = m_actions[:, :-1, :]
+        n_obses = m_obses[:, :-1, ...]
+        n_actions = m_actions[:, :-1, ...]
         n_rewards = m_rewards[:, :-1]
-        obs_ = m_obses[:, -1, :]
+        obs_ = m_obses[:, -1, ...]
         n_dones = m_dones[:, :-1]
 
         if self.use_n_step_is:
             m_mu_probs = trans['mu_prob']
-            n_mu_probs = m_mu_probs[:, :-1, :]
+            n_mu_probs = m_mu_probs[:, :-1, ...]
 
         if self.use_rnn:
             m_rnn_states = trans['rnn_state']
-            rnn_state = m_rnn_states[:, 0, :]
+            rnn_state = m_rnn_states[:, 0, ...]
 
         self._train(n_obses=n_obses,
                     n_actions=n_actions,

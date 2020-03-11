@@ -168,6 +168,8 @@ class Main(object):
                                                      0, False, False,
                                                      np.zeros(self.obs_dim),
                                                      initial_rnn_state[0])
+                    # action, next_rnn_state = self.sac.choose_action_by_cem(obs.astype(np.float32),
+                    #                               rnn_state)
 
                     action, next_rnn_state = self.sac.choose_rnn_action(obs.astype(np.float32),
                                                                         rnn_state)
