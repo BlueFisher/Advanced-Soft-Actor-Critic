@@ -43,6 +43,24 @@ class ModelTransition(tf.keras.Model):
         return next_state_dist
 
 
+class ModelObservation(tf.keras.Model):
+    def __init__(self, state_dim, obs_dim):
+        super(ModelObservation, self).__init__()
+        self.seq = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(obs_dim)
+        ])
+
+        self(tf.keras.Input(shape=(state_dim,)))
+
+    def call(self, state):
+        obs = self.seq(state)
+
+        return obs
+
+
 class ModelReward(tf.keras.Model):
     def __init__(self, state_dim):
         super(ModelReward, self).__init__()
@@ -69,7 +87,7 @@ class ModelRNN(tf.keras.Model):
         self.get_call_result_tensors()
 
     def call(self, obs, initial_state):
-        outputs, next_rnn_state = self.layer_rnn(obs[:, :, -4:], initial_state=initial_state)
+        outputs, next_rnn_state = self.layer_rnn(obs[:, :, -4:-2], initial_state=initial_state)
 
         state = tf.concat([outputs, obs], -1)
 

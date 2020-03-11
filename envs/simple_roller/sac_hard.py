@@ -32,10 +32,28 @@ class ModelReward(tf.keras.Model):
             tf.keras.layers.Dense(1)
         ])
 
+        self(tf.keras.Input(shape=(state_dim,)))
+
     def call(self, state):
         reward = self.seq(state)
 
         return reward
+
+
+class ModelObservation(tf.keras.Model):
+    def __init__(self, state_dim, obs_dim):
+        super(ModelObservation, self).__init__()
+        self.seq = tf.keras.Sequential([
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(obs_dim)
+        ])
+
+        self(tf.keras.Input(shape=(state_dim,)))
+
+    def call(self, state):
+        obs = self.seq(state)
+
+        return obs
 
 
 class ModelRNN(tf.keras.Model):
