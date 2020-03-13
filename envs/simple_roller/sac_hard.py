@@ -56,9 +56,9 @@ class ModelObservation(tf.keras.Model):
         return obs
 
 
-class ModelRNN(tf.keras.Model):
+class ModelRep(tf.keras.Model):
     def __init__(self, obs_dim):
-        super(ModelRNN, self).__init__()
+        super(ModelRep, self).__init__()
         self.obs_dim = obs_dim
         self.rnn_units = 32
         self.layer_rnn = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
