@@ -77,9 +77,9 @@ class ModelReward(tf.keras.Model):
         return reward
 
 
-class ModelRNN(tf.keras.Model):
+class ModelRep(tf.keras.Model):
     def __init__(self, obs_dim):
-        super(ModelRNN, self).__init__()
+        super(ModelRep, self).__init__()
         self.obs_dim = obs_dim
         self.rnn_units = 8
         self.layer_rnn = tf.keras.layers.RNN(tf.keras.layers.GRUCell(self.rnn_units),

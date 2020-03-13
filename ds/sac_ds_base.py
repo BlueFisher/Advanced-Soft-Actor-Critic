@@ -21,7 +21,6 @@ class SAC_DS_Base(SAC_Base):
                  burn_in_step=0,
                  n_step=1,
                  use_rnn=False,
-                 use_prediction=True,
 
                  seed=None,
                  write_summary_per_step=20,
@@ -29,12 +28,13 @@ class SAC_DS_Base(SAC_Base):
                  update_target_per_step=1,
                  init_log_alpha=-2.3,
                  use_auto_alpha=True,
+                 rep_lr=3e-4,
                  q_lr=3e-4,
                  policy_lr=3e-4,
                  alpha_lr=3e-4,
-                 rnn_lr=3e-4,
                  gamma=0.99,
                  _lambda=0.9,
+                 use_prediction=False,
                  use_reward_normalization=False):
 
         physical_devices = tf.config.experimental.list_physical_devices('GPU')
@@ -48,7 +48,6 @@ class SAC_DS_Base(SAC_Base):
         self.burn_in_step = burn_in_step
         self.n_step = n_step
         self.use_rnn = use_rnn
-        self.use_prediction = use_prediction
 
         self.write_summary_per_step = write_summary_per_step
         self.tau = tau
@@ -56,6 +55,7 @@ class SAC_DS_Base(SAC_Base):
         self.use_auto_alpha = use_auto_alpha
         self.gamma = gamma
         self._lambda = _lambda
+        self.use_prediction = use_prediction
         self.use_reward_normalization = use_reward_normalization
         self.use_priority = True
         self.use_n_step_is = True
@@ -64,7 +64,7 @@ class SAC_DS_Base(SAC_Base):
             tf.random.set_seed(seed)
 
         self._build_model(model, init_log_alpha,
-                          q_lr, policy_lr, alpha_lr, rnn_lr)
+                          q_lr, policy_lr, alpha_lr, rep_lr)
         if model_root_path is not None:
             self._init_or_restore(model_root_path)
 

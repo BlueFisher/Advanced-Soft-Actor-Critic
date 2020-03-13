@@ -38,20 +38,20 @@ sac_config:
   burn_in_step: 0
   n_step: 1
   use_rnn: false
-  use_prediction: true
 
   tau: 0.005
   update_target_per_step: 1
   init_log_alpha: -2.3
   use_auto_alpha: true
+  rep_lr: 0.0003
   q_lr: 0.0003
   policy_lr: 0.0003
   alpha_lr: 0.0003
-  rnn_lr: 0.0003
   gamma: 0.99
   _lambda: 1.0
   use_priority: true
   use_n_step_is: true
+  use_prediction: false
   use_reward_normalization: false
   use_curiosity: false
   curiosity_strength: 1
