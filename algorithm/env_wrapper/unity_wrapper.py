@@ -2,6 +2,10 @@ import logging
 
 import numpy as np
 
+if __name__ == "__main__":
+    import sys
+    sys.path.append('../..')
+
 from mlagents_envs.environment import UnityEnvironment
 from mlagents_envs.side_channel.engine_configuration_channel import EngineConfig, EngineConfigurationChannel
 from mlagents_envs.side_channel.float_properties_channel import FloatPropertiesChannel
@@ -146,20 +150,15 @@ class UnityWrapper:
 
 
 if __name__ == "__main__":
-
-    env = EnvWrapper(True, base_port=5004)
-    n_agents, obs = env.reset({
-        'copy': 4
-    })
+    env = UnityWrapper(True, base_port=5004)
+    n_agents, obs = env.reset()
     print('n_agents', n_agents)
-    print('obs', obs)
+    # print('obs', obs)
 
     for _ in range(10000):
         obs, reward, done, max_step = env.step(np.random.randn(n_agents, 2))
 
-        print('obs', obs.shape)
-        print('reward', reward)
         print('done', done)
-        print('max_step', max_step)
+        input()
 
     env.close()
