@@ -9,7 +9,7 @@ class ModelTransition(tf.keras.Model):
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(state_dim)
+            tf.keras.layers.Dense(state_dim + state_dim)
         ])
 
         self.next_state_tfpd = tfp.layers.DistributionLambda(make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
@@ -18,10 +18,10 @@ class ModelTransition(tf.keras.Model):
 
     def call(self, state, action):
         next_state = self.seq(tf.concat([state, action], -1))
-        # mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
-        # next_state_dist = self.next_state_tfpd([mean, tf.exp(logstd)])
+        mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
+        next_state_dist = self.next_state_tfpd([mean, tf.clip_by_value(tf.exp(logstd), 0, 1.)])
 
-        return next_state
+        return next_state_dist
 
 
 class ModelReward(tf.keras.Model):
@@ -31,6 +31,8 @@ class ModelReward(tf.keras.Model):
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(1)
         ])
+
+        self(tf.keras.Input(shape=(state_dim,)))
 
     def call(self, state):
         reward = self.seq(state)
@@ -43,7 +45,6 @@ class ModelObservation(tf.keras.Model):
         super(ModelObservation, self).__init__()
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(obs_dim)
         ])
 
@@ -54,9 +55,10 @@ class ModelObservation(tf.keras.Model):
 
         return obs
 
-class ModelRNN(tf.keras.Model):
+
+class ModelRep(tf.keras.Model):
     def __init__(self, obs_dim):
-        super(ModelRNN, self).__init__()
+        super(ModelRep, self).__init__()
         self.obs_dim = obs_dim
         self.rnn_units = 32
         self.layer_rnn = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
