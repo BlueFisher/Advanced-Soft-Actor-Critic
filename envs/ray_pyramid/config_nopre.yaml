@@ -7,16 +7,15 @@ base_config:
   name: "ray15_nopre_{time}"
   max_iter: 500
   save_model_per_iter: 50
-  reset_on_iteration: false
+  reset_on_iteration: true
   
 reset_config:
   force_reset: true
-  avoid_wall: false
 
 sac_config:
   seed: 42
 
-  burn_in_step: 10
+  burn_in_step: 15
   n_step: 5
   use_rnn: true
   use_prediction: false
