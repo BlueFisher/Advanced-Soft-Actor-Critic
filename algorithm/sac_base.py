@@ -450,21 +450,22 @@ class SAC_Base(object):
                                              n_dones[:, self.burn_in_step:],
                                              n_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None))
 
-            loss_mse = tf.keras.losses.MeanSquaredError()
-
-            loss_q1 = loss_mse(q1, y)
-            loss_q2 = loss_mse(q2, y)
-
+            loss_q1 = tf.square(q1 - y)
+            loss_q2 = tf.square(q2 - y)
             if self.use_priority:
                 loss_q1 *= priority_is
                 loss_q2 *= priority_is
+            loss_q1 = tf.reduce_mean(loss_q1)
+            loss_q2 = tf.reduce_mean(loss_q2)
 
-            loss_rep = loss_q1 + loss_q2
+            loss_rep = loss_rep_q = loss_q1 + loss_q2
 
             if self.use_prediction:
+                loss_mse = tf.keras.losses.MeanSquaredError()
+
                 approx_next_state_dist = self.model_transition(n_states[:, self.burn_in_step:, ...],
                                                                n_actions[:, self.burn_in_step:, ...])
-                loss_transition = -approx_next_state_dist.log_prob(m_states[:, self.burn_in_step + 1:, ...])
+                loss_transition = -approx_next_state_dist.log_prob(m_target_states[:, self.burn_in_step + 1:, ...])
                 std_normal = tfp.distributions.Normal(tf.zeros_like(approx_next_state_dist.loc),
                                                       tf.ones_like(approx_next_state_dist.scale))
                 loss_transition += tfp.distributions.kl_divergence(approx_next_state_dist, std_normal)
@@ -480,7 +481,7 @@ class SAC_Base(object):
                 approx_m_obs = self.model_observation(m_states[:, self.burn_in_step:, ...])
                 loss_obs = loss_mse(approx_m_obs, m_obses[:, self.burn_in_step:, ...])
 
-                loss_rep = loss_rep + loss_transition + loss_reward + loss_obs
+                loss_rep = loss_rep_q + loss_transition + loss_reward + loss_obs
 
             if self.use_curiosity:
                 approx_next_n_states = self.model_forward(n_states, n_actions)
@@ -506,6 +507,9 @@ class SAC_Base(object):
         grads_rep = tape.gradient(loss_rep, rep_variables)
         self.optimizer_rep.apply_gradients(zip(grads_rep, rep_variables))
 
+        # test_grads = tape.gradient(loss_transition, self.model_rep.trainable_variables + self.model_transition.trainable_variables)
+        # debug_grad(test_grads)
+
         if self.use_curiosity:
             grads_forward = tape.gradient(loss_forward, self.model_forward.trainable_variables)
             self.optimizer_forward.apply_gradients(zip(grads_forward, self.model_forward.trainable_variables))
@@ -527,10 +531,11 @@ class SAC_Base(object):
                 if self.use_curiosity:
                     tf.summary.scalar('loss/forward', tf.reduce_mean(loss_forward), step=self.global_step)
 
+                tf.summary.scalar('loss/rep_q', loss_rep_q, step=self.global_step)
                 if self.use_prediction:
-                    tf.summary.scalar('loss/transition', -tf.reduce_mean(loss_transition), step=self.global_step)
-                    tf.summary.scalar('loss/reward', tf.reduce_mean(loss_reward), step=self.global_step)
-                    tf.summary.scalar('loss/observation', tf.reduce_mean(loss_obs), step=self.global_step)
+                    tf.summary.scalar('loss/transition', -loss_transition, step=self.global_step)
+                    tf.summary.scalar('loss/reward', loss_reward, step=self.global_step)
+                    tf.summary.scalar('loss/observation', loss_obs, step=self.global_step)
 
                 tf.summary.scalar('loss/Q1', tf.reduce_mean(loss_q1), step=self.global_step)
                 tf.summary.scalar('loss/Q2', tf.reduce_mean(loss_q2), step=self.global_step)

@@ -9,6 +9,9 @@ base_config:
   save_model_per_iter: 50
   reset_on_iteration: false
   
+replay_config:
+  beta: 0.1
+  beta_increment_per_sampling: 0
 
 sac_config:
   seed: 42
