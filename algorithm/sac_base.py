@@ -333,6 +333,7 @@ class SAC_Base(object):
 
         self._update_reward_bound(np.min(cum_rewards), np.max(cum_rewards))
 
+    @tf.function
     def _get_y(self, n_states, n_actions, n_rewards, state_, n_dones,
                n_mu_probs=None):
         """
@@ -460,9 +461,8 @@ class SAC_Base(object):
 
             loss_rep = loss_rep_q = loss_q1 + loss_q2
 
+            loss_mse = tf.keras.losses.MeanSquaredError()
             if self.use_prediction:
-                loss_mse = tf.keras.losses.MeanSquaredError()
-
                 approx_next_state_dist = self.model_transition(n_states[:, self.burn_in_step:, ...],
                                                                n_actions[:, self.burn_in_step:, ...])
                 loss_transition = -approx_next_state_dist.log_prob(m_target_states[:, self.burn_in_step + 1:, ...])
@@ -484,9 +484,10 @@ class SAC_Base(object):
                 loss_rep = loss_rep_q + loss_transition + loss_reward + loss_obs
 
             if self.use_curiosity:
-                approx_next_n_states = self.model_forward(n_states, n_actions)
-                next_n_states = tf.concat([n_states[:, 1:, ...], tf.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)
-                loss_forward = tf.reduce_mean(tf.math.squared_difference(approx_next_n_states, next_n_states))
+                approx_next_n_states = self.model_forward(n_states[:, self.burn_in_step:, ...],
+                                                          n_actions[:, self.burn_in_step:, ...])
+                next_n_states = m_states[:, self.burn_in_step + 1:, ...]
+                loss_forward = loss_mse(approx_next_n_states, next_n_states)
 
             log_prob = tf.reduce_sum(squash_correction_log_prob(policy, action_sampled), axis=1, keepdims=True)
             loss_policy = alpha * log_prob - tf.minimum(q1_for_gradient, q2_for_gradient)
@@ -529,7 +530,7 @@ class SAC_Base(object):
                 tf.summary.scalar('loss/y', tf.reduce_mean(y), step=self.global_step)
 
                 if self.use_curiosity:
-                    tf.summary.scalar('loss/forward', tf.reduce_mean(loss_forward), step=self.global_step)
+                    tf.summary.scalar('loss/forward', loss_forward, step=self.global_step)
 
                 tf.summary.scalar('loss/rep_q', loss_rep_q, step=self.global_step)
                 if self.use_prediction:
