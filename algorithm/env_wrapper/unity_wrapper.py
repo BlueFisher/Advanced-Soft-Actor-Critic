@@ -58,10 +58,11 @@ class UnityWrapper:
     def init(self):
         group_spec = self._env.get_agent_group_spec(self.group_name)
         self._logger.info(f'Observation shapes: {group_spec.observation_shapes}')
-        self._logger.info(f'Action size: {group_spec.action_size}')
+        is_discrete = group_spec.is_action_discrete()
+        self._logger.info(f'Action size: {group_spec.action_size}. Is discrete: {is_discrete}')
 
         obs_sizes = [s[0] for s in group_spec.observation_shapes]
-        return sum(obs_sizes), group_spec.action_size
+        return sum(obs_sizes), group_spec.action_size, is_discrete
 
     def reset(self, reset_config=None):
         reset_config = {} if reset_config is None else reset_config
