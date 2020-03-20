@@ -109,7 +109,7 @@ class Main(object):
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')
 
-        self.obs_dim, self.action_dim = self.env.init()
+        self.obs_dim, self.action_dim, self.is_discrete = self.env.init()
 
         # If model exists, load saved model, or copy a new one
         if os.path.isfile(f'{model_root_path}/sac_model.py'):
@@ -120,6 +120,7 @@ class Main(object):
 
         self.sac = SAC_Base(obs_dim=self.obs_dim,
                             action_dim=self.action_dim,
+                            is_discrete=self.is_discrete,
                             model_root_path=model_root_path,
                             model=custom_sac_model,
                             train_mode=self.train_mode,
