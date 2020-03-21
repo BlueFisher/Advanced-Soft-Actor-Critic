@@ -2,7 +2,7 @@ base_config:
   build_path: 
     win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
-  scene: RayObstacleWalker
+  scene: RayObstacleSquare
 
   name: "obstacle_wall_{time}"
   max_iter: 1000

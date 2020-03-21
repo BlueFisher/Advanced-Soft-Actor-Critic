@@ -81,23 +81,22 @@ class ModelRep(tf.keras.Model):
     def __init__(self, obs_dim):
         super(ModelRep, self).__init__()
         self.obs_dim = obs_dim
-        self.rnn_units = 32
+        self.rnn_units = 16
         self.layer_rnn = tf.keras.layers.RNN(tf.keras.layers.GRUCell(self.rnn_units),
                                              return_sequences=True,
                                              return_state=True)
-        self.layer_ray = tf.keras.Sequential([
-            tf.keras.layers.Reshape([-1, 11, 4]),
-            tf.keras.layers.Dense(4, activation=tf.nn.relu),
-            tf.keras.layers.Reshape([-1, 11 * 4])
-        ])
+        # self.layer_ray = tf.keras.Sequential([
+        #     tf.keras.layers.Reshape([-1, 11, 4]),
+        #     tf.keras.layers.Dense(4, activation=tf.nn.relu),
+        #     tf.keras.layers.Reshape([-1, 11 * 4])
+        # ])
 
         self.get_call_result_tensors()
 
     def call(self, obs, initial_state):
-        outputs, next_rnn_state = self.layer_rnn(obs[:, :, -4:-2], initial_state=initial_state)
+        outputs, next_rnn_state = self.layer_rnn(obs[:, :, -6:-2], initial_state=initial_state)
 
-        ray = self.layer_ray(obs[:, :, :44])
-        state = tf.concat([ray, obs[:, :, -4:], outputs], -1)
+        state = tf.concat([obs, outputs], -1)
 
         return state, next_rnn_state, outputs
 
