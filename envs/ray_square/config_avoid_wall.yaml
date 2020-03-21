@@ -2,7 +2,7 @@ base_config:
   build_path: 
     win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
-  scene: RayWalker
+  scene: RaySquare
 
   name: "avoidwall_{time}"
   max_iter: 500
