@@ -2,6 +2,8 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+from algorithm.common_models import ModelRNNRep
+
 
 class ModelTransition(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
@@ -41,11 +43,11 @@ class ModelReward(tf.keras.Model):
 
 
 class ModelObservation(tf.keras.Model):
-    def __init__(self, state_dim, obs_dim):
+    def __init__(self, state_dim, obs_dims):
         super(ModelObservation, self).__init__()
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(obs_dim)
+            tf.keras.layers.Dense(obs_dims[0][0])
         ])
 
         self(tf.keras.Input(shape=(state_dim,)))
@@ -53,13 +55,17 @@ class ModelObservation(tf.keras.Model):
     def call(self, state):
         obs = self.seq(state)
 
-        return obs
+        return [obs]
+
+    def get_loss(self, state, obs_list):
+        approx_obs = self.seq(state)
+
+        return tf.reduce_mean(tf.square(approx_obs - obs_list[0]))
 
 
-class ModelRep(tf.keras.Model):
-    def __init__(self, obs_dim):
-        super(ModelRep, self).__init__()
-        self.obs_dim = obs_dim
+class ModelRep(ModelRNNRep):
+    def __init__(self, obs_dims):
+        super(ModelRep, self).__init__(obs_dims)
         self.rnn_units = 32
         self.layer_rnn = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
         self.seq = tf.keras.Sequential([
@@ -68,17 +74,14 @@ class ModelRep(tf.keras.Model):
 
         self.get_call_result_tensors()
 
-    def call(self, obs, initial_state):
+    def call(self, obs_list, initial_state):
+        obs = obs_list[0]
         outputs, next_rnn_state = self.layer_rnn(obs, initial_state=initial_state)
 
         state = tf.concat([obs, outputs], -1)
         state = self.seq(state)
 
         return state, next_rnn_state, outputs
-
-    def get_call_result_tensors(self):
-        return self(tf.keras.Input(shape=(None, self.obs_dim,), dtype=tf.float32),
-                    tf.keras.Input(shape=(self.rnn_units,), dtype=tf.float32))
 
 
 class ModelQ(tf.keras.Model):

@@ -2,36 +2,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-
-class ModelForward(tf.keras.Model):
-    def __init__(self, state_dim, action_dim):
-        super(ModelForward, self).__init__()
-        self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(state_dim)
-        ])
-
-        self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(action_dim,)))
-
-    def call(self, state, action):
-        next_state = self.seq(tf.concat([state, action], -1))
-
-        return next_state
-
-
-class ModelRep(tf.keras.Model):
-    def __init__(self, obs_dim):
-        super(ModelRep, self).__init__()
-        self.obs_dim = obs_dim
-
-        self.get_call_result_tensors()
-
-    def call(self, obs):
-        return obs
-
-    def get_call_result_tensors(self):
-        return self(tf.keras.Input(shape=(self.obs_dim,), dtype=tf.float32))
+from algorithm.common_models import ModelSimpleRep as ModelRep
 
 
 class ModelQ(tf.keras.Model):

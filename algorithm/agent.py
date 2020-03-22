@@ -14,21 +14,21 @@ class Agent(object):
         self._tmp_episode_trans = list()
 
     def add_transition(self,
-                       obs,
+                       obs_list,
                        action,
                        reward,
                        local_done,
                        max_reached,
-                       obs_,
+                       next_obs_list,
                        rnn_state=None):
 
         transition = {
-            'obs': obs,
+            'obs_list': obs_list,
             'action': action,
             'reward': reward,
             'local_done': local_done,
             'max_reached': max_reached,
-            'obs_': obs_,
+            'next_obs_list': next_obs_list,
             'rnn_state': rnn_state
         }
         self._tmp_episode_trans.append(transition)
@@ -37,42 +37,60 @@ class Agent(object):
             self.reward += reward
         self.last_reward += reward
 
-        self._extra_log(obs,
+        self._extra_log(obs_list,
                         action,
                         reward,
                         local_done,
                         max_reached,
-                        obs_)
+                        next_obs_list)
 
         if local_done:
             self.done = True
             self.last_reward = 0
 
             episode_trans = self._get_episode_trans()
-            episode_trans = [np.asarray([t], dtype=np.float32) for t in episode_trans]
             self._tmp_episode_trans.clear()
 
             return episode_trans
 
     def _extra_log(self,
-                   obs,
+                   obs_list,
                    action,
                    reward,
                    local_done,
                    max_reached,
-                   obs_):
+                   next_obs_list):
         pass
 
     def _get_episode_trans(self):
-        trans = [[t['obs'] for t in self._tmp_episode_trans],
-                 [t['action'] for t in self._tmp_episode_trans],
-                 [t['reward'] for t in self._tmp_episode_trans],
-                 self._tmp_episode_trans[-1]['obs_'],
-                 [t['local_done'] and not t['max_reached'] for t in self._tmp_episode_trans]]
-        if self.use_rnn:
-            trans.append([t['rnn_state'] for t in self._tmp_episode_trans])
+        obs_list = [t['obs_list'] for t in self._tmp_episode_trans]
+        obs_list = [np.stack(t, axis=0) for t in zip(*obs_list)]
+        obs_list = [np.expand_dims(t, 0).astype(np.float32) for t in obs_list]
+        # list([1, ep_len, obs_dim_i], ...)
 
-        return trans
+        action = np.stack([t['action'] for t in self._tmp_episode_trans], axis=0)
+        action = np.expand_dims(action, 0).astype(np.float32)  # [1, ep_len, action_dim]
+
+        reward = np.stack([t['reward'] for t in self._tmp_episode_trans], axis=0)
+        reward = np.expand_dims(reward, 0).astype(np.float32)  # [1, ep_len]
+
+        next_obs_list = [np.expand_dims(t, 0).astype(np.float32)
+                     for t in self._tmp_episode_trans[-1]['next_obs_list']]
+        # list([1, obs_dim_i], ...)
+
+        done = np.stack([t['local_done'] and not t['max_reached'] for t in self._tmp_episode_trans],
+                         axis=0)
+        done = np.expand_dims(done, 0).astype(np.float32)  # [1, ep_len]
+
+        episode_trans = [obs_list, action, reward, next_obs_list, done]
+
+        if self.use_rnn:
+            rnn_state = np.stack([t['rnn_state'] for t in self._tmp_episode_trans], axis=0)
+            rnn_state = np.expand_dims(rnn_state, 0).astype(np.float32)
+            # [1, ep_len, rnn_state_dim]
+            episode_trans.append(rnn_state)
+
+        return episode_trans
 
     def is_empty(self):
         return len(self._tmp_episode_trans) == 0
@@ -88,12 +106,16 @@ class Agent(object):
 
 
 if __name__ == "__main__":
-    agent = Agent(0, 6)
-    for i in range(20):
+    agent = Agent(0, False)
+    for i in range(10):
         print(i, '===')
-        a, b = agent.add_transition(np.random.randn(4), np.random.randn(2), 1, False, False, np.random.randn(4))
-        print(a, b)
+        a = agent.add_transition([np.random.randn(4), np.random.randn(3)],
+                                 np.random.randn(2), 1, False, False,
+                                 [np.random.randn(4), np.random.randn(3)])
+        print(a)
 
-    print(20, '===')
-    a, b = agent.add_transition(np.random.randn(4), np.random.randn(2), 1, True, False, np.random.randn(4))
-    print(a, b)
+    print(10, '===')
+    a = agent.add_transition([np.random.randn(4), np.random.randn(3)],
+                             np.random.randn(2), 1, True, False,
+                             [np.random.randn(4), np.random.randn(3)])
+    print(a)

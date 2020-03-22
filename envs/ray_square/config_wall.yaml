@@ -1,5 +1,5 @@
 base_config:
-  build_path: 
+  build_path:
     win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
   scene: RaySquare
@@ -19,6 +19,6 @@ sac_config:
   burn_in_step: 10
   n_step: 5
   use_rnn: true
-  use_prediction: true
+  use_prediction: false
 
   _lambda: 0.99
