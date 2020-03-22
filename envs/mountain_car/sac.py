@@ -2,6 +2,8 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+from algorithm.common_models import ModelSimpleRep as ModelRep
+
 
 class ModelForward(tf.keras.Model):
     def __init__(self, state_dim, action_dim):

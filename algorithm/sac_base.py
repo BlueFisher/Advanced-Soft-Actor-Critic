@@ -28,9 +28,27 @@ def debug_grad(grads):
         debug(grad)
 
 
+def _np_to_tensor(fn):
+    def c(*args, **kwargs):
+        return fn(*[tf.constant(k) if not isinstance(k, tf.Tensor) else k for k in args if k is not None],
+                  **{k: tf.constant(v) if not isinstance(v, tf.Tensor) else v for k, v in kwargs.items() if v is not None})
+
+    return c
+
+
+def _list_arg_to_concrete_arg(name, arg_list):
+    concrete_arg = {
+        name: arg_list[0]
+    }
+    for i, arg in enumerate(arg_list[1:]):
+        concrete_arg[f'{name}_{i+1}'] = arg
+
+    return concrete_arg
+
+
 class SAC_Base(object):
     def __init__(self,
-                 obs_dim,
+                 obs_dims,
                  action_dim,
                  is_discrete,
                  model_root_path,
@@ -64,7 +82,7 @@ class SAC_Base(object):
 
                  replay_config=None):
         """
-        obs_dim: Dimension of observation
+        obs_dims: List of dimensions of observations
         action_dim: Dimension of action
         model_root_path: The path that saves summary, checkpoints, config etc.
         model: Custom Model Class
@@ -84,7 +102,7 @@ class SAC_Base(object):
         if len(physical_devices) > 0:
             tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
-        self.obs_dim = obs_dim
+        self.obs_dims = obs_dims
         self.action_dim = action_dim
         self.is_discrete = is_discrete
         self.train_mode = train_mode
@@ -147,8 +165,8 @@ class SAC_Base(object):
             self.optimizer_alpha = tf.keras.optimizers.Adam(alpha_lr)
 
         # Get represented state dimension
-        self.model_rep = model.ModelRep(self.obs_dim)  # TODO ds no rep
-        self.model_target_rep = model.ModelRep(self.obs_dim)
+        self.model_rep = model.ModelRep(self.obs_dims)  # TODO ds no rep
+        self.model_target_rep = model.ModelRep(self.obs_dims)
         if self.use_rnn:
             # Get rnn_state dimension
             state, next_rnn_state, _ = self.model_rep.get_call_result_tensors()
@@ -161,7 +179,7 @@ class SAC_Base(object):
         if self.use_prediction:
             self.model_transition = model.ModelTransition(state_dim, self.action_dim)
             self.model_reward = model.ModelReward(state_dim)
-            self.model_observation = model.ModelObservation(state_dim, self.obs_dim)
+            self.model_observation = model.ModelObservation(state_dim, self.obs_dims)
 
         if self.use_curiosity:
             self.model_forward = model.ModelForward(state_dim, self.action_dim)
@@ -225,24 +243,18 @@ class SAC_Base(object):
         """
         Initialize some @tf.function and specify tf.TensorSpec
         """
-        def _np_to_tensor(fn):
-            def c(*args, **kwargs):
-                return fn(*[tf.constant(k) if not isinstance(k, tf.Tensor) else k for k in args if k is not None],
-                          **{k: tf.constant(v) if not isinstance(v, tf.Tensor) else v for k, v in kwargs.items() if v is not None})
-
-            return c
 
         # get_n_probs
         if self.use_rnn:
             tmp_get_n_probs = self.get_n_probs.get_concrete_function(
-                n_obses=tf.TensorSpec(shape=(None, None, self.obs_dim), dtype=tf.float32),
-                n_selected_actions=tf.TensorSpec(shape=(None, None, self.action_dim), dtype=tf.float32),
-                rnn_state=tf.TensorSpec(shape=(None, self.rnn_state_dim), dtype=tf.float32),
+                n_obses_list=[tf.TensorSpec(shape=(None, None, *t)) for t in self.obs_dims],
+                n_selected_actions=tf.TensorSpec(shape=(None, None, self.action_dim)),
+                rnn_state=tf.TensorSpec(shape=(None, self.rnn_state_dim)),
             )
         else:
             tmp_get_n_probs = self.get_n_probs.get_concrete_function(
-                n_obses=tf.TensorSpec(shape=(None, None, self.obs_dim), dtype=tf.float32),
-                n_selected_actions=tf.TensorSpec(shape=(None, None, self.action_dim), dtype=tf.float32)
+                n_obses_list=[tf.TensorSpec(shape=(None, None, *t)) for t in self.obs_dims],
+                n_selected_actions=tf.TensorSpec(shape=(None, None, self.action_dim))
             )
         self.get_n_probs = _np_to_tensor(tmp_get_n_probs)
 
@@ -250,33 +262,33 @@ class SAC_Base(object):
             step_size = self.burn_in_step + self.n_step
             # get_td_error
             kwargs = {
-                'n_obses': tf.TensorSpec(shape=[None, step_size, self.obs_dim], dtype=tf.float32),
-                'n_actions': tf.TensorSpec(shape=[None, step_size, self.action_dim], dtype=tf.float32),
-                'n_rewards': tf.TensorSpec(shape=[None, step_size], dtype=tf.float32),
-                'obs_': tf.TensorSpec(shape=[None, self.obs_dim], dtype=tf.float32),
-                'n_dones': tf.TensorSpec(shape=[None, step_size], dtype=tf.float32)
+                'n_obses_list': [tf.TensorSpec(shape=(None, step_size, *t)) for t in self.obs_dims],
+                'n_actions': tf.TensorSpec(shape=(None, step_size, self.action_dim)),
+                'n_rewards': tf.TensorSpec(shape=(None, step_size)),
+                'next_obs_list': [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims],
+                'n_dones': tf.TensorSpec(shape=(None, step_size))
             }
             if self.use_n_step_is:
-                kwargs['n_mu_probs'] = tf.TensorSpec(shape=[None, step_size], dtype=tf.float32)
+                kwargs['n_mu_probs'] = tf.TensorSpec(shape=(None, step_size))
             if self.use_rnn:
-                kwargs['rnn_state'] = tf.TensorSpec(shape=[None, self.rnn_state_dim], dtype=tf.float32)
+                kwargs['rnn_state'] = tf.TensorSpec(shape=(None, self.rnn_state_dim))
             tmp_get_td_error = self.get_td_error.get_concrete_function(**kwargs)
             self.get_td_error = _np_to_tensor(tmp_get_td_error)
 
             # _train
             kwargs = {
-                'n_obses': tf.TensorSpec(shape=[None, step_size, self.obs_dim], dtype=tf.float32),
-                'n_actions': tf.TensorSpec(shape=[None, step_size, self.action_dim], dtype=tf.float32),
-                'n_rewards': tf.TensorSpec(shape=[None, step_size], dtype=tf.float32),
-                'obs_': tf.TensorSpec(shape=[None, self.obs_dim], dtype=tf.float32),
-                'n_dones': tf.TensorSpec(shape=[None, step_size], dtype=tf.float32)
+                'n_obses_list': [tf.TensorSpec(shape=(None, step_size, *t)) for t in self.obs_dims],
+                'n_actions': tf.TensorSpec(shape=(None, step_size, self.action_dim)),
+                'n_rewards': tf.TensorSpec(shape=(None, step_size)),
+                'next_obs_list': [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims],
+                'n_dones': tf.TensorSpec(shape=(None, step_size))
             }
             if self.use_n_step_is:
-                kwargs['n_mu_probs'] = tf.TensorSpec(shape=[None, step_size], dtype=tf.float32)
+                kwargs['n_mu_probs'] = tf.TensorSpec(shape=(None, step_size))
             if self.use_priority:
-                kwargs['priority_is'] = tf.TensorSpec(shape=[None, 1], dtype=tf.float32)
+                kwargs['priority_is'] = tf.TensorSpec(shape=(None, 1))
             if self.use_rnn:
-                kwargs['initial_rnn_state'] = tf.TensorSpec(shape=[None, self.rnn_state_dim], dtype=tf.float32)
+                kwargs['initial_rnn_state'] = tf.TensorSpec(shape=(None, self.rnn_state_dim))
             tmp_train = self._train.get_concrete_function(**kwargs)
             self._train = _np_to_tensor(tmp_train)
 
@@ -299,14 +311,14 @@ class SAC_Base(object):
         [t.assign(tau * e + (1. - tau) * t) for t, e in zip(target_variables, eval_variables)]
 
     @tf.function
-    def get_n_probs(self, n_obses, n_selected_actions, rnn_state=None):
+    def get_n_probs(self, n_obses_list, n_selected_actions, rnn_state=None):
         """
         tf.function
         """
         if self.use_rnn:
-            n_states, *_ = self.model_rep(n_obses, [rnn_state])
+            n_states, *_ = self.model_rep(n_obses_list, [rnn_state])
         else:
-            n_states = self.model_rep(n_obses)
+            n_states = self.model_rep(n_obses_list)
 
         policy = self.model_policy(n_states)
 
@@ -454,7 +466,7 @@ class SAC_Base(object):
         return y  # [None, 1]
 
     @tf.function
-    def _train(self, n_obses, n_actions, n_rewards, obs_, n_dones,
+    def _train(self, n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
                n_mu_probs=None, priority_is=None,
                initial_rnn_state=None):
         """
@@ -464,13 +476,14 @@ class SAC_Base(object):
             self._update_target_variables(tau=self.tau)
 
         with tf.GradientTape(persistent=True) as tape:
-            m_obses = tf.concat([n_obses, tf.reshape(obs_, (-1, 1, obs_.shape[-1]))], axis=1)
+            m_obses_list = [tf.concat([n_obses, tf.reshape(next_obs, (-1, 1, *next_obs.shape[1:]))], axis=1)
+                            for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
             if self.use_rnn:
-                m_states, *_ = self.model_rep(m_obses, initial_rnn_state)
-                m_target_states, *_ = self.model_target_rep(m_obses, initial_rnn_state)
+                m_states, *_ = self.model_rep(m_obses_list, initial_rnn_state)
+                m_target_states, *_ = self.model_target_rep(m_obses_list, initial_rnn_state)
             else:
-                m_states = self.model_rep(m_obses)
-                m_target_states = self.model_target_rep(m_obses)
+                m_states = self.model_rep(m_obses_list)
+                m_target_states = self.model_target_rep(m_obses_list)
 
             n_states = m_states[:, :-1, ...]
             state = m_states[:, self.burn_in_step, ...]
@@ -525,15 +538,11 @@ class SAC_Base(object):
                 loss_transition += tfp.distributions.kl_divergence(approx_next_state_dist, std_normal)
                 loss_transition = tf.reduce_mean(loss_transition)
 
-                # approx_next_n_states = self.model_transition(n_states[:, self.burn_in_step:, ...],
-                #                                              n_actions[:, self.burn_in_step:, ...])
-                # loss_transition = loss_mse(approx_next_n_states, m_states[:, self.burn_in_step + 1:, ...])
-
                 approx_n_rewards = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])
                 loss_reward = loss_mse(approx_n_rewards, tf.expand_dims(n_rewards[:, self.burn_in_step:], 2))
 
-                approx_m_obs = self.model_observation(m_states[:, self.burn_in_step:, ...])
-                loss_obs = loss_mse(approx_m_obs, m_obses[:, self.burn_in_step:, ...])
+                loss_obs = self.model_observation.get_loss(m_states[:, self.burn_in_step:, ...],
+                                                           [m_obses[:, self.burn_in_step:, ...] for m_obses in m_obses_list])
 
                 loss_rep = loss_rep_q + loss_transition + loss_reward + loss_obs
 
@@ -617,33 +626,34 @@ class SAC_Base(object):
         self.global_step.assign_add(1)
 
     @tf.function
-    def get_n_rnn_states(self, n_obses, rnn_state):
+    def get_n_rnn_states(self, n_obses_list, rnn_state):
         """
         tf.function
         """
-        *_, n_rnn_states = self.model_rep(n_obses, [rnn_state])
+        *_, n_rnn_states = self.model_rep(n_obses_list, [rnn_state])
         return n_rnn_states
 
     @tf.function
-    def choose_action(self, obs):
+    def choose_action(self, obs_list):
         """
         tf.function
-        obs: [None, obs_dim]
+        obs_list: list([None, obs_dim_i], ...)
         """
-        policy = self.model_policy(self.model_rep(obs))
+        policy = self.model_policy(self.model_rep(obs_list))
         if self.is_discrete:
             return tf.one_hot(policy.sample(), self.action_dim)
         else:
             return tf.tanh(policy.sample())
 
     @tf.function
-    def choose_rnn_action(self, obs, rnn_state):
+    def choose_rnn_action(self, obs_list, rnn_state):
         """
         tf.function
-        obs: [Batch, obs_dim]
+        obs_list: list([None, obs_dim_i], ...)
+        rnn_state: [None, rnn_state]
         """
-        obs = tf.reshape(obs, (-1, 1, obs.shape[-1]))
-        state, next_rnn_state, _ = self.model_rep(obs, [rnn_state])
+        obs_list = [tf.reshape(obs, (-1, 1, obs.shape[-1])) for obs in obs_list]
+        state, next_rnn_state, _ = self.model_rep(obs_list, [rnn_state])
         policy = self.model_policy(state)
         if self.is_discrete:
             action = policy.sample()
@@ -670,16 +680,17 @@ class SAC_Base(object):
         return self.cem_rewards
 
     @tf.function
-    def choose_action_by_cem(self, obs, rnn_state):
+    def choose_action_by_cem(self, obs_list, rnn_state):
         """
         tf.function
-        obs: [Batch, obs_dim]
+        obs_list: list([None, obs_dim_i], ...)
+        rnn_state: [None, rnn_state]
         """
         if self.use_rnn:
-            obs = tf.reshape(obs, (-1, 1, obs.shape[-1]))
-            state, next_rnn_state, _ = self.model_rep(obs, [rnn_state])
+            obs_list = [tf.reshape(obs, (-1, 1, obs.shape[-1])) for obs in obs_list]
+            state, next_rnn_state, _ = self.model_rep(obs_list, [rnn_state])
         else:
-            state = self.model_rep(obs)
+            state = self.model_rep(obs_list)
 
         state = tf.reshape(state, (-1, state.shape[-1]))
 
@@ -722,19 +733,21 @@ class SAC_Base(object):
             return action
 
     @tf.function
-    def get_td_error(self, n_obses, n_actions, n_rewards, obs_, n_dones,
+    def get_td_error(self, n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
                      n_mu_probs=None, rnn_state=None):
         """
         tf.function
         """
-        m_obses = tf.concat([n_obses, tf.reshape(obs_, (-1, 1, obs_.shape[-1]))], axis=1)
+        m_obses_list = [tf.concat([n_obses, tf.reshape(next_obs, (-1, 1, *next_obs.shape[1:]))], axis=1)
+                        for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
         if self.use_rnn:
-            tmp_states, *_ = self.model_rep(m_obses[:, :self.burn_in_step + 1, ...], rnn_state)
+            tmp_states, *_ = self.model_rep([m_obses[:, :self.burn_in_step + 1, ...] for m_obses in m_obses_list],
+                                            rnn_state)
             state = tmp_states[:, self.burn_in_step, ...]
-            m_target_states, *_ = self.model_target_rep(m_obses, rnn_state)
+            m_target_states, *_ = self.model_target_rep(m_obses_list, rnn_state)
         else:
-            state = self.model_rep(m_obses[:, self.burn_in_step, ...])
-            m_target_states = self.model_target_rep(m_obses)
+            state = self.model_rep([m_obses[:, self.burn_in_step, ...] for m_obses in m_obses_list])
+            m_target_states = self.model_target_rep(m_obses_list)
 
         action = n_actions[:, self.burn_in_step, ...]
 
@@ -773,13 +786,13 @@ class SAC_Base(object):
                 tf.summary.scalar(s['tag'], s['simple_value'], step=iteration + self.init_iteration)
         self.summary_writer.flush()
 
-    def fill_replay_buffer(self, n_obses, n_actions, n_rewards, obs_, n_dones,
+    def fill_replay_buffer(self, n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
                            n_rnn_states=None):
         """
-        n_obses: [1, episode_len, obs_dim]
+        n_obses_list: list([1, episode_len, obs_dim_i], ...)
         n_actions: [1, episode_len, action_dim]
         n_rewards: [1, episode_len]
-        obs_: [1, obs_dim]
+        next_obs_list: list([1, obs_dim_i], ...)
         n_dones: [1, episode_len]
         n_rnn_states: [1, episode_len, rnn_state_dim]
         """
@@ -787,16 +800,17 @@ class SAC_Base(object):
             self.update_reward_bound(n_rewards)
 
         # Ignore episodes whose length is too short
-        if n_obses.shape[1] < self.burn_in_step + self.n_step:
+        if n_obses_list[0].shape[1] < self.burn_in_step + self.n_step:
             return
 
-        obs = n_obses.reshape([-1, n_obses.shape[-1]])
+        # Reshape [1, episode_len, ...] to [episode_len, ...]
+        obs_list = [n_obses.reshape([-1, *n_obses.shape[2:]]) for n_obses in n_obses_list]
         action = n_actions.reshape([-1, n_actions.shape[-1]])
         reward = n_rewards.reshape([-1])
         done = n_dones.reshape([-1])
 
-        # Padding obs_ for episode experience replay
-        obs = np.concatenate([obs, obs_])
+        # Padding next_obs for episode experience replay
+        obs_list = [np.concatenate([obs, next_obs]) for obs, next_obs in zip(obs_list, next_obs_list)]
         action = np.concatenate([action,
                                  np.empty([1, action.shape[-1]], dtype=np.float32)])
         reward = np.concatenate([reward,
@@ -804,8 +818,9 @@ class SAC_Base(object):
         done = np.concatenate([done,
                                np.zeros([1], dtype=np.float32)])
 
+        storage_data = {f'obs_{i}': obs for i, obs in enumerate(obs_list)}
         storage_data = {
-            'obs': obs,
+            **storage_data,
             'action': action,
             'reward': reward,
             'done': done,
@@ -813,10 +828,10 @@ class SAC_Base(object):
 
         if self.use_n_step_is:
             if self.use_rnn:
-                n_mu_probs = self.get_n_probs(n_obses, n_actions,
+                n_mu_probs = self.get_n_probs(*n_obses_list, n_actions,
                                               n_rnn_states[:, 0, ...]).numpy()
             else:
-                n_mu_probs = self.get_n_probs(n_obses, n_actions).numpy()
+                n_mu_probs = self.get_n_probs(*n_obses_list, n_actions).numpy()
 
             mu_prob = n_mu_probs.reshape([-1])
             mu_prob = np.concatenate([mu_prob,
@@ -830,7 +845,7 @@ class SAC_Base(object):
             storage_data['rnn_state'] = rnn_state
 
         """
-        obs: [episode_len + 1, obs_dim]
+        obs_i: [episode_len + 1, obs_dim_i]
         action: [episode_len + 1, action_dim]
         reward: [episode_len + 1, ]
         done: [episode_len + 1, ]
@@ -851,7 +866,7 @@ class SAC_Base(object):
 
         """
         trans:
-            obs: [Batch, obs_dim]
+            obs_i: [Batch, obs_dim_i]
             action: [Batch, action_dim]
             reward: [Batch, ]
             done: [Batch, ]
@@ -874,21 +889,21 @@ class SAC_Base(object):
             trans[k] = np.concatenate([np.expand_dims(t, 1) for t in v], axis=1)
 
         """
-        m_obses: [Batch, episode_len + 1, obs_dim]
+        m_obses_list: list([Batch, episode_len + 1, obs_dim_i])
         m_actions: [Batch, episode_len + 1, action_dim]
         m_rewards: [Batch, episode_len + 1]
         m_dones: [Batch, episode_len + 1]
         m_mu_probs: [Batch, episode_len + 1]
         """
-        m_obses = trans['obs']
+        m_obses_list = [trans[f'obs_{i}'] for i in range(len(self.obs_dims))]
         m_actions = trans['action']
         m_rewards = trans['reward']
         m_dones = trans['done']
 
-        n_obses = m_obses[:, :-1, ...]
+        n_obses_list = [m_obses[:, :-1, ...] for m_obses in m_obses_list]
         n_actions = m_actions[:, :-1, ...]
         n_rewards = m_rewards[:, :-1]
-        obs_ = m_obses[:, -1, ...]
+        next_obs_list = [m_obses[:, -1, ...] for m_obses in m_obses_list]
         n_dones = m_dones[:, :-1]
 
         if self.use_n_step_is:
@@ -899,10 +914,10 @@ class SAC_Base(object):
             m_rnn_states = trans['rnn_state']
             rnn_state = m_rnn_states[:, 0, ...]
 
-        self._train(n_obses=n_obses,
+        self._train(**_list_arg_to_concrete_arg('n_obses_list', n_obses_list),
                     n_actions=n_actions,
                     n_rewards=n_rewards,
-                    obs_=obs_,
+                    **_list_arg_to_concrete_arg('next_obs_list', next_obs_list),
                     n_dones=n_dones,
                     n_mu_probs=n_mu_probs if self.use_n_step_is else None,
                     priority_is=priority_is if self.use_priority else None,
@@ -910,15 +925,19 @@ class SAC_Base(object):
 
         self.summary_writer.flush()
 
-        if self.use_n_step_is or self.use_priority:
+        if self.use_n_step_is:
             if self.use_rnn:
-                n_pi_probs = self.get_n_probs(n_obses, n_actions, rnn_state).numpy()
+                n_pi_probs = self.get_n_probs(*n_obses_list, n_actions, rnn_state).numpy()
             else:
-                n_pi_probs = self.get_n_probs(n_obses, n_actions).numpy()
+                n_pi_probs = self.get_n_probs(*n_obses_list, n_actions).numpy()
 
         # Update td_error
         if self.use_priority:
-            td_error = self.get_td_error(n_obses, n_actions, n_rewards, obs_, n_dones,
+            td_error = self.get_td_error(**_list_arg_to_concrete_arg('n_obses_list', n_obses_list),
+                                         n_actions=n_actions,
+                                         n_rewards=n_rewards,
+                                         **_list_arg_to_concrete_arg('next_obs_list', next_obs_list),
+                                         n_dones=n_dones,
                                          n_mu_probs=n_pi_probs if self.use_n_step_is else None,
                                          rnn_state=rnn_state if self.use_rnn else None).numpy()
             self.replay_buffer.update(pointers, td_error)
@@ -927,7 +946,7 @@ class SAC_Base(object):
         if self.use_rnn:
             pointers_list = [pointers + i for i in range(1, self.burn_in_step + self.n_step + 1)]
             tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-            n_rnn_states = self.get_n_rnn_states(n_obses, rnn_state).numpy()
+            n_rnn_states = self.get_n_rnn_states(n_obses_list, rnn_state).numpy()
             rnn_states = n_rnn_states.reshape(-1, n_rnn_states.shape[-1])
             self.replay_buffer.update_transitions(tmp_pointers, 'rnn_state', rnn_states)
 
