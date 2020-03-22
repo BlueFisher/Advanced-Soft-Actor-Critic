@@ -8,12 +8,12 @@ class AgentHitted(Agent):
     hitted = 0
 
     def _extra_log(self,
-                   obs,
+                   obs_list,
                    action,
                    reward,
                    local_done,
                    max_reached,
-                   obs_):
+                   next_obs_list):
 
         if not self.done and reward >= 1:
             self.hitted += 1

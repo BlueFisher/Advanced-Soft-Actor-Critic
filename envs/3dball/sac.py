@@ -2,19 +2,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-
-class ModelRep(tf.keras.Model):
-    def __init__(self, obs_dim):
-        super(ModelRep, self).__init__()
-        self.obs_dim = obs_dim
-
-        self.get_call_result_tensors()
-
-    def call(self, obs):
-        return obs
-
-    def get_call_result_tensors(self):
-        return self(tf.keras.Input(shape=(self.obs_dim,), dtype=tf.float32))
+from algorithm.common_models import ModelSimpleRep as ModelRep
 
 
 class ModelQ(tf.keras.Model):
@@ -52,4 +40,4 @@ class ModelPolicy(tf.keras.Model):
         l = self.seq(state)
         mean, logstd = tf.split(l, num_or_size_splits=2, axis=-1)
 
-        return self.tfpd([mean, tf.clip_by_value(tf.exp(logstd), 0.1, 1.0)])
+        return self.tfpd([tf.tanh(mean), tf.clip_by_value(tf.exp(logstd), 0.1, 1.0)])
