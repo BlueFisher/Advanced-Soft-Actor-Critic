@@ -78,8 +78,8 @@ class ModelRep(ModelRNNRep):
         obs = obs_list[0]
         outputs, next_rnn_state = self.layer_rnn(obs, initial_state=initial_state)
 
-        state = tf.concat([obs, outputs], -1)
-        state = self.seq(state)
+        # state = tf.concat([obs, outputs], -1)
+        state = self.seq(outputs)
 
         return state, next_rnn_state, outputs
 

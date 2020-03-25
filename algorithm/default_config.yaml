@@ -1,25 +1,27 @@
 base_config:
-  env_type: UNITY # UNITY, GYM
-  scene: scene
+  env_type: UNITY # UNITY or GYM
+  scene: scene # The scene name. 
+               # If in Unity envs, it indicates the specific scene. 
+               # If in Gym envs, it is just a readable name displayed in TensorBoard
 
   # Only for Unity Environments
-  build_path: 
+  build_path: # Unity executable path
     win32: path_win32
     linux: path_linux
   port: 5005
   
   # Only for Gym Enviroments
-  build_path: GymEnv
+  build_path: GymEnv # Like CartPole-v1
 
-  name: "{time}"
-  sac: sac
-  n_agents: 1
-  max_iter: 1000
-  max_step: -1
-  save_model_per_iter: 500
-  reset_on_iteration: true
+  name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
+  sac: sac # Neural network models file
+  n_agents: 1 # N agents running in parallel
+  max_iter: 1000 # Max iteration
+  max_step: -1 # Max step in each iteration
+  save_model_per_iter: 500 # Save model parameters every N iterations
+  reset_on_iteration: true # Whether to force reset agent if an episode terminated
 
-reset_config: null
+reset_config: null # Reset parameters sent to Unity
 
 replay_config:
   batch_size: 256
