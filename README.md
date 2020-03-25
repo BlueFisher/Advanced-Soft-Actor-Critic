@@ -56,44 +56,44 @@ base_config:
   max_iter: 1000 # Max iteration
   max_step: -1 # Max step in each iteration
   save_model_per_iter: 500 # Save model parameters every N iterations
-  reset_on_iteration: true # Whether to force reset agent if an episode terminated
+  reset_on_iteration: true # If to force reset agent if an episode terminated
 
 reset_config: null # Reset parameters sent to Unity
 
 replay_config:
   batch_size: 256
   capacity: 1000000
-  alpha: 0.9
-  beta: 0.4
+  alpha: 0.9 # PER: [0~1] convert the importance of TD error to priority
+  beta: 0.4 # PER: Importance-sampling, from initial value increasing to 1
   beta_increment_per_sampling: 0.001
-  td_error_min: 0.01
-  td_error_max: 1.
-  use_mongodb: false
+  td_error_min: 0.01 # Small amount to avoid zero priority
+  td_error_max: 1. # Clipped abs error
+  use_mongodb: false # TODO
 
 sac_config:
-  seed: null
-  write_summary_per_step: 20
+  seed: null # Random seed
+  write_summary_per_step: 20 # Write summaries in TensorBoard every N steps
 
-  burn_in_step: 0
-  n_step: 1
-  use_rnn: false
+  burn_in_step: 0 # Burn-in steps in R2D2
+  n_step: 1 # Update Q function by N steps
+  use_rnn: false # If use RNN
 
-  tau: 0.005
-  update_target_per_step: 1
-  init_log_alpha: -2.3
-  use_auto_alpha: true
-  rep_lr: 0.0003
-  q_lr: 0.0003
-  policy_lr: 0.0003
-  alpha_lr: 0.0003
-  gamma: 0.99
-  _lambda: 1.0
-  use_priority: true
-  use_n_step_is: true
-  use_prediction: false
-  use_reward_normalization: false
-  use_curiosity: false
-  curiosity_strength: 1
+  tau: 0.005 # Coefficient of updating target network
+  update_target_per_step: 1 # Update target network every N steps
+  init_log_alpha: -2.3 # The initial log_alpha
+  use_auto_alpha: true # If use automating entropy adjustment
+  rep_lr: 0.0003 # Learning rate for representation model
+  q_lr: 0.0003 # Learning rate for Q
+  policy_lr: 0.0003 # Learning rate for policy
+  alpha_lr: 0.0003 # Learning rate for alpha
+  gamma: 0.99 # Discount factor
+  _lambda: 1.0 # Discount factor for V-trace
+  use_priority: true # If use PER
+  use_n_step_is: true # If use importance sampling
+  use_prediction: false # If train a transition model
+  use_reward_normalization: false # If use reward normalization
+  use_curiosity: false # If use curiosity
+  curiosity_strength: 1 # Curiosity strength if use curiosity
 ```
 
 ## Start Training

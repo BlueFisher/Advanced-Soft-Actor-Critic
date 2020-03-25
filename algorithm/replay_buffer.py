@@ -183,11 +183,11 @@ class PrioritizedReplayBuffer:
     def __init__(self,
                  batch_size=256,
                  capacity=524288,
-                 alpha=0.9,  # [0~1] convert the importance of TD error to priority
-                 beta=0.4,  # importance-sampling, from initial value increasing to 1
+                 alpha=0.9,  # [0~1] Convert the importance of TD error to priority
+                 beta=0.4,  # Importance-sampling, from initial value increasing to 1
                  beta_increment_per_sampling=0.001,
-                 td_error_min=0.01,  # small amount to avoid zero priority
-                 td_error_max=1.,  # clipped abs error
+                 td_error_min=0.01,  # Small amount to avoid zero priority
+                 td_error_max=1.,  # Clipped abs error
                  use_mongodb=False):
         self.batch_size = batch_size
         self.capacity = int(2**math.floor(math.log2(capacity)))
