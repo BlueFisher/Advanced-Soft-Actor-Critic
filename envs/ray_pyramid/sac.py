@@ -32,6 +32,7 @@ class ModelReward(tf.keras.Model):
         super(ModelReward, self).__init__()
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(1)
         ])
 
@@ -48,36 +49,34 @@ class ModelObservation(tf.keras.Model):
         super(ModelObservation, self).__init__()
         assert obs_dims[0] == (44, )
         assert obs_dims[1] == (6, )
+
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(obs_dims[0][0] + obs_dims[1][0])
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(6)
         ])
 
         self(tf.keras.Input(shape=(state_dim,)))
 
     def call(self, state):
-        obs = self.seq(state)
+        obs = self.seq(state[..., 44:])
 
-        return [obs[..., :44], obs[..., 44:]]
+        return [state[..., :44], obs]
 
     def get_loss(self, state, obs_list):
-        approx_obs = self.seq(state)
-        approx_ray_obs = approx_obs[..., :44]
-        approx_vec_obs = approx_obs[..., 44:]
+        approx_vec_obs = self.seq(state[..., 44:])
 
         ray_obs, vec_obs = obs_list
 
         mse = tf.losses.MeanSquaredError()
 
-        return mse(approx_ray_obs, ray_obs) + mse(approx_vec_obs, vec_obs)
+        return mse(approx_vec_obs, vec_obs)
 
 
 class ModelRep(ModelRNNRep):
     def __init__(self, obs_dims):
         super(ModelRep, self).__init__(obs_dims)
-        self.rnn_units = 8
+        self.rnn_units = 16
         self.layer_rnn = tf.keras.layers.RNN(tf.keras.layers.GRUCell(self.rnn_units),
                                              return_sequences=True,
                                              return_state=True)
@@ -88,7 +87,7 @@ class ModelRep(ModelRNNRep):
         ray_obs, vec_obs = obs_list
         outputs, next_rnn_state = self.layer_rnn(vec_obs, initial_state=initial_state)
 
-        state = tf.concat([ray_obs, vec_obs, outputs], -1)
+        state = tf.concat([ray_obs, outputs], -1)  # 44 + 16
 
         return state, next_rnn_state, outputs
 
