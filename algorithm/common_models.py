@@ -3,7 +3,7 @@ import tensorflow as tf
 
 class ModelSimpleRep(tf.keras.Model):
     def __init__(self, obs_dims):
-        super(ModelSimpleRep, self).__init__()
+        super().__init__()
         self.obs_dims = obs_dims
 
         self.get_call_result_tensors()
@@ -17,7 +17,7 @@ class ModelSimpleRep(tf.keras.Model):
 
 class ModelRNNRep(tf.keras.Model):
     def __init__(self, obs_dims):
-        super(ModelRNNRep, self).__init__()
+        super().__init__()
         self.obs_dims = obs_dims
 
     def call(self, obs_list, initial_state):

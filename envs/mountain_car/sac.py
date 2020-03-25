@@ -23,7 +23,7 @@ class ModelForward(tf.keras.Model):
 
 class ModelQ(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
-        super(ModelQ, self).__init__()
+        super().__init__()
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
@@ -41,7 +41,7 @@ class ModelQ(tf.keras.Model):
 
 class ModelPolicy(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
-        super(ModelPolicy, self).__init__()
+        super().__init__()
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
