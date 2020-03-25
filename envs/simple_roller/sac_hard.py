@@ -7,7 +7,7 @@ from algorithm.common_models import ModelRNNRep
 
 class ModelTransition(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
-        super(ModelTransition, self).__init__()
+        super().__init__()
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
@@ -28,7 +28,7 @@ class ModelTransition(tf.keras.Model):
 
 class ModelReward(tf.keras.Model):
     def __init__(self, state_dim):
-        super(ModelReward, self).__init__()
+        super().__init__()
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(1)
@@ -44,7 +44,7 @@ class ModelReward(tf.keras.Model):
 
 class ModelObservation(tf.keras.Model):
     def __init__(self, state_dim, obs_dims):
-        super(ModelObservation, self).__init__()
+        super().__init__()
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(obs_dims[0][0])
@@ -65,7 +65,7 @@ class ModelObservation(tf.keras.Model):
 
 class ModelRep(ModelRNNRep):
     def __init__(self, obs_dims):
-        super(ModelRep, self).__init__(obs_dims)
+        super().__init__(obs_dims)
         self.rnn_units = 32
         self.layer_rnn = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
         self.seq = tf.keras.Sequential([
@@ -86,7 +86,7 @@ class ModelRep(ModelRNNRep):
 
 class ModelQ(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
-        super(ModelQ, self).__init__()
+        super().__init__()
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
@@ -104,7 +104,7 @@ class ModelQ(tf.keras.Model):
 
 class ModelPolicy(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
-        super(ModelPolicy, self).__init__()
+        super().__init__()
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
