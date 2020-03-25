@@ -523,8 +523,8 @@ class SAC_Base(object):
                 loss_q1 *= priority_is
                 loss_q2 *= priority_is
 
-            loss_q1 = tf.reduce_mean(loss_q1)
-            loss_q2 = tf.reduce_mean(loss_q2)
+            loss_q1 = 0.5 * tf.reduce_mean(loss_q1)
+            loss_q2 = 0.5 * tf.reduce_mean(loss_q2)
 
             loss_rep = loss_rep_q = loss_q1 + loss_q2
 

@@ -4,14 +4,15 @@ base_config:
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
   scene: RaySquare
 
-  name: "avoidwall_{time}"
-  max_iter: 500
+  name: "ray5_wall_nopre_{time}"
+  max_iter: 200
   save_model_per_iter: 50
   reset_on_iteration: false
   
 reset_config:
   force_reset: true
-  avoid_wall: true
+  avoid_wall: false
+  ray_length: 5
 
 sac_config:
   seed: 42
@@ -19,6 +20,6 @@ sac_config:
   burn_in_step: 10
   n_step: 5
   use_rnn: true
-  use_prediction: true
+  use_prediction: false
 
   _lambda: 0.99

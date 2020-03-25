@@ -2,16 +2,18 @@ base_config:
   build_path: 
     win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
-  scene: RayObstacleSquare
+  scene: RaySquareNoWall
 
-  name: "obstacle_wall_{time}"
-  max_iter: 1000
+  name: "nowall_{time}"
+  sac: sac_nowall
+  max_iter: 10000
   save_model_per_iter: 50
   reset_on_iteration: false
   
 reset_config:
   force_reset: true
   avoid_wall: false
+  ray_length: 20
 
 sac_config:
   seed: 42
