@@ -89,13 +89,26 @@ class SAC_Base(object):
         train_mode: Is training or inference
 
         seed: Random seed
-        write_summary_per_step: Write summaries in TensorBoard every `write_summary_per_step` step
+        write_summary_per_step: Write summaries in TensorBoard every `write_summary_per_step` steps
 
         burn_in_step: Burn-in steps in R2D2
         n_step: Update Q function by `n_step` steps
         use_rnn: If use RNN
 
+        tau: Coefficient of updating target network
+        update_target_per_step: Update target network every 'update_target_per_step' steps
+        init_log_alpha: The initial log_alpha
+        use_auto_alpha: If use automating entropy adjustment
+        *_lr: Learning rate
+        gamma: Discount factor
+        _lambda: Discount factor for V-trace
+
+        use_priority: If use PER
+        use_n_step_is: If use importance sampling
         use_prediction: If train a transition model
+        use_reward_normalization: If use reward normalization
+        use_curiosity: If use curiosity
+        curiosity_strength: Curiosity strength if use curiosity
         """
 
         physical_devices = tf.config.experimental.list_physical_devices('GPU')
