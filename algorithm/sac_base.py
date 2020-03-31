@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from .replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
+from .replay_buffer import PrioritizedReplayBuffer
 from .trans_cache import TransCache
 
 logger = logging.getLogger('sac.base')
