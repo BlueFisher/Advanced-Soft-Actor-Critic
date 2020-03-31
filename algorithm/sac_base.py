@@ -160,13 +160,15 @@ class SAC_Base(object):
             self.max_cum_reward = tf.Variable(0, dtype=tf.float32, name='max_q')
         self.global_step = tf.Variable(0, dtype=tf.int64, name='global_step')
 
-        self.optimizer_rep = tf.keras.optimizers.Adam(Learning_rate)
-        self.optimizer_q1 = tf.keras.optimizers.Adam(Learning_rate)
-        self.optimizer_q2 = tf.keras.optimizers.Adam(Learning_rate)
-        self.optimizer_policy = tf.keras.optimizers.Adam(Learning_rate)
+        adam_optimizer = lambda : tf.keras.optimizers.Adam(Learning_rate)
+
+        self.optimizer_rep = adam_optimizer()
+        self.optimizer_q1 = adam_optimizer()
+        self.optimizer_q2 = adam_optimizer()
+        self.optimizer_policy = adam_optimizer()
 
         if self.use_auto_alpha:
-            self.optimizer_alpha = tf.keras.optimizers.Adam(Learning_rate)
+            self.optimizer_alpha = adam_optimizer()
 
         # Get represented state dimension
         self.model_rep = model.ModelRep(self.obs_dims)  # TODO ds no rep
@@ -187,7 +189,7 @@ class SAC_Base(object):
 
         if self.use_curiosity:
             self.model_forward = model.ModelForward(state_dim, self.action_dim)
-            self.optimizer_forward = tf.keras.optimizers.Adam(Learning_rate)
+            self.optimizer_forward = adam_optimizer()
 
         self.model_q1 = model.ModelQ(state_dim, self.action_dim)
         self.model_target_q1 = model.ModelQ(state_dim, self.action_dim)
