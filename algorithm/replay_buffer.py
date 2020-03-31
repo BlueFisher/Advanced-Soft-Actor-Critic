@@ -62,45 +62,6 @@ class DataStorage:
         return self._size == self.capacity
 
 
-class ReplayBuffer:
-    _data_pointer = 0
-
-    def __init__(self, batch_size=256, capacity=1e6, **kwargs):
-        self.batch_size = int(batch_size)
-        self.capacity = int(capacity)
-
-        self._trans_storage = EpisodeStorage(self.capacity)
-
-    def add(self, *transitions):
-        self._trans_storage.add(transitions)
-
-    def sample(self):
-        if not self.is_lg_batch_size:
-            return None
-
-        pointers = np.random.choice(range(self._trans_storage.size), size=self.batch_size, replace=False)
-
-        transitions = self._trans_storage.get(pointers)
-        return pointers, transitions
-
-    def update_transitions(self, pointers, index, data):
-        assert len(pointers) == len(data)
-
-        self._trans_storage.update(pointers, index, data)
-
-    @property
-    def is_full(self):
-        return self._trans_storage.is_full
-
-    @property
-    def size(self):
-        return self._trans_storage.size
-
-    @property
-    def is_lg_batch_size(self):
-        return self._trans_storage.size > self.batch_size
-
-
 class SumTree:
     def __init__(self, capacity):
         capacity = int(capacity)

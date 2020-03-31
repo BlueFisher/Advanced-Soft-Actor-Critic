@@ -26,9 +26,10 @@ reset_config: null # Reset parameters sent to Unity
 replay_config:
   batch_size: 256
   capacity: 1000000
-  alpha: 0.9 # PER: [0~1] convert the importance of TD error to priority
-  beta: 0.4 # PER: Importance-sampling, from initial value increasing to 1
-  beta_increment_per_sampling: 0.001
+  alpha: 0.9 # [0~1] convert the importance of TD error to priority
+             # If 0, PER will reduce to vanilla replay buffer
+  beta: 0.4 # Importance-sampling, from initial value increasing to 1
+  beta_increment_per_sampling: 0.001 # Increment step
   td_error_min: 0.01 # Small amount to avoid zero priority
   td_error_max: 1. # Clipped abs error
   use_mongodb: false # TODO
@@ -43,15 +44,16 @@ sac_config:
 
   tau: 0.005 # Coefficient of updating target network
   update_target_per_step: 1 # Update target network every N steps
+
   init_log_alpha: -2.3 # The initial log_alpha
   use_auto_alpha: true # If use automating entropy adjustment
-  rep_lr: 0.0003 # Learning rate for representation model
-  q_lr: 0.0003 # Learning rate for Q
-  policy_lr: 0.0003 # Learning rate for policy
-  alpha_lr: 0.0003 # Learning rate for alpha
+
+  Learning_rate: 0.0003 # Learning rate of all optimizers
+
   gamma: 0.99 # Discount factor
   _lambda: 1.0 # Discount factor for V-trace
-  use_priority: true # If use PER
+  
+  use_priority: true # If use PER importance ratio
   use_n_step_is: true # If use importance sampling
   use_prediction: false # If train a transition model
   use_reward_normalization: false # If use reward normalization
