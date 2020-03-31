@@ -66,10 +66,7 @@ class SAC_Base(object):
                  update_target_per_step=1,
                  init_log_alpha=-2.3,
                  use_auto_alpha=True,
-                 rep_lr=3e-4,
-                 q_lr=3e-4,
-                 policy_lr=3e-4,
-                 alpha_lr=3e-4,
+                 Learning_rate=3e-4,
                  gamma=0.99,
                  _lambda=0.9,
 
@@ -99,11 +96,11 @@ class SAC_Base(object):
         update_target_per_step: Update target network every 'update_target_per_step' steps
         init_log_alpha: The initial log_alpha
         use_auto_alpha: If use automating entropy adjustment
-        *_lr: Learning rate
+        learning_rate: Learning rate of all optimizers
         gamma: Discount factor
         _lambda: Discount factor for V-trace
 
-        use_priority: If use PER
+        use_priority: If use PER importance ratio
         use_n_step_is: If use importance sampling
         use_prediction: If train a transition model
         use_reward_normalization: If use reward normalization
@@ -141,8 +138,7 @@ class SAC_Base(object):
         if seed is not None:
             tf.random.set_seed(seed)
 
-        self._build_model(model, init_log_alpha,
-                          q_lr, policy_lr, alpha_lr, rep_lr)
+        self._build_model(model, init_log_alpha, Learning_rate)
         self._init_or_restore(model_root_path)
 
         if self.train_mode:
@@ -150,16 +146,11 @@ class SAC_Base(object):
             self.summary_writer = tf.summary.create_file_writer(summary_path)
 
             replay_config = {} if replay_config is None else replay_config
-            if self.use_priority:
-                self.replay_buffer = PrioritizedReplayBuffer(**replay_config)
-            else:
-                self.replay_buffer = ReplayBuffer(**replay_config)
+            self.replay_buffer = PrioritizedReplayBuffer(**replay_config)
 
         self._init_tf_function()
 
-    def _build_model(self, model, init_log_alpha,
-                     q_lr, policy_lr, alpha_lr,
-                     rnn_lr=None):
+    def _build_model(self, model, init_log_alpha, Learning_rate):
         """
         Initialize variables, network models and optimizers
         """
@@ -169,13 +160,13 @@ class SAC_Base(object):
             self.max_cum_reward = tf.Variable(0, dtype=tf.float32, name='max_q')
         self.global_step = tf.Variable(0, dtype=tf.int64, name='global_step')
 
-        self.optimizer_rep = tf.keras.optimizers.Adam(rnn_lr)
-        self.optimizer_q1 = tf.keras.optimizers.Adam(q_lr)
-        self.optimizer_q2 = tf.keras.optimizers.Adam(q_lr)
-        self.optimizer_policy = tf.keras.optimizers.Adam(policy_lr)
+        self.optimizer_rep = tf.keras.optimizers.Adam(Learning_rate)
+        self.optimizer_q1 = tf.keras.optimizers.Adam(Learning_rate)
+        self.optimizer_q2 = tf.keras.optimizers.Adam(Learning_rate)
+        self.optimizer_policy = tf.keras.optimizers.Adam(Learning_rate)
 
         if self.use_auto_alpha:
-            self.optimizer_alpha = tf.keras.optimizers.Adam(alpha_lr)
+            self.optimizer_alpha = tf.keras.optimizers.Adam(Learning_rate)
 
         # Get represented state dimension
         self.model_rep = model.ModelRep(self.obs_dims)  # TODO ds no rep
@@ -196,7 +187,7 @@ class SAC_Base(object):
 
         if self.use_curiosity:
             self.model_forward = model.ModelForward(state_dim, self.action_dim)
-            self.optimizer_forward = tf.keras.optimizers.Adam(policy_lr)
+            self.optimizer_forward = tf.keras.optimizers.Adam(Learning_rate)
 
         self.model_q1 = model.ModelQ(state_dim, self.action_dim)
         self.model_target_q1 = model.ModelQ(state_dim, self.action_dim)
@@ -626,7 +617,7 @@ class SAC_Base(object):
 
                 tf.summary.scalar('loss/rep_q', loss_rep_q, step=self.global_step)
                 if self.use_prediction:
-                    tf.summary.scalar('loss/transition', -loss_transition, step=self.global_step)
+                    tf.summary.scalar('loss/transition', tf.reduce_mean(approx_next_state_dist.entropy()), step=self.global_step)
                     tf.summary.scalar('loss/reward', loss_reward, step=self.global_step)
                     tf.summary.scalar('loss/observation', loss_obs, step=self.global_step)
 

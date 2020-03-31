@@ -28,10 +28,7 @@ class SAC_DS_Base(SAC_Base):
                  update_target_per_step=1,
                  init_log_alpha=-2.3,
                  use_auto_alpha=True,
-                 rep_lr=3e-4,
-                 q_lr=3e-4,
-                 policy_lr=3e-4,
-                 alpha_lr=3e-4,
+                 learning_rate=3e-4,
                  gamma=0.99,
                  _lambda=0.9,
                  use_prediction=False,
@@ -63,8 +60,7 @@ class SAC_DS_Base(SAC_Base):
         if seed is not None:
             tf.random.set_seed(seed)
 
-        self._build_model(model, init_log_alpha,
-                          q_lr, policy_lr, alpha_lr, rep_lr)
+        self._build_model(model, init_log_alpha learning_rate)
         if model_root_path is not None:
             self._init_or_restore(model_root_path)
 
