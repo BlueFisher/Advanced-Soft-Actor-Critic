@@ -4,7 +4,7 @@ base_config:
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
   scene: RaySquareNoWall
 
-  name: "nowall_nopre_{time}"
+  name: "nopre_{time}"
   sac: sac_nowall
   max_iter: 10000
   save_model_per_iter: 50
@@ -13,7 +13,7 @@ base_config:
 reset_config:
   force_reset: true
   avoid_wall: false
-  ray_length: 20
+  ray_length: 10
 
 sac_config:
   seed: 42

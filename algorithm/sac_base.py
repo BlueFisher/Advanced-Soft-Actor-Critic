@@ -66,7 +66,7 @@ class SAC_Base(object):
                  update_target_per_step=1,
                  init_log_alpha=-2.3,
                  use_auto_alpha=True,
-                 Learning_rate=3e-4,
+                 learning_rate=3e-4,
                  gamma=0.99,
                  _lambda=0.9,
 
@@ -138,7 +138,7 @@ class SAC_Base(object):
         if seed is not None:
             tf.random.set_seed(seed)
 
-        self._build_model(model, init_log_alpha, Learning_rate)
+        self._build_model(model, init_log_alpha, learning_rate)
         self._init_or_restore(model_root_path)
 
         if self.train_mode:
@@ -150,7 +150,7 @@ class SAC_Base(object):
 
         self._init_tf_function()
 
-    def _build_model(self, model, init_log_alpha, Learning_rate):
+    def _build_model(self, model, init_log_alpha, learning_rate):
         """
         Initialize variables, network models and optimizers
         """
@@ -160,7 +160,7 @@ class SAC_Base(object):
             self.max_cum_reward = tf.Variable(0, dtype=tf.float32, name='max_q')
         self.global_step = tf.Variable(0, dtype=tf.int64, name='global_step')
 
-        adam_optimizer = lambda : tf.keras.optimizers.Adam(Learning_rate)
+        def adam_optimizer(): return tf.keras.optimizers.Adam(learning_rate)
 
         self.optimizer_rep = adam_optimizer()
         self.optimizer_q1 = adam_optimizer()
@@ -181,6 +181,7 @@ class SAC_Base(object):
             state = self.model_rep.get_call_result_tensors()
             self.rnn_state_dim = 1
         state_dim = state.shape[-1]
+        logger.info(f'State Dimension: {state_dim}')
 
         if self.use_prediction:
             self.model_transition = model.ModelTransition(state_dim, self.action_dim)
@@ -658,7 +659,7 @@ class SAC_Base(object):
         obs_list: list([None, obs_dim_i], ...)
         rnn_state: [None, rnn_state]
         """
-        obs_list = [tf.reshape(obs, (-1, 1, obs.shape[-1])) for obs in obs_list]
+        obs_list = [tf.reshape(obs, (-1, 1, *obs.shape[1:])) for obs in obs_list]
         state, next_rnn_state, _ = self.model_rep(obs_list, [rnn_state])
         policy = self.model_policy(state)
         if self.is_discrete:

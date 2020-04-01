@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from algorithm.common_models import ModelSimpleRep as ModelRep
+from algorithm.common_models import ModelVoidRep as ModelRep
 
 
 class ModelQ(tf.keras.Model):

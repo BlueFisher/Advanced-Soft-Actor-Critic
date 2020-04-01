@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from algorithm.common_models import ModelRNNRep
+from algorithm.common_models import ModelSimpleRep, ModelRNNRep
 
 
 class ModelTransition(tf.keras.Model):
@@ -63,9 +63,49 @@ class ModelObservation(tf.keras.Model):
         return tf.reduce_mean(tf.square(approx_obs - obs_list[0]))
 
 
+# # No RNN example
+# class ModelRep(ModelSimpleRep):
+#     def __init__(self, obs_dims):
+#         super().__init__(obs_dims)
+#         self.conv = tf.keras.Sequential([
+#             tf.keras.layers.Conv2D(3, 3, activation=tf.nn.relu),
+#             tf.keras.layers.MaxPooling2D(),
+#             tf.keras.layers.Conv2D(3, 3, activation=tf.nn.relu),
+#             tf.keras.layers.MaxPooling2D(),
+#             tf.keras.layers.Conv2D(3, 3, activation=tf.nn.relu),
+#             tf.keras.layers.MaxPooling2D(),
+#             tf.keras.layers.Flatten(),
+#             tf.keras.layers.Dense(64, activation=tf.nn.tanh)
+#         ])
+
+#         self.get_call_result_tensors()
+
+#     def call(self, obs_list):
+#         vis_obs = obs_list[0]
+#         batch = tf.shape(vis_obs)[0]
+#         if len(vis_obs.shape) == 5:
+#             vis_obs = tf.reshape(vis_obs, [-1, *vis_obs.shape[2:]])
+#             vec_state = self.conv(vis_obs)
+#             vec_state = tf.reshape(vec_state, [batch, -1, vec_state.shape[-1]])
+#         else:
+#             vec_state = self.conv(vis_obs)
+
+#         return vec_state
+
 class ModelRep(ModelRNNRep):
     def __init__(self, obs_dims):
         super().__init__(obs_dims)
+        self.conv = tf.keras.Sequential([
+            tf.keras.layers.Conv2D(3, 3, activation=tf.nn.relu),
+            tf.keras.layers.MaxPooling2D(),
+            tf.keras.layers.Conv2D(3, 3, activation=tf.nn.relu),
+            tf.keras.layers.MaxPooling2D(),
+            tf.keras.layers.Conv2D(3, 3, activation=tf.nn.relu),
+            tf.keras.layers.MaxPooling2D(),
+            tf.keras.layers.Flatten(),
+            tf.keras.layers.Dense(64)
+        ])
+
         self.rnn_units = 64
         self.layer_rnn = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
         self.seq = tf.keras.Sequential([
@@ -75,8 +115,13 @@ class ModelRep(ModelRNNRep):
         self.get_call_result_tensors()
 
     def call(self, obs_list, initial_state):
-        obs = obs_list[0]
-        outputs, next_rnn_state = self.layer_rnn(obs, initial_state=initial_state)
+        vis_obs = obs_list[0]
+        batch = tf.shape(vis_obs)[0]
+        vis_obs = tf.reshape(vis_obs, [-1, *vis_obs.shape[2:]])
+        vec_obs = self.conv(vis_obs)
+        vec_obs = tf.reshape(vec_obs, [batch, -1, vec_obs.shape[-1]])
+
+        outputs, next_rnn_state = self.layer_rnn(vec_obs, initial_state=initial_state)
 
         state = self.seq(outputs)
 

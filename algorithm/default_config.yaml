@@ -48,7 +48,7 @@ sac_config:
   init_log_alpha: -2.3 # The initial log_alpha
   use_auto_alpha: true # If use automating entropy adjustment
 
-  Learning_rate: 0.0003 # Learning rate of all optimizers
+  learning_rate: 0.0003 # Learning rate of all optimizers
 
   gamma: 0.99 # Discount factor
   _lambda: 1.0 # Discount factor for V-trace
