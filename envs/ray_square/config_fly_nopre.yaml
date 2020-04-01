@@ -2,24 +2,25 @@ base_config:
   build_path: 
     win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
-  scene: ContinousHardRoller
+  scene: RaySquareFly
 
-  name: "pre_{time}"
-  sac: sac_hard
-  max_iter: 200
+  name: "nopre_{time}"
+  sac: sac_fly
+  max_iter: 10000
   save_model_per_iter: 50
   reset_on_iteration: false
   
-replay_config:
-  beta: 0.1
-  beta_increment_per_sampling: 0
+reset_config:
+  force_reset: true
+  avoid_wall: false
+  ray_length: 10
 
 sac_config:
   seed: 42
-  
+
   burn_in_step: 10
   n_step: 5
   use_rnn: true
-  use_prediction: true
+  use_prediction: false
 
-  init_log_alpha: -4.6
+  _lambda: 0.99

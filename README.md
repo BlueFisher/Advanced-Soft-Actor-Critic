@@ -85,7 +85,7 @@ sac_config:
   init_log_alpha: -2.3 # The initial log_alpha
   use_auto_alpha: true # If use automating entropy adjustment
 
-  Learning_rate: 0.0003 # Learning rate of all optimizers
+  learning_rate: 0.0003 # Learning rate of all optimizers
 
   gamma: 0.99 # Discount factor
   _lambda: 1.0 # Discount factor for V-trace
@@ -116,11 +116,11 @@ optional arguments:
   --editor              running in Unity Editor
   --logger_file LOGGER_FILE
                         logging into a file
-  --name NAME, -n NAME  training name
+  --name NAME, -n NAME  training name, base_config.name
   --port PORT, -p PORT  communication port in Unity
-  --seed SEED           random seed
-  --sac SAC             neural network model
-  --agents AGENTS       number of agents
+  --seed SEED           random seed, sac_config.seed
+  --sac SAC             neural network model, base_config.sac
+  --agents AGENTS       number of agents, base_config.n_agents
   --repeat REPEAT       number of repeated experiments
 
 examples:

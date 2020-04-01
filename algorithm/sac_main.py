@@ -66,7 +66,7 @@ class Main(object):
             config['base_config']['n_agents'] = args.agents
 
         # Replace {time} from current time and random letters
-        rand = ''.join(random.sample(string.ascii_letters + string.digits, 4))
+        rand = ''.join(random.sample(string.ascii_letters, 4))
         config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now + rand)
         model_root_path = f'models/{config["base_config"]["scene"]}/{config["base_config"]["name"]}'
 

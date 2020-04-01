@@ -19,7 +19,7 @@ if __name__ == '__main__':
     parser.add_argument('--repeat', type=int, default=1, help='number of repeated experiments')
     args = parser.parse_args()
 
-    if args.env in ['simple_roller', 'ray_square','ray_pyramid']:
+    if args.env in ['simple_roller', 'ray_square', 'ray_pyramid']:
         from algorithm.sac_main_hitted import MainHitted as Main
     else:
         from algorithm.sac_main import Main

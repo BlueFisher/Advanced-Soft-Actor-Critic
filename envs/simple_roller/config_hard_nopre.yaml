@@ -22,7 +22,4 @@ sac_config:
   use_rnn: true
   use_prediction: false
 
-  tau: 0.9
-  _lambda: 1
-  update_target_per_step: 100
   init_log_alpha: -4.6

@@ -6,13 +6,21 @@ class ModelSimpleRep(tf.keras.Model):
         super().__init__()
         self.obs_dims = obs_dims
 
+    def call(self, obs_list):
+        raise Exception("ModelSimpleRep not implemented")
+
+    def get_call_result_tensors(self):
+        return self([tf.keras.Input(shape=t) for t in self.obs_dims])
+
+
+class ModelVoidRep(ModelSimpleRep):
+    def __init__(self, obs_dims):
+        super().__init__(obs_dims)
+
         self.get_call_result_tensors()
 
     def call(self, obs_list):
         return obs_list[0]
-
-    def get_call_result_tensors(self):
-        return self([tf.keras.Input(shape=t) for t in self.obs_dims])
 
 
 class ModelRNNRep(tf.keras.Model):
