@@ -94,6 +94,9 @@ class Learner(object):
     def _init_env(self, config_path, replay_config, sac_config, model_root_path):
         self._stub = StubController(self.net_config)
 
+        self.burn_in_step = sac_config['burn_in_step']
+        self.n_step = sac_config['n_step']
+
         if self.config['env_type'] == 'UNITY':
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
@@ -104,17 +107,19 @@ class Learner(object):
                                         file_name=self.config['build_path'][sys.platform],
                                         no_graphics=not self.render and self.train_mode,
                                         base_port=self.config['build_port'],
-                                        args=['--scene', self.config['scene']])
+                                        scene=self.config['scene'],
+                                        n_agents=self.config['n_agents'])
 
         elif self.config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
 
             self.env = GymWrapper(train_mode=self.train_mode,
-                                  env_name=self.config['build_path'])
+                                  env_name=self.config['build_path'],
+                                  n_agents=self.config['n_agents'])
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')
 
-        obs_dim, action_dim = self.env.init()
+        obs_dims, action_dim, is_discrete = self.env.init()
 
         self.logger.info(f'{self.config["build_path"]} initialized')
 
@@ -125,8 +130,9 @@ class Learner(object):
             custom_sac_model = importlib.import_module(f'{config_path.replace("/",".")}.{self.config["sac"]}')
             shutil.copyfile(f'{config_path}/{self.config["sac"]}.py', f'{model_root_path}/sac_model.py')
 
-        self.sac = SAC_DS_Base(obs_dim=obs_dim,
+        self.sac = SAC_DS_Base(obs_dims=obs_dims,
                                action_dim=action_dim,
+                               is_discrete=is_discrete,
                                model_root_path=model_root_path,
                                model=custom_sac_model,
                                train_mode=self.train_mode,
@@ -139,36 +145,71 @@ class Learner(object):
 
         return [v.numpy() for v in variables]
 
-    def _get_action(self, obs, rnn_state=None):
+    def _get_action(self, obs_list, rnn_state=None):
         if self.sac.use_rnn:
             assert rnn_state is not None
 
         with self._training_lock:
             if self.sac.use_rnn:
-                action, next_rnn_state = self.sac.choose_rnn_action(obs, rnn_state)
+                action, next_rnn_state = self.sac.choose_rnn_action(obs_list, rnn_state)
                 next_rnn_state = next_rnn_state
                 return action.numpy(), next_rnn_state.numpy()
             else:
-                action = self.sac.choose_action(obs)
+                action = self.sac.choose_action(obs_list)
                 return action.numpy()
 
-    def _get_td_error(self, n_obses,
+    def _get_td_error(self,
+                      n_obses_list,
                       n_actions,
                       n_rewards,
-                      obs_,
+                      next_obs_list,
                       n_dones,
                       n_mu_probs,
-                      rnn_state):
-        with self._training_lock:
-            td_error = self.sac.get_td_error(n_obses,
-                                             n_actions,
-                                             n_rewards,
-                                             obs_,
-                                             n_dones,
-                                             n_mu_probs,
-                                             rnn_state)
+                      n_rnn_states=None):
+        """
+        n_obses_list: list([1, episode_len, obs_dim_i], ...)
+        n_actions: [1, episode_len, action_dim]
+        n_rewards: [1, episode_len]
+        next_obs_list: list([1, obs_dim_i], ...)
+        n_dones: [1, episode_len]
+        n_rnn_states: [1, episode_len, rnn_state_dim]
+        """
+        ignore_size = self.burn_in_step + self.n_step
 
-        return td_error.numpy()
+        tmp_n_obses_list = [None] * len(n_obses_list)
+        for i, n_obses in enumerate(n_obses_list):
+            tmp_n_obses_list[i] = np.concatenate([n_obses[:, i:i + ignore_size]
+                                                  for i in range(n_obses.shape[1] - ignore_size + 1)], axis=0)
+        n_actions = np.concatenate([n_actions[:, i:i + ignore_size]
+                                    for i in range(n_actions.shape[1] - ignore_size + 1)], axis=0)
+        n_rewards = np.concatenate([n_rewards[:, i:i + ignore_size]
+                                    for i in range(n_rewards.shape[1] - ignore_size + 1)], axis=0)
+        for i, n_obses in enumerate(n_obses_list):
+            next_obs_list[i] = np.concatenate([n_obses[:, i + ignore_size]
+                                               for i in range(n_obses.shape[1] - ignore_size)]
+                                              + [next_obs_list[i]],
+                                              axis=0)
+        n_dones = np.concatenate([n_dones[:, i:i + ignore_size]
+                                  for i in range(n_dones.shape[1] - ignore_size + 1)], axis=0)
+        n_mu_probs = np.concatenate([n_mu_probs[:, i:i + ignore_size]
+                                     for i in range(n_mu_probs.shape[1] - ignore_size + 1)], axis=0)
+        if self.sac.use_rnn:
+            rnn_state = np.concatenate([n_rnn_states[:, i]
+                                        for i in range(n_rnn_states.shape[1] - ignore_size + 1)], axis=0)
+
+        with self._training_lock:
+            td_error = self.sac.get_ds_td_error(n_obses_list=tmp_n_obses_list,
+                                                n_actions=n_actions,
+                                                n_rewards=n_rewards,
+                                                next_obs_list=next_obs_list,
+                                                n_dones=n_dones,
+                                                n_mu_probs=n_mu_probs,
+                                                rnn_state=rnn_state if self.sac.use_rnn else None)
+        td_error = td_error.flatten()
+        td_error = np.concatenate([td_error,
+                                   np.zeros(ignore_size, dtype=np.float32)])
+
+        return td_error
 
     def _post_rewards(self, peer, n_rewards):
         if self.sac.use_reward_normalization:
@@ -181,7 +222,7 @@ class Learner(object):
         iteration = 0
         start_time = time.time()
 
-        n_agents, obs = self.env.reset(reset_config=self.reset_config)
+        n_agents, obs_list = self.env.reset(reset_config=self.reset_config)
 
         agents = [self._agent_class(i, use_rnn=use_rnn)
                   for i in range(n_agents)]
@@ -197,7 +238,7 @@ class Learner(object):
                 continue
 
             if self.config['reset_on_iteration']:
-                _, obs = self.env.reset(reset_config=self.reset_config)
+                _, obs_list = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
 
@@ -212,30 +253,30 @@ class Learner(object):
             while False in [a.done for a in agents] and (not self.train_mode or self._is_training):
                 with self._training_lock:
                     if use_rnn:
-                        action, next_rnn_state = self.sac.choose_rnn_action(obs.astype(np.float32),
+                        action, next_rnn_state = self.sac.choose_rnn_action([o.astype(np.float32) for o in obs_list],
                                                                             rnn_state)
                         next_rnn_state = next_rnn_state.numpy()
                     else:
-                        action = self.sac.choose_action(obs.astype(np.float32))
+                        action = self.sac.choose_action([o.astype(np.float32) for o in obs_list])
 
                 action = action.numpy()
 
-                obs_, reward, local_done, max_reached = self.env.step(action)
+                next_obs_list, reward, local_done, max_reached = self.env.step(action)
 
                 if step == self.config['max_step']:
                     local_done = [True] * len(agents)
                     max_reached = [True] * len(agents)
 
                 for i, agent in enumerate(agents):
-                    agent.add_transition(obs[i],
+                    agent.add_transition([o[i] for o in obs_list],
                                          action[i],
                                          reward[i],
                                          local_done[i],
                                          max_reached[i],
-                                         obs_[i],
+                                         [o[i] for o in next_obs_list],
                                          rnn_state[i] if use_rnn else None)
 
-                obs = obs_
+                obs_list = next_obs_list
                 if use_rnn:
                     rnn_state = next_rnn_state
                     rnn_state[local_done] = initial_rnn_state[local_done]
@@ -288,10 +329,10 @@ class Learner(object):
 
         while True:
             (pointers,
-             n_obses,
+             n_obses_list,
              n_actions,
              n_rewards,
-             obs_,
+             next_obs_list,
              n_dones,
              n_mu_probs,
              rnn_state,
@@ -299,10 +340,10 @@ class Learner(object):
 
             with self._training_lock:
                 td_error, update_data = self.sac.train(pointers=pointers,
-                                                       n_obses=n_obses,
+                                                       n_obses_list=n_obses_list,
                                                        n_actions=n_actions,
                                                        n_rewards=n_rewards,
-                                                       obs_=obs_,
+                                                       next_obs_list=next_obs_list,
                                                        n_dones=n_dones,
                                                        n_mu_probs=n_mu_probs,
                                                        priority_is=priority_is,
@@ -352,14 +393,14 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
             yield Pong(time=int(time.time() * 1000))
 
     def GetAction(self, request: learner_pb2.GetActionRequest, context):
-        obs = proto_to_ndarray(request.obs)
+        obs_list = [proto_to_ndarray(obs) for obs in request.obs_list]
         rnn_state = proto_to_ndarray(request.rnn_state)
 
         if rnn_state is None:
-            action = self._get_action(obs)
+            action = self._get_action(obs_list)
             next_rnn_state = None
         else:
-            action, next_rnn_state = self._get_action(obs, rnn_state)
+            action, next_rnn_state = self._get_action(obs_list, rnn_state)
 
         return learner_pb2.Action(action=ndarray_to_proto(action),
                                   rnn_state=ndarray_to_proto(next_rnn_state))
@@ -369,21 +410,21 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
         return learner_pb2.PolicyVariables(variables=[ndarray_to_proto(v) for v in variables])
 
     def GetTDError(self, request: learner_pb2.GetTDErrorRequest, context):
-        n_obses = proto_to_ndarray(request.n_obses)
+        n_obses_list = [proto_to_ndarray(n_obses) for n_obses in request.n_obses_list]
         n_actions = proto_to_ndarray(request.n_actions)
         n_rewards = proto_to_ndarray(request.n_rewards)
-        obs_ = proto_to_ndarray(request.obs_)
+        next_obs_list = [proto_to_ndarray(next_obs) for next_obs in request.next_obs_list]
         n_dones = proto_to_ndarray(request.n_dones)
         n_mu_probs = proto_to_ndarray(request.n_mu_probs)
-        rnn_state = proto_to_ndarray(request.rnn_state)
+        n_rnn_states = proto_to_ndarray(request.n_rnn_states)
 
-        td_error = self._get_td_error(n_obses,
+        td_error = self._get_td_error(n_obses_list,
                                       n_actions,
                                       n_rewards,
-                                      obs_,
+                                      next_obs_list,
                                       n_dones,
                                       n_mu_probs,
-                                      rnn_state)
+                                      n_rnn_states)
         return learner_pb2.TDError(td_error=ndarray_to_proto(td_error))
 
     def PostRewards(self, request: learner_pb2.PostRewardsRequest, context):
@@ -403,10 +444,10 @@ class StubController:
         response = self._replay_stub.Sample(Empty())
         if response.has_data:
             return (proto_to_ndarray(response.pointers),
-                    proto_to_ndarray(response.n_obses),
+                    [proto_to_ndarray(n_obses) for n_obses in response.n_obses_list],
                     proto_to_ndarray(response.n_actions),
                     proto_to_ndarray(response.n_rewards),
-                    proto_to_ndarray(response.obs_),
+                    [proto_to_ndarray(next_obs) for next_obs in response.next_obs_list],
                     proto_to_ndarray(response.n_dones),
                     proto_to_ndarray(response.n_mu_probs),
                     proto_to_ndarray(response.rnn_state),

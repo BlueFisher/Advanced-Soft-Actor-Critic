@@ -2,21 +2,22 @@ base_config:
   build_path: 
     win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
     linux: /data/linux-RL-Envs/RL-Envs.x86_64
-  scene: ContinousVisualRoller
+  scene: ContinousHardRoller
 
-  name: "{time}"
-  sac: sac_visual
-  max_iter: 100000
-  save_model_per_iter: 200
+  sac: sac_hard
+  save_model_per_iter: 50
   reset_on_iteration: false
-
+  
 replay_config:
-  batch_size: 64
+  beta: 0.1
+  beta_increment_per_sampling: 0
 
 sac_config:
+  seed: 42
+  
   burn_in_step: 10
   n_step: 5
   use_rnn: true
   use_prediction: true
 
-  init_log_alpha: -2.3
+  init_log_alpha: -4.6
