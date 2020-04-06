@@ -51,17 +51,25 @@ class Replay(object):
                 config['replay_config'],
                 config['sac_config'])
 
-    def _add(self, n_obses, n_actions, n_rewards, obs_, n_dones, n_mu_probs,
+    def _add(self,
+             n_obses_list,
+             n_actions,
+             n_rewards,
+             next_obs_list,
+             n_dones,
+             n_mu_probs,
              n_rnn_states=None):
 
-        obs = n_obses.reshape([-1, n_obses.shape[-1]])
+        self.obs_list_len = len(n_obses_list)
+        # Reshape [1, episode_len, ...] to [episode_len, ...]
+        obs_list = [n_obses.reshape([-1, *n_obses.shape[2:]]) for n_obses in n_obses_list]
         action = n_actions.reshape([-1, n_actions.shape[-1]])
         reward = n_rewards.reshape([-1])
         done = n_dones.reshape([-1])
-        mu_prob = n_mu_probs.reshape([-1, n_mu_probs.shape[-1]])
+        mu_prob = n_mu_probs.reshape([-1])
 
-        # Padding obs_
-        obs = np.concatenate([obs, obs_])
+        # Padding next_obs for episode experience replay
+        obs_list = [np.concatenate([obs, next_obs]) for obs, next_obs in zip(obs_list, next_obs_list)]
         action = np.concatenate([action,
                                  np.empty([1, action.shape[-1]], dtype=np.float32)])
         reward = np.concatenate([reward,
@@ -69,10 +77,11 @@ class Replay(object):
         done = np.concatenate([done,
                                np.zeros([1], dtype=np.float32)])
         mu_prob = np.concatenate([mu_prob,
-                                  np.empty([1, mu_prob.shape[-1]], dtype=np.float32)])
+                                  np.empty([1], dtype=np.float32)])
 
+        storage_data = {f'obs_{i}': obs for i, obs in enumerate(obs_list)}
         storage_data = {
-            'obs': obs,
+            **storage_data,
             'action': action,
             'reward': reward,
             'done': done,
@@ -86,26 +95,19 @@ class Replay(object):
             storage_data['rnn_state'] = rnn_state
 
         # Get td_error
-        ignore_size = self.burn_in_step + self.n_step
-
-        n_obses = np.concatenate([n_obses[:, i:i + ignore_size] for i in range(n_obses.shape[1] - ignore_size + 1)], axis=0)
-        n_actions = np.concatenate([n_actions[:, i:i + ignore_size] for i in range(n_actions.shape[1] - ignore_size + 1)], axis=0)
-        n_rewards = np.concatenate([n_rewards[:, i:i + ignore_size] for i in range(n_rewards.shape[1] - ignore_size + 1)], axis=0)
-        obs_ = obs[ignore_size:]
-        n_dones = np.concatenate([n_dones[:, i:i + ignore_size] for i in range(n_dones.shape[1] - ignore_size + 1)], axis=0)
-        n_mu_probs = np.concatenate([n_mu_probs[:, i:i + ignore_size] for i in range(n_mu_probs.shape[1] - ignore_size + 1)], axis=0)
-        if self.use_rnn:
-            rnn_state = rnn_state[:-ignore_size]
-
-        td_error = self._stub.get_td_error(n_obses, n_actions, n_rewards, obs_, n_dones, n_mu_probs,
-                                           rnn_state=rnn_state if self.use_rnn else None)
+        td_error = self._stub.get_td_error(n_obses_list,
+                                           n_actions,
+                                           n_rewards,
+                                           next_obs_list,
+                                           n_dones,
+                                           n_mu_probs,
+                                           n_rnn_states=n_rnn_states if self.use_rnn else None)
         # td_error = np.abs(np.random.randn(n_obses.shape[0], 1).astype(np.float32))
         if td_error is not None:
             td_error = td_error.flatten()
-            td_error = np.concatenate([td_error,
-                                       np.zeros(ignore_size, dtype=np.float32)])
             with self._replay_buffer_lock:
-                self._replay_buffer.add_with_td_error(td_error, storage_data, ignore_size=ignore_size)
+                self._replay_buffer.add_with_td_error(td_error, storage_data,
+                                                      ignore_size=self.burn_in_step + self.n_step)
 
             percent = self._replay_buffer.size / self._replay_buffer.capacity * 100
             print(f'buffer size, {percent:.2f}%', end='\r')
@@ -129,18 +131,18 @@ class Replay(object):
         for k, v in trans.items():
             trans[k] = np.concatenate([np.expand_dims(t, 1) for t in v], axis=1)
 
-        m_obses = trans['obs']
+        m_obses_list = [trans[f'obs_{i}'] for i in range(self.obs_list_len)]
         m_actions = trans['action']
         m_rewards = trans['reward']
         m_dones = trans['done']
         m_mu_probs = trans['mu_prob']
 
-        n_obses = m_obses[:, :-1, :]
-        n_actions = m_actions[:, :-1, :]
+        n_obses_list = [m_obses[:, :-1, ...] for m_obses in m_obses_list]
+        n_actions = m_actions[:, :-1, ...]
         n_rewards = m_rewards[:, :-1]
-        obs_ = m_obses[:, -1, :]
+        next_obs_list = [m_obses[:, -1, ...] for m_obses in m_obses_list]
         n_dones = m_dones[:, :-1]
-        n_mu_probs = m_mu_probs[:, :-1, :]
+        n_mu_probs = m_mu_probs[:, :-1]
 
         if self.use_rnn:
             m_rnn_states = trans['rnn_state']
@@ -148,10 +150,10 @@ class Replay(object):
         else:
             rnn_state = None
 
-        return pointers, (n_obses,
+        return pointers, (n_obses_list,
                           n_actions,
                           n_rewards,
-                          obs_,
+                          next_obs_list,
                           n_dones,
                           n_mu_probs,
                           rnn_state), priority_is
@@ -205,10 +207,10 @@ class ReplayService(replay_pb2_grpc.ReplayServiceServicer):
             yield Pong(time=int(time.time() * 1000))
 
     def Add(self, request: replay_pb2.AddRequest, context):
-        self._add(n_obses=proto_to_ndarray(request.n_obses),
+        self._add(n_obses_list=[proto_to_ndarray(n_obses) for n_obses in request.n_obses_list],
                   n_actions=proto_to_ndarray(request.n_actions),
                   n_rewards=proto_to_ndarray(request.n_rewards),
-                  obs_=proto_to_ndarray(request.obs_),
+                  next_obs_list=[proto_to_ndarray(next_obs) for next_obs in request.next_obs_list],
                   n_dones=proto_to_ndarray(request.n_dones),
                   n_mu_probs=proto_to_ndarray(request.n_mu_probs),
                   n_rnn_states=proto_to_ndarray(request.n_rnn_states))
@@ -220,22 +222,22 @@ class ReplayService(replay_pb2_grpc.ReplayServiceServicer):
             return replay_pb2.SampledData(has_data=False)
         else:
             pointers, trans, priority_is = sampled
-            (n_obses,
+            (n_obses_list,
              n_actions,
              n_rewards,
-             obs_,
+             next_obs_list,
              n_dones,
              n_mu_probs,
-             rnn_state) = [ndarray_to_proto(t) for t in trans]
+             rnn_state) = trans
 
             return replay_pb2.SampledData(pointers=ndarray_to_proto(pointers),
-                                          n_obses=n_obses,
-                                          n_actions=n_actions,
-                                          n_rewards=n_rewards,
-                                          obs_=obs_,
-                                          n_dones=n_dones,
-                                          n_mu_probs=n_mu_probs,
-                                          rnn_state=rnn_state,
+                                          n_obses_list=[ndarray_to_proto(n_obses) for n_obses in n_obses_list],
+                                          n_actions=ndarray_to_proto(n_actions),
+                                          n_rewards=ndarray_to_proto(n_rewards),
+                                          next_obs_list=[ndarray_to_proto(next_obs) for next_obs in next_obs_list],
+                                          n_dones=ndarray_to_proto(n_dones),
+                                          n_mu_probs=ndarray_to_proto(n_mu_probs),
+                                          rnn_state=ndarray_to_proto(rnn_state),
                                           priority_is=ndarray_to_proto(priority_is),
                                           has_data=True)
 
@@ -263,15 +265,21 @@ class StubController:
         self._logger = logging.getLogger('ds.replay.stub')
 
     @rpc_error_inspector
-    def get_td_error(self, n_obses, n_actions, n_rewards, obs_, n_dones, n_mu_probs,
-                     rnn_state=None):
-        request = learner_pb2.GetTDErrorRequest(n_obses=ndarray_to_proto(n_obses),
+    def get_td_error(self,
+                     n_obses_list,
+                     n_actions,
+                     n_rewards,
+                     next_obs_list,
+                     n_dones,
+                     n_mu_probs,
+                     n_rnn_states=None):
+        request = learner_pb2.GetTDErrorRequest(n_obses_list=[ndarray_to_proto(n_obses) for n_obses in n_obses_list],
                                                 n_actions=ndarray_to_proto(n_actions),
                                                 n_rewards=ndarray_to_proto(n_rewards),
-                                                obs_=ndarray_to_proto(obs_),
+                                                next_obs_list=[ndarray_to_proto(next_obs) for next_obs in next_obs_list],
                                                 n_dones=ndarray_to_proto(n_dones),
                                                 n_mu_probs=ndarray_to_proto(n_mu_probs),
-                                                rnn_state=ndarray_to_proto(rnn_state))
+                                                n_rnn_states=ndarray_to_proto(n_rnn_states))
 
         response = self._learner_stub.GetTDError(request)
 

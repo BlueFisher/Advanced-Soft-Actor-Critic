@@ -13,14 +13,14 @@ base_config:
   
   name: "{time}"
   sac: sac
-  # update policy variables each "update_policy_variables_per_step" 
-  # or get action from learner each step
-  update_policy_mode: true
-  # -1 for policy variables being updated each iteration
-  update_policy_variables_per_step: -1
-  max_step: -1
-  save_model_per_iter: 10
-  reset_on_iteration: true
+  update_policy_mode: true # update policy variables each "update_policy_variables_per_step" 
+                           # or get action from learner each step
+  update_policy_variables_per_step: -1 # -1 for policy variables being updated each 
+                                       # iteration
+  n_agents: 1 # N agents running in parallel
+  max_step: -1 # Max step in each iteration
+  save_model_per_iter: 10 # Save model parameters every N iterations
+  reset_on_iteration: true # If to force reset agent if an episode terminated
   
 net_config:
   replay_host: 127.0.0.1
@@ -34,23 +34,34 @@ reset_config:
 replay_config:
   batch_size: 256
   capacity: 1000000
-  alpha: 0.9
-  use_mongodb: false
+  alpha: 0.9 # [0~1] convert the importance of TD error to priority
+             # If 0, PER will reduce to vanilla replay buffer
+  beta: 0.4 # Importance-sampling, from initial value increasing to 1
+  beta_increment_per_sampling: 0.001 # Increment step
+  td_error_min: 0.01 # Small amount to avoid zero priority
+  td_error_max: 1. # Clipped abs error
+  use_mongodb: false # TODO
 
 sac_config:
-  seed: null
-  write_summary_per_step: 20
+  seed: null # Random seed
+  write_summary_per_step: 20 # Write summaries in TensorBoard every N steps
 
-  burn_in_step: 0
-  n_step: 1
-  use_rnn: false
+  burn_in_step: 0 # Burn-in steps in R2D2
+  n_step: 1 # Update Q function by N steps
+  use_rnn: false # If use RNN
 
-  tau: 0.005
-  update_target_per_step: 1
-  init_log_alpha: -2.3
-  use_auto_alpha: true
-  learning_rate: 0.0003
-  gamma: 0.99
-  _lambda: 1.0
-  use_prediction: false
-  use_reward_normalization: false
+  tau: 0.005 # Coefficient of updating target network
+  update_target_per_step: 1 # Update target network every N steps
+
+  init_log_alpha: -2.3 # The initial log_alpha
+  use_auto_alpha: true # If use automating entropy adjustment
+
+  learning_rate: 0.0003 # Learning rate of all optimizers
+
+  gamma: 0.99 # Discount factor
+  _lambda: 1.0 # Discount factor for V-trace
+
+  use_prediction: false # If train a transition model
+  use_reward_normalization: false # If use reward normalization
+  use_curiosity: false # If use curiosity
+  curiosity_strength: 1 # Curiosity strength if use curiosity

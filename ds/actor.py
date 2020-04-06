@@ -89,24 +89,27 @@ class Actor(object):
                                         file_name=self.config['build_path'][sys.platform],
                                         no_graphics=self.train_mode,
                                         base_port=self.config['build_port'],
-                                        args=['--scene', self.config['scene']])
+                                        scene=self.config['scene'],
+                                        n_agents=self.config['n_agents'])
 
         elif self.config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
 
             self.env = GymWrapper(train_mode=self.train_mode,
-                                  env_name=self.config['build_path'])
+                                  env_name=self.config['build_path'],
+                                  n_agents=self.config['n_agents'])
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')
 
-        self.obs_dim, self.action_dim = self.env.init()
+        self.obs_dims, self.action_dim, is_discrete = self.env.init()
 
         self.logger.info(f'{self.config["build_path"]} initialized')
 
         custom_sac_model = importlib.import_module(f'{self.config_path.replace("/",".")}.{self.config["sac"]}')
 
-        self.sac_actor = SAC_DS_Base(obs_dim=self.obs_dim,
+        self.sac_actor = SAC_DS_Base(obs_dims=self.obs_dims,
                                      action_dim=self.action_dim,
+                                     is_discrete=is_discrete,
                                      model_root_path=None,
                                      model=custom_sac_model,
                                      train_mode=False,
@@ -120,22 +123,37 @@ class Actor(object):
         if variables is not None:
             self.sac_actor.update_policy_variables(variables)
 
-    def _add_trans(self, n_obses, n_actions, n_rewards, obs_, n_dones,
+    def _add_trans(self,
+                   n_obses_list,
+                   n_actions,
+                   n_rewards,
+                   next_obs_list,
+                   n_dones,
                    n_rnn_states=None):
 
         self._stub.post_rewards(n_rewards)
 
-        if n_obses.shape[1] < self.sac_actor.burn_in_step + self.sac_actor.n_step:
+        if n_obses_list[0].shape[1] < self.sac_actor.burn_in_step + self.sac_actor.n_step:
             return
 
         if self.sac_actor.use_rnn:
-            n_mu_probs = self.sac_actor.get_rnn_n_step_probs(n_obses, n_actions,
-                                                             n_rnn_states[:, 0, :]).numpy()
-            self._stub.add_transitions(n_obses, n_actions, n_rewards, obs_, n_dones, n_mu_probs,
+            n_mu_probs = self.sac_actor.get_n_probs(*n_obses_list, n_actions,
+                                                    n_rnn_states[:, 0, :]).numpy()
+            self._stub.add_transitions(n_obses_list,
+                                       n_actions,
+                                       n_rewards,
+                                       next_obs_list,
+                                       n_dones,
+                                       n_mu_probs,
                                        n_rnn_states)
         else:
-            n_mu_probs = self.sac_actor.get_n_step_probs(n_obses, n_actions).numpy()
-            self._stub.add_transitions(n_obses, n_actions, n_rewards, obs_, n_dones, n_mu_probs)
+            n_mu_probs = self.sac_actor.get_n_probs(*n_obses_list, n_actions).numpy()
+            self._stub.add_transitions(n_obses_list,
+                                       n_actions,
+                                       n_rewards,
+                                       next_obs_list,
+                                       n_dones,
+                                       n_mu_probs)
 
     def _run(self):
         iteration = 0
@@ -157,7 +175,7 @@ class Actor(object):
                 self._init_env()
                 use_rnn = self.sac_actor.use_rnn
 
-                n_agents, obs = self.env.reset(reset_config=self.reset_config)
+                n_agents, obs_list = self.env.reset(reset_config=self.reset_config)
 
                 agents = [self._agent_class(i, use_rnn=use_rnn)
                           for i in range(n_agents)]
@@ -167,7 +185,7 @@ class Actor(object):
                     rnn_state = initial_rnn_state
 
             if self.config['reset_on_iteration']:
-                _, obs = self.env.reset(reset_config=self.reset_config)
+                _, obs_list = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
 
@@ -187,10 +205,10 @@ class Actor(object):
                 for agent in agents:
                     if agent.is_empty():
                         for _ in range(self.sac_actor.burn_in_step):
-                            agent.add_transition(np.zeros(self.obs_dim),
+                            agent.add_transition([np.zeros(t) for t in self.obs_dims],
                                                  np.zeros(self.action_dim),
                                                  0, False, False,
-                                                 np.zeros(self.obs_dim),
+                                                 [np.zeros(t) for t in self.obs_dims],
                                                  initial_rnn_state[0])
 
                 if self.config['update_policy_mode']:
@@ -199,37 +217,38 @@ class Actor(object):
                         self._update_policy_variables()
 
                     if use_rnn:
-                        action, next_rnn_state = self.sac_actor.choose_rnn_action(obs.astype(np.float32),
+                        action, next_rnn_state = self.sac_actor.choose_rnn_action([o.astype(np.float32) for o in obs_list],
                                                                                   rnn_state)
                         next_rnn_state = next_rnn_state.numpy()
                     else:
-                        action = self.sac_actor.choose_action(obs.astype(np.float32))
+                        action = self.sac_actor.choose_action([o.astype(np.float32) for o in obs_list])
 
                     action = action.numpy()
                 else:
                     # Get action from learner each step
                     if use_rnn:
-                        action_rnn_state = self._stub.get_action(obs.astype(np.float32), rnn_state)
+                        action_rnn_state = self._stub.get_action([o.astype(np.float32) for o in obs_list],
+                                                                 rnn_state)
                         if action_rnn_state is None:
                             break
                         action, next_rnn_state = action_rnn_state
                     else:
-                        action = self._stub.get_action(obs.astype(np.float32))
+                        action = self._stub.get_action([o.astype(np.float32) for o in obs_list])
                         if action is None:
                             break
 
-                obs_, reward, local_done, max_reached = self.env.step(action)
+                next_obs_list, reward, local_done, max_reached = self.env.step(action)
 
                 if step == self.config['max_step']:
                     local_done = [True] * len(agents)
                     max_reached = [True] * len(agents)
 
-                episode_trans_list = [agents[i].add_transition(obs[i],
+                episode_trans_list = [agents[i].add_transition([o[i] for o in obs_list],
                                                                action[i],
                                                                reward[i],
                                                                local_done[i],
                                                                max_reached[i],
-                                                               obs_[i],
+                                                               [o[i] for o in next_obs_list],
                                                                rnn_state[i] if use_rnn else None)
                                       for i in range(len(agents))]
 
@@ -239,7 +258,7 @@ class Actor(object):
                         for episode_trans in episode_trans_list:
                             self._add_trans(*episode_trans)
 
-                obs = obs_
+                obs_list = next_obs_list
                 if use_rnn:
                     rnn_state = next_rnn_state
                     rnn_state[local_done] = initial_rnn_state[local_done]
@@ -279,19 +298,28 @@ class StubController:
         return self._replay_connected and self._learner_connected
 
     @rpc_error_inspector
-    def add_transitions(self, n_obses, n_actions, n_rewards, obs_, n_dones, n_mu_probs,
+    def add_transitions(self,
+                        n_obses_list,
+                        n_actions,
+                        n_rewards,
+                        next_obs_list,
+                        n_dones,
+                        n_mu_probs,
                         n_rnn_states=None):
-        self._replay_stub.Add(replay_pb2.AddRequest(n_obses=ndarray_to_proto(n_obses),
+        self._replay_stub.Add(replay_pb2.AddRequest(n_obses_list=[ndarray_to_proto(n_obses)
+                                                                  for n_obses in n_obses_list],
                                                     n_actions=ndarray_to_proto(n_actions),
                                                     n_rewards=ndarray_to_proto(n_rewards),
-                                                    obs_=ndarray_to_proto(obs_),
+                                                    next_obs_list=[ndarray_to_proto(next_obs)
+                                                                   for next_obs in next_obs_list],
                                                     n_dones=ndarray_to_proto(n_dones),
                                                     n_mu_probs=ndarray_to_proto(n_mu_probs),
                                                     n_rnn_states=ndarray_to_proto(n_rnn_states)))
 
     @rpc_error_inspector
-    def get_action(self, obs, rnn_state=None):
-        request = learner_pb2.GetActionRequest(obs=ndarray_to_proto(obs),
+    def get_action(self, obs_list, rnn_state=None):
+        request = learner_pb2.GetActionRequest(obs_list=[ndarray_to_proto(obs)
+                                                         for obs in obs_list],
                                                rnn_state=ndarray_to_proto(rnn_state))
 
         response = self._learner_stub.GetAction(request)

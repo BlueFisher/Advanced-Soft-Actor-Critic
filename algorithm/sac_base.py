@@ -15,7 +15,7 @@ logger.setLevel(level=logging.INFO)
 
 
 def squash_correction_log_prob(dist, x):
-    return dist.log_prob(x) - tf.math.log(1 - tf.pow(tf.tanh(x), 2) + 1e-6)
+    return dist.log_prob(x) - tf.math.log(tf.maximum(1 - tf.square(tf.tanh(x)), 1e-6))
 
 
 def debug(x):
@@ -28,6 +28,12 @@ def debug_grad(grads):
         debug(grad)
 
 
+def debug_grad_com(grads, grads1):
+    for i, grad in enumerate(grads):
+        tf.print(grad.name)
+        debug(grad - grads1[i])
+
+
 def _np_to_tensor(fn):
     def c(*args, **kwargs):
         return fn(*[tf.constant(k) if not isinstance(k, tf.Tensor) else k for k in args if k is not None],
@@ -36,7 +42,7 @@ def _np_to_tensor(fn):
     return c
 
 
-def _list_arg_to_concrete_arg(name, arg_list):
+def list_arg_to_concrete_arg(name, arg_list):
     concrete_arg = {
         name: arg_list[0]
     }
@@ -69,6 +75,7 @@ class SAC_Base(object):
                  learning_rate=3e-4,
                  gamma=0.99,
                  _lambda=0.9,
+                 clip_epsilon=0.2,
 
                  use_priority=True,
                  use_n_step_is=True,
@@ -99,6 +106,7 @@ class SAC_Base(object):
         learning_rate: Learning rate of all optimizers
         gamma: Discount factor
         _lambda: Discount factor for V-trace
+        clip_epsilon: epsilon for q and policy clip
 
         use_priority: If use PER importance ratio
         use_n_step_is: If use importance sampling
@@ -127,6 +135,7 @@ class SAC_Base(object):
         self.use_auto_alpha = use_auto_alpha
         self.gamma = gamma
         self._lambda = _lambda
+        self.clip_epsilon = clip_epsilon
 
         self.use_priority = use_priority
         self.use_n_step_is = use_n_step_is
@@ -196,7 +205,9 @@ class SAC_Base(object):
         self.model_target_q1 = model.ModelQ(state_dim, self.action_dim)
         self.model_q2 = model.ModelQ(state_dim, self.action_dim)
         self.model_target_q2 = model.ModelQ(state_dim, self.action_dim)
+
         self.model_policy = model.ModelPolicy(state_dim, self.action_dim)
+        self.model_target_policy = model.ModelPolicy(state_dim, self.action_dim)
 
         self.cem_rewards = None
 
@@ -314,6 +325,9 @@ class SAC_Base(object):
 
         target_variables += self.model_target_rep.trainable_variables
         eval_variables += self.model_rep.trainable_variables
+
+        target_variables += self.model_target_policy.trainable_variables
+        eval_variables += self.model_policy.trainable_variables
 
         [t.assign(tau * e + (1. - tau) * t) for t, e in zip(target_variables, eval_variables)]
 
@@ -500,6 +514,7 @@ class SAC_Base(object):
             alpha = tf.exp(self.log_alpha)
 
             policy = self.model_policy(state)
+            target_policy = self.model_target_policy(state)
             if self.is_discrete:
                 q1 = self.model_q1(state)  # [Batch, action_dim]
                 q2 = self.model_q2(state)  # [Batch, action_dim]
@@ -507,8 +522,10 @@ class SAC_Base(object):
                 action_sampled = policy.sample()  # [Batch, action_dim]
                 q1 = self.model_q1(state, action)  # [Batch, 1]
                 q1_for_gradient = self.model_q1(state, tf.tanh(action_sampled))
+                target_q1 = self.model_target_q1(state, action)
                 q2 = self.model_q2(state, action)  # [Batch, 1]
                 q2_for_gradient = self.model_q2(state, tf.tanh(action_sampled))
+                target_q2 = self.model_target_q2(state, action)
 
             y = tf.stop_gradient(self._get_y(m_target_states[:, self.burn_in_step:-1, ...],
                                              n_actions[:, self.burn_in_step:, ...],
@@ -523,8 +540,28 @@ class SAC_Base(object):
                 loss_q1 = tf.square(q1_single - y)
                 loss_q2 = tf.square(q2_single - y)
             else:
-                loss_q1 = tf.square(q1 - y)
-                loss_q2 = tf.square(q2 - y)
+                clipped_q1 = target_q1 + tf.clip_by_value(
+                    q1 - target_q1,
+                    -self.clip_epsilon,
+                    self.clip_epsilon,
+                )
+                clipped_q2 = target_q2 + tf.clip_by_value(
+                    q2 - target_q2,
+                    -self.clip_epsilon,
+                    self.clip_epsilon,
+                )
+
+                loss_q1_a = tf.square(clipped_q1 - y)
+                loss_q2_a = tf.square(clipped_q2 - y)
+
+                loss_q1_b = tf.square(q1 - y)
+                loss_q2_b = tf.square(q2 - y)
+
+                loss_q1 = tf.maximum(loss_q1_a, loss_q1_b)
+                loss_q2 = tf.maximum(loss_q2_a, loss_q2_b)
+
+                # loss_q1 = tf.square(q1 - y)
+                # loss_q2 = tf.square(q2 - y)
 
             if self.use_priority:
                 loss_q1 *= priority_is
@@ -540,16 +577,17 @@ class SAC_Base(object):
                 approx_next_state_dist = self.model_transition(n_states[:, self.burn_in_step:, ...],
                                                                n_actions[:, self.burn_in_step:, ...])
                 loss_transition = -approx_next_state_dist.log_prob(m_target_states[:, self.burn_in_step + 1:, ...])
+                # loss_transition = -tf.maximum(loss_transition, -2.)
                 std_normal = tfp.distributions.Normal(tf.zeros_like(approx_next_state_dist.loc),
                                                       tf.ones_like(approx_next_state_dist.scale))
-                loss_transition += tfp.distributions.kl_divergence(approx_next_state_dist, std_normal)
+                loss_transition += 0.9 * tfp.distributions.kl_divergence(approx_next_state_dist, std_normal)
                 loss_transition = tf.reduce_mean(loss_transition)
 
                 approx_n_rewards = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])
-                loss_reward = loss_mse(approx_n_rewards, tf.expand_dims(n_rewards[:, self.burn_in_step:], 2))
+                loss_reward = 0.5 * loss_mse(approx_n_rewards, tf.expand_dims(n_rewards[:, self.burn_in_step:], 2))
 
-                loss_obs = self.model_observation.get_loss(m_states[:, self.burn_in_step:, ...],
-                                                           [m_obses[:, self.burn_in_step:, ...] for m_obses in m_obses_list])
+                loss_obs = 0.5 * self.model_observation.get_loss(m_states[:, self.burn_in_step:, ...],
+                                                                 [m_obses[:, self.burn_in_step:, ...] for m_obses in m_obses_list])
 
                 loss_rep = loss_rep_q + loss_transition + loss_reward + loss_obs
 
@@ -571,10 +609,32 @@ class SAC_Base(object):
                 loss_alpha = tf.reduce_sum(probs * loss_alpha, axis=1, keepdims=True)  # [Batch, 1]
             else:
                 log_prob = tf.reduce_sum(squash_correction_log_prob(policy, action_sampled), axis=1, keepdims=True)
-                loss_policy = alpha * log_prob - tf.minimum(q1_for_gradient, q2_for_gradient)
+
+                log_prob = squash_correction_log_prob(policy, action_sampled)
+                target_log_prob = squash_correction_log_prob(target_policy, action_sampled)
+
+                clipped_log_prob = target_log_prob + tf.clip_by_value(log_prob - target_log_prob,
+                                                                      tf.math.log(1 - self.clip_epsilon),
+                                                                      tf.math.log(1 + self.clip_epsilon))
+
+                clipped_log_prob = tf.reduce_sum(clipped_log_prob, axis=1, keepdims=True)
+                log_prob = tf.reduce_sum(log_prob, axis=1, keepdims=True)
+
+                loss_policy_a = alpha * clipped_log_prob - tf.minimum(q1_for_gradient, q2_for_gradient)
+                loss_policy_b = alpha * log_prob - tf.minimum(q1_for_gradient, q2_for_gradient)
+
+                loss_policy = tf.maximum(loss_policy_a, loss_policy_b)
                 # [Batch, 1]
 
+                log_prob = tf.reduce_sum(squash_correction_log_prob(policy, action_sampled), axis=1, keepdims=True)
+
                 loss_alpha = -alpha * (log_prob - self.action_dim)  # [Batch, 1]
+
+                # log_prob = tf.reduce_sum(squash_correction_log_prob(policy, action_sampled), axis=1, keepdims=True)
+                # loss_policy = alpha * log_prob - tf.minimum(q1_for_gradient, q2_for_gradient)
+                # # [Batch, 1]
+
+                # loss_alpha = -alpha * (log_prob - self.action_dim)  # [Batch, 1]
 
             loss_policy = tf.reduce_mean(loss_policy)
             loss_alpha = tf.reduce_mean(loss_alpha)
@@ -594,8 +654,9 @@ class SAC_Base(object):
         grads_rep = tape.gradient(loss_rep, rep_variables)
         self.optimizer_rep.apply_gradients(zip(grads_rep, rep_variables))
 
-        # test_grads = tape.gradient(loss_transition, self.model_rep.trainable_variables + self.model_transition.trainable_variables)
-        # debug_grad(test_grads)
+        # test_grads = tape.gradient(loss_rep, self.model_rep.trainable_variables)
+        # test_grads_q = tape.gradient(loss_rep_q, self.model_rep.trainable_variables)
+        # debug_grad_com(test_grads, test_grads_q)
 
         if self.use_curiosity:
             grads_forward = tape.gradient(loss_forward, self.model_forward.trainable_variables)
@@ -740,8 +801,14 @@ class SAC_Base(object):
             return action
 
     @tf.function
-    def get_td_error(self, n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
-                     n_mu_probs=None, rnn_state=None):
+    def get_td_error(self,
+                     n_obses_list,
+                     n_actions,
+                     n_rewards,
+                     next_obs_list,
+                     n_dones,
+                     n_mu_probs=None,
+                     rnn_state=None):
         """
         tf.function
         """
@@ -860,10 +927,7 @@ class SAC_Base(object):
         """
 
         # n_step transitions except the first one and the last obs_, n_step - 1 + 1
-        if self.use_priority:
-            self.replay_buffer.add(storage_data, ignore_size=self.burn_in_step + self.n_step)
-        else:
-            self.replay_buffer.add(storage_data)  # TODO
+        self.replay_buffer.add(storage_data, ignore_size=self.burn_in_step + self.n_step)
 
     def train(self):
         # Sample from replay buffer
@@ -878,11 +942,9 @@ class SAC_Base(object):
             reward: [Batch, ]
             done: [Batch, ]
             mu_prob: [Batch, ]
+            rnn_state: [Batch, rnn_state_dim]
         """
-        if self.use_priority:
-            pointers, trans, priority_is = sampled
-        else:
-            pointers, trans = sampled
+        pointers, trans, priority_is = sampled
 
         # Get n_step transitions
         trans = {k: [v] for k, v in trans.items()}
@@ -896,11 +958,12 @@ class SAC_Base(object):
             trans[k] = np.concatenate([np.expand_dims(t, 1) for t in v], axis=1)
 
         """
-        m_obses_list: list([Batch, episode_len + 1, obs_dim_i])
-        m_actions: [Batch, episode_len + 1, action_dim]
-        m_rewards: [Batch, episode_len + 1]
-        m_dones: [Batch, episode_len + 1]
-        m_mu_probs: [Batch, episode_len + 1]
+        m_obses_list: list([Batch, N + 1, obs_dim_i])
+        m_actions: [Batch, N + 1, action_dim]
+        m_rewards: [Batch, N + 1]
+        m_dones: [Batch, N + 1]
+        m_mu_probs: [Batch, N + 1]
+        m_rnn_states: [Batch, N + 1, rnn_state_dim]
         """
         m_obses_list = [trans[f'obs_{i}'] for i in range(len(self.obs_dims))]
         m_actions = trans['action']
@@ -921,10 +984,10 @@ class SAC_Base(object):
             m_rnn_states = trans['rnn_state']
             rnn_state = m_rnn_states[:, 0, ...]
 
-        self._train(**_list_arg_to_concrete_arg('n_obses_list', n_obses_list),
+        self._train(**list_arg_to_concrete_arg('n_obses_list', n_obses_list),
                     n_actions=n_actions,
                     n_rewards=n_rewards,
-                    **_list_arg_to_concrete_arg('next_obs_list', next_obs_list),
+                    **list_arg_to_concrete_arg('next_obs_list', next_obs_list),
                     n_dones=n_dones,
                     n_mu_probs=n_mu_probs if self.use_n_step_is else None,
                     priority_is=priority_is if self.use_priority else None,
@@ -933,17 +996,16 @@ class SAC_Base(object):
         self.summary_writer.flush()
 
         if self.use_n_step_is:
-            if self.use_rnn:
-                n_pi_probs = self.get_n_probs(*n_obses_list, n_actions, rnn_state).numpy()
-            else:
-                n_pi_probs = self.get_n_probs(*n_obses_list, n_actions).numpy()
+            n_pi_probs = self.get_n_probs(*n_obses_list,
+                                          n_actions,
+                                          rnn_state=rnn_state if self.use_rnn else None).numpy()
 
         # Update td_error
         if self.use_priority:
-            td_error = self.get_td_error(**_list_arg_to_concrete_arg('n_obses_list', n_obses_list),
+            td_error = self.get_td_error(**list_arg_to_concrete_arg('n_obses_list', n_obses_list),
                                          n_actions=n_actions,
                                          n_rewards=n_rewards,
-                                         **_list_arg_to_concrete_arg('next_obs_list', next_obs_list),
+                                         **list_arg_to_concrete_arg('next_obs_list', next_obs_list),
                                          n_dones=n_dones,
                                          n_mu_probs=n_pi_probs if self.use_n_step_is else None,
                                          rnn_state=rnn_state if self.use_rnn else None).numpy()
