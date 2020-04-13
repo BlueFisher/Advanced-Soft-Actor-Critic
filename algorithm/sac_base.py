@@ -673,27 +673,32 @@ class SAC_Base(object):
 
         del tape
 
-        # Write summaries
-        if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
-            with self.summary_writer.as_default():
-                tf.summary.scalar('loss/y', tf.reduce_mean(y), step=self.global_step)
-
-                if self.use_curiosity:
-                    tf.summary.scalar('loss/forward', loss_forward, step=self.global_step)
-
-                tf.summary.scalar('loss/rep_q', loss_rep_q, step=self.global_step)
-                if self.use_prediction:
-                    tf.summary.scalar('loss/transition', tf.reduce_mean(approx_next_state_dist.entropy()), step=self.global_step)
-                    tf.summary.scalar('loss/reward', loss_reward, step=self.global_step)
-                    tf.summary.scalar('loss/observation', loss_obs, step=self.global_step)
-
-                tf.summary.scalar('loss/Q1', loss_q1, step=self.global_step)
-                tf.summary.scalar('loss/Q2', loss_q2, step=self.global_step)
-                tf.summary.scalar('loss/policy', loss_policy, step=self.global_step)
-                tf.summary.scalar('loss/entropy', tf.reduce_mean(policy.entropy()), step=self.global_step)
-                tf.summary.scalar('loss/alpha', alpha, step=self.global_step)
-
         self.global_step.assign_add(1)
+
+        summary = {
+            'scalar': {
+                'loss/y': tf.reduce_mean(y),
+                'loss/rep_q': loss_rep_q,
+                'loss/Q1': loss_q1,
+                'loss/Q2': loss_q2,
+                'loss/policy': loss_policy,
+                'loss/entropy': tf.reduce_mean(policy.entropy()),
+                'loss/alpha': alpha,
+            },
+            'image': {}
+        }
+        if self.use_curiosity:
+            summary['scalar']['loss/forward'] = loss_forward
+
+        if self.use_prediction:
+            summary['scalar']['loss/transition'] = tf.reduce_mean(approx_next_state_dist.entropy())
+            summary['scalar']['loss/reward'] = loss_reward
+            summary['scalar']['loss/observation'] = loss_obs
+
+            app_obs = self.model_observation(m_states[:5, self.burn_in_step:self.burn_in_step + 1, ...])
+            summary['image']['observation'] = tf.reshape(app_obs, [-1, *app_obs.shape[2:]])
+
+        return summary
 
     @tf.function
     def get_n_rnn_states(self, n_obses_list, rnn_state):
@@ -1048,16 +1053,23 @@ class SAC_Base(object):
             m_rnn_states = trans['rnn_state']
             rnn_state = m_rnn_states[:, 0, ...]
 
-        self._train(**list_arg_to_concrete_arg('n_obses_list', n_obses_list),
-                    n_actions=n_actions,
-                    n_rewards=n_rewards,
-                    **list_arg_to_concrete_arg('next_obs_list', next_obs_list),
-                    n_dones=n_dones,
-                    n_mu_probs=n_mu_probs if self.use_n_step_is else None,
-                    priority_is=priority_is if self.use_priority else None,
-                    initial_rnn_state=rnn_state if self.use_rnn else None)
+        summary = self._train(**list_arg_to_concrete_arg('n_obses_list', n_obses_list),
+                              n_actions=n_actions,
+                              n_rewards=n_rewards,
+                              **list_arg_to_concrete_arg('next_obs_list', next_obs_list),
+                              n_dones=n_dones,
+                              n_mu_probs=n_mu_probs if self.use_n_step_is else None,
+                              priority_is=priority_is if self.use_priority else None,
+                              initial_rnn_state=rnn_state if self.use_rnn else None)
 
-        self.summary_writer.flush()
+        if self.summary_writer is not None and (self.global_step - 1) % self.write_summary_per_step == 0:
+            with self.summary_writer.as_default():
+                for k, v in summary['scalar'].items():
+                    tf.summary.scalar(k, v, step=self.global_step)
+                for k, v in summary['image'].items():
+                    tf.summary.image(k, v, step=self.global_step)
+
+            self.summary_writer.flush()
 
         if self.use_n_step_is:
             n_pi_probs = self.get_n_probs(*n_obses_list,

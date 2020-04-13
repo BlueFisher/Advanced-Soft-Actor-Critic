@@ -107,14 +107,23 @@ class SAC_DS_Base(SAC_Base):
               priority_is,
               rnn_state=None):
 
-        self._train(**list_arg_to_concrete_arg('n_obses_list', n_obses_list),
-                    n_actions=n_actions,
-                    n_rewards=n_rewards,
-                    **list_arg_to_concrete_arg('next_obs_list', next_obs_list),
-                    n_dones=n_dones,
-                    n_mu_probs=n_mu_probs,
-                    priority_is=priority_is,
-                    initial_rnn_state=rnn_state if self.use_rnn else None)
+        summary = self._train(**list_arg_to_concrete_arg('n_obses_list', n_obses_list),
+                              n_actions=n_actions,
+                              n_rewards=n_rewards,
+                              **list_arg_to_concrete_arg('next_obs_list', next_obs_list),
+                              n_dones=n_dones,
+                              n_mu_probs=n_mu_probs,
+                              priority_is=priority_is,
+                              initial_rnn_state=rnn_state if self.use_rnn else None)
+
+        if self.summary_writer is not None and (self.global_step - 1) % self.write_summary_per_step == 0:
+            with self.summary_writer.as_default():
+                for k, v in summary['scalar'].items():
+                    tf.summary.scalar(k, v, step=self.global_step)
+                for k, v in summary['image'].items():
+                    tf.summary.image(k, v, step=self.global_step)
+
+            self.summary_writer.flush()
 
         n_pi_probs = self.get_n_probs(*n_obses_list,
                                       n_actions,
