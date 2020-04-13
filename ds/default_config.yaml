@@ -11,8 +11,8 @@ base_config:
   # only for Gym Enviroments
   build_path: GymEnv
   
-  name: "{time}"
-  sac: sac
+  name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
+  sac: sac # Neural network models file
   update_policy_mode: true # update policy variables each "update_policy_variables_per_step" 
                            # or get action from learner each step
   update_policy_variables_per_step: -1 # -1 for policy variables being updated each 
@@ -33,7 +33,7 @@ reset_config:
 
 replay_config:
   batch_size: 256
-  capacity: 1000000
+  capacity: 524288
   alpha: 0.9 # [0~1] convert the importance of TD error to priority
              # If 0, PER will reduce to vanilla replay buffer
   beta: 0.4 # Importance-sampling, from initial value increasing to 1

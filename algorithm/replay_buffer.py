@@ -14,7 +14,6 @@ class DataStorage:
     def __init__(self, capacity):
         # TODO: MongoDB
         self.capacity = capacity
-        self.episode_index = list()
 
     def add(self, data: dict):
         """

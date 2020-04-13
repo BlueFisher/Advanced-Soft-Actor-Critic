@@ -144,11 +144,10 @@ class SAC_Base(object):
         self.use_curiosity = use_curiosity
         self.curiosity_strength = curiosity_strength
 
+        self.use_add_with_td = False
+
         if seed is not None:
             tf.random.set_seed(seed)
-
-        self._build_model(model, init_log_alpha, learning_rate)
-        self._init_or_restore(model_root_path)
 
         if self.train_mode:
             summary_path = f'{model_root_path}/log'
@@ -156,6 +155,9 @@ class SAC_Base(object):
 
             replay_config = {} if replay_config is None else replay_config
             self.replay_buffer = PrioritizedReplayBuffer(**replay_config)
+
+        self._build_model(model, init_log_alpha, learning_rate)
+        self._init_or_restore(model_root_path)
 
         self._init_tf_function()
 
@@ -180,7 +182,7 @@ class SAC_Base(object):
             self.optimizer_alpha = adam_optimizer()
 
         # Get represented state dimension
-        self.model_rep = model.ModelRep(self.obs_dims)  # TODO ds no rep
+        self.model_rep = model.ModelRep(self.obs_dims)
         self.model_target_rep = model.ModelRep(self.obs_dims)
         if self.use_rnn:
             # Get rnn_state dimension
@@ -707,7 +709,8 @@ class SAC_Base(object):
         tf.function
         obs_list: list([None, obs_dim_i], ...)
         """
-        policy = self.model_policy(self.model_rep(obs_list))
+        state = self.model_rep(obs_list)
+        policy = self.model_policy(state)
         if self.is_discrete:
             return tf.one_hot(policy.sample(), self.action_dim)
         else:
@@ -848,6 +851,60 @@ class SAC_Base(object):
                                   axis=1, keepdims=True)
         return td_error
 
+    def get_episode_td_error(self,
+                             n_obses_list,
+                             n_actions,
+                             n_rewards,
+                             next_obs_list,
+                             n_dones,
+                             n_mu_probs=None,
+                             n_rnn_states=None):
+        """
+        n_obses_list: list([1, episode_len, obs_dim_i], ...)
+        n_actions: [1, episode_len, action_dim]
+        n_rewards: [1, episode_len]
+        next_obs_list: list([1, obs_dim_i], ...)
+        n_dones: [1, episode_len]
+        n_rnn_states: [1, episode_len, rnn_state_dim]
+        """
+        ignore_size = self.burn_in_step + self.n_step
+
+        tmp_n_obses_list = [None] * len(n_obses_list)
+        for i, n_obses in enumerate(n_obses_list):
+            tmp_n_obses_list[i] = np.concatenate([n_obses[:, i:i + ignore_size]
+                                                  for i in range(n_obses.shape[1] - ignore_size + 1)], axis=0)
+        n_actions = np.concatenate([n_actions[:, i:i + ignore_size]
+                                    for i in range(n_actions.shape[1] - ignore_size + 1)], axis=0)
+        n_rewards = np.concatenate([n_rewards[:, i:i + ignore_size]
+                                    for i in range(n_rewards.shape[1] - ignore_size + 1)], axis=0)
+        tmp_next_obs_list = [None] * len(next_obs_list)
+        for i, n_obses in enumerate(n_obses_list):
+            tmp_next_obs_list[i] = np.concatenate([n_obses[:, i + ignore_size]
+                                                   for i in range(n_obses.shape[1] - ignore_size)]
+                                                  + [next_obs_list[i]],
+                                                  axis=0)
+        n_dones = np.concatenate([n_dones[:, i:i + ignore_size]
+                                  for i in range(n_dones.shape[1] - ignore_size + 1)], axis=0)
+
+        if self.use_n_step_is:
+            n_mu_probs = np.concatenate([n_mu_probs[:, i:i + ignore_size]
+                                         for i in range(n_mu_probs.shape[1] - ignore_size + 1)], axis=0)
+        if self.use_rnn:
+            rnn_state = np.concatenate([n_rnn_states[:, i]
+                                        for i in range(n_rnn_states.shape[1] - ignore_size + 1)], axis=0)
+
+        td_error = self.get_td_error(**list_arg_to_concrete_arg('n_obses_list', tmp_n_obses_list),
+                                     n_actions=n_actions,
+                                     n_rewards=n_rewards,
+                                     **list_arg_to_concrete_arg('next_obs_list', tmp_next_obs_list),
+                                     n_dones=n_dones,
+                                     n_mu_probs=n_mu_probs if self.use_n_step_is else None,
+                                     rnn_state=rnn_state if self.use_rnn else None).numpy()
+        td_error = td_error.flatten()
+        td_error = np.concatenate([td_error,
+                                   np.zeros(ignore_size, dtype=np.float32)])
+        return td_error
+
     def save_model(self, iteration):
         self.ckpt_manager.save(iteration + self.init_iteration)
 
@@ -860,7 +917,12 @@ class SAC_Base(object):
                 tf.summary.scalar(s['tag'], s['simple_value'], step=iteration + self.init_iteration)
         self.summary_writer.flush()
 
-    def fill_replay_buffer(self, n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
+    def fill_replay_buffer(self,
+                           n_obses_list,
+                           n_actions,
+                           n_rewards,
+                           next_obs_list,
+                           n_dones,
                            n_rnn_states=None):
         """
         n_obses_list: list([1, episode_len, obs_dim_i], ...)
@@ -918,16 +980,18 @@ class SAC_Base(object):
                                         np.empty([1, rnn_state.shape[-1]], dtype=np.float32)])
             storage_data['rnn_state'] = rnn_state
 
-        """
-        obs_i: [episode_len + 1, obs_dim_i]
-        action: [episode_len + 1, action_dim]
-        reward: [episode_len + 1, ]
-        done: [episode_len + 1, ]
-        mu_prob: [episode_len + 1, ]
-        """
-
         # n_step transitions except the first one and the last obs_, n_step - 1 + 1
-        self.replay_buffer.add(storage_data, ignore_size=self.burn_in_step + self.n_step)
+        if self.use_add_with_td:
+            td_error = self.get_episode_td_error(n_obses_list=n_obses_list,
+                                                 n_actions=n_actions,
+                                                 n_rewards=n_rewards,
+                                                 next_obs_list=next_obs_list,
+                                                 n_dones=n_dones,
+                                                 n_mu_probs=n_mu_probs if self.use_n_step_is else None,
+                                                 n_rnn_states=n_rnn_states if self.use_rnn else None)
+            self.replay_buffer.add_with_td_error(td_error, storage_data, self.burn_in_step + self.n_step)
+        else:
+            self.replay_buffer.add(storage_data, ignore_size=self.burn_in_step + self.n_step)
 
     def train(self):
         # Sample from replay buffer

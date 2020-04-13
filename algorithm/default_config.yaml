@@ -25,7 +25,7 @@ reset_config: null # Reset parameters sent to Unity
 
 replay_config:
   batch_size: 256
-  capacity: 1000000
+  capacity: 524288
   alpha: 0.9 # [0~1] convert the importance of TD error to priority
              # If 0, PER will reduce to vanilla replay buffer
   beta: 0.4 # Importance-sampling, from initial value increasing to 1
