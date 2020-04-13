@@ -96,23 +96,6 @@ class SAC_DS_Base(SAC_Base):
         for v, n_v in zip(variables, policy_variables):
             v.assign(n_v)
 
-    def get_ds_td_error(self,
-                        n_obses_list,
-                        n_actions,
-                        n_rewards,
-                        next_obs_list,
-                        n_dones,
-                        n_mu_probs,
-                        rnn_state=None):
-        td_error = self.get_td_error(**list_arg_to_concrete_arg('n_obses_list', n_obses_list),
-                                     n_actions=n_actions,
-                                     n_rewards=n_rewards,
-                                     **list_arg_to_concrete_arg('next_obs_list', next_obs_list),
-                                     n_dones=n_dones,
-                                     n_mu_probs=n_mu_probs,
-                                     rnn_state=rnn_state if self.use_rnn else None)
-        return td_error.numpy()
-
     def train(self,
               pointers,
               n_obses_list,

@@ -94,9 +94,6 @@ class Learner(object):
     def _init_env(self, config_path, replay_config, sac_config, model_root_path):
         self._stub = StubController(self.net_config)
 
-        self.burn_in_step = sac_config['burn_in_step']
-        self.n_step = sac_config['n_step']
-
         if self.config['env_type'] == 'UNITY':
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
@@ -174,40 +171,13 @@ class Learner(object):
         n_dones: [1, episode_len]
         n_rnn_states: [1, episode_len, rnn_state_dim]
         """
-        ignore_size = self.burn_in_step + self.n_step
-
-        tmp_n_obses_list = [None] * len(n_obses_list)
-        for i, n_obses in enumerate(n_obses_list):
-            tmp_n_obses_list[i] = np.concatenate([n_obses[:, i:i + ignore_size]
-                                                  for i in range(n_obses.shape[1] - ignore_size + 1)], axis=0)
-        n_actions = np.concatenate([n_actions[:, i:i + ignore_size]
-                                    for i in range(n_actions.shape[1] - ignore_size + 1)], axis=0)
-        n_rewards = np.concatenate([n_rewards[:, i:i + ignore_size]
-                                    for i in range(n_rewards.shape[1] - ignore_size + 1)], axis=0)
-        for i, n_obses in enumerate(n_obses_list):
-            next_obs_list[i] = np.concatenate([n_obses[:, i + ignore_size]
-                                               for i in range(n_obses.shape[1] - ignore_size)]
-                                              + [next_obs_list[i]],
-                                              axis=0)
-        n_dones = np.concatenate([n_dones[:, i:i + ignore_size]
-                                  for i in range(n_dones.shape[1] - ignore_size + 1)], axis=0)
-        n_mu_probs = np.concatenate([n_mu_probs[:, i:i + ignore_size]
-                                     for i in range(n_mu_probs.shape[1] - ignore_size + 1)], axis=0)
-        if self.sac.use_rnn:
-            rnn_state = np.concatenate([n_rnn_states[:, i]
-                                        for i in range(n_rnn_states.shape[1] - ignore_size + 1)], axis=0)
-
-        with self._training_lock:
-            td_error = self.sac.get_ds_td_error(n_obses_list=tmp_n_obses_list,
-                                                n_actions=n_actions,
-                                                n_rewards=n_rewards,
-                                                next_obs_list=next_obs_list,
-                                                n_dones=n_dones,
-                                                n_mu_probs=n_mu_probs,
-                                                rnn_state=rnn_state if self.sac.use_rnn else None)
-        td_error = td_error.flatten()
-        td_error = np.concatenate([td_error,
-                                   np.zeros(ignore_size, dtype=np.float32)])
+        td_error = self.sac.get_episode_td_error(n_obses_list=n_obses_list,
+                                                 n_actions=n_actions,
+                                                 n_rewards=n_rewards,
+                                                 next_obs_list=next_obs_list,
+                                                 n_dones=n_dones,
+                                                 n_mu_probs=n_mu_probs,
+                                                 n_rnn_states=n_rnn_states if self.use_rnn else None)
 
         return td_error
 
