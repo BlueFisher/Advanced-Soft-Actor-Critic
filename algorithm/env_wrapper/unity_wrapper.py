@@ -18,7 +18,6 @@ class UnityWrapper:
                  file_name=None,
                  base_port=5005,
                  seed=None,
-                 no_graphics=False,
                  scene=None,
                  n_agents=1):
 
@@ -42,7 +41,6 @@ class UnityWrapper:
         self._env = UnityEnvironment(file_name=file_name,
                                      base_port=base_port,
                                      seed=seed,
-                                     no_graphics=no_graphics,
                                      args=['--scene', scene, '--n_agents', str(n_agents)],
                                      side_channels=[engine_configuration_channel,
                                                     self.float_properties_channel])

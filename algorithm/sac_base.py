@@ -695,7 +695,7 @@ class SAC_Base(object):
             summary['scalar']['loss/reward'] = loss_reward
             summary['scalar']['loss/observation'] = loss_obs
 
-            app_obs = self.model_observation(m_states[:5, self.burn_in_step:self.burn_in_step + 1, ...])
+            app_obs = self.model_observation(m_states[0:1, self.burn_in_step:, ...])
             summary['image']['observation'] = tf.reshape(app_obs, [-1, *app_obs.shape[2:]])
 
         return summary
@@ -1062,12 +1062,13 @@ class SAC_Base(object):
                               priority_is=priority_is if self.use_priority else None,
                               initial_rnn_state=rnn_state if self.use_rnn else None)
 
-        if self.summary_writer is not None and (self.global_step - 1) % self.write_summary_per_step == 0:
+        step = self.global_step - 1
+        if self.summary_writer is not None and step % self.write_summary_per_step == 0:
             with self.summary_writer.as_default():
                 for k, v in summary['scalar'].items():
-                    tf.summary.scalar(k, v, step=self.global_step)
+                    tf.summary.scalar(k, v, step=step)
                 for k, v in summary['image'].items():
-                    tf.summary.image(k, v, step=self.global_step)
+                    tf.summary.image(k, v, max_outputs=self.n_step, step=step)
 
             self.summary_writer.flush()
 
