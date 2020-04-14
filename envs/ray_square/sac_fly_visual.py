@@ -47,12 +47,13 @@ class ModelObservation(tf.keras.Model):
         super().__init__()
         assert obs_dims[0] == (30, 30, 3)
         self.seq = tf.keras.Sequential([
-            tf.keras.Input(64),
-            tf.keras.layers.Dense(256, activation=tf.nn.elu),
-            tf.keras.layers.Dense(2 * 2 * 32, activation=tf.nn.elu),
-            tf.keras.layers.Reshape(target_shape=(2, 2, 32)),
-            tf.keras.layers.Conv2DTranspose(filters=16, kernel_size=8, strides=4, activation=tf.nn.elu),
-            tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=3, strides=1),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
+            tf.keras.layers.Dense(4 * 4 * 16, activation=tf.nn.relu),
+            tf.keras.layers.Reshape(target_shape=(4, 4, 16)),
+            tf.keras.layers.Conv2DTranspose(filters=16, kernel_size=3, strides=1, activation=tf.nn.relu),
+            tf.keras.layers.Conv2DTranspose(filters=16, kernel_size=3, strides=2, activation=tf.nn.relu),
+            tf.keras.layers.Conv2DTranspose(filters=16, kernel_size=3, strides=2, activation=tf.nn.relu),
+            tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=4, strides=1),
         ])
  
         self(tf.keras.Input(shape=(state_dim,)))
@@ -78,12 +79,12 @@ class ModelRep(ModelRNNRep):
     def __init__(self, obs_dims):
         super().__init__(obs_dims)
         self.conv = tf.keras.Sequential([
-            tf.keras.layers.Conv2D(filters=16, kernel_size=3, strides=2, activation=tf.nn.elu),
-            tf.keras.layers.Conv2D(filters=32, kernel_size=3, strides=2, activation=tf.nn.elu),
-            tf.keras.layers.Conv2D(filters=64, kernel_size=3, strides=2, activation=tf.nn.elu),
+            tf.keras.layers.Conv2D(filters=16, kernel_size=3, strides=2, activation=tf.nn.relu),
+            tf.keras.layers.Conv2D(filters=16, kernel_size=3, strides=2, activation=tf.nn.relu),
+            tf.keras.layers.Conv2D(filters=16, kernel_size=3, strides=2, activation=tf.nn.relu),
             tf.keras.layers.Flatten(),
-            tf.keras.layers.Dense(128, activation=tf.nn.elu),
-            tf.keras.layers.Dense(64, activation=tf.nn.elu)
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(64, activation=tf.nn.relu)
         ])
 
         self.rnn_units = 64

@@ -51,11 +51,10 @@ class Learner(object):
         self._run()
 
     def _init_config(self, config_path, args):
-        config_name = 'config.yaml' if args.config is None else args.config
-        config_file_path = f'{config_path}/{config_name}'  # default config.yaml
-        # Merge default_config.yaml and custom config.yaml
+        config_file_path = f'{config_path}/config_ds.yaml'
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
-                                                           config_file_path)
+                                                           config_file_path,
+                                                           args.config)
 
         # Initialize config from command line arguments
         self.train_mode = not args.run

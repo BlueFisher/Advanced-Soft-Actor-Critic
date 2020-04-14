@@ -4,7 +4,7 @@ import sys
 import yaml
 
 
-def initialize_config_from_yaml(default_config_path, config_file_path):
+def initialize_config_from_yaml(default_config_path, config_file_path, config_cat):
     config = dict()
 
     with open(default_config_path) as f:
@@ -12,11 +12,13 @@ def initialize_config_from_yaml(default_config_path, config_file_path):
         config = default_config_file
 
     # initialize config from config_file_path
-    if config_file_path is not None:
-        with open(config_file_path) as f:
-            config_file = yaml.load(f, Loader=yaml.FullLoader)
-            for k, v in config_file.items():
-                assert k in config.keys(), f'{k} is invalid'
+    with open(config_file_path) as f:
+        config_file = yaml.load(f, Loader=yaml.FullLoader)
+        for cat in ['default', config_cat]:
+            if cat is None:
+                continue
+            for k, v in config_file[cat].items():
+                assert k in config.keys(), f'{k} in {cat} is invalid'
                 if v is not None:
                     if k == 'reset_config':
                         config[k] = v
