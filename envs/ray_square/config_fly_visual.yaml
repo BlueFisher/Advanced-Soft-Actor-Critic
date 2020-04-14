@@ -12,8 +12,6 @@ base_config:
   
 reset_config:
   force_reset: true
-  avoid_wall: false
-  ray_length: 10
 
 replay_config:
   batch_size: 64
@@ -22,6 +20,6 @@ sac_config:
   burn_in_step: 10
   n_step: 5
   use_rnn: true
-  use_prediction: false
+  use_prediction: true
 
   _lambda: 0.99

@@ -38,9 +38,10 @@ class Replay(object):
         self._run_replay_server(net_config)
 
     def _init_config(self, config_path, args):
-        config_file_path = f'{config_path}/{args.config}' if args.config is not None else None
+        config_file_path = f'{config_path}/config_ds.yaml'
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
-                                                           config_file_path)
+                                                           config_file_path,
+                                                           args.config)
 
         self.logger = config_helper.set_logger('ds.replay', args.logger_file)
 
