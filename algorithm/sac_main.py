@@ -94,7 +94,6 @@ class Main(object):
             else:
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         file_name=self.config['build_path'][sys.platform],
-                                        no_graphics=not self.render and self.train_mode,
                                         base_port=self.config['port'],
                                         scene=self.config['scene'],
                                         n_agents=self.config['n_agents'])
@@ -196,7 +195,7 @@ class Main(object):
                 if self.train_mode:
                     episode_trans_list = [t for t in episode_trans_list if t is not None]
                     if len(episode_trans_list) != 0:
-                        # n_obses_list, n_actions, n_rewards, next_obs_list, n_dones, 
+                        # n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
                         # n_rnn_states
                         for episode_trans in episode_trans_list:
                             self.sac.fill_replay_buffer(*episode_trans)
