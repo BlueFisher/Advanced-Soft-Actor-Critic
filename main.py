@@ -15,11 +15,11 @@ if __name__ == '__main__':
     parser.add_argument('--port', '-p', type=int, default=5005, help='communication port')
     parser.add_argument('--seed', type=int, help='random seed')
     parser.add_argument('--sac', help='neural network model')
-    parser.add_argument('--agents', type=int, default=1, help='number of agents')
+    parser.add_argument('--agents', type=int, help='number of agents')
     parser.add_argument('--repeat', type=int, default=1, help='number of repeated experiments')
     args = parser.parse_args()
 
-    if args.env in ['simple_roller', 'ray_square', 'ray_pyramid']:
+    if args.env in ['roller', 'square', 'pyramid']:
         from algorithm.sac_main_hitted import MainHitted as Main
     else:
         from algorithm.sac_main import Main

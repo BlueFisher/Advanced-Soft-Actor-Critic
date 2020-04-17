@@ -695,8 +695,10 @@ class SAC_Base(object):
             summary['scalar']['loss/reward'] = loss_reward
             summary['scalar']['loss/observation'] = loss_obs
 
-            app_obs = self.model_observation(m_states[0:1, self.burn_in_step:, ...])
-            summary['image']['observation'] = tf.reshape(app_obs, [-1, *app_obs.shape[2:]])
+            approx_obs_list = self.model_observation(tf.random.normal([3, 1, state.shape[-1]]))
+            for approx_obs in approx_obs_list:
+                if len(approx_obs.shape) > 3:
+                    summary['image']['observation'] = tf.reshape(approx_obs, [-1, *approx_obs.shape[2:]])
 
         return summary
 
