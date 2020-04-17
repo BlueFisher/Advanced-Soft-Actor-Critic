@@ -48,8 +48,8 @@ class ModelObservation(tf.keras.Model):
         super().__init__()
         assert obs_dims[0] == (30, 30, 3)
         self.conv = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(32, activation=tf.nn.relu),
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(2 * 2 * 32, activation=tf.nn.relu),
             tf.keras.layers.Reshape(target_shape=(2, 2, 32)),
             tf.keras.layers.Conv2DTranspose(filters=32, kernel_size=4, strides=2, activation=tf.nn.relu),
@@ -76,37 +76,37 @@ class ModelObservation(tf.keras.Model):
         return tf.reduce_mean(tf.square(approx_obs - obs_list[0]))
 
 
-class ModelRep(ModelSimpleRep):
+class ModelRep(ModelRNNRep):
     def __init__(self, obs_dims):
         super().__init__(obs_dims)
         self.conv = tf.keras.Sequential([
             tf.keras.layers.Conv2D(16, kernel_size=8, strides=4, activation=tf.nn.relu),
             tf.keras.layers.Conv2D(32, kernel_size=4, strides=2, activation=tf.nn.relu),
             tf.keras.layers.Flatten(),
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
         ])
 
+        self.rnn_units = 64
+        self.layer_rnn = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(16)
+            tf.keras.layers.Dense(8)
         ])
 
         self.get_call_result_tensors()
 
-    def call(self, obs_list):
-        vis_obs, vec_obs = obs_list[0], obs_list[1]
-        if len(vis_obs.shape) == 5:
-            batch = tf.shape(vis_obs)[0]
-            vis_obs = tf.reshape(vis_obs, [-1, *vis_obs.shape[2:]])
-            vis_state = self.conv(vis_obs)
-            vis_state = tf.reshape(vis_state, [batch, -1, vis_state.shape[-1]])
-        else:
-            vis_state = self.conv(vis_obs)
+    def call(self, obs_list, initial_state):
+        vis_obs = obs_list[0]
 
-        state = tf.concat([vis_state, vec_obs], axis=-1)
-        state = self.seq(state)
+        batch = tf.shape(vis_obs)[0]
+        vis_obs = tf.reshape(vis_obs, [-1, *vis_obs.shape[2:]])
+        vis_obs = self.conv(vis_obs)
+        vis_obs = tf.reshape(vis_obs, [batch, -1, vis_obs.shape[-1]])
 
-        return state
+        outputs, next_rnn_state = self.layer_rnn(vis_obs, initial_state=initial_state)
+        state = self.seq(outputs)
+
+        return state, next_rnn_state, outputs
 
 
 class ModelQ(tf.keras.Model):
