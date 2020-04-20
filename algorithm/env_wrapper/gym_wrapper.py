@@ -31,12 +31,12 @@ class GymWrapper:
         else:
             action_dim = env.action_space.shape[0]
 
-        return self._state_dim, action_dim, self.is_discrete
+        return [(self._state_dim, )], action_dim, self.is_discrete
 
     def reset(self, reset_config=None):
         obs = np.stack([e.reset() for e in self._envs], axis=0)
 
-        return len(self._envs), obs.astype(np.float32)
+        return len(self._envs), [obs.astype(np.float32)]
 
     def step(self, action):
         obs = np.empty([len(self._envs), self._state_dim], dtype=np.float32)
@@ -59,7 +59,7 @@ class GymWrapper:
         for i in np.where(done)[0]:
             obs[i] = self._envs[i].reset()
 
-        return obs, reward, done, max_step
+        return [obs], reward, done, max_step
 
     def close(self):
         for env in self._envs:
