@@ -1,6 +1,6 @@
 default:
   base_config:
-    build_path: 
+    build_path:
       win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
       linux: /data/linux-RL-Envs/RL-Envs.x86_64
 
@@ -19,32 +19,25 @@ default:
     _lambda: 0.99
     init_log_alpha: -4.6
 
-
 vanilla:
   base_config:
     scene: SimpleRoller
-
     max_iter: 100
-
   sac_config:
     n_step: 10
     tau: 0.9
 
-
 hard:
   base_config: &hard_base
     scene: HardRoller
-  
     name: "pre_{time}"
     sac: sac_hard
     max_iter: 200
-  
   sac_config: &hard_sac
     burn_in_step: 10
     n_step: 5
     use_rnn: true
     use_prediction: true
-
 
 hard_nopre:
   base_config:
@@ -54,31 +47,25 @@ hard_nopre:
     <<: *hard_sac
     use_prediction: false
 
-
 visual:
   base_config: &visual_base
     scene: VisualRoller
-  
     name: "pre_{time}"
     sac: sac_visual
     max_iter: 100000
     save_model_per_iter: 200
-  
   replay_config: &visual_replay
     batch_size: 64
     capacity: 131072
     beta: 0.4
     beta_increment_per_sampling: 0.001
-  
   sac_config: &visual_sac
     write_summary_per_step: 100
     burn_in_step: 10
     n_step: 3
     use_rnn: true
     use_prediction: true
-  
     init_log_alpha: -2.3
-
 
 visual_nopre:
   base_config:

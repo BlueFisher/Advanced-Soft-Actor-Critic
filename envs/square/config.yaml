@@ -15,15 +15,12 @@ default:
     n_step: 5
     use_rnn: true
     use_prediction: true
-    _lambda: 0.99
-
 
 wall:
   base_config: &wall_base
     scene: RaySquare
     name: "ray5_wall_pre_{time}"
     max_iter: 200
-
   reset_config: &wall_reset
     avoid_wall: false
     ray_length: 5
@@ -32,18 +29,15 @@ wall_nopre:
   base_config:
     <<: *wall_base
     name: "ray5_wall_nopre_{time}"
-
   reset_config: *wall_reset
   sac_config:
     use_prediction: false
-
 
 nowall:
   base_config: &nowall_base
     scene: RaySquare
     name: "ray5_nowall_pre_{time}"
     max_iter: 200
-
   reset_config: &nowall_reset
     avoid_wall: true
     ray_length: 5
@@ -52,20 +46,16 @@ nowall_nopre:
   base_config:
     <<: *nowall_base
     name: "ray5_nowall_nopre_{time}"
-
   reset_config: *nowall_reset
   sac_config:
     use_prediction: false
 
-
 fly:
   base_config: &fly_base
     scene: RaySquareFly
-
     sac: sac_fly
     name: "pre_{time}"
     max_iter: 10000
-
   reset_config: &fly_reset
     ray_length: 10
 
@@ -73,18 +63,15 @@ fly_nopre:
   base_config:
     <<: *fly_base
     name: "nopre_{time}"
-
   reset_config: *fly_reset
   sac_config:
     use_prediction: false
-
 
 visual_fly:
   base_config: &visual_fly_base
     scene: VisualSquareFly
     sac: sac_visual_fly
     name: "pre_{time}"
-
   replay_config: &visual_fly_replay
     batch_size: 64
     capacity: 131072
@@ -93,7 +80,6 @@ visual_fly_nopre:
   base_config:
     <<: *visual_fly_base
     name: "nopre_{time}"
-
   replay_config: *visual_fly_replay
   sac_config:
     use_prediction: false
