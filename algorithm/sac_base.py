@@ -36,20 +36,10 @@ def debug_grad_com(grads, grads1):
 
 def _np_to_tensor(fn):
     def c(*args, **kwargs):
-        return fn(*[tf.constant(k) if not isinstance(k, tf.Tensor) else k for k in args if k is not None],
-                  **{k: tf.constant(v) if not isinstance(v, tf.Tensor) else v for k, v in kwargs.items() if v is not None})
+        return fn(*[k for k in args if k is not None],
+                  **{k: v for k, v in kwargs.items() if v is not None})
 
     return c
-
-
-def list_arg_to_concrete_arg(name, arg_list):
-    concrete_arg = {
-        name: arg_list[0]
-    }
-    for i, arg in enumerate(arg_list[1:]):
-        concrete_arg[f'{name}_{i+1}'] = arg
-
-    return concrete_arg
 
 
 class SAC_Base(object):
@@ -264,53 +254,60 @@ class SAC_Base(object):
         Initialize some @tf.function and specify tf.TensorSpec
         """
 
-        # get_n_probs
+        """ get_n_probs
+        n_obses_list, n_selected_actions, rnn_state=None """
         if self.use_rnn:
-            tmp_get_n_probs = self.get_n_probs.get_concrete_function(
-                n_obses_list=[tf.TensorSpec(shape=(None, None, *t)) for t in self.obs_dims],
-                n_selected_actions=tf.TensorSpec(shape=(None, None, self.action_dim)),
-                rnn_state=tf.TensorSpec(shape=(None, self.rnn_state_dim)),
-            )
+            tmp_get_n_probs = tf.function(self.get_n_probs.python_function, input_signature=[
+                [tf.TensorSpec(shape=(None, None, *t)) for t in self.obs_dims],
+                tf.TensorSpec(shape=(None, None, self.action_dim)),
+                tf.TensorSpec(shape=(None, self.rnn_state_dim)),
+            ])
         else:
-            tmp_get_n_probs = self.get_n_probs.get_concrete_function(
-                n_obses_list=[tf.TensorSpec(shape=(None, None, *t)) for t in self.obs_dims],
-                n_selected_actions=tf.TensorSpec(shape=(None, None, self.action_dim))
-            )
+            tmp_get_n_probs = tf.function(self.get_n_probs.python_function, input_signature=[
+                [tf.TensorSpec(shape=(None, None, *t)) for t in self.obs_dims],
+                tf.TensorSpec(shape=(None, None, self.action_dim)),
+            ])
         self.get_n_probs = _np_to_tensor(tmp_get_n_probs)
 
         if self.train_mode:
             step_size = self.burn_in_step + self.n_step
-            # get_td_error
-            kwargs = {
-                'n_obses_list': [tf.TensorSpec(shape=(None, step_size, *t)) for t in self.obs_dims],
-                'n_actions': tf.TensorSpec(shape=(None, step_size, self.action_dim)),
-                'n_rewards': tf.TensorSpec(shape=(None, step_size)),
-                'next_obs_list': [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims],
-                'n_dones': tf.TensorSpec(shape=(None, step_size))
-            }
+            """ get_td_error
+            n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
+            n_mu_probs=None,
+            rnn_state=None """
+            signature = [
+                [tf.TensorSpec(shape=(None, step_size, *t)) for t in self.obs_dims],
+                tf.TensorSpec(shape=(None, step_size, self.action_dim)),
+                tf.TensorSpec(shape=(None, step_size)),
+                [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims],
+                tf.TensorSpec(shape=(None, step_size))
+            ]
             if self.use_n_step_is:
-                kwargs['n_mu_probs'] = tf.TensorSpec(shape=(None, step_size))
+                signature.append(tf.TensorSpec(shape=(None, step_size)))
             if self.use_rnn:
-                kwargs['rnn_state'] = tf.TensorSpec(shape=(None, self.rnn_state_dim))
-            tmp_get_td_error = self.get_td_error.get_concrete_function(**kwargs)
-            self.get_td_error = _np_to_tensor(tmp_get_td_error)
+                signature.append(tf.TensorSpec(shape=(None, self.rnn_state_dim)))
+            self.get_td_error = _np_to_tensor(tf.function(self.get_td_error.python_function,
+                                                          input_signature=signature))
 
-            # _train
-            kwargs = {
-                'n_obses_list': [tf.TensorSpec(shape=(None, step_size, *t)) for t in self.obs_dims],
-                'n_actions': tf.TensorSpec(shape=(None, step_size, self.action_dim)),
-                'n_rewards': tf.TensorSpec(shape=(None, step_size)),
-                'next_obs_list': [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims],
-                'n_dones': tf.TensorSpec(shape=(None, step_size))
-            }
+            """ _train
+            n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
+            n_mu_probs=None, priority_is=None,
+            initial_rnn_state=None """
+            signature = [
+                [tf.TensorSpec(shape=(None, step_size, *t)) for t in self.obs_dims],
+                tf.TensorSpec(shape=(None, step_size, self.action_dim)),
+                tf.TensorSpec(shape=(None, step_size)),
+                [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims],
+                tf.TensorSpec(shape=(None, step_size))
+            ]
             if self.use_n_step_is:
-                kwargs['n_mu_probs'] = tf.TensorSpec(shape=(None, step_size))
+                signature.append(tf.TensorSpec(shape=(None, step_size)))
             if self.use_priority:
-                kwargs['priority_is'] = tf.TensorSpec(shape=(None, 1))
+                signature.append(tf.TensorSpec(shape=(None, 1)))
             if self.use_rnn:
-                kwargs['initial_rnn_state'] = tf.TensorSpec(shape=(None, self.rnn_state_dim))
-            tmp_train = self._train.get_concrete_function(**kwargs)
-            self._train = _np_to_tensor(tmp_train)
+                signature.append(tf.TensorSpec(shape=(None, self.rnn_state_dim)))
+            self._train = _np_to_tensor(tf.function(self._train.python_function,
+                                                    input_signature=signature))
 
     def get_initial_rnn_state(self, batch_size):
         assert self.use_rnn
@@ -900,10 +897,10 @@ class SAC_Base(object):
             rnn_state = np.concatenate([n_rnn_states[:, i]
                                         for i in range(n_rnn_states.shape[1] - ignore_size + 1)], axis=0)
 
-        td_error = self.get_td_error(**list_arg_to_concrete_arg('n_obses_list', tmp_n_obses_list),
+        td_error = self.get_td_error(n_obses_list=tmp_n_obses_list,
                                      n_actions=n_actions,
                                      n_rewards=n_rewards,
-                                     **list_arg_to_concrete_arg('next_obs_list', tmp_next_obs_list),
+                                     next_obs_list=tmp_next_obs_list,
                                      n_dones=n_dones,
                                      n_mu_probs=n_mu_probs if self.use_n_step_is else None,
                                      rnn_state=rnn_state if self.use_rnn else None).numpy()
@@ -971,10 +968,10 @@ class SAC_Base(object):
 
         if self.use_n_step_is:
             if self.use_rnn:
-                n_mu_probs = self.get_n_probs(*n_obses_list, n_actions,
+                n_mu_probs = self.get_n_probs(n_obses_list, n_actions,
                                               n_rnn_states[:, 0, ...]).numpy()
             else:
-                n_mu_probs = self.get_n_probs(*n_obses_list, n_actions).numpy()
+                n_mu_probs = self.get_n_probs(n_obses_list, n_actions).numpy()
 
             mu_prob = n_mu_probs.reshape([-1])
             mu_prob = np.concatenate([mu_prob,
@@ -1055,10 +1052,10 @@ class SAC_Base(object):
             m_rnn_states = trans['rnn_state']
             rnn_state = m_rnn_states[:, 0, ...]
 
-        summary = self._train(**list_arg_to_concrete_arg('n_obses_list', n_obses_list),
+        summary = self._train(n_obses_list=n_obses_list,
                               n_actions=n_actions,
                               n_rewards=n_rewards,
-                              **list_arg_to_concrete_arg('next_obs_list', next_obs_list),
+                              next_obs_list=next_obs_list,
                               n_dones=n_dones,
                               n_mu_probs=n_mu_probs if self.use_n_step_is else None,
                               priority_is=priority_is if self.use_priority else None,
@@ -1075,16 +1072,16 @@ class SAC_Base(object):
             self.summary_writer.flush()
 
         if self.use_n_step_is:
-            n_pi_probs = self.get_n_probs(*n_obses_list,
+            n_pi_probs = self.get_n_probs(n_obses_list,
                                           n_actions,
                                           rnn_state=rnn_state if self.use_rnn else None).numpy()
 
         # Update td_error
         if self.use_priority:
-            td_error = self.get_td_error(**list_arg_to_concrete_arg('n_obses_list', n_obses_list),
+            td_error = self.get_td_error(n_obses_list=n_obses_list,
                                          n_actions=n_actions,
                                          n_rewards=n_rewards,
-                                         **list_arg_to_concrete_arg('next_obs_list', next_obs_list),
+                                         next_obs_list=next_obs_list,
                                          n_dones=n_dones,
                                          n_mu_probs=n_pi_probs if self.use_n_step_is else None,
                                          rnn_state=rnn_state if self.use_rnn else None).numpy()
