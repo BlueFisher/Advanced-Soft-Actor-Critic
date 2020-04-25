@@ -579,7 +579,7 @@ class SAC_Base(object):
                 # loss_transition = -tf.maximum(loss_transition, -2.)
                 std_normal = tfp.distributions.Normal(tf.zeros_like(approx_next_state_dist.loc),
                                                       tf.ones_like(approx_next_state_dist.scale))
-                loss_transition += 0.9 * tfp.distributions.kl_divergence(approx_next_state_dist, std_normal)
+                loss_transition += 0.8 * tfp.distributions.kl_divergence(approx_next_state_dist, std_normal)
                 loss_transition = tf.reduce_mean(loss_transition)
 
                 approx_n_rewards = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])
@@ -608,32 +608,10 @@ class SAC_Base(object):
                 loss_alpha = tf.reduce_sum(probs * loss_alpha, axis=1, keepdims=True)  # [Batch, 1]
             else:
                 log_prob = tf.reduce_sum(squash_correction_log_prob(policy, action_sampled), axis=1, keepdims=True)
-
-                log_prob = squash_correction_log_prob(policy, action_sampled)
-                target_log_prob = squash_correction_log_prob(target_policy, action_sampled)
-
-                clipped_log_prob = target_log_prob + tf.clip_by_value(log_prob - target_log_prob,
-                                                                      tf.math.log(1 - self.clip_epsilon),
-                                                                      tf.math.log(1 + self.clip_epsilon))
-
-                clipped_log_prob = tf.reduce_sum(clipped_log_prob, axis=1, keepdims=True)
-                log_prob = tf.reduce_sum(log_prob, axis=1, keepdims=True)
-
-                loss_policy_a = alpha * clipped_log_prob - tf.minimum(q1_for_gradient, q2_for_gradient)
-                loss_policy_b = alpha * log_prob - tf.minimum(q1_for_gradient, q2_for_gradient)
-
-                loss_policy = tf.maximum(loss_policy_a, loss_policy_b)
+                loss_policy = alpha * log_prob - tf.minimum(q1_for_gradient, q2_for_gradient)
                 # [Batch, 1]
 
-                log_prob = tf.reduce_sum(squash_correction_log_prob(policy, action_sampled), axis=1, keepdims=True)
-
                 loss_alpha = -alpha * (log_prob - self.action_dim)  # [Batch, 1]
-
-                # log_prob = tf.reduce_sum(squash_correction_log_prob(policy, action_sampled), axis=1, keepdims=True)
-                # loss_policy = alpha * log_prob - tf.minimum(q1_for_gradient, q2_for_gradient)
-                # # [Batch, 1]
-
-                # loss_alpha = -alpha * (log_prob - self.action_dim)  # [Batch, 1]
 
             loss_policy = tf.reduce_mean(loss_policy)
             loss_alpha = tf.reduce_mean(loss_alpha)
@@ -652,10 +630,6 @@ class SAC_Base(object):
             rep_variables += self.model_observation.trainable_variables
         grads_rep = tape.gradient(loss_rep, rep_variables)
         self.optimizer_rep.apply_gradients(zip(grads_rep, rep_variables))
-
-        # test_grads = tape.gradient(loss_rep, self.model_rep.trainable_variables)
-        # test_grads_q = tape.gradient(loss_rep_q, self.model_rep.trainable_variables)
-        # debug_grad_com(test_grads, test_grads_q)
 
         if self.use_curiosity:
             grads_forward = tape.gradient(loss_forward, self.model_forward.trainable_variables)
