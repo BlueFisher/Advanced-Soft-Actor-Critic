@@ -89,8 +89,7 @@ class ModelRep(ModelRNNRep):
         self.rnn_units = 64
         self.layer_rnn = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(8)
+            tf.keras.layers.Dense(64, activation=tf.nn.relu)
         ])
 
         self.get_call_result_tensors()

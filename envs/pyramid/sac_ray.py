@@ -9,7 +9,7 @@ class ModelTransition(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
         super().__init__()
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.tanh),
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(state_dim + state_dim)
@@ -51,43 +51,44 @@ class ModelObservation(tf.keras.Model):
         assert obs_dims[1] == (6, )
 
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(6)
+            tf.keras.layers.Dense(32, activation=tf.nn.relu),
+            tf.keras.layers.Dense(50, activation=tf.nn.relu),
+            tf.keras.layers.Dense(48)
         ])
 
         self(tf.keras.Input(shape=(state_dim,)))
 
     def call(self, state):
-        obs = self.seq(state[..., 44:])
+        obs = self.seq(state)
 
-        return [state[..., :44], obs]
+        return [obs[..., :44], obs[..., 44:]]
 
     def get_loss(self, state, obs_list):
-        approx_vec_obs = self.seq(state[..., 44:])
+        approx_obs = self.seq(state)
 
         ray_obs, vec_obs = obs_list
 
         mse = tf.losses.MeanSquaredError()
 
-        return mse(approx_vec_obs, vec_obs)
+        return 0.5 * mse(approx_obs[..., :44], ray_obs) + 0.5 * mse(approx_obs[..., 44:], vec_obs[..., :-2])
 
 
 class ModelRep(ModelRNNRep):
     def __init__(self, obs_dims):
         super().__init__(obs_dims)
-        self.rnn_units = 16
+
+        self.rnn_units = 8
         self.layer_rnn = tf.keras.layers.RNN(tf.keras.layers.GRUCell(self.rnn_units),
                                              return_sequences=True,
                                              return_state=True)
-
+        self.seq = tf.keras.Sequential([
+            tf.keras.layers.Dense(64),
+        ])
         self.get_call_result_tensors()
 
     def call(self, obs_list, initial_state):
-        ray_obs, vec_obs = obs_list
-        outputs, next_rnn_state = self.layer_rnn(vec_obs, initial_state=initial_state)
-
-        state = tf.concat([ray_obs, outputs], -1)  # 44 + 16
+        outputs, next_rnn_state = self.layer_rnn(obs_list[1][..., :-2], initial_state=initial_state)
+        state = self.seq(tf.concat([obs_list[0], outputs], axis=-1))
 
         return state, next_rnn_state, outputs
 

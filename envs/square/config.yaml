@@ -12,6 +12,7 @@ default:
     force_reset: true
 
   sac_config:
+    seed: 42
     burn_in_step: 10
     n_step: 5
     use_rnn: true
