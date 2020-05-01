@@ -18,6 +18,7 @@ default:
   sac_config:
     seed: 42
     _lambda: 0.99
+    clip_epsilon: 1.
     init_log_alpha: -4.6
 
 vanilla:
@@ -62,10 +63,11 @@ visual:
     beta_increment_per_sampling: 0.001
   sac_config: &visual_sac
     write_summary_per_step: 100
-    burn_in_step: 10
+    burn_in_step: 20
     n_step: 3
     use_rnn: true
     use_prediction: true
+    clip_epsilon: 0.2
     init_log_alpha: -2.3
 
 visual_nopre:

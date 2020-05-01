@@ -5,14 +5,10 @@ import numpy as np
 
 from mlagents_envs.environment import UnityEnvironment
 from mlagents_envs.side_channel.engine_configuration_channel import EngineConfig, EngineConfigurationChannel
-from mlagents_envs.side_channel.float_properties_channel import FloatPropertiesChannel
+from mlagents_envs.side_channel.environment_parameters_channel import EnvironmentParametersChannel
 
 
 class UnityWrapper:
-    _agent_ids = None
-    _n_agents = 1
-    _addition_action_dim = 0
-
     def __init__(self,
                  train_mode=True,
                  file_name=None,
@@ -26,6 +22,14 @@ class UnityWrapper:
         self._logger = logging.getLogger('UnityWrapper')
 
         engine_configuration_channel = EngineConfigurationChannel()
+        self.environment_parameters_channel = EnvironmentParametersChannel()
+
+        self._env = UnityEnvironment(file_name=file_name,
+                                     base_port=base_port,
+                                     seed=seed,
+                                     args=['--scene', scene, '--n_agents', str(n_agents)],
+                                     side_channels=[engine_configuration_channel,
+                                                    self.environment_parameters_channel])
 
         if train_mode:
             engine_configuration_channel.set_configuration_parameters(time_scale=100)
@@ -36,111 +40,43 @@ class UnityWrapper:
                                                                       time_scale=0,
                                                                       target_frame_rate=60)
 
-        self.float_properties_channel = FloatPropertiesChannel()
-
-        self._env = UnityEnvironment(file_name=file_name,
-                                     base_port=base_port,
-                                     seed=seed,
-                                     args=['--scene', scene, '--n_agents', str(n_agents)],
-                                     side_channels=[engine_configuration_channel,
-                                                    self.float_properties_channel])
-
         self._env.reset()
-        self.group_name = self._env.get_agent_groups()[0]
-        step_result = self._env.get_step_result(self.group_name)
-        self._n_agents = step_result.n_agents()
+        self.bahavior_name = self._env.get_behavior_names()[0]
 
     def init(self):
-        group_spec = self._env.get_agent_group_spec(self.group_name)
-        self._logger.info(f'Observation shapes: {group_spec.observation_shapes}')
-        is_discrete = group_spec.is_action_discrete()
-        self._logger.info(f'Action size: {group_spec.action_size}. Is discrete: {is_discrete}')
+        behavior_spec = self._env.get_behavior_spec(self.bahavior_name)
+        self._logger.info(f'Observation shapes: {behavior_spec.observation_shapes}')
+        is_discrete = behavior_spec.is_action_discrete()
+        self._logger.info(f'Action size: {behavior_spec.action_size}. Is discrete: {is_discrete}')
 
-        return group_spec.observation_shapes, group_spec.action_size, is_discrete
+        return behavior_spec.observation_shapes, behavior_spec.action_size, is_discrete
 
     def reset(self, reset_config=None):
         reset_config = {} if reset_config is None else reset_config
         for k, v in reset_config.items():
-            self.float_properties_channel.set_property(k, v)
+            self.environment_parameters_channel.set_float_parameter(k, float(v))
 
         self._env.reset()
-        step_result = self._env.get_step_result(self.group_name)
+        decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
 
-        obs_list = step_result.obs
-
-        if step_result.n_agents() == self._n_agents:
-            self._agent_ids = step_result.agent_id
-            self._addition_action_dim = 0
-        elif step_result.n_agents() > self._n_agents:
-            obs_list = [obs[-self._n_agents:] for obs in obs_list]
-            self._agent_ids = step_result.agent_id[-self._n_agents:]
-            self._addition_action_dim = step_result.n_agents() - self._n_agents
-        else:
-            self._logger.error('reset error')
-            return self.reset(reset_config)
-
-        return self._n_agents, [obs.astype(np.float32) for obs in obs_list]
+        return len(decision_steps), [obs.astype(np.float32) for obs in decision_steps.obs]
 
     def step(self, action):
-        if self._addition_action_dim != 0:
-            action = np.concatenate([np.zeros([self._addition_action_dim, action.shape[-1]]), action], axis=0)
-            self._addition_action_dim = 0
+        self._env.set_actions(self.bahavior_name, action)
+        self._env.step()
+        decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
 
-        self._env.set_actions(self.group_name, action)
+        reward = decision_steps.reward
+        reward[terminal_steps.agent_id] = terminal_steps.reward
 
-        done_step_result = dict()
-        while True:
-            self._env.step()
-            step_result = self._env.get_step_result(self.group_name)
-            n = self._n_agents
+        done = np.full([10, ], False, dtype=np.bool)
+        done[terminal_steps.agent_id] = True
 
-            obs_list = step_result.obs
+        max_step = np.full([10, ], False, dtype=np.bool)
+        max_step[terminal_steps.agent_id] = terminal_steps.max_step
 
-            if step_result.n_agents() < n:
-                true_ids = np.where(np.isin(self._agent_ids, step_result.agent_id))[0]
-                for i, true_id in enumerate(true_ids):
-                    done_step_result[true_id] = (step_result.reward[i],
-                                                 step_result.done[i],
-                                                 step_result.max_step[i])
-                continue
-
-            elif step_result.n_agents() > n:
-                true_ids = np.where(np.isin(self._agent_ids, step_result.agent_id[:-n]))[0]
-                for i, true_id in enumerate(true_ids):
-                    done_step_result[true_id] = (step_result.reward[i],
-                                                 step_result.done[i],
-                                                 step_result.max_step[i])
-
-                obs_list = [obs[-n:] for obs in obs_list]
-                reward = step_result.reward[-n:]
-                done = step_result.done[-n:]
-                max_step = step_result.max_step[-n:]
-                self._agent_ids = step_result.agent_id[-n:]
-                self._addition_action_dim = step_result.n_agents() - n
-                break
-
-            else:
-                if np.all(step_result.done):
-                    true_ids = np.where(np.isin(self._agent_ids, step_result.agent_id))[0]
-                    for i, true_id in enumerate(true_ids):
-                        done_step_result[true_id] = (step_result.reward[i],
-                                                     step_result.done[i],
-                                                     step_result.max_step[i])
-                    continue
-
-                else:
-                    reward = step_result.reward
-                    done = step_result.done
-                    max_step = step_result.max_step
-                    self._agent_ids = step_result.agent_id
-                    break
-
-        for key, value in done_step_result.items():
-            reward[key], done[key], max_step[key] = value
-        done_step_result.clear()
-
-        return ([obs.astype(np.float32) for obs in obs_list],
-                reward.astype(np.float32),
+        return ([obs.astype(np.float32) for obs in decision_steps.obs],
+                decision_steps.reward.astype(np.float32),
                 done,
                 max_step)
 
