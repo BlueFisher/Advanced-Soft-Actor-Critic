@@ -52,6 +52,7 @@ sac_config:
 
   gamma: 0.99 # Discount factor
   _lambda: 1.0 # Discount factor for V-trace
+  clip_epsilon: 0.2 # Epsilon for q and policy clip
   
   use_priority: true # If use PER importance ratio
   use_n_step_is: true # If use importance sampling

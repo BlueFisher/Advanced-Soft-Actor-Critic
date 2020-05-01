@@ -96,7 +96,7 @@ class SAC_Base(object):
         learning_rate: Learning rate of all optimizers
         gamma: Discount factor
         _lambda: Discount factor for V-trace
-        clip_epsilon: epsilon for q and policy clip
+        clip_epsilon: Epsilon for q and policy clip
 
         use_priority: If use PER importance ratio
         use_n_step_is: If use importance sampling
@@ -667,6 +667,7 @@ class SAC_Base(object):
             summary['scalar']['loss/observation'] = loss_obs
 
             approx_obs_list = self.model_observation(tf.random.normal([3, 1, state.shape[-1]]))
+            assert isinstance(approx_obs_list, list)
             for approx_obs in approx_obs_list:
                 if len(approx_obs.shape) > 3:
                     summary['image']['observation'] = tf.reshape(approx_obs, [-1, *approx_obs.shape[2:]])
