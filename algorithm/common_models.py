@@ -1,6 +1,12 @@
 import tensorflow as tf
 
 
+class ModelTransition(tf.keras.Model):
+    def extra_obs(self, obs_list):
+        shape = tf.shape(obs_list[0])
+        return tf.zeros([shape[0], shape[1], 0])
+
+
 class ModelSimpleRep(tf.keras.Model):
     def __init__(self, obs_dims):
         super().__init__()

@@ -573,7 +573,9 @@ class SAC_Base(object):
 
             loss_mse = tf.keras.losses.MeanSquaredError()
             if self.use_prediction:
-                approx_next_state_dist = self.model_transition(n_states[:, self.burn_in_step:, ...],
+                extra_obs = self.model_transition.extra_obs(n_obses_list)[:, self.burn_in_step:, ...]
+                approx_next_state_dist = self.model_transition(tf.concat([n_states[:, self.burn_in_step:, ...],
+                                                                          extra_obs], axis=-1),
                                                                n_actions[:, self.burn_in_step:, ...])
                 loss_transition = -approx_next_state_dist.log_prob(m_target_states[:, self.burn_in_step + 1:, ...])
                 # loss_transition = -tf.maximum(loss_transition, -2.)
@@ -666,7 +668,7 @@ class SAC_Base(object):
             summary['scalar']['loss/reward'] = loss_reward
             summary['scalar']['loss/observation'] = loss_obs
 
-            approx_obs_list = self.model_observation(tf.random.normal([3, 1, state.shape[-1]]))
+            approx_obs_list = self.model_observation(m_states[0:1, self.burn_in_step:, ...])
             assert isinstance(approx_obs_list, list)
             for approx_obs in approx_obs_list:
                 if len(approx_obs.shape) > 3:

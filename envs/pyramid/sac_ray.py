@@ -2,10 +2,10 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from algorithm.common_models import ModelRNNRep
+from algorithm.common_models import ModelTransition, ModelRNNRep
 
 
-class ModelTransition(tf.keras.Model):
+class ModelTransition(ModelTransition):
     def __init__(self, state_dim, action_dim):
         super().__init__()
         self.seq = tf.keras.Sequential([
@@ -17,7 +17,7 @@ class ModelTransition(tf.keras.Model):
 
         self.next_state_tfpd = tfp.layers.DistributionLambda(make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
 
-        self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(action_dim,)))
+        self(tf.keras.Input(shape=(state_dim + 2,)), tf.keras.Input(shape=(action_dim,)))
 
     def call(self, state, action):
         next_state = self.seq(tf.concat([state, action], -1))
@@ -25,6 +25,9 @@ class ModelTransition(tf.keras.Model):
         next_state_dist = self.next_state_tfpd([mean, tf.exp(logstd)])
 
         return next_state_dist
+
+    def extra_obs(self, obs_list):
+        return obs_list[1][..., -2:]
 
 
 class ModelReward(tf.keras.Model):
