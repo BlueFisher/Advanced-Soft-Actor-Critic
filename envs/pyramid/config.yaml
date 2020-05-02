@@ -24,14 +24,14 @@ ray:
   base_config: &ray_base
     scene: RayPyramid
     sac: sac_ray
-    name: "ray20_pre_clipped_{time}"
+    name: "ray20_pre_kn_clipped_{time}"
   reset_config: &ray_reset
     ray_length: 20
 
 ray_nopre:
   base_config:
     <<: *ray_base
-    name: "ray20_nopre_clipped_{time}"
+    name: "ray20_nopre_kn_clipped_{time}"
   reset_config: *ray_reset
   sac_config:
     use_prediction: false

@@ -2,10 +2,10 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from algorithm.common_models import ModelSimpleRep, ModelRNNRep
+from algorithm.common_models import ModelTransition, ModelSimpleRep, ModelRNNRep
 
 
-class ModelTransition(tf.keras.Model):
+class ModelTransition(ModelTransition):
     def __init__(self, state_dim, action_dim):
         super().__init__()
         self.seq = tf.keras.Sequential([

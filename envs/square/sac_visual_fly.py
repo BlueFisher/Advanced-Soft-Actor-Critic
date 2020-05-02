@@ -2,10 +2,10 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from algorithm.common_models import ModelSimpleRep, ModelRNNRep
+from algorithm.common_models import ModelTransition, ModelSimpleRep, ModelRNNRep
 
 
-class ModelTransition(tf.keras.Model):
+class ModelTransition(ModelTransition):
     def __init__(self, state_dim, action_dim):
         super().__init__()
         self.seq = tf.keras.Sequential([
@@ -16,7 +16,7 @@ class ModelTransition(tf.keras.Model):
 
         self.next_state_tfpd = tfp.layers.DistributionLambda(make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
 
-        self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(action_dim,)))
+        self(tf.keras.Input(shape=(state_dim + 2,)), tf.keras.Input(shape=(action_dim,)))
 
     def call(self, state, action):
         next_state = self.seq(tf.concat([state, action], -1))
@@ -24,6 +24,9 @@ class ModelTransition(tf.keras.Model):
         next_state_dist = self.next_state_tfpd([mean, tf.exp(logstd)])
 
         return next_state_dist
+
+    def extra_obs(self, obs_list):
+        return obs_list[1][..., -2:]
 
 
 class ModelReward(tf.keras.Model):
@@ -46,6 +49,7 @@ class ModelObservation(tf.keras.Model):
     def __init__(self, state_dim, obs_dims):
         super().__init__()
         assert obs_dims[0] == (30, 30, 3)
+        assert obs_dims[1] == (6, )
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(4 * 4 * 16, activation=tf.nn.relu),
@@ -55,7 +59,7 @@ class ModelObservation(tf.keras.Model):
             tf.keras.layers.Conv2DTranspose(filters=16, kernel_size=3, strides=2, activation=tf.nn.relu),
             tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=4, strides=1),
         ])
- 
+
         self(tf.keras.Input(shape=(state_dim,)))
 
     def call(self, state):
