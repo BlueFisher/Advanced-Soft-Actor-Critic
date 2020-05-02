@@ -66,14 +66,27 @@ class UnityWrapper:
         self._env.step()
         decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
 
+        tmp_terminal_steps = terminal_steps
+
+        while len(decision_steps) == 0:
+            self._env.set_actions(self.bahavior_name, np.empty([0, action.shape[-1]]))
+            self._env.step()
+            decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
+            tmp_terminal_steps.agent_id = np.concatenate([tmp_terminal_steps.agent_id,
+                                                          terminal_steps.agent_id])
+            tmp_terminal_steps.reward = np.concatenate([tmp_terminal_steps.reward,
+                                                        terminal_steps.reward])
+            tmp_terminal_steps.max_step = np.concatenate([tmp_terminal_steps.max_step,
+                                                          terminal_steps.max_step])
+
         reward = decision_steps.reward
-        reward[terminal_steps.agent_id] = terminal_steps.reward
+        reward[tmp_terminal_steps.agent_id] = tmp_terminal_steps.reward
 
-        done = np.full([10, ], False, dtype=np.bool)
-        done[terminal_steps.agent_id] = True
+        done = np.full([len(decision_steps), ], False, dtype=np.bool)
+        done[tmp_terminal_steps.agent_id] = True
 
-        max_step = np.full([10, ], False, dtype=np.bool)
-        max_step[terminal_steps.agent_id] = terminal_steps.max_step
+        max_step = np.full([len(decision_steps), ], False, dtype=np.bool)
+        max_step[tmp_terminal_steps.agent_id] = tmp_terminal_steps.max_step
 
         return ([obs.astype(np.float32) for obs in decision_steps.obs],
                 decision_steps.reward.astype(np.float32),
@@ -85,15 +98,11 @@ class UnityWrapper:
 
 
 if __name__ == "__main__":
-    env = UnityWrapper(True, base_port=5004)
-    n_agents, obs = env.reset()
-    print('n_agents', n_agents)
-    # print('obs', obs)
+    env = UnityWrapper(train_mode=True, base_port=5004)
 
-    for _ in range(10000):
-        obs, reward, done, max_step = env.step(np.random.randn(n_agents, 2))
-
-        print('done', done)
-        input()
+    for i in range(100):
+        n_agents, obs = env.reset()
+        for _ in range(100):
+            obs, reward, done, max_step = env.step(np.random.randn(n_agents, 2))
 
     env.close()
