@@ -77,6 +77,8 @@ visual_fly:
   replay_config: &visual_fly_replay
     batch_size: 64
     capacity: 131072
+  sac_config: &visual_fly_sac
+    burn_in_step: 20
 
 visual_fly_nopre:
   base_config:
@@ -84,4 +86,5 @@ visual_fly_nopre:
     name: "nopre_{time}"
   replay_config: *visual_fly_replay
   sac_config:
+    <<: *visual_fly_sac
     use_prediction: false

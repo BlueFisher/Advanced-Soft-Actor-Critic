@@ -99,7 +99,7 @@ class ModelRep(ModelRNNRep):
 
         self.get_call_result_tensors()
 
-    def call(self, obs_list, initial_state):
+    def call(self, obs_list, rnn_state):
         vis_obs = obs_list[0]
 
         batch = tf.shape(vis_obs)[0]
@@ -107,7 +107,7 @@ class ModelRep(ModelRNNRep):
         vis_obs = self.conv(vis_obs)
         vis_obs = tf.reshape(vis_obs, [batch, -1, vis_obs.shape[-1]])
 
-        outputs, next_rnn_state = self.layer_rnn(vis_obs, initial_state=initial_state)
+        outputs, next_rnn_state = self.layer_rnn(vis_obs, initial_state=rnn_state)
 
         state = self.seq(outputs)
 

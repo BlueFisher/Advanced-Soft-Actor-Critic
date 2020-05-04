@@ -336,7 +336,7 @@ class SAC_Base(object):
         tf.function
         """
         if self.use_rnn:
-            n_states, *_ = self.model_rep(n_obses_list, [rnn_state])
+            n_states, *_ = self.model_rep(n_obses_list, rnn_state)
         else:
             n_states = self.model_rep(n_obses_list)
 
@@ -464,24 +464,6 @@ class SAC_Base(object):
 
         # V_s + \sum{td_error}
         y = v[:, 0:1] + r  # [Batch, 1]
-
-        # NO V-TRACE
-        # policy = self.model_policy(state_)
-        # action_sampled = policy.sample()
-        # next_log_prob = tf.reduce_sum(policy.log_prob(action_sampled), axis=1, keepdims=True)
-        # next_q1 = self.model_target_q1(state_, action_sampled)
-        # next_q2 = self.model_target_q2(state_, action_sampled)
-        # reward = tf.reduce_sum(n_rewards * gamma_ratio, axis=1, keepdims=True)
-        # y = reward + tf.pow(self.gamma, self.n_step) * (1 - done) * (tf.minimum(next_q1, next_q2) - alpha * next_log_prob)
-
-        # r = tf.reduce_sum(n_rewards * gamma_ratio, axis=1, keepdims=True)
-
-        # policy = self.model_policy(state_)
-        # next_q1 = self.model_target_q1(state_)
-        # next_q2 = self.model_target_q2(state_)
-        # min_q = tf.minimum(next_q1, next_q2)
-
-        # y = r + tf.pow(self.gamma, self.n_step) * (1 - n_dones[:, -1:]) * tf.reduce_sum(policy.probs * (min_q), axis=-1, keepdims=True)
 
         return y  # [None, 1]
 
@@ -681,7 +663,7 @@ class SAC_Base(object):
         """
         tf.function
         """
-        *_, n_rnn_states = self.model_rep(n_obses_list, [rnn_state])
+        *_, n_rnn_states = self.model_rep(n_obses_list, rnn_state)
         return n_rnn_states
 
     @tf.function
@@ -705,7 +687,7 @@ class SAC_Base(object):
         rnn_state: [None, rnn_state]
         """
         obs_list = [tf.reshape(obs, (-1, 1, *obs.shape[1:])) for obs in obs_list]
-        state, next_rnn_state, _ = self.model_rep(obs_list, [rnn_state])
+        state, next_rnn_state, _ = self.model_rep(obs_list, rnn_state)
         policy = self.model_policy(state)
         if self.is_discrete:
             action = policy.sample()
@@ -740,7 +722,7 @@ class SAC_Base(object):
         """
         if self.use_rnn:
             obs_list = [tf.reshape(obs, (-1, 1, obs.shape[-1])) for obs in obs_list]
-            state, next_rnn_state, _ = self.model_rep(obs_list, [rnn_state])
+            state, next_rnn_state, _ = self.model_rep(obs_list, rnn_state)
         else:
             state = self.model_rep(obs_list)
 
