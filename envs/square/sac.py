@@ -49,7 +49,7 @@ class ModelObservation(tf.keras.Model):
         super().__init__()
         assert obs_dims[0] == (44, )
         assert obs_dims[1] == (6, )
-        
+
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
@@ -83,9 +83,9 @@ class ModelRep(ModelRNNRep):
 
         self.get_call_result_tensors()
 
-    def call(self, obs_list, initial_state):
+    def call(self, obs_list, rnn_state):
         ray_obs, vec_obs = obs_list
-        outputs, next_rnn_state = self.layer_rnn(vec_obs, initial_state=initial_state)
+        outputs, next_rnn_state = self.layer_rnn(vec_obs, initial_state=rnn_state)
 
         state = tf.concat([ray_obs, outputs], -1)
 

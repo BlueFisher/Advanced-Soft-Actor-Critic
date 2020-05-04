@@ -21,24 +21,27 @@ class UnityWrapper:
 
         self._logger = logging.getLogger('UnityWrapper')
 
-        engine_configuration_channel = EngineConfigurationChannel()
+        self.engine_configuration_channel = EngineConfigurationChannel()
         self.environment_parameters_channel = EnvironmentParametersChannel()
 
         self._env = UnityEnvironment(file_name=file_name,
                                      base_port=base_port,
                                      seed=seed,
                                      args=['--scene', scene, '--n_agents', str(n_agents)],
-                                     side_channels=[engine_configuration_channel,
+                                     side_channels=[self.engine_configuration_channel,
                                                     self.environment_parameters_channel])
 
         if train_mode:
-            engine_configuration_channel.set_configuration_parameters(time_scale=100)
+            self.engine_configuration_channel.set_configuration_parameters(width=200,
+                                                                           height=200,
+                                                                           quality_level=0,
+                                                                           time_scale=100)
         else:
-            engine_configuration_channel.set_configuration_parameters(width=1028,
-                                                                      height=720,
-                                                                      quality_level=5,
-                                                                      time_scale=0,
-                                                                      target_frame_rate=60)
+            self.engine_configuration_channel.set_configuration_parameters(width=1028,
+                                                                           height=720,
+                                                                           quality_level=5,
+                                                                           time_scale=5,
+                                                                           target_frame_rate=60)
 
         self._env.reset()
         self.bahavior_name = self._env.get_behavior_names()[0]
@@ -48,6 +51,11 @@ class UnityWrapper:
         self._logger.info(f'Observation shapes: {behavior_spec.observation_shapes}')
         is_discrete = behavior_spec.is_action_discrete()
         self._logger.info(f'Action size: {behavior_spec.action_size}. Is discrete: {is_discrete}')
+
+        for o in behavior_spec.observation_shapes:
+            if len(o) >= 3:
+                self.engine_configuration_channel.set_configuration_parameters(quality_level=5)
+                break
 
         return behavior_spec.observation_shapes, behavior_spec.action_size, is_discrete
 

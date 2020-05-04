@@ -34,7 +34,7 @@ class ModelRNNRep(tf.keras.Model):
         super().__init__()
         self.obs_dims = obs_dims
 
-    def call(self, obs_list, initial_state):
+    def call(self, obs_list, rnn_state):
         raise Exception("ModelRNNRep not implemented")
 
     def get_call_result_tensors(self):

@@ -89,8 +89,8 @@ class ModelRep(ModelRNNRep):
         ])
         self.get_call_result_tensors()
 
-    def call(self, obs_list, initial_state):
-        outputs, next_rnn_state = self.layer_rnn(obs_list[1][..., :-2], initial_state=initial_state)
+    def call(self, obs_list, rnn_state):
+        outputs, next_rnn_state = self.layer_rnn(obs_list[1][..., :-2], initial_state=rnn_state)
         state = self.seq(tf.concat([obs_list[0], outputs], axis=-1))
 
         return state, next_rnn_state, outputs

@@ -12,6 +12,7 @@ import string
 import sys
 import time
 import yaml
+import matplotlib.pyplot as plt
 
 import numpy as np
 
