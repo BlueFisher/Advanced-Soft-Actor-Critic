@@ -155,21 +155,22 @@ class Main(object):
                     agent.reset()
 
             is_max_reached = False
+            action = np.zeros([len(agents), self.action_dim], dtype=np.float32)
             step = 0
 
             while False in [a.done for a in agents]:
                 if use_rnn:
                     # burn-in padding
-                    for agent in agents:
-                        if agent.is_empty():
-                            for _ in range(self.sac.burn_in_step):
-                                agent.add_transition([np.zeros(t) for t in self.obs_dims],
-                                                     np.zeros(self.action_dim),
-                                                     0, False, False,
-                                                     [np.zeros(t) for t in self.obs_dims],
-                                                     initial_rnn_state[0])
+                    for agent in [a for a in agents if a.is_empty()]:
+                        for _ in range(self.sac.burn_in_step):
+                            agent.add_transition([np.zeros(t) for t in self.obs_dims],
+                                                 np.zeros(self.action_dim),
+                                                 0, False, False,
+                                                 [np.zeros(t) for t in self.obs_dims],
+                                                 initial_rnn_state[0])
 
                     action, next_rnn_state = self.sac.choose_rnn_action([o.astype(np.float32) for o in obs_list],
+                                                                        action,
                                                                         rnn_state)
                     next_rnn_state = next_rnn_state.numpy()
                 else:
@@ -203,6 +204,7 @@ class Main(object):
                     self.sac.train()
 
                 obs_list = next_obs_list
+                action[local_done] = np.zeros(self.action_dim)
                 if use_rnn:
                     rnn_state = next_rnn_state
                     rnn_state[local_done] = initial_rnn_state[local_done]

@@ -74,8 +74,8 @@ class ModelObservation(tf.keras.Model):
 
 
 class ModelRep(ModelRNNRep):
-    def __init__(self, obs_dims):
-        super().__init__(obs_dims)
+    def __init__(self, obs_dims, action_dim):
+        super().__init__(obs_dims, action_dim)
         self.rnn_units = 16
         self.layer_rnn = tf.keras.layers.RNN(tf.keras.layers.GRUCell(self.rnn_units),
                                              return_sequences=True,
@@ -83,7 +83,7 @@ class ModelRep(ModelRNNRep):
 
         self.get_call_result_tensors()
 
-    def call(self, obs_list, rnn_state):
+    def call(self, obs_list, pre_action, rnn_state):
         ray_obs, vec_obs = obs_list
         outputs, next_rnn_state = self.layer_rnn(vec_obs, initial_state=rnn_state)
 
