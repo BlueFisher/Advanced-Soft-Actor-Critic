@@ -64,8 +64,8 @@ class ModelObservation(tf.keras.Model):
 
 
 class ModelRep(ModelRNNRep):
-    def __init__(self, obs_dims):
-        super().__init__(obs_dims)
+    def __init__(self, obs_dims, action_dim):
+        super().__init__(obs_dims, action_dim)
         self.rnn_units = 64
         self.layer_rnn = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
         self.seq = tf.keras.Sequential([
@@ -74,8 +74,9 @@ class ModelRep(ModelRNNRep):
 
         self.get_call_result_tensors()
 
-    def call(self, obs_list, rnn_state):
+    def call(self, obs_list, pre_action, rnn_state):
         obs = obs_list[0]
+        obs = tf.concat([obs, pre_action], axis=-1)
         outputs, next_rnn_state = self.layer_rnn(obs, initial_state=rnn_state)
 
         state = self.seq(outputs)

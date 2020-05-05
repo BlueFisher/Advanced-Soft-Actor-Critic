@@ -80,8 +80,8 @@ class ModelObservation(tf.keras.Model):
 
 
 class ModelRep(ModelRNNRep):
-    def __init__(self, obs_dims):
-        super().__init__(obs_dims)
+    def __init__(self, obs_dims, action_dim):
+        super().__init__(obs_dims, action_dim)
         self.conv = tf.keras.Sequential([
             tf.keras.layers.Conv2D(filters=16, kernel_size=3, strides=2, activation=tf.nn.relu),
             tf.keras.layers.Conv2D(filters=16, kernel_size=3, strides=2, activation=tf.nn.relu),
@@ -99,7 +99,7 @@ class ModelRep(ModelRNNRep):
 
         self.get_call_result_tensors()
 
-    def call(self, obs_list, rnn_state):
+    def call(self, obs_list, pre_action, rnn_state):
         vis_obs = obs_list[0]
 
         batch = tf.shape(vis_obs)[0]

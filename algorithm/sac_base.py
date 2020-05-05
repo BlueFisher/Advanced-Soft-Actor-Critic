@@ -34,6 +34,13 @@ def debug_grad_com(grads, grads1):
         debug(grad - grads1[i])
 
 
+def gen_pre_n_actions(n_actions, keep_last_action=False):
+    return tf.concat([
+        tf.zeros_like(n_actions[:, 0:1, ...]),
+        n_actions if keep_last_action else n_actions[:, :-1, ...]
+    ], axis=1)
+
+
 def _np_to_tensor(fn):
     def c(*args, **kwargs):
         return fn(*[k for k in args if k is not None],
@@ -172,8 +179,8 @@ class SAC_Base(object):
             self.optimizer_alpha = adam_optimizer()
 
         # Get represented state dimension
-        self.model_rep = model.ModelRep(self.obs_dims)
-        self.model_target_rep = model.ModelRep(self.obs_dims)
+        self.model_rep = model.ModelRep(self.obs_dims, self.action_dim)
+        self.model_target_rep = model.ModelRep(self.obs_dims, self.action_dim)
         if self.use_rnn:
             # Get rnn_state dimension
             state, next_rnn_state, _ = self.model_rep.get_call_result_tensors()
@@ -199,7 +206,6 @@ class SAC_Base(object):
         self.model_target_q2 = model.ModelQ(state_dim, self.action_dim)
 
         self.model_policy = model.ModelPolicy(state_dim, self.action_dim)
-        self.model_target_policy = model.ModelPolicy(state_dim, self.action_dim)
 
         self.cem_rewards = None
 
@@ -325,9 +331,6 @@ class SAC_Base(object):
         target_variables += self.model_target_rep.trainable_variables
         eval_variables += self.model_rep.trainable_variables
 
-        target_variables += self.model_target_policy.trainable_variables
-        eval_variables += self.model_policy.trainable_variables
-
         [t.assign(tau * e + (1. - tau) * t) for t, e in zip(target_variables, eval_variables)]
 
     @tf.function
@@ -336,7 +339,9 @@ class SAC_Base(object):
         tf.function
         """
         if self.use_rnn:
-            n_states, *_ = self.model_rep(n_obses_list, rnn_state)
+            n_states, *_ = self.model_rep(n_obses_list,
+                                          gen_pre_n_actions(n_selected_actions),
+                                          rnn_state)
         else:
             n_states = self.model_rep(n_obses_list)
 
@@ -481,8 +486,12 @@ class SAC_Base(object):
             m_obses_list = [tf.concat([n_obses, tf.reshape(next_obs, (-1, 1, *next_obs.shape[1:]))], axis=1)
                             for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
             if self.use_rnn:
-                m_states, *_ = self.model_rep(m_obses_list, initial_rnn_state)
-                m_target_states, *_ = self.model_target_rep(m_obses_list, initial_rnn_state)
+                m_states, *_ = self.model_rep(m_obses_list,
+                                              gen_pre_n_actions(n_actions, keep_last_action=True),
+                                              initial_rnn_state)
+                m_target_states, *_ = self.model_target_rep(m_obses_list,
+                                                            gen_pre_n_actions(n_actions, keep_last_action=True),
+                                                            initial_rnn_state)
             else:
                 m_states = self.model_rep(m_obses_list)
                 m_target_states = self.model_target_rep(m_obses_list)
@@ -495,7 +504,6 @@ class SAC_Base(object):
             alpha = tf.exp(self.log_alpha)
 
             policy = self.model_policy(state)
-            target_policy = self.model_target_policy(state)
             if self.is_discrete:
                 q1 = self.model_q1(state)  # [Batch, action_dim]
                 q2 = self.model_q2(state)  # [Batch, action_dim]
@@ -659,11 +667,13 @@ class SAC_Base(object):
         return summary
 
     @tf.function
-    def get_n_rnn_states(self, n_obses_list, rnn_state):
+    def get_n_rnn_states(self, n_obses_list, n_actions, rnn_state):
         """
         tf.function
         """
-        *_, n_rnn_states = self.model_rep(n_obses_list, rnn_state)
+        *_, n_rnn_states = self.model_rep(n_obses_list,
+                                          gen_pre_n_actions(n_actions),
+                                          rnn_state)
         return n_rnn_states
 
     @tf.function
@@ -680,14 +690,15 @@ class SAC_Base(object):
             return tf.tanh(policy.sample())
 
     @tf.function
-    def choose_rnn_action(self, obs_list, rnn_state):
+    def choose_rnn_action(self, obs_list, pre_action, rnn_state):
         """
         tf.function
         obs_list: list([None, obs_dim_i], ...)
         rnn_state: [None, rnn_state]
         """
         obs_list = [tf.reshape(obs, (-1, 1, *obs.shape[1:])) for obs in obs_list]
-        state, next_rnn_state, _ = self.model_rep(obs_list, rnn_state)
+        pre_action = tf.reshape(pre_action, (-1, 1, *pre_action.shape[1:]))
+        state, next_rnn_state, _ = self.model_rep(obs_list, pre_action, rnn_state)
         policy = self.model_policy(state)
         if self.is_discrete:
             action = policy.sample()
@@ -697,74 +708,6 @@ class SAC_Base(object):
 
         action = tf.reshape(action, (-1, action.shape[-1]))
         return action, next_rnn_state
-
-    @tf.function
-    def _cal_cem_reward(self, state, action):
-        cem_horizon = 12
-
-        if self.cem_rewards is None:
-            self.cem_rewards = tf.Variable(tf.zeros([state.shape[0], cem_horizon]))
-
-        for j in range(cem_horizon):
-            state_ = self.model_transition(state, action).sample()
-            self.cem_rewards[:, j:j + 1].assign(self.model_reward(state_))
-            state = state_
-            action = tf.tanh(self.model_policy(state).sample())
-
-        return self.cem_rewards
-
-    @tf.function
-    def choose_action_by_cem(self, obs_list, rnn_state):
-        """
-        tf.function
-        obs_list: list([None, obs_dim_i], ...)
-        rnn_state: [None, rnn_state]
-        """
-        if self.use_rnn:
-            obs_list = [tf.reshape(obs, (-1, 1, obs.shape[-1])) for obs in obs_list]
-            state, next_rnn_state, _ = self.model_rep(obs_list, rnn_state)
-        else:
-            state = self.model_rep(obs_list)
-
-        state = tf.reshape(state, (-1, state.shape[-1]))
-
-        repeat = 1000
-        top = 100
-        iteration = 10
-
-        batch = state.shape[0]
-        dist = self.model_policy(state)
-        mean, std = dist.loc, dist.scale
-
-        for i in range(iteration):
-            state_repeated = tf.repeat(state, repeat, axis=0)
-            mean_repeated = tf.repeat(mean, repeat, axis=0)
-            std_repeated = tf.repeat(std, repeat, axis=0)
-
-            action_repeated = tfp.distributions.Normal(mean_repeated, std_repeated)
-            action_repeated = tf.tanh(action_repeated.sample())
-
-            rewards = self._cal_cem_reward(state_repeated, action_repeated)
-
-            cum_reward = tf.reshape(tf.reduce_sum(rewards, axis=1), [batch, repeat])
-            sorted_index = tf.argsort(cum_reward, axis=1)
-            sorted_index = sorted_index[..., -top:]
-            sorted_index = tf.reshape(sorted_index, [-1])
-            tmp_index = tf.repeat(tf.range(batch), top, axis=0)
-
-            action_repeated = tf.reshape(action_repeated, [batch, repeat, 2])
-            action_repeated = tf.gather_nd(action_repeated, tf.unstack([tmp_index, sorted_index], axis=1))
-            action_repeated = tf.reshape(action_repeated, [batch, top, 2])
-            mean = tf.reduce_mean(tf.atanh(action_repeated * 0.9999), axis=1)
-            std = tf.math.reduce_std(tf.atanh(action_repeated * 0.9999), axis=1)
-
-        action = tfp.distributions.Normal(mean, std)
-        action = tf.tanh(action.sample())
-
-        if self.use_rnn:
-            return action, next_rnn_state
-        else:
-            return action
 
     @tf.function
     def get_td_error(self,
@@ -782,9 +725,13 @@ class SAC_Base(object):
                         for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
         if self.use_rnn:
             tmp_states, *_ = self.model_rep([m_obses[:, :self.burn_in_step + 1, ...] for m_obses in m_obses_list],
+                                            gen_pre_n_actions(n_actions[:, :self.burn_in_step + 1, ...]),
                                             rnn_state)
             state = tmp_states[:, self.burn_in_step, ...]
-            m_target_states, *_ = self.model_target_rep(m_obses_list, rnn_state)
+            m_target_states, *_ = self.model_target_rep(m_obses_list,
+                                                        gen_pre_n_actions(n_actions,
+                                                                          keep_last_action=True),
+                                                        rnn_state)
         else:
             state = self.model_rep([m_obses[:, self.burn_in_step, ...] for m_obses in m_obses_list])
             m_target_states = self.model_target_rep(m_obses_list)
@@ -1050,7 +997,7 @@ class SAC_Base(object):
         if self.use_rnn:
             pointers_list = [pointers + i for i in range(1, self.burn_in_step + self.n_step + 1)]
             tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-            n_rnn_states = self.get_n_rnn_states(n_obses_list, rnn_state).numpy()
+            n_rnn_states = self.get_n_rnn_states(n_obses_list, n_actions, rnn_state).numpy()
             rnn_states = n_rnn_states.reshape(-1, n_rnn_states.shape[-1])
             self.replay_buffer.update_transitions(tmp_pointers, 'rnn_state', rnn_states)
 
