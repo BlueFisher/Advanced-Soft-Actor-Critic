@@ -2,15 +2,16 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from algorithm.common_models import ModelTransition, ModelSimpleRep, ModelRNNRep
+from algorithm.common_models import ModelTransition, ModelRNNRep
 
 
 class ModelTransition(ModelTransition):
     def __init__(self, state_dim, action_dim):
         super().__init__()
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.tanh),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.tanh),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(state_dim + state_dim)
         ])
 
@@ -33,7 +34,8 @@ class ModelReward(tf.keras.Model):
     def __init__(self, state_dim):
         super().__init__()
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(1)
         ])
 
@@ -48,17 +50,16 @@ class ModelReward(tf.keras.Model):
 class ModelObservation(tf.keras.Model):
     def __init__(self, state_dim, obs_dims):
         super().__init__()
-        assert obs_dims[0] == (30, 30, 3)
+        assert obs_dims[0] == (84, 84, 3)
         assert obs_dims[1] == (6, )  # Only first 4
 
         self.vis_seq = tf.keras.Sequential([
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(4 * 4 * 16, activation=tf.nn.relu),
-            tf.keras.layers.Reshape(target_shape=(4, 4, 16)),
-            tf.keras.layers.Conv2DTranspose(filters=16, kernel_size=3, strides=1, activation=tf.nn.relu),
-            tf.keras.layers.Conv2DTranspose(filters=16, kernel_size=3, strides=2, activation=tf.nn.relu),
-            tf.keras.layers.Conv2DTranspose(filters=16, kernel_size=3, strides=2, activation=tf.nn.relu),
-            tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=4, strides=1),
+            tf.keras.layers.Dense(7 * 7 * 64, activation=tf.nn.relu),
+            tf.keras.layers.Reshape(target_shape=(7, 7, 64)),
+            tf.keras.layers.Conv2DTranspose(filters=64, kernel_size=3, strides=1, activation=tf.nn.relu),
+            tf.keras.layers.Conv2DTranspose(filters=64, kernel_size=4, strides=2, activation=tf.nn.relu),
+            tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=8, strides=4),
         ])
         self.vec_seq = tf.keras.Sequential([
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
@@ -90,14 +91,14 @@ class ModelObservation(tf.keras.Model):
 
 class ModelRep(ModelRNNRep):
     def __init__(self, obs_dims, action_dim):
-        assert obs_dims[0] == (30, 30, 3)
+        assert obs_dims[0] == (84, 84, 3)
         assert obs_dims[1] == (6, )  # Only first 4
 
         super().__init__(obs_dims, action_dim)
         self.conv = tf.keras.Sequential([
-            tf.keras.layers.Conv2D(filters=16, kernel_size=3, strides=2, activation=tf.nn.relu),
-            tf.keras.layers.Conv2D(filters=16, kernel_size=3, strides=2, activation=tf.nn.relu),
-            tf.keras.layers.Conv2D(filters=16, kernel_size=3, strides=2, activation=tf.nn.relu),
+            tf.keras.layers.Conv2D(filters=32, kernel_size=8, strides=4, activation=tf.nn.relu),
+            tf.keras.layers.Conv2D(filters=64, kernel_size=4, strides=2, activation=tf.nn.relu),
+            tf.keras.layers.Conv2D(filters=64, kernel_size=3, strides=1, activation=tf.nn.relu),
             tf.keras.layers.Flatten(),
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(64, activation=tf.nn.relu)
@@ -130,15 +131,21 @@ class ModelRep(ModelRNNRep):
 class ModelQ(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
         super().__init__()
+        self.layer_state = tf.keras.layers.Dense(128, activation=tf.nn.relu)
+        self.layer_action = tf.keras.layers.Dense(128, activation=tf.nn.relu)
+
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(1)
         ])
 
         self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(action_dim,)))
 
     def call(self, state, action):
+        state = self.layer_state(state)
+        action = self.layer_action(action)
         l = tf.concat([state, action], -1)
 
         q = self.seq(l)
@@ -148,10 +155,17 @@ class ModelQ(tf.keras.Model):
 class ModelPolicy(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
         super().__init__()
-        self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(action_dim + action_dim)
+        self.common_model = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu)
+        ])
+        self.mean_model = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(action_dim)
+        ])
+        self.logstd_model = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(action_dim)
         ])
 
         self.tfpd = tfp.layers.DistributionLambda(make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
@@ -159,7 +173,9 @@ class ModelPolicy(tf.keras.Model):
         self(tf.keras.Input(shape=(state_dim,)))
 
     def call(self, state):
-        l = self.seq(state)
-        mean, logstd = tf.split(l, num_or_size_splits=2, axis=-1)
+        l = self.common_model(state)
 
-        return self.tfpd([mean, tf.clip_by_value(tf.exp(logstd), 0.1, 1.0)])
+        mean = self.mean_model(l)
+        logstd = self.logstd_model(l)
+
+        return self.tfpd([tf.tanh(mean), tf.clip_by_value(tf.exp(logstd), 0.1, 1.0)])

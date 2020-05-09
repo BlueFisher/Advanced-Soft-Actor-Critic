@@ -24,14 +24,32 @@ ray:
   base_config: &ray_base
     scene: RayPyramid
     sac: sac_ray
-    name: "ray20_pre_kn_clipped_{time}"
+    name: "ray20_pre_kn_{time}"
   reset_config: &ray_reset
     ray_length: 20
 
 ray_nopre:
   base_config:
     <<: *ray_base
-    name: "ray20_nopre_kn_clipped_{time}"
+    name: "ray20_nopre_{time}"
   reset_config: *ray_reset
   sac_config:
     use_prediction: false
+
+visual:
+  base_config: &visual_base
+    scene: VisualPyramid
+    sac: sac_visual
+    name: "pre_kn_{time}"
+    max_iter: 10000
+  replay_config: &visual_replay
+    batch_size: 64
+    capacity: 131072
+
+visual_nopre:
+  base_config:
+    <<: *visual_base
+    name: "nopre_{time}"
+  sac_config:
+    use_prediction: false
+  replay_config: *visual_replay

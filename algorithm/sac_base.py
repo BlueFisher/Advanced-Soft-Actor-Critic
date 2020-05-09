@@ -178,14 +178,19 @@ class SAC_Base(object):
         if self.use_auto_alpha:
             self.optimizer_alpha = adam_optimizer()
 
-        # Get represented state dimension
-        self.model_rep = model.ModelRep(self.obs_dims, self.action_dim)
-        self.model_target_rep = model.ModelRep(self.obs_dims, self.action_dim)
+        
         if self.use_rnn:
-            # Get rnn_state dimension
+            # Get represented state dimension
+            self.model_rep = model.ModelRep(self.obs_dims, self.action_dim)
+            self.model_target_rep = model.ModelRep(self.obs_dims, self.action_dim)
+            # Get state and rnn_state dimension
             state, next_rnn_state, _ = self.model_rep.get_call_result_tensors()
             self.rnn_state_dim = next_rnn_state.shape[-1]
         else:
+            # Get represented state dimension
+            self.model_rep = model.ModelRep(self.obs_dims)
+            self.model_target_rep = model.ModelRep(self.obs_dims)
+            # Get state dimension
             state = self.model_rep.get_call_result_tensors()
             self.rnn_state_dim = 1
         state_dim = state.shape[-1]
@@ -659,7 +664,6 @@ class SAC_Base(object):
             summary['scalar']['loss/observation'] = loss_obs
 
             approx_obs_list = self.model_observation(m_states[0:1, self.burn_in_step:, ...])
-            assert isinstance(approx_obs_list, list)
             for approx_obs in approx_obs_list:
                 if len(approx_obs.shape) > 3:
                     summary['image']['observation'] = tf.reshape(approx_obs, [-1, *approx_obs.shape[2:]])

@@ -2,25 +2,37 @@ import logging
 
 import numpy as np
 import gym
+try:
+    import pybullet_envs
+except:
+    pass
 
 
 class GymWrapper:
     def __init__(self,
                  train_mode=True,
                  env_name=None,
+                 render=False,
                  n_agents=1):
         self.train_mode = train_mode
         self.env_name = env_name
+        self.render = render
         self.n_agents = n_agents
         self._envs = list()
 
         self._logger = logging.getLogger('UnityWrapper')
 
     def init(self):
-        for _ in range(self.n_agents):
+        for i in range(self.n_agents):
+            # TODO
+            # spec = gym.envs.registry.spec('MinitaurBulletEnv-v0')
+            # spec._kwargs['render'] = not self.train_mode and i == 0
             self._envs.append(gym.make(self.env_name))
 
         env = self._envs[0]
+        if self.render or not self.train_mode:
+            env.render()
+
         self._logger.info(f'Observation shapes: {env.observation_space}')
         self._logger.info(f'Action size: {env.action_space}')
 
@@ -53,7 +65,7 @@ class GymWrapper:
             reward[i] = tmp_reward
             done[i] = tmp_done
 
-        if not self.train_mode:
+        if self.render or not self.train_mode:
             self._envs[0].render()
 
         for i in np.where(done)[0]:

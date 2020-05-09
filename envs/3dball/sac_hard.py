@@ -76,6 +76,7 @@ class ModelRep(ModelRNNRep):
 
     def call(self, obs_list, pre_action, rnn_state):
         obs = obs_list[0]
+        obs = tf.concat([obs, pre_action], axis=-1)
         outputs, next_rnn_state = self.layer_rnn(obs, initial_state=rnn_state)
 
         state = tf.concat([obs, outputs], -1)
