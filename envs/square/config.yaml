@@ -56,7 +56,7 @@ fly:
   base_config: &fly_base
     scene: RaySquareFly
     sac: sac_fly
-    name: "pre_{time}"
+    name: "pre_kn_{time}"
     max_iter: 10000
   reset_config: &fly_reset
     ray_length: 10
@@ -73,7 +73,8 @@ visual_fly:
   base_config: &visual_fly_base
     scene: VisualSquareFly
     sac: sac_visual_fly
-    name: "pre_{time}"
+    name: "pre_kn_{time}"
+    max_iter: 2000
   replay_config: &visual_fly_replay
     batch_size: 64
     capacity: 131072

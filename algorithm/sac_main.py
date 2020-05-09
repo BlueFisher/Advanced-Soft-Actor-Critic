@@ -12,7 +12,6 @@ import string
 import sys
 import time
 import yaml
-import matplotlib.pyplot as plt
 
 import numpy as np
 
@@ -104,6 +103,7 @@ class Main(object):
 
             self.env = GymWrapper(train_mode=self.train_mode,
                                   env_name=self.config['build_path'],
+                                  render=self.render,
                                   n_agents=self.config['n_agents'])
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')

@@ -31,9 +31,9 @@ hard:
     scene: 3DBallHard
     sac: sac_hard
     name: "pre_{time}"
-    burn_in_step: 10
+  sac_config: &hard_sac
     use_rnn: true
-  sac_config:
+    burn_in_step: 10
     use_prediction: true
 
 hard_nopre:
@@ -41,4 +41,5 @@ hard_nopre:
     <<: *hard_base
     name: "nopre_{time}"
   sac_config:
+    <<: *hard_sac
     use_prediction: false
