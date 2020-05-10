@@ -110,7 +110,7 @@ class SAC_DS_Base(SAC_Base):
         summary = self._train(n_obses_list=n_obses_list,
                               n_actions=n_actions,
                               n_rewards=n_rewards,
-                              n_obses_list=next_obs_list,
+                              next_obs_list=next_obs_list,
                               n_dones=n_dones,
                               n_mu_probs=n_mu_probs,
                               priority_is=priority_is,
@@ -125,14 +125,14 @@ class SAC_DS_Base(SAC_Base):
 
             self.summary_writer.flush()
 
-        n_pi_probs = self.get_n_probs(*n_obses_list,
+        n_pi_probs = self.get_n_probs(n_obses_list,
                                       n_actions,
                                       rnn_state=rnn_state if self.use_rnn else None).numpy()
 
         td_error = self.get_td_error(n_obses_list=n_obses_list,
                                      n_actions=n_actions,
                                      n_rewards=n_rewards,
-                                     n_obses_list=next_obs_list,
+                                     next_obs_list=next_obs_list,
                                      n_dones=n_dones,
                                      n_mu_probs=n_pi_probs,
                                      rnn_state=rnn_state if self.use_rnn else None).numpy()

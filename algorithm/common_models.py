@@ -30,6 +30,9 @@ class ModelVoidRep(ModelSimpleRep):
 
 
 class ModelRNNRep(tf.keras.Model):
+    '''
+    Base class of RNN Representation Model
+    '''
     def __init__(self, obs_dims, action_dim):
         super().__init__()
         self.obs_dims = obs_dims

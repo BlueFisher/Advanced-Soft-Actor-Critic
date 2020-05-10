@@ -5,7 +5,6 @@ default:
 
     build_path: 'Walker2DBulletEnv-v0'
 
-    max_step: -1
     max_iter: 10000
     save_model_per_iter: 100
     n_agents: 10

@@ -54,6 +54,7 @@ class Actor(object):
         # Initialize config from command line arguments
         self.train_mode = not args.run
         self.run_in_editor = args.editor
+        self.config_cat = args.config
 
         self.logger = config_helper.set_logger('ds.actor', args.logger_file)
 
@@ -64,7 +65,8 @@ class Actor(object):
 
         # Initialize config
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
-                                                           self.config_file_path)
+                                                           self.config_file_path,
+                                                           self.config_cat)
 
         if self.cmd_args.build_port is not None:
             config['base_config']['build_port'] = self.cmd_args.build_port
@@ -136,8 +138,8 @@ class Actor(object):
             return
 
         if self.sac_actor.use_rnn:
-            n_mu_probs = self.sac_actor.get_n_probs(*n_obses_list, n_actions,
-                                                    n_rnn_states[:, 0, :]).numpy()
+            n_mu_probs = self.sac_actor.get_n_probs(n_obses_list, n_actions,
+                                                    n_rnn_states[:, 0, ...]).numpy()
             self._stub.add_transitions(n_obses_list,
                                        n_actions,
                                        n_rewards,
@@ -146,7 +148,7 @@ class Actor(object):
                                        n_mu_probs,
                                        n_rnn_states)
         else:
-            n_mu_probs = self.sac_actor.get_n_probs(*n_obses_list, n_actions).numpy()
+            n_mu_probs = self.sac_actor.get_n_probs(n_obses_list, n_actions).numpy()
             self._stub.add_transitions(n_obses_list,
                                        n_actions,
                                        n_rewards,
@@ -269,8 +271,8 @@ class Actor(object):
 
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]
-        rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(rewards)])
-        self.logger.info(f'{iteration}, rewards {rewards_sorted}')
+        rewards = ", ".join([f"{i:6.1f}" for i in rewards])
+        self.logger.info(f'{iteration}, rewards {rewards}')
 
 
 class StubController:
