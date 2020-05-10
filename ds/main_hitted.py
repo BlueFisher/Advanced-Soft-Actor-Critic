@@ -30,15 +30,16 @@ class LearnerHitted(Learner):
         rewards = [a.reward for a in agents]
         hitted = sum([a.hitted for a in agents])
 
-        rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(rewards)])
-        self.logger.info(f'{iteration}, {time_elapse:.2f}min, rewards {rewards_sorted}, hitted {hitted}')
+        rewards = ", ".join([f"{i:6.1f}" for i in rewards])
+        self.logger.info(f'{iteration}, {time_elapse:.2f}, rewards {rewards}, hitted {hitted}')
 
 
 class ActorHitted(Actor):
     _agent_class = AgentHitted
 
-    def _log_episode_info(self, global_step, agents):
+    def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]
-        rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(rewards)])
         hitted = sum([a.hitted for a in agents])
-        self.logger.info(f'{global_step}, rewards {rewards_sorted}, hitted {hitted}')
+
+        rewards = ", ".join([f"{i:6.1f}" for i in rewards])
+        self.logger.info(f'{iteration}, rewards {rewards}, hitted {hitted}')

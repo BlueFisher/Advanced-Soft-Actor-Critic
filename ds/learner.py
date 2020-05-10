@@ -101,7 +101,6 @@ class Learner(object):
             else:
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         file_name=self.config['build_path'][sys.platform],
-                                        no_graphics=not self.render and self.train_mode,
                                         base_port=self.config['build_port'],
                                         scene=self.config['scene'],
                                         n_agents=self.config['n_agents'])
@@ -111,6 +110,7 @@ class Learner(object):
 
             self.env = GymWrapper(train_mode=self.train_mode,
                                   env_name=self.config['build_path'],
+                                  render=self.render,
                                   n_agents=self.config['n_agents'])
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')
@@ -176,7 +176,7 @@ class Learner(object):
                                                  next_obs_list=next_obs_list,
                                                  n_dones=n_dones,
                                                  n_mu_probs=n_mu_probs,
-                                                 n_rnn_states=n_rnn_states if self.use_rnn else None)
+                                                 n_rnn_states=n_rnn_states if self.sac.use_rnn else None)
 
         return td_error
 
@@ -277,8 +277,8 @@ class Learner(object):
     def _log_episode_info(self, iteration, start_time, agents):
         time_elapse = (time.time() - start_time) / 60
         rewards = [a.reward for a in agents]
-        rewards_sorted = ", ".join([f"{i:.1f}" for i in sorted(rewards)])
-        self.logger.info(f'{iteration}, {time_elapse:.2f}min, rewards {rewards_sorted}')
+        rewards = ", ".join([f"{i:6.1f}" for i in rewards])
+        self.logger.info(f'{iteration}, {time_elapse:.2f}, rewards {rewards}')
 
     def _get_sampled_data(self):
         while True:
