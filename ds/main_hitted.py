@@ -14,7 +14,7 @@ from algorithm.sac_main_hitted import AgentHitted
 class LearnerHitted(Learner):
     _agent_class = AgentHitted
 
-    def _log_episode_summaries(self, iteration, agents):
+    def _log_episode_summaries(self, agents):
         rewards = np.array([a.reward for a in agents])
         hitted = sum([a.hitted for a in agents])
 
@@ -23,7 +23,7 @@ class LearnerHitted(Learner):
             {'tag': 'reward/max', 'simple_value': rewards.max()},
             {'tag': 'reward/min', 'simple_value': rewards.min()},
             {'tag': 'reward/hitted', 'simple_value': hitted}
-        ], iteration)
+        ])
 
     def _log_episode_info(self, iteration, start_time, agents):
         time_elapse = (time.time() - start_time) / 60

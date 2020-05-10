@@ -212,8 +212,6 @@ class SAC_Base(object):
 
         self.model_policy = model.ModelPolicy(state_dim, self.action_dim)
 
-        self.cem_rewards = None
-
     def _init_or_restore(self, model_path):
         """
         Initialize network weights from scratch or restore from model_root_path
@@ -822,13 +820,13 @@ class SAC_Base(object):
     def save_model(self, iteration):
         self.ckpt_manager.save(iteration + self.init_iteration)
 
-    def write_constant_summaries(self, constant_summaries, iteration):
+    def write_constant_summaries(self, constant_summaries):
         """
         Write constant information like reward, iteration from sac_main.py
         """
         with self.summary_writer.as_default():
             for s in constant_summaries:
-                tf.summary.scalar(s['tag'], s['simple_value'], step=iteration + self.init_iteration)
+                tf.summary.scalar(s['tag'], s['simple_value'], step=self.global_step)
         self.summary_writer.flush()
 
     def fill_replay_buffer(self,

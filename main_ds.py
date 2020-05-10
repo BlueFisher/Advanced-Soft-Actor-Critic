@@ -16,9 +16,9 @@ if __name__ == '__main__':
     parser.add_argument('--logger_file', help='logging into a file')
     parser.add_argument('--name', '-n', help='training name')
     parser.add_argument('--build_port', '-p', type=int, default=5005, help='communication port')
-    parser.add_argument('--seed', type=int, help='random seed')
     parser.add_argument('--sac', help='neural network model')
     parser.add_argument('--agents', type=int, default=1, help='number of agents')
+    parser.add_argument('--noise', type=float, default=0, help='additional noise for actor')
     args = parser.parse_args()
 
     config_path = f'envs/{args.env}'

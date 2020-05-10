@@ -33,8 +33,8 @@ RECONNECT_TIME = 2
 
 class Actor(object):
     train_mode = True
-    _websocket_connected = False
     _agent_class = Agent
+    _logged_waiting_for_connection = False
 
     def __init__(self, config_path, args):
         self.config_path = config_path
@@ -74,6 +74,8 @@ class Actor(object):
             config['base_config']['sac'] = self.cmd_args.sac
         if self.cmd_args.agents is not None:
             config['reset_config']['copy'] = self.cmd_args.agents
+        if self.cmd_args.noise is not None:
+            config['sac_config']['noise'] = self.cmd_args.noise
 
         self.config = config['base_config']
         sac_config = config['sac_config']
@@ -167,9 +169,12 @@ class Actor(object):
                     self.logger.info(f'{self.config["build_path"]} closed')
                     iteration = 0
 
-                self.logger.warning('waiting for connection')
+                if not self._logged_waiting_for_connection:
+                    self.logger.warning('waiting for connection')
+                    self._logged_waiting_for_connection = True
                 time.sleep(WAITING_CONNECTION_TIME)
                 continue
+            self._logged_waiting_for_connection = False
 
             # Learner is online, reset all settings
             if iteration == 0 and self._stub.connected:

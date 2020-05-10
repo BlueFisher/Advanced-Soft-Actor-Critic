@@ -103,7 +103,7 @@ sac_config:
 ```
 usage: main.py env_folder [--config CONFIG] [--run] [--render] [--editor]
                [--logger_file LOGGER_FILE] [--name NAME] [--port PORT]
-               [--seed SEED] [--sac SAC] [--agents AGENTS] [--repeat REPEAT]
+               [--sac SAC] [--agents AGENTS] [--repeat REPEAT]
 
 positional arguments:
   env_folder
@@ -118,7 +118,6 @@ optional arguments:
                         logging into a file
   --name NAME, -n NAME  training name, base_config.name
   --port PORT, -p PORT  communication port in Unity
-  --seed SEED           random seed, sac_config.seed
   --sac SAC             neural network model, base_config.sac
   --agents AGENTS       number of agents, base_config.n_agents
   --repeat REPEAT       number of repeated experiments
