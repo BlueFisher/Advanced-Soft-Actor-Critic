@@ -38,7 +38,9 @@ class SAC_DS_Base(SAC_Base):
                  use_prediction=False,
                  use_reward_normalization=False,
                  use_curiosity=False,
-                 curiosity_strength=1):
+                 curiosity_strength=1,
+
+                 noise=0.):
 
         physical_devices = tf.config.experimental.list_physical_devices('GPU')
         if len(physical_devices) > 0:
@@ -68,6 +70,8 @@ class SAC_DS_Base(SAC_Base):
         self.use_priority = True
         self.use_n_step_is = True
 
+        self.noise = noise
+
         if seed is not None:
             tf.random.set_seed(seed)
 
@@ -80,6 +84,20 @@ class SAC_DS_Base(SAC_Base):
             self.summary_writer = tf.summary.create_file_writer(summary_path)
 
         self._init_tf_function()
+
+    @tf.function
+    def choose_action(self, obs_list):
+        """
+        tf.function
+        obs_list: list([None, obs_dim_i], ...)
+        """
+        state = self.model_rep(obs_list)
+        policy = self.model_policy(state)
+        if self.is_discrete:
+            return tf.one_hot(policy.sample(), self.action_dim)
+        else:
+            action = tf.tanh(policy.sample())
+            return tf.clip_by_value(action + tf.random.normal(tf.shape(action), stddev=self.noise), -1., 1.)
 
     # For learner to send variables to actors
     @tf.function

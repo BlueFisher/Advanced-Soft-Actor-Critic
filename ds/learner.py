@@ -65,8 +65,6 @@ class Learner(object):
             config['base_config']['name'] = args.name
         if args.build_port is not None:
             config['base_config']['build_port'] = args.build_port
-        if args.seed is not None:
-            config['sac_config']['seed'] = args.seed
         if args.sac is not None:
             config['base_config']['sac'] = args.sac
         if args.agents is not None:
@@ -254,7 +252,7 @@ class Learner(object):
 
             if self.train_mode:
                 with self._training_lock:
-                    self._log_episode_summaries(iteration, agents)
+                    self._log_episode_summaries(agents)
 
                     if iteration % self.config['save_model_per_iter'] == 0:
                         self.sac.save_model(iteration)
@@ -266,13 +264,13 @@ class Learner(object):
             if self.train_mode:
                 time.sleep(EVALUATION_INTERVAL)
 
-    def _log_episode_summaries(self, iteration, agents):
+    def _log_episode_summaries(self, agents):
         rewards = np.array([a.reward for a in agents])
         self.sac.write_constant_summaries([
             {'tag': 'reward/mean', 'simple_value': rewards.mean()},
             {'tag': 'reward/max', 'simple_value': rewards.max()},
             {'tag': 'reward/min', 'simple_value': rewards.min()}
-        ], iteration)
+        ])
 
     def _log_episode_info(self, iteration, start_time, agents):
         time_elapse = (time.time() - start_time) / 60

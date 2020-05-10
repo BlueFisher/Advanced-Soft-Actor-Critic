@@ -13,7 +13,6 @@ if __name__ == '__main__':
     parser.add_argument('--logger_file', help='logging into a file')
     parser.add_argument('--name', '-n', help='training name')
     parser.add_argument('--port', '-p', type=int, default=5005, help='communication port')
-    parser.add_argument('--seed', type=int, help='random seed')
     parser.add_argument('--sac', help='neural network model')
     parser.add_argument('--agents', type=int, help='number of agents')
     parser.add_argument('--repeat', type=int, default=1, help='number of repeated experiments')
