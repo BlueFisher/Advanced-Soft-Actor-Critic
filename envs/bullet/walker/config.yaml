@@ -10,9 +10,6 @@ default:
     n_agents: 10
 
   sac_config:
-    seed: 42
+    use_auto_alpha: false
 
-    n_step: 3
-
-    _lambda: 0.99
-    # use_reward_normalization: true
+    n_step: 5

@@ -93,7 +93,6 @@ sac_config:
   use_priority: true # If use PER importance ratio
   use_n_step_is: true # If use importance sampling
   use_prediction: false # If train a transition model
-  use_reward_normalization: false # If use reward normalization
   use_curiosity: false # If use curiosity
   curiosity_strength: 1 # Curiosity strength if use curiosity
 ```

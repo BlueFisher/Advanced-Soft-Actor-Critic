@@ -18,4 +18,3 @@ default:
     tau: 0.9
     _lambda: 0.99
     init_log_alpha: -4.6
-    use_reward_normalization: true

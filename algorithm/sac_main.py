@@ -213,7 +213,7 @@ class Main(object):
                 self._log_episode_summaries(agents)
 
                 if iteration % self.config['save_model_per_iter'] == 0:
-                    self.sac.save_model(iteration)
+                    self.sac.save_model()
 
             self._log_episode_info(iteration, agents)
 
