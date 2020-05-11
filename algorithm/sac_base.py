@@ -77,7 +77,6 @@ class SAC_Base(object):
                  use_priority=True,
                  use_n_step_is=True,
                  use_prediction=False,
-                 use_reward_normalization=False,
                  use_curiosity=False,
                  curiosity_strength=1,
 
@@ -108,7 +107,6 @@ class SAC_Base(object):
         use_priority: If use PER importance ratio
         use_n_step_is: If use importance sampling
         use_prediction: If train a transition model
-        use_reward_normalization: If use reward normalization
         use_curiosity: If use curiosity
         curiosity_strength: Curiosity strength if use curiosity
         """
@@ -137,7 +135,6 @@ class SAC_Base(object):
         self.use_priority = use_priority
         self.use_n_step_is = use_n_step_is
         self.use_prediction = use_prediction
-        self.use_reward_normalization = use_reward_normalization
         self.use_curiosity = use_curiosity
         self.curiosity_strength = curiosity_strength
 
@@ -163,9 +160,6 @@ class SAC_Base(object):
         Initialize variables, network models and optimizers
         """
         self.log_alpha = tf.Variable(init_log_alpha, dtype=tf.float32, name='log_alpha')
-        if self.use_reward_normalization:
-            self.min_cum_reward = tf.Variable(0, dtype=tf.float32, name='min_q')
-            self.max_cum_reward = tf.Variable(0, dtype=tf.float32, name='max_q')
         self.global_step = tf.Variable(0, dtype=tf.int64, name='global_step')
 
         def adam_optimizer(): return tf.keras.optimizers.Adam(learning_rate)
@@ -178,7 +172,6 @@ class SAC_Base(object):
         if self.use_auto_alpha:
             self.optimizer_alpha = adam_optimizer()
 
-        
         if self.use_rnn:
             # Get represented state dimension
             self.model_rep = model.ModelRep(self.obs_dims, self.action_dim)
@@ -239,10 +232,6 @@ class SAC_Base(object):
         if self.use_auto_alpha:
             ckpt.optimizer_alpha = self.optimizer_alpha
 
-        if self.use_reward_normalization:
-            ckpt.min_cum_reward = self.min_cum_reward
-            ckpt.max_cum_reward = self.max_cum_reward
-
         if self.use_curiosity:
             ckpt.model_forward = self.model_forward
             ckpt.optimizer_forward = self.optimizer_forward
@@ -252,10 +241,8 @@ class SAC_Base(object):
         ckpt.restore(self.ckpt_manager.latest_checkpoint)
         if self.ckpt_manager.latest_checkpoint:
             logger.info(f'Restored from {self.ckpt_manager.latest_checkpoint}')
-            self.init_iteration = int(self.ckpt_manager.latest_checkpoint.split('-')[1].split('.')[0])
         else:
             logger.info('Initializing from scratch')
-            self.init_iteration = 0
             self._update_target_variables()
 
     def _init_tf_function(self):
@@ -359,28 +346,6 @@ class SAC_Base(object):
 
         return policy_prob
 
-    @tf.function(input_signature=[tf.TensorSpec(shape=None, dtype=tf.float32),
-                                  tf.TensorSpec(shape=None, dtype=tf.float32)])
-    def _update_reward_bound(self, min_reward, max_reward):
-        self.min_cum_reward.assign(tf.minimum(self.min_cum_reward, min_reward))
-        self.max_cum_reward.assign(tf.maximum(self.max_cum_reward, max_reward))
-
-    def update_reward_bound(self, n_rewards):
-        # n_rewards [1, episode_len]
-        ep_len = n_rewards.shape[1]
-        gamma = np.array([[np.power(self.gamma, i)] for i in range(ep_len)], dtype=np.float32)
-
-        cum_rewards = np.empty(ep_len, dtype=np.float32)
-        tmp_rewards = n_rewards * gamma
-
-        for i in range(ep_len):
-            cum_rewards[i] = np.sum(tmp_rewards.diagonal(i))
-
-        cum_n_rewards = np.cumsum(tmp_rewards.diagonal(0))
-        cum_rewards = np.concatenate([cum_rewards, cum_n_rewards])
-
-        self._update_reward_bound(np.min(cum_rewards), np.max(cum_rewards))
-
     @tf.function
     def _get_y(self, n_states, n_actions, n_rewards, state_, n_dones,
                n_mu_probs=None):
@@ -388,8 +353,6 @@ class SAC_Base(object):
         tf.function
         Get target value
         """
-        if self.use_reward_normalization:
-            n_rewards = n_rewards / tf.maximum(self.max_cum_reward, tf.abs(self.min_cum_reward))
 
         gamma_ratio = [[tf.pow(self.gamma, i) for i in range(self.n_step)]]
         lambda_ratio = [[tf.pow(self._lambda, i) for i in range(self.n_step)]]
@@ -817,8 +780,8 @@ class SAC_Base(object):
                                    np.zeros(ignore_size, dtype=np.float32)])
         return td_error
 
-    def save_model(self, iteration):
-        self.ckpt_manager.save(iteration + self.init_iteration)
+    def save_model(self):
+        self.ckpt_manager.save(self.global_step)
 
     def write_constant_summaries(self, constant_summaries):
         """
@@ -844,8 +807,6 @@ class SAC_Base(object):
         n_dones: [1, episode_len]
         n_rnn_states: [1, episode_len, rnn_state_dim]
         """
-        if self.use_reward_normalization:
-            self.update_reward_bound(n_rewards)
 
         # Ignore episodes whose length is too short
         if n_obses_list[0].shape[1] < self.burn_in_step + self.n_step:

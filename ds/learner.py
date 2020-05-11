@@ -179,9 +179,7 @@ class Learner(object):
         return td_error
 
     def _post_rewards(self, peer, n_rewards):
-        if self.sac.use_reward_normalization:
-            with self._training_lock:
-                self.sac.update_reward_bound(n_rewards)
+        pass
 
     def _policy_evaluation(self):
         use_rnn = self.sac.use_rnn
@@ -255,7 +253,7 @@ class Learner(object):
                     self._log_episode_summaries(agents)
 
                     if iteration % self.config['save_model_per_iter'] == 0:
-                        self.sac.save_model(iteration)
+                        self.sac.save_model()
 
             self._log_episode_info(iteration, start_time, agents)
 
