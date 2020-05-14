@@ -59,3 +59,4 @@ sac_config:
   use_prediction: false # If train a transition model
   use_curiosity: false # If use curiosity
   curiosity_strength: 1 # Curiosity strength if use curiosity
+  use_normalization: false # If use observation normalization

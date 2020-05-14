@@ -9,8 +9,9 @@ class ModelQ(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
         super().__init__()
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(1)
         ])
 
@@ -27,15 +28,16 @@ class ModelPolicy(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
         super().__init__()
         self.common_model = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu)
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
         ])
         self.mean_model = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(action_dim)
         ])
         self.logstd_model = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(action_dim)
         ])
 

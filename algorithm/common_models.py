@@ -8,6 +8,10 @@ class ModelTransition(tf.keras.Model):
 
 
 class ModelSimpleRep(tf.keras.Model):
+    '''
+    Base class of Simple Representation Model without RNN
+    '''
+
     def __init__(self, obs_dims):
         super().__init__()
         self.obs_dims = obs_dims
@@ -16,7 +20,7 @@ class ModelSimpleRep(tf.keras.Model):
         raise Exception("ModelSimpleRep not implemented")
 
     def get_call_result_tensors(self):
-        return self([tf.keras.Input(shape=t) for t in self.obs_dims])
+        return self.call([tf.keras.Input(shape=t) for t in self.obs_dims])
 
 
 class ModelVoidRep(ModelSimpleRep):
@@ -42,6 +46,6 @@ class ModelRNNRep(tf.keras.Model):
         raise Exception("ModelRNNRep not implemented")
 
     def get_call_result_tensors(self):
-        return self([tf.keras.Input(shape=(None, *t)) for t in self.obs_dims],
+        return self.call([tf.keras.Input(shape=(None, *t)) for t in self.obs_dims],
                     tf.keras.Input(shape=(None, self.action_dim)),
                     tf.keras.Input(shape=(self.rnn_units,)))

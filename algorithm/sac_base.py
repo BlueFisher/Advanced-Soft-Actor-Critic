@@ -79,6 +79,7 @@ class SAC_Base(object):
                  use_prediction=False,
                  use_curiosity=False,
                  curiosity_strength=1,
+                 use_normalization=False,
 
                  replay_config=None):
         """
@@ -137,6 +138,7 @@ class SAC_Base(object):
         self.use_prediction = use_prediction
         self.use_curiosity = use_curiosity
         self.curiosity_strength = curiosity_strength
+        self.use_normalization = use_normalization
 
         self.use_add_with_td = False
 
@@ -160,7 +162,7 @@ class SAC_Base(object):
         Initialize variables, network models and optimizers
         """
         self.log_alpha = tf.Variable(init_log_alpha, dtype=tf.float32, name='log_alpha')
-        self.global_step = tf.Variable(0, dtype=tf.int64, name='global_step')
+        self.global_step = tf.Variable(0, dtype=tf.int64, trainable=False, name='global_step')
 
         def adam_optimizer(): return tf.keras.optimizers.Adam(learning_rate)
 
@@ -172,17 +174,37 @@ class SAC_Base(object):
         if self.use_auto_alpha:
             self.optimizer_alpha = adam_optimizer()
 
+        if self.use_normalization:
+            self._create_normalizer()
+
+            p_self = self
+
+            class ModelRep(model.ModelRep):
+                def call(self, obs_list, *args, **kwargs):
+                    obs_list = [
+                        tf.clip_by_value(
+                            (obs - p_self.running_means)
+                            / tf.sqrt(
+                                p_self.running_variances / (tf.cast(p_self.normalizer_step, tf.float32) + 1)
+                            ),
+                            -5, 5
+                        ) for obs in obs_list
+                    ]
+                    return super().call(obs_list, *args, **kwargs)
+        else:
+            ModelRep = model.ModelRep
+
         if self.use_rnn:
             # Get represented state dimension
-            self.model_rep = model.ModelRep(self.obs_dims, self.action_dim)
-            self.model_target_rep = model.ModelRep(self.obs_dims, self.action_dim)
+            self.model_rep = ModelRep(self.obs_dims, self.action_dim)
+            self.model_target_rep = ModelRep(self.obs_dims, self.action_dim)
             # Get state and rnn_state dimension
             state, next_rnn_state, _ = self.model_rep.get_call_result_tensors()
             self.rnn_state_dim = next_rnn_state.shape[-1]
         else:
             # Get represented state dimension
-            self.model_rep = model.ModelRep(self.obs_dims)
-            self.model_target_rep = model.ModelRep(self.obs_dims)
+            self.model_rep = ModelRep(self.obs_dims)
+            self.model_target_rep = ModelRep(self.obs_dims)
             # Get state dimension
             state = self.model_rep.get_call_result_tensors()
             self.rnn_state_dim = 1
@@ -209,33 +231,44 @@ class SAC_Base(object):
         """
         Initialize network weights from scratch or restore from model_root_path
         """
-        ckpt = tf.train.Checkpoint(log_alpha=self.log_alpha,
-                                   global_step=self.global_step,
+        ckpt_saved = {
+            'log_alpha': self.log_alpha,
+            'global_step': self.global_step,
 
-                                   optimizer_rep=self.optimizer_rep,
-                                   optimizer_q1=self.optimizer_q1,
-                                   optimizer_q2=self.optimizer_q2,
-                                   optimizer_policy=self.optimizer_policy,
+            'optimizer_rep': self.optimizer_rep,
+            'optimizer_q1': self.optimizer_q1,
+            'optimizer_q2': self.optimizer_q2,
+            'optimizer_policy': self.optimizer_policy,
 
-                                   model_rep=self.model_rep,
-                                   model_target_rep=self.model_target_rep,
-                                   model_q1=self.model_q1,
-                                   model_target_q1=self.model_target_q1,
-                                   model_q2=self.model_q2,
-                                   model_target_q2=self.model_target_q2,
-                                   model_policy=self.model_policy)
+            'model_rep': self.model_rep,
+            'model_target_rep': self.model_target_rep,
+            'model_q1': self.model_q1,
+            'model_target_q1': self.model_target_q1,
+            'model_q2': self.model_q2,
+            'model_target_q2': self.model_target_q2,
+            'model_policy': self.model_policy
+        }
+
+        if self.use_normalization:
+            ckpt_saved['normalizer_step'] = self.normalizer_step
+            for i, v in enumerate(self.running_means):
+                ckpt_saved[f'running_means_{i}'] = v
+            for i, v in enumerate(self.running_variances):
+                ckpt_saved[f'running_variances_{i}'] = v
+
         if self.use_prediction:
-            ckpt.model_transition = self.model_transition
-            ckpt.model_reward = self.model_reward
-            ckpt.model_observation = self.model_observation
+            ckpt_saved['model_transition'] = self.model_transition
+            ckpt_saved['model_reward'] = self.model_reward
+            ckpt_saved['model_observation'] = self.model_observation
 
         if self.use_auto_alpha:
-            ckpt.optimizer_alpha = self.optimizer_alpha
+            ckpt_saved['optimizer_alpha'] = self.optimizer_alpha
 
         if self.use_curiosity:
-            ckpt.model_forward = self.model_forward
-            ckpt.optimizer_forward = self.optimizer_forward
+            ckpt_saved['model_forward'] = self.model_forward
+            ckpt_saved['optimizer_forward'] = self.optimizer_forward
 
+        ckpt = tf.train.Checkpoint(**ckpt_saved)
         self.ckpt_manager = tf.train.CheckpointManager(ckpt, f'{model_path}/model', max_to_keep=10)
 
         ckpt.restore(self.ckpt_manager.latest_checkpoint)
@@ -249,6 +282,14 @@ class SAC_Base(object):
         """
         Initialize some @tf.function and specify tf.TensorSpec
         """
+
+        """ _udpate_normalizer
+        obses_list """
+        if self.use_normalization:
+            self._udpate_normalizer = _np_to_tensor(
+                tf.function(self._udpate_normalizer.python_function, input_signature=[
+                    [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims]
+                ]))
 
         """ get_n_probs
         n_obses_list, n_selected_actions, rnn_state=None """
@@ -322,6 +363,33 @@ class SAC_Base(object):
         eval_variables += self.model_rep.trainable_variables
 
         [t.assign(tau * e + (1. - tau) * t) for t, e in zip(target_variables, eval_variables)]
+
+    def _create_normalizer(self):
+        self.normalizer_step = tf.Variable(0, dtype=tf.int32, trainable=False, name='normalizer_step')
+        self.running_means = []
+        self.running_variances = []
+        for dim in self.obs_dims:
+            self.running_means.append(
+                tf.Variable(tf.zeros(dim), trainable=False, name='running_means'))
+            self.running_variances.append(
+                tf.Variable(tf.ones(dim), trainable=False, name='running_variances'))
+
+    @tf.function
+    def _udpate_normalizer(self, obs_list):
+        self.normalizer_step.assign(self.normalizer_step + tf.shape(obs_list[0])[0])
+
+        input_to_old_means = [tf.subtract(obs_list[i], self.running_means[i]) for i in range(len(obs_list))]
+        new_means = [self.running_means[i] + tf.reduce_sum(
+            input_to_old_means[i] / tf.cast(self.normalizer_step, dtype=tf.float32), axis=0
+        ) for i in range(len(obs_list))]
+
+        input_to_new_means = [tf.subtract(obs_list[i], new_means[i]) for i in range(len(obs_list))]
+        new_variance = [self.running_variances[i] + tf.reduce_sum(
+            input_to_new_means[i] * input_to_old_means[i], axis=0
+        ) for i in range(len(obs_list))]
+
+        [self.running_means[i].assign(new_means[i]) for i in range(len(obs_list))]
+        [self.running_variances[i].assign(new_variance[i]) for i in range(len(obs_list))]
 
     @tf.function
     def get_n_probs(self, n_obses_list, n_selected_actions, rnn_state=None):
@@ -814,6 +882,8 @@ class SAC_Base(object):
 
         # Reshape [1, episode_len, ...] to [episode_len, ...]
         obs_list = [n_obses.reshape([-1, *n_obses.shape[2:]]) for n_obses in n_obses_list]
+        if self.use_normalization:
+            self._udpate_normalizer(obs_list)
         action = n_actions.reshape([-1, n_actions.shape[-1]])
         reward = n_rewards.reshape([-1])
         done = n_dones.reshape([-1])
