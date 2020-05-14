@@ -210,22 +210,22 @@ class Main(object):
                 step += 1
 
             if self.train_mode:
-                self._log_episode_summaries(agents)
+                self._log_episode_summaries(iteration, agents)
 
                 if iteration % self.config['save_model_per_iter'] == 0:
-                    self.sac.save_model()
+                    self.sac.save_model(iteration)
 
             self._log_episode_info(iteration, agents)
 
         self.env.close()
 
-    def _log_episode_summaries(self, agents):
+    def _log_episode_summaries(self, iteration, agents):
         rewards = np.array([a.reward for a in agents])
         self.sac.write_constant_summaries([
             {'tag': 'reward/mean', 'simple_value': rewards.mean()},
             {'tag': 'reward/max', 'simple_value': rewards.max()},
             {'tag': 'reward/min', 'simple_value': rewards.min()}
-        ])
+        ], iteration)
 
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]

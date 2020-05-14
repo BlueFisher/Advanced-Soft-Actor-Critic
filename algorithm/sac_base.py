@@ -274,8 +274,10 @@ class SAC_Base(object):
         ckpt.restore(self.ckpt_manager.latest_checkpoint)
         if self.ckpt_manager.latest_checkpoint:
             logger.info(f'Restored from {self.ckpt_manager.latest_checkpoint}')
+            self.init_iteration = int(self.ckpt_manager.latest_checkpoint.split('-')[1].split('.')[0])
         else:
             logger.info('Initializing from scratch')
+            self.init_iteration = 0
             self._update_target_variables()
 
     def _init_tf_function(self):
@@ -693,6 +695,8 @@ class SAC_Base(object):
             summary['scalar']['loss/observation'] = loss_obs
 
             approx_obs_list = self.model_observation(m_states[0:1, self.burn_in_step:, ...])
+            if not isinstance(approx_obs_list, (list, tuple)):
+                approx_obs_list = [approx_obs_list]
             for approx_obs in approx_obs_list:
                 if len(approx_obs.shape) > 3:
                     summary['image']['observation'] = tf.reshape(approx_obs, [-1, *approx_obs.shape[2:]])
@@ -848,16 +852,18 @@ class SAC_Base(object):
                                    np.zeros(ignore_size, dtype=np.float32)])
         return td_error
 
-    def save_model(self):
-        self.ckpt_manager.save(self.global_step)
+    def save_model(self, iteration):
+        self.ckpt_manager.save(iteration + self.init_iteration)
 
-    def write_constant_summaries(self, constant_summaries):
+    def write_constant_summaries(self, constant_summaries, iteration):
         """
         Write constant information like reward, iteration from sac_main.py
         """
         with self.summary_writer.as_default():
             for s in constant_summaries:
-                tf.summary.scalar(s['tag'], s['simple_value'], step=self.global_step)
+                tf.summary.scalar(s['tag'], s['simple_value'], step=iteration + self.init_iteration)
+            tf.summary.scalar('test/step_log', 1, step=self.global_step)
+
         self.summary_writer.flush()
 
     def fill_replay_buffer(self,
