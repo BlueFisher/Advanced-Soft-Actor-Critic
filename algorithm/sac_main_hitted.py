@@ -30,7 +30,7 @@ class AgentHitted(Agent):
 class MainHitted(Main):
     _agent_class = AgentHitted
 
-    def _log_episode_summaries(self, agents):
+    def _log_episode_summaries(self, iteration, agents):
         rewards = np.array([a.reward for a in agents])
         hitted = sum([a.hitted for a in agents])
 
@@ -39,7 +39,7 @@ class MainHitted(Main):
             {'tag': 'reward/max', 'simple_value': rewards.max()},
             {'tag': 'reward/min', 'simple_value': rewards.min()},
             {'tag': 'reward/hitted', 'simple_value': hitted}
-        ])
+        ], iteration)
 
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]
