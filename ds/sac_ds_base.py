@@ -18,6 +18,7 @@ class SAC_DS_Base(SAC_Base):
                  model_root_path,  # None in actor
                  model,
                  train_mode=True,
+                 last_ckpt=None,
 
                  seed=None,
                  write_summary_per_step=20,
@@ -77,7 +78,7 @@ class SAC_DS_Base(SAC_Base):
 
         self._build_model(model, init_log_alpha, learning_rate)
         if model_root_path is not None:
-            self._init_or_restore(model_root_path)
+            self._init_or_restore(model_root_path, last_ckpt)
 
         if train_mode:
             summary_path = f'{model_root_path}/log'

@@ -58,6 +58,7 @@ class Learner(object):
 
         # Initialize config from command line arguments
         self.train_mode = not args.run
+        self.last_ckpt = args.ckpt
         self.render = args.render
         self.run_in_editor = args.editor
 
@@ -130,6 +131,7 @@ class Learner(object):
                                model_root_path=model_root_path,
                                model=custom_sac_model,
                                train_mode=self.train_mode,
+                               last_ckpt=self.last_ckpt,
 
                                **sac_config)
 
