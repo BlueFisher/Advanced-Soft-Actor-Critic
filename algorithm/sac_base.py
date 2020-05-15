@@ -57,6 +57,7 @@ class SAC_Base(object):
                  model_root_path,
                  model,
                  train_mode=True,
+                 last_ckpt=None,
 
                  seed=None,
                  write_summary_per_step=20,
@@ -88,6 +89,7 @@ class SAC_Base(object):
         model_root_path: The path that saves summary, checkpoints, config etc.
         model: Custom Model Class
         train_mode: Is training or inference
+        last_ckpt: The checkpoint to restore
 
         seed: Random seed
         write_summary_per_step: Write summaries in TensorBoard every `write_summary_per_step` steps
@@ -153,7 +155,7 @@ class SAC_Base(object):
             self.replay_buffer = PrioritizedReplayBuffer(**replay_config)
 
         self._build_model(model, init_log_alpha, learning_rate)
-        self._init_or_restore(model_root_path)
+        self._init_or_restore(model_root_path, last_ckpt)
 
         self._init_tf_function()
 
@@ -227,7 +229,7 @@ class SAC_Base(object):
 
         self.model_policy = model.ModelPolicy(state_dim, self.action_dim)
 
-    def _init_or_restore(self, model_path):
+    def _init_or_restore(self, model_path, last_ckpt):
         """
         Initialize network weights from scratch or restore from model_root_path
         """
@@ -271,11 +273,16 @@ class SAC_Base(object):
         ckpt = tf.train.Checkpoint(**ckpt_saved)
         self.ckpt_manager = tf.train.CheckpointManager(ckpt, f'{model_path}/model', max_to_keep=10)
 
-        ckpt.restore(self.ckpt_manager.latest_checkpoint)
         if self.ckpt_manager.latest_checkpoint:
-            logger.info(f'Restored from {self.ckpt_manager.latest_checkpoint}')
-            self.init_iteration = int(self.ckpt_manager.latest_checkpoint.split('-')[1].split('.')[0])
+            if last_ckpt is None:
+                latest_checkpoint = self.ckpt_manager.latest_checkpoint
+            else:
+                latest_checkpoint = self.ckpt_manager.latest_checkpoint.split('-')[0] + f'-{last_ckpt}'
+            ckpt.restore(latest_checkpoint)
+            logger.info(f'Restored from {latest_checkpoint}')
+            self.init_iteration = int(latest_checkpoint.split('-')[1])
         else:
+            ckpt.restore(None)
             logger.info('Initializing from scratch')
             self.init_iteration = 0
             self._update_target_variables()
