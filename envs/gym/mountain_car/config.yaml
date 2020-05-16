@@ -7,7 +7,6 @@ default:
 
     max_step: -1
     max_iter: 100
-    save_model_per_iter: 50
 
   sac_config:
     seed: 42

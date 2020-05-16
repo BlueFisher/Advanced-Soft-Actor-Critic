@@ -5,13 +5,20 @@ default:
 
     build_path: 'AntBulletEnv-v0'
 
-    max_iter: 10000
-    save_model_per_iter: 100
+    max_iter: 3000
     n_agents: 10
 
   sac_config:
-    seed: 42
+    use_auto_alpha: true
 
     n_step: 3
-
     _lambda: 0.99
+
+    use_curiosity: true
+    curiosity_strength: 0.2
+    use_normalization: true
+
+no_curiosity:
+  sac_config:
+    use_curiosity: false
+    

@@ -214,9 +214,6 @@ class Main(object):
             if self.train_mode:
                 self._log_episode_summaries(iteration, agents)
 
-                if iteration % self.config['save_model_per_iter'] == 0:
-                    self.sac.save_model(iteration)
-
             self._log_episode_info(iteration, agents)
 
         self.env.close()

@@ -5,24 +5,36 @@ import tensorflow_probability as tfp
 from algorithm.common_models import ModelVoidRep as ModelRep
 
 
+class ModelForward(tf.keras.Model):
+    def __init__(self, state_dim, action_dim):
+        super(ModelForward, self).__init__()
+        self.seq = tf.keras.Sequential([
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
+            tf.keras.layers.Dense(state_dim)
+        ])
+
+        self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(action_dim,)))
+
+    def call(self, state, action):
+        next_state = self.seq(tf.concat([state, action], -1))
+
+        return next_state
+
+
 class ModelQ(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
         super().__init__()
-        self.layer_state = tf.keras.layers.Dense(128, activation=tf.nn.relu)
-        self.layer_action = tf.keras.layers.Dense(128, activation=tf.nn.relu)
-
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(1)
         ])
 
         self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(action_dim,)))
 
     def call(self, state, action):
-        state = self.layer_state(state)
-        action = self.layer_action(action)
         l = tf.concat([state, action], -1)
 
         q = self.seq(l)
@@ -33,15 +45,16 @@ class ModelPolicy(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
         super().__init__()
         self.common_model = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu)
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
         ])
         self.mean_model = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(action_dim)
         ])
         self.logstd_model = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(action_dim)
         ])
 

@@ -254,9 +254,6 @@ class Learner(object):
                 with self._training_lock:
                     self._log_episode_summaries(iteration, agents)
 
-                    if iteration % self.config['save_model_per_iter'] == 0:
-                        self.sac.save_model(iteration)
-
             self._log_episode_info(iteration, start_time, agents)
 
             iteration += 1

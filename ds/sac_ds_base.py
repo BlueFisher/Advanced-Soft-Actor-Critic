@@ -56,7 +56,8 @@ class SAC_DS_Base(SAC_Base):
         self.n_step = n_step
         self.use_rnn = use_rnn
 
-        self.write_summary_per_step = write_summary_per_step
+        self.write_summary_per_step = int(write_summary_per_step)
+        self.save_model_per_step = int(save_model_per_step)
         self.tau = tau
         self.update_target_per_step = update_target_per_step
         self.use_auto_alpha = use_auto_alpha
@@ -135,12 +136,17 @@ class SAC_DS_Base(SAC_Base):
                               priority_is=priority_is,
                               initial_rnn_state=rnn_state if self.use_rnn else None)
 
-        if self.summary_writer is not None and (self.global_step - 1) % self.write_summary_per_step == 0:
+        step = self.global_step.numpy()
+
+        if step % self.save_model_per_step == 0:
+            self.ckpt_manager.save(step)
+
+        if self.summary_writer is not None and step % self.write_summary_per_step == 0:
             with self.summary_writer.as_default():
                 for k, v in summary['scalar'].items():
-                    tf.summary.scalar(k, v, step=self.global_step)
+                    tf.summary.scalar(k, v, step=step)
                 for k, v in summary['image'].items():
-                    tf.summary.image(k, v, step=self.global_step)
+                    tf.summary.image(k, v, max_outputs=self.n_step, step=step)
 
             self.summary_writer.flush()
 
@@ -169,5 +175,7 @@ class SAC_DS_Base(SAC_Base):
             n_rnn_states = self.get_n_rnn_states(n_obses_list, rnn_state).numpy()
             rnn_states = n_rnn_states.reshape(-1, n_rnn_states.shape[-1])
             update_data.append((tmp_pointers, 'rnn_state', rnn_states))
+
+        self.global_step.assign_add(1)
 
         return td_error, update_data

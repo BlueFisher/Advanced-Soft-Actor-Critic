@@ -6,12 +6,19 @@ default:
     build_path: 'Walker2DBulletEnv-v0'
 
     max_iter: 3000
-    save_model_per_iter: 100
     n_agents: 10
 
   sac_config:
     use_auto_alpha: true
 
-    n_step: 5
+    n_step: 3
+    _lambda: 0.99
 
     use_normalization: true
+
+curiosity:
+  base_config:
+    name: 'curiosity_{time}'
+  sac_config:
+    use_curiosity: true
+    curiosity_strength: 0.2

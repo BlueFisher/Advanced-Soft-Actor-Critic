@@ -4,7 +4,6 @@ default:
       win32: C:\Users\Fisher\Documents\Unity\build-RL-Envs\RL-Envs.exe
       linux: /data/linux-RL-Envs/RL-Envs.x86_64
 
-    save_model_per_iter: 50
     reset_on_iteration: false
     n_agents: 10
 
@@ -55,7 +54,6 @@ visual:
     name: "pre_{time}"
     sac: sac_visual
     max_iter: 100000
-    save_model_per_iter: 200
   replay_config: &visual_replay
     batch_size: 64
     capacity: 131072
@@ -63,8 +61,8 @@ visual:
     beta_increment_per_sampling: 0.001
   sac_config: &visual_sac
     write_summary_per_step: 100
-    burn_in_step: 20
-    n_step: 3
+    burn_in_step: 40
+    n_step: 5
     use_rnn: true
     use_prediction: true
     clip_epsilon: 0.2

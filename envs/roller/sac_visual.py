@@ -47,50 +47,49 @@ class ModelObservation(tf.keras.Model):
     def __init__(self, state_dim, obs_dims):
         super().__init__()
         assert obs_dims[0] == (30, 30, 3)
-        self.conv = tf.keras.Sequential([
-            tf.keras.layers.Dense(32, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+        self.vis_seq = tf.keras.Sequential([
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(2 * 2 * 32, activation=tf.nn.relu),
             tf.keras.layers.Reshape(target_shape=(2, 2, 32)),
             tf.keras.layers.Conv2DTranspose(filters=32, kernel_size=4, strides=2, activation=tf.nn.relu),
             tf.keras.layers.Conv2DTranspose(filters=16, kernel_size=8, strides=4, activation=tf.nn.relu),
-            tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=3, strides=1),
+            tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=3, strides=1, activation=tf.nn.relu),
         ])
 
         self(tf.keras.Input(shape=(state_dim,)))
 
     def call(self, state):
         batch = tf.shape(state)[0]
-        state = tf.reshape(state, [-1, state.shape[-1]])
-        approx_obs = self.conv(state)
-        approx_obs = tf.reshape(approx_obs, [batch, -1, *approx_obs.shape[1:]])
+        t_state = tf.reshape(state, [-1, state.shape[-1]])
+        vis_obs = self.vis_seq(t_state)
+        vis_obs = tf.reshape(vis_obs, [batch, -1, *vis_obs.shape[1:]])
 
-        return [tf.clip_by_value(approx_obs, 0, 1.)]
+        return vis_obs
 
     def get_loss(self, state, obs_list):
-        batch = tf.shape(state)[0]
-        state = tf.reshape(state, [-1, state.shape[-1]])
-        approx_obs = self.conv(state)
-        approx_obs = tf.reshape(approx_obs, [batch, -1, *approx_obs.shape[1:]])
+        approx_vis_obs = self(state)
+        vis_obs = obs_list[0]
 
-        return tf.reduce_mean(tf.square(approx_obs - obs_list[0]))
+        mse = tf.keras.losses.MeanSquaredError()
+
+        return mse(approx_vis_obs, vis_obs)
 
 
 class ModelRep(ModelRNNRep):
     def __init__(self, obs_dims, action_dim):
         super().__init__(obs_dims, action_dim)
         self.conv = tf.keras.Sequential([
-            tf.keras.layers.Conv2D(16, kernel_size=8, strides=4, activation=tf.nn.relu),
-            tf.keras.layers.Conv2D(32, kernel_size=4, strides=2, activation=tf.nn.relu),
+            tf.keras.layers.Conv2D(filters=32, kernel_size=8, strides=4, activation=tf.nn.relu),
+            tf.keras.layers.Conv2D(filters=64, kernel_size=4, strides=2, activation=tf.nn.relu),
             tf.keras.layers.Flatten(),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(64, activation=tf.nn.relu)
         ])
 
         self.rnn_units = 64
         self.layer_rnn = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(8)
         ])
 
         self.get_call_result_tensors()
@@ -113,8 +112,8 @@ class ModelQ(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
         super().__init__()
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(1)
         ])
 
@@ -131,8 +130,8 @@ class ModelPolicy(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
         super().__init__()
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(action_dim + action_dim)
         ])
 
