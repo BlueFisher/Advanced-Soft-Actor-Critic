@@ -61,6 +61,7 @@ class SAC_Base(object):
 
                  seed=None,
                  write_summary_per_step=20,
+                 save_model_per_step=1e3,
 
                  burn_in_step=0,
                  n_step=1,
@@ -127,7 +128,8 @@ class SAC_Base(object):
         self.n_step = n_step
         self.use_rnn = use_rnn
 
-        self.write_summary_per_step = write_summary_per_step
+        self.write_summary_per_step = int(write_summary_per_step)
+        self.save_model_per_step = int(save_model_per_step)
         self.tau = tau
         self.update_target_per_step = update_target_per_step
         self.use_auto_alpha = use_auto_alpha
@@ -679,8 +681,8 @@ class SAC_Base(object):
 
         del tape
 
-        self.global_step.assign_add(1)
-
+        # TODO: Summaries should be returned because of the issus
+        # https://github.com/tensorflow/tensorflow/issues/28007
         summary = {
             'scalar': {
                 'loss/y': tf.reduce_mean(y),
@@ -859,17 +861,13 @@ class SAC_Base(object):
                                    np.zeros(ignore_size, dtype=np.float32)])
         return td_error
 
-    def save_model(self, iteration):
-        self.ckpt_manager.save(iteration + self.init_iteration)
-
     def write_constant_summaries(self, constant_summaries, iteration):
         """
         Write constant information like reward, iteration from sac_main.py
         """
         with self.summary_writer.as_default():
             for s in constant_summaries:
-                tf.summary.scalar(s['tag'], s['simple_value'], step=iteration + self.init_iteration)
-            tf.summary.scalar('test/step_log', 1, step=self.global_step)
+                tf.summary.scalar(s['tag'], s['simple_value'], step=self.global_step)
 
         self.summary_writer.flush()
 
@@ -1013,7 +1011,11 @@ class SAC_Base(object):
                               priority_is=priority_is if self.use_priority else None,
                               initial_rnn_state=rnn_state if self.use_rnn else None)
 
-        step = self.global_step - 1
+        step = self.global_step.numpy()
+
+        if step % self.save_model_per_step == 0:
+            self.ckpt_manager.save(step)
+
         if self.summary_writer is not None and step % self.write_summary_per_step == 0:
             with self.summary_writer.as_default():
                 for k, v in summary['scalar'].items():
@@ -1053,3 +1055,5 @@ class SAC_Base(object):
             tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
             pi_probs = n_pi_probs.reshape(-1)
             self.replay_buffer.update_transitions(tmp_pointers, 'mu_prob', pi_probs)
+
+        self.global_step.assign_add(1)

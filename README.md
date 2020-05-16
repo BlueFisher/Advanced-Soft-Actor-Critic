@@ -55,14 +55,13 @@ base_config:
   n_agents: 1 # N agents running in parallel
   max_iter: 1000 # Max iteration
   max_step: -1 # Max step in each iteration
-  save_model_per_iter: 500 # Save model parameters every N iterations
   reset_on_iteration: true # If to force reset agent if an episode terminated
 
 reset_config: null # Reset parameters sent to Unity
 
 replay_config:
   batch_size: 256
-  capacity: 1000000
+  capacity: 524288
   alpha: 0.9 # [0~1] convert the importance of TD error to priority
              # If 0, PER will reduce to vanilla replay buffer
   beta: 0.4 # Importance-sampling, from initial value increasing to 1
@@ -74,6 +73,7 @@ replay_config:
 sac_config:
   seed: null # Random seed
   write_summary_per_step: 20 # Write summaries in TensorBoard every N steps
+  save_model_per_step: 1000 # Save model every N steps
 
   burn_in_step: 0 # Burn-in steps in R2D2
   n_step: 1 # Update Q function by N steps
@@ -89,12 +89,14 @@ sac_config:
 
   gamma: 0.99 # Discount factor
   _lambda: 1.0 # Discount factor for V-trace
+  clip_epsilon: 0.2 # Epsilon for q and policy clip
   
   use_priority: true # If use PER importance ratio
   use_n_step_is: true # If use importance sampling
   use_prediction: false # If train a transition model
   use_curiosity: false # If use curiosity
   curiosity_strength: 1 # Curiosity strength if use curiosity
+  use_normalization: false # If use observation normalization
 ```
 
 ## Start Training

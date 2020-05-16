@@ -19,7 +19,6 @@ base_config:
                                        # iteration
   n_agents: 1 # N agents running in parallel
   max_step: -1 # Max step in each iteration
-  save_model_per_iter: 10 # Save model parameters every N iterations
   reset_on_iteration: true # If to force reset agent if an episode terminated
   
 net_config:

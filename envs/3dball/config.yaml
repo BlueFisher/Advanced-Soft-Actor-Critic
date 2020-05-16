@@ -6,7 +6,6 @@ default:
 
     max_iter: 200
     max_step: 500
-    save_model_per_iter: 20
     n_agents: 10
 
   replay_config:
