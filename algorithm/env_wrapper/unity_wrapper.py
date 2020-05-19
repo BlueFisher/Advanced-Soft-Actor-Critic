@@ -7,6 +7,9 @@ from mlagents_envs.environment import UnityEnvironment
 from mlagents_envs.side_channel.engine_configuration_channel import EngineConfig, EngineConfigurationChannel
 from mlagents_envs.side_channel.environment_parameters_channel import EnvironmentParametersChannel
 
+logger = logging.getLogger('UnityWrapper')
+logger.setLevel(level=logging.INFO)
+
 
 class UnityWrapper:
     def __init__(self,
@@ -18,8 +21,6 @@ class UnityWrapper:
                  n_agents=1):
 
         seed = seed if seed is not None else np.random.randint(0, 65536)
-
-        self._logger = logging.getLogger('UnityWrapper')
 
         self.engine_configuration_channel = EngineConfigurationChannel()
         self.environment_parameters_channel = EnvironmentParametersChannel()
@@ -48,9 +49,9 @@ class UnityWrapper:
 
     def init(self):
         behavior_spec = self._env.get_behavior_spec(self.bahavior_name)
-        self._logger.info(f'Observation shapes: {behavior_spec.observation_shapes}')
+        logger.info(f'Observation shapes: {behavior_spec.observation_shapes}')
         is_discrete = behavior_spec.is_action_discrete()
-        self._logger.info(f'Action size: {behavior_spec.action_size}. Is discrete: {is_discrete}')
+        logger.info(f'Action size: {behavior_spec.action_size}. Is discrete: {is_discrete}')
 
         for o in behavior_spec.observation_shapes:
             if len(o) >= 3:

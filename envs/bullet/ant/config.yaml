@@ -14,11 +14,12 @@ default:
     n_step: 3
     _lambda: 0.99
 
-    use_curiosity: true
-    curiosity_strength: 0.2
     use_normalization: true
 
-no_curiosity:
+curiosity:
+  base_config:
+    name: 'curiosity_{time}'
   sac_config:
-    use_curiosity: false
+    use_curiosity: true
+    curiosity_strength: 0.2
     

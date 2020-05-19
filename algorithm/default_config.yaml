@@ -16,7 +16,7 @@ base_config:
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
   sac: sac # Neural network models file
   n_agents: 1 # N agents running in parallel
-  max_iter: 1000 # Max iteration
+  max_iter: 100000 # Max iteration
   max_step: -1 # Max step in each iteration
   reset_on_iteration: true # If to force reset agent if an episode terminated
 

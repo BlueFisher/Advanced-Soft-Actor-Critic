@@ -1,11 +1,21 @@
 import logging
+import time
 
 import numpy as np
 import gym
+
+logger = logging.getLogger('GymWrapper')
+logger.setLevel(level=logging.INFO)
+
 try:
     import pybullet_envs
 except:
-    pass
+    logger.warning('No PyBullet environments')
+
+try:
+    import gym_maze
+except:
+    logger.warning('No Gym Maze environments')
 
 
 class GymWrapper:
@@ -20,8 +30,6 @@ class GymWrapper:
         self.n_agents = n_agents
         self._envs = list()
 
-        self._logger = logging.getLogger('UnityWrapper')
-
     def init(self):
         for i in range(self.n_agents):
             # TODO
@@ -33,8 +41,8 @@ class GymWrapper:
         if self.render or not self.train_mode:
             env.render()
 
-        self._logger.info(f'Observation shapes: {env.observation_space}')
-        self._logger.info(f'Action size: {env.action_space}')
+        logger.info(f'Observation shapes: {env.observation_space}')
+        logger.info(f'Action size: {env.action_space}')
 
         self._state_dim = env.observation_space.shape[0]
         self.is_discrete = isinstance(env.action_space, gym.spaces.Discrete)
@@ -59,6 +67,7 @@ class GymWrapper:
         if self.is_discrete:
             # Convert one-hot to label
             action = np.argmax(action, axis=1)
+            action = action.tolist()
         for i, env in enumerate(self._envs):
             tmp_obs, tmp_reward, tmp_done, info = env.step(action[i])
             obs[i] = tmp_obs
@@ -70,6 +79,9 @@ class GymWrapper:
 
         for i in np.where(done)[0]:
             obs[i] = self._envs[i].reset()
+
+        if not self.train_mode and self.n_agents == 1 and 'Bullet' in self.env_name:
+            time.sleep(0.01)
 
         return [obs], reward, done, max_step
 

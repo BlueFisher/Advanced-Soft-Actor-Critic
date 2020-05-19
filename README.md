@@ -5,22 +5,25 @@ This project is the algorithm [Soft Actor-Critic](https://arxiv.org/pdf/1812.059
 ## Features
 
 - N-step
-- V-trace (IMPALA: Scalable Distributed Deep-RL with Importance Weighted Actor-Learner Architectures)
-- Prioritized Experience Replay
-- Episode Experience Replay
-- R2D2 (Recurrent Experience Replay In Distributed Reinforcement Learning)
-- Representation model, Q function and policy strucutres
-- Auxiliary prediction model
-- Distributed training (Distributed Prioritized Experience Replay)
-- Discrete action (Soft Actor-Critic for Discrete Action Settings)
+- V-trace ([IMPALA: Scalable Distributed Deep-RL with Importance Weighted Actor-Learner Architectures](http://arxiv.org/abs/1802.01561))
+- [Prioritized Experience Replay](http://arxiv.org/abs/1511.05952)
+- *Episode Experience Replay
+- R2D2 ([Recurrent Experience Replay In Distributed Reinforcement Learning](https://openreview.net/pdf?id=r1lyTjAqYX))
+- *Representation model, Q function and policy strucutres
+- *Recurrent prediction model
+- Distributed training ([Distributed Prioritized Experience Replay](http://arxiv.org/abs/1803.00933))
+- Discrete action ([Soft Actor-Critic for Discrete Action Settings](http://arxiv.org/abs/1910.07207))
+- Curiosity mechanism ([Curiosity-driven Exploration by Self-supervised Prediction](http://arxiv.org/abs/1705.05363))
+
+\* denotes the features that we implemented.
 
 ## Supported Environments
 
 Gym and Unity environments with ML-Agents. 
 
-Observation can be any combination of vectors and images, which mean an agent can have multiple sensors and the resolution of each image can be different.
+Observation can be any combination of vectors and images, which means an agent can have multiple sensors and the resolution of each image can be different.
 
-Action space can be continuous or discrete, but not supporting both continuous and discrete actions output.
+Action space can be continuous or discrete, but not supporting both continuous and discrete actions outputs.
 
 Not supporting multi-agent environments.
 
@@ -28,7 +31,7 @@ Not supporting multi-agent environments.
 
 ### Training Settings
 
-All neural network models should be in a .py file (default sac.py). All training configurations should be specified in a .yaml file (default config.yaml)
+All neural network models should be in a .py file (default `sac.py`). All training configurations should be specified in `config.yaml`.
 
 Both neural network models and training configurations should be placed in the same folder under `envs`.
 
@@ -73,7 +76,7 @@ replay_config:
 sac_config:
   seed: null # Random seed
   write_summary_per_step: 20 # Write summaries in TensorBoard every N steps
-  save_model_per_step: 1000 # Save model every N steps
+  save_model_per_step: 100000 # Save model every N steps
 
   burn_in_step: 0 # Burn-in steps in R2D2
   n_step: 1 # Update Q function by N steps
