@@ -37,6 +37,7 @@ class ModelRNNRep(tf.keras.Model):
     '''
     Base class of RNN Representation Model
     '''
+
     def __init__(self, obs_dims, action_dim):
         super().__init__()
         self.obs_dims = obs_dims
@@ -47,5 +48,5 @@ class ModelRNNRep(tf.keras.Model):
 
     def get_call_result_tensors(self):
         return self.call([tf.keras.Input(shape=(None, *t)) for t in self.obs_dims],
-                    tf.keras.Input(shape=(None, self.action_dim)),
-                    tf.keras.Input(shape=(self.rnn_units,)))
+                         tf.keras.Input(shape=(None, self.action_dim)),
+                         tf.keras.Input(shape=(self.rnn_units,)))

@@ -61,7 +61,7 @@ class SAC_Base(object):
 
                  seed=None,
                  write_summary_per_step=20,
-                 save_model_per_step=1e3,
+                 save_model_per_step=1e5,
 
                  burn_in_step=0,
                  n_step=1,
