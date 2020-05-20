@@ -55,7 +55,7 @@ class ModelObservation(tf.keras.Model):
     def call(self, state):
         obs = self.seq(state)
 
-        return [obs]
+        return obs
 
     def get_loss(self, state, obs_list):
         approx_obs = self.seq(state)
@@ -66,7 +66,7 @@ class ModelObservation(tf.keras.Model):
 class ModelRep(ModelRNNRep):
     def __init__(self, obs_dims, action_dim):
         super().__init__(obs_dims, action_dim)
-        self.rnn_units = 2
+        self.rnn_units = 64
         self.layer_rnn = tf.keras.layers.RNN(tf.keras.layers.GRUCell(self.rnn_units), return_sequences=True, return_state=True)
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.tanh)
@@ -76,11 +76,10 @@ class ModelRep(ModelRNNRep):
 
     def call(self, obs_list, pre_action, rnn_state):
         obs = obs_list[0]
-        # obs = tf.concat([obs, pre_action], axis=-1)
+        obs = tf.concat([obs, pre_action], axis=-1)
         outputs, next_rnn_state = self.layer_rnn(obs, initial_state=rnn_state)
 
         state = self.seq(outputs)
-        
 
         return state, next_rnn_state, outputs
 

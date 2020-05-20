@@ -216,6 +216,7 @@ class Main(object):
 
             self._log_episode_info(iteration, agents)
 
+        self.sac.save_model()
         self.env.close()
 
     def _log_episode_summaries(self, iteration, agents):

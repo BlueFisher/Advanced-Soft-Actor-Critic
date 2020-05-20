@@ -75,8 +75,9 @@ replay_config:
 
 sac_config:
   seed: null # Random seed
-  write_summary_per_step: 20 # Write summaries in TensorBoard every N steps
+  write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
   save_model_per_step: 100000 # Save model every N steps
+  save_model_per_minute: 5 # Save model every N minutes
 
   burn_in_step: 0 # Burn-in steps in R2D2
   n_step: 1 # Update Q function by N steps
