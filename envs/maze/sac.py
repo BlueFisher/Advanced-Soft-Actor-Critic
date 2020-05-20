@@ -9,7 +9,7 @@ class ModelTransition(ModelTransition):
     def __init__(self, state_dim, action_dim):
         super().__init__()
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(64, activation=tf.nn.tanh),
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(state_dim + state_dim)
         ])
@@ -21,7 +21,7 @@ class ModelTransition(ModelTransition):
     def call(self, state, action):
         next_state = self.seq(tf.concat([state, action], -1))
         mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
-        next_state_dist = self.next_state_tfpd([mean, tf.clip_by_value(tf.exp(logstd), 0, 1.)])
+        next_state_dist = self.next_state_tfpd([mean, tf.exp(logstd)])
 
         return next_state_dist
 
@@ -66,21 +66,21 @@ class ModelObservation(tf.keras.Model):
 class ModelRep(ModelRNNRep):
     def __init__(self, obs_dims, action_dim):
         super().__init__(obs_dims, action_dim)
-        self.rnn_units = 32
+        self.rnn_units = 2
         self.layer_rnn = tf.keras.layers.RNN(tf.keras.layers.GRUCell(self.rnn_units), return_sequences=True, return_state=True)
         self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(32)
+            tf.keras.layers.Dense(64, activation=tf.nn.tanh)
         ])
 
         self.get_call_result_tensors()
 
     def call(self, obs_list, pre_action, rnn_state):
         obs = obs_list[0]
-        obs = tf.concat([obs, pre_action], axis=-1)
+        # obs = tf.concat([obs, pre_action], axis=-1)
         outputs, next_rnn_state = self.layer_rnn(obs, initial_state=rnn_state)
 
-        state = tf.concat([obs, outputs], -1)
-        state = self.seq(state)
+        state = self.seq(outputs)
+        
 
         return state, next_rnn_state, outputs
 
@@ -91,15 +91,13 @@ class ModelQ(tf.keras.Model):
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(1)
+            tf.keras.layers.Dense(action_dim)
         ])
 
-        self(tf.keras.Input(shape=(state_dim,)), tf.keras.Input(shape=(action_dim,)))
+        self(tf.keras.Input(shape=(state_dim,)))
 
-    def call(self, state, action):
-        l = tf.concat([state, action], -1)
-
-        q = self.seq(l)
+    def call(self, state):
+        q = self.seq(state)
         return q
 
 
@@ -109,15 +107,14 @@ class ModelPolicy(tf.keras.Model):
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(action_dim + action_dim)
+            tf.keras.layers.Dense(action_dim)
         ])
 
-        self.tfpd = tfp.layers.DistributionLambda(make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
+        self.tfpd = tfp.layers.DistributionLambda(make_distribution_fn=lambda t: tfp.distributions.Categorical(logits=t))
 
         self(tf.keras.Input(shape=(state_dim,)))
 
     def call(self, state):
-        l = self.seq(state)
-        mean, logstd = tf.split(l, num_or_size_splits=2, axis=-1)
+        logits = self.seq(state)
 
-        return self.tfpd([tf.tanh(mean), tf.clip_by_value(tf.exp(logstd), 0.1, 1.0)])
+        return self.tfpd(logits)
