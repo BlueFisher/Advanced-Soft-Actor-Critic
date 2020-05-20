@@ -50,6 +50,8 @@ def _np_to_tensor(fn):
 
 
 class SAC_Base(object):
+    _last_save_time = 0
+
     def __init__(self,
                  obs_dims,
                  action_dim,
@@ -60,8 +62,9 @@ class SAC_Base(object):
                  last_ckpt=None,
 
                  seed=None,
-                 write_summary_per_step=20,
+                 write_summary_per_step=1e3,
                  save_model_per_step=1e5,
+                 save_model_per_minute=5,
 
                  burn_in_step=0,
                  n_step=1,
@@ -94,6 +97,8 @@ class SAC_Base(object):
 
         seed: Random seed
         write_summary_per_step: Write summaries in TensorBoard every `write_summary_per_step` steps
+        save_model_per_step: Save model every N steps
+        save_model_per_minute: Save model every N minutes
 
         burn_in_step: Burn-in steps in R2D2
         n_step: Update Q function by `n_step` steps
@@ -130,6 +135,7 @@ class SAC_Base(object):
 
         self.write_summary_per_step = int(write_summary_per_step)
         self.save_model_per_step = int(save_model_per_step)
+        self.save_model_per_minute = save_model_per_minute
         self.tau = tau
         self.update_target_per_step = update_target_per_step
         self.use_auto_alpha = use_auto_alpha
@@ -871,6 +877,9 @@ class SAC_Base(object):
 
         self.summary_writer.flush()
 
+    def save_model(self):
+        self.ckpt_manager.save(self.global_step)
+
     def fill_replay_buffer(self,
                            n_obses_list,
                            n_actions,
@@ -1012,9 +1021,11 @@ class SAC_Base(object):
                               initial_rnn_state=rnn_state if self.use_rnn else None)
 
         step = self.global_step.numpy()
-
-        if step % self.save_model_per_step == 0:
-            self.ckpt_manager.save(step)
+        
+        if step % self.save_model_per_step == 0 \
+                and (time.time() - self._last_save_time) / 60 >= self.save_model_per_minute:
+            self.save_model()
+            self._last_save_time = time.time()
 
         if self.summary_writer is not None and step % self.write_summary_per_step == 0:
             with self.summary_writer.as_default():

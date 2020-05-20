@@ -55,7 +55,7 @@ class ModelObservation(tf.keras.Model):
     def call(self, state):
         obs = self.seq(state)
 
-        return [obs]
+        return obs
 
     def get_loss(self, state, obs_list):
         approx_obs = self.seq(state)
