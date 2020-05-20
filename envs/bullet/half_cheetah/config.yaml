@@ -1,0 +1,24 @@
+default:
+  base_config:
+    env_type: GYM
+    scene: HalfCheetah
+
+    build_path: 'HalfCheetahBulletEnv-v0'
+
+    max_iter: 3000
+    n_agents: 10
+
+  sac_config:
+    use_auto_alpha: true
+
+    n_step: 3
+    _lambda: 0.99
+
+    use_normalization: true
+
+curiosity:
+  base_config:
+    name: 'curiosity_{time}'
+  sac_config:
+    use_curiosity: true
+    curiosity_strength: 0.2

@@ -67,7 +67,9 @@ class ModelRep(ModelRNNRep):
     def __init__(self, obs_dims, action_dim):
         super().__init__(obs_dims, action_dim)
         self.rnn_units = 64
-        self.layer_rnn = tf.keras.layers.GRU(self.rnn_units, return_sequences=True, return_state=True)
+        # TODO Disabled temporarily because of the issue
+        # https://github.com/tensorflow/tensorflow/issues/39697
+        self.layer_rnn = tf.keras.layers.RNN(tf.keras.layers.GRUCell(self.rnn_units), return_sequences=True, return_state=True)
         self.seq = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.tanh)
         ])
