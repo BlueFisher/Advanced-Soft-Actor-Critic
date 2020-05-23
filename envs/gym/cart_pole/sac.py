@@ -2,37 +2,18 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from algorithm.common_models import ModelVoidRep as ModelRep
+import algorithm.nn_models as m
+
+ModelRep = m.ModelSimpleRep
 
 
-class ModelQ(tf.keras.Model):
+class ModelQ(m.ModelDiscreteQ):
     def __init__(self, state_dim, action_dim):
-        super().__init__()
-        self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(action_dim)
-        ])
-
-        self(tf.keras.Input(shape=(state_dim,)))
-
-    def call(self, state):
-        q = self.seq(state)
-        return q
+        super().__init__(state_dim, action_dim,
+                         dense_n=64, dense_depth=1)
 
 
-class ModelPolicy(tf.keras.Model):
+class ModelPolicy(m.ModelDiscretePolicy):
     def __init__(self, state_dim, action_dim):
-        super().__init__()
-        self.seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(action_dim)
-        ])
-
-        self.tfpd = tfp.layers.DistributionLambda(make_distribution_fn=lambda t: tfp.distributions.Categorical(logits=t))
-
-        self(tf.keras.Input(shape=(state_dim,)))
-
-    def call(self, state):
-        logits = self.seq(state)
-
-        return self.tfpd(logits)
+        super().__init__(state_dim, action_dim,
+                         dense_n=64, dense_depth=1)

@@ -39,6 +39,7 @@ class SAC_DS_Base(SAC_Base):
                  clip_epsilon=0.2,
 
                  use_prediction=False,
+                 use_extra_data=True,
                  use_curiosity=False,
                  curiosity_strength=1,
                  use_normalization
@@ -69,6 +70,7 @@ class SAC_DS_Base(SAC_Base):
         self.clip_epsilon = clip_epsilon
 
         self.use_prediction = use_prediction
+        self.use_extra_data = use_extra_data
         self.use_curiosity = use_curiosity
         self.curiosity_strength = curiosity_strength
         self.use_normalization = use_normalization

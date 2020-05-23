@@ -82,6 +82,7 @@ class SAC_Base(object):
                  use_priority=True,
                  use_n_step_is=True,
                  use_prediction=False,
+                 use_extra_data=True,
                  use_curiosity=False,
                  curiosity_strength=1,
                  use_normalization=False,
@@ -116,6 +117,7 @@ class SAC_Base(object):
         use_priority: If use PER importance ratio
         use_n_step_is: If use importance sampling
         use_prediction: If train a transition model
+        use_extra_data: If use extra data to train prediction model
         use_curiosity: If use curiosity
         curiosity_strength: Curiosity strength if use curiosity
         """
@@ -146,6 +148,7 @@ class SAC_Base(object):
         self.use_priority = use_priority
         self.use_n_step_is = use_n_step_is
         self.use_prediction = use_prediction
+        self.use_extra_data = use_extra_data
         self.use_curiosity = use_curiosity
         self.curiosity_strength = curiosity_strength
         self.use_normalization = use_normalization
@@ -209,22 +212,25 @@ class SAC_Base(object):
             self.model_rep = ModelRep(self.obs_dims, self.action_dim)
             self.model_target_rep = ModelRep(self.obs_dims, self.action_dim)
             # Get state and rnn_state dimension
-            state, next_rnn_state, _ = self.model_rep.get_call_result_tensors()
+            state, next_rnn_state, _ = self.model_rep.init()
             self.rnn_state_dim = next_rnn_state.shape[-1]
         else:
             # Get represented state dimension
             self.model_rep = ModelRep(self.obs_dims)
             self.model_target_rep = ModelRep(self.obs_dims)
             # Get state dimension
-            state = self.model_rep.get_call_result_tensors()
+            state = self.model_rep.init()
             self.rnn_state_dim = 1
         state_dim = state.shape[-1]
         logger.info(f'State Dimension: {state_dim}')
 
         if self.use_prediction:
-            self.model_transition = model.ModelTransition(state_dim, self.action_dim)
-            self.model_reward = model.ModelReward(state_dim)
-            self.model_observation = model.ModelObservation(state_dim, self.obs_dims)
+            self.model_transition = model.ModelTransition(state_dim, self.action_dim,
+                                                          self.use_extra_data)
+            self.model_reward = model.ModelReward(state_dim,
+                                                  self.use_extra_data)
+            self.model_observation = model.ModelObservation(state_dim, self.obs_dims,
+                                                            self.use_extra_data)
 
         if self.use_curiosity:
             self.model_forward = model.ModelForward(state_dim, self.action_dim)
@@ -232,6 +238,7 @@ class SAC_Base(object):
 
         self.model_q1 = model.ModelQ(state_dim, self.action_dim)
         self.model_target_q1 = model.ModelQ(state_dim, self.action_dim)
+
         self.model_q2 = model.ModelQ(state_dim, self.action_dim)
         self.model_target_q2 = model.ModelQ(state_dim, self.action_dim)
 
@@ -277,6 +284,11 @@ class SAC_Base(object):
         if self.use_curiosity:
             ckpt_saved['model_forward'] = self.model_forward
             ckpt_saved['optimizer_forward'] = self.optimizer_forward
+        
+        # Execute init() of all models from nn_models
+        for m in ckpt_saved.values():
+            if isinstance(m, tf.keras.Model):
+                m.init()
 
         ckpt = tf.train.Checkpoint(**ckpt_saved)
         self.ckpt_manager = tf.train.CheckpointManager(ckpt, f'{model_path}/model', max_to_keep=10)
@@ -614,10 +626,14 @@ class SAC_Base(object):
 
             loss_mse = tf.keras.losses.MeanSquaredError()
             if self.use_prediction:
-                extra_obs = self.model_transition.extra_obs(n_obses_list)[:, self.burn_in_step:, ...]
-                approx_next_state_dist = self.model_transition(tf.concat([n_states[:, self.burn_in_step:, ...],
-                                                                          extra_obs], axis=-1),
-                                                               n_actions[:, self.burn_in_step:, ...])
+                if self.use_extra_data:
+                    extra_obs = self.model_transition.extra_obs(n_obses_list)[:, self.burn_in_step:, ...]
+                    extra_state = tf.concat([n_states[:, self.burn_in_step:, ...], extra_obs], axis=-1)
+                    approx_next_state_dist = self.model_transition(extra_state,
+                                                                   n_actions[:, self.burn_in_step:, ...])
+                else:
+                    approx_next_state_dist = self.model_transition(n_states[:, self.burn_in_step:, ...],
+                                                                   n_actions[:, self.burn_in_step:, ...])
                 loss_transition = -approx_next_state_dist.log_prob(m_target_states[:, self.burn_in_step + 1:, ...])
                 # loss_transition = -tf.maximum(loss_transition, -2.)
                 std_normal = tfp.distributions.Normal(tf.zeros_like(approx_next_state_dist.loc),
@@ -1021,7 +1037,7 @@ class SAC_Base(object):
                               initial_rnn_state=rnn_state if self.use_rnn else None)
 
         step = self.global_step.numpy()
-        
+
         if step % self.save_model_per_step == 0 \
                 and (time.time() - self._last_save_time) / 60 >= self.save_model_per_minute:
             self.save_model()

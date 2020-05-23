@@ -61,6 +61,7 @@ sac_config:
   _lambda: 1.0 # Discount factor for V-trace
 
   use_prediction: false # If train a transition model
+  use_extra_data: true # If use extra data to train prediction model
   use_curiosity: false # If use curiosity
   curiosity_strength: 1 # Curiosity strength if use curiosity
   use_normalization: false # If use observation normalization
