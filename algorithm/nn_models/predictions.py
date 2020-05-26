@@ -65,7 +65,7 @@ class ModelBaseForward(tf.keras.Model):
 
 
 class ModelForward(ModelBaseForward):
-    def __init__(state_dim, action_dim,
+    def __init__(self, state_dim, action_dim,
                  dense_n=64, dense_depth=2):
         super().__init__(state_dim, action_dim)
 
