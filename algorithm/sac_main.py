@@ -131,10 +131,10 @@ class Main(object):
     def _run(self):
         use_rnn = self.sac.use_rnn
 
-        n_agents, obs_list = self.env.reset(reset_config=self.reset_config)
+        obs_list = self.env.reset(reset_config=self.reset_config)
 
         agents = [self._agent_class(i, use_rnn=self.sac.use_rnn)
-                  for i in range(n_agents)]
+                  for i in range(self.config['n_agents'])]
 
         if use_rnn:
             initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))
@@ -144,7 +144,7 @@ class Main(object):
 
         for iteration in range(self.config['max_iter'] + 1):
             if self.config['reset_on_iteration'] or is_max_reached:
-                _, obs_list = self.env.reset(reset_config=self.reset_config)
+                obs_list = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
 

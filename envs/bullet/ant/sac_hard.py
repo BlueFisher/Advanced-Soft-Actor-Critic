@@ -68,6 +68,7 @@ class ModelObservation(m.ModelBaseObservation):
         approx_obs = self(state)
 
         obs = obs_list[0]
+
         if not self.use_extra_data:
             obs = tf.concat([obs[..., :3], obs[..., 6:]], axis=-1)
 
