@@ -3,7 +3,7 @@ default:
     env_type: GYM
     scene: Ant
 
-    build_path: 'AntBulletEnv-v0'
+    build_path: "AntBulletEnv-v0"
 
     max_iter: 3000
     n_agents: 10
@@ -15,11 +15,33 @@ default:
     _lambda: 0.99
 
     use_normalization: true
-
-curiosity:
-  base_config:
-    name: 'curiosity_{time}'
-  sac_config:
     use_curiosity: true
     curiosity_strength: 0.2
-    
+
+hard:
+  base_config: &hard_base
+    scene: AntHard
+    sac: sac_hard
+
+  sac_config: &hard_sac
+    burn_in_step: 20
+    use_rnn: true
+    use_prediction: true
+
+hard_noextra:
+  base_config:
+    <<: *hard_base
+    name: "noextra_{time}"
+
+  sac_config:
+    <<: *hard_sac
+    use_extra_data: false
+
+hard_nopre:
+  base_config:
+    <<: *hard_base
+    name: "nopre_{time}"
+
+  sac_config:
+    <<: *hard_sac
+    use_prediction: false
