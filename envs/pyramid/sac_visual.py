@@ -125,7 +125,7 @@ class ModelRep(m.ModelBaseGRURep):
         vis_obs = tf.reshape(vis_obs, [batch, -1, vis_obs.shape[-1]])
         state = self.dense(tf.concat([vis_obs, outputs], axis=-1))
 
-        return state, next_rnn_state, outputs
+        return state, next_rnn_state
 
 
 class ModelQ(m.ModelContinuesQ):

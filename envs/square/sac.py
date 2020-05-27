@@ -81,7 +81,7 @@ class ModelRep(m.ModelBaseGRURep):
 
         state = tf.concat([ray_obs, outputs], -1)
 
-        return state, next_rnn_state, outputs
+        return state, next_rnn_state
 
 
 class ModelQ(m.ModelContinuesQ):

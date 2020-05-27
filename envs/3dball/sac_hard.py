@@ -77,7 +77,7 @@ class ModelRep(m.ModelBaseGRURep):
 
         state = self.dense(outputs)
 
-        return state, next_rnn_state, outputs
+        return state, next_rnn_state
 
 
 class ModelQ(m.ModelContinuesQ):

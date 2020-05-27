@@ -212,7 +212,7 @@ class SAC_Base(object):
             self.model_rep = ModelRep(self.obs_dims, self.action_dim)
             self.model_target_rep = ModelRep(self.obs_dims, self.action_dim)
             # Get state and rnn_state dimension
-            state, next_rnn_state, _ = self.model_rep.init()
+            state, next_rnn_state = self.model_rep.init()
             self.rnn_state_dim = next_rnn_state.shape[-1]
         else:
             # Get represented state dimension
@@ -284,7 +284,7 @@ class SAC_Base(object):
         if self.use_curiosity:
             ckpt_saved['model_forward'] = self.model_forward
             ckpt_saved['optimizer_forward'] = self.optimizer_forward
-        
+
         # Execute init() of all models from nn_models
         for m in ckpt_saved.values():
             if isinstance(m, tf.keras.Model):
@@ -426,9 +426,9 @@ class SAC_Base(object):
         tf.function
         """
         if self.use_rnn:
-            n_states, *_ = self.model_rep(n_obses_list,
-                                          gen_pre_n_actions(n_selected_actions),
-                                          rnn_state)
+            n_states, _ = self.model_rep(n_obses_list,
+                                         gen_pre_n_actions(n_selected_actions),
+                                         rnn_state)
         else:
             n_states = self.model_rep(n_obses_list)
 
@@ -549,12 +549,12 @@ class SAC_Base(object):
             m_obses_list = [tf.concat([n_obses, tf.reshape(next_obs, (-1, 1, *next_obs.shape[1:]))], axis=1)
                             for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
             if self.use_rnn:
-                m_states, *_ = self.model_rep(m_obses_list,
-                                              gen_pre_n_actions(n_actions, keep_last_action=True),
-                                              initial_rnn_state)
-                m_target_states, *_ = self.model_target_rep(m_obses_list,
-                                                            gen_pre_n_actions(n_actions, keep_last_action=True),
-                                                            initial_rnn_state)
+                m_states, _ = self.model_rep(m_obses_list,
+                                             gen_pre_n_actions(n_actions, keep_last_action=True),
+                                             initial_rnn_state)
+                m_target_states, _ = self.model_target_rep(m_obses_list,
+                                                           gen_pre_n_actions(n_actions, keep_last_action=True),
+                                                           initial_rnn_state)
             else:
                 m_states = self.model_rep(m_obses_list)
                 m_target_states = self.model_target_rep(m_obses_list)
@@ -739,10 +739,15 @@ class SAC_Base(object):
         """
         tf.function
         """
-        *_, n_rnn_states = self.model_rep(n_obses_list,
-                                          gen_pre_n_actions(n_actions),
+        n_rnn_states = list()
+        n_actions = gen_pre_n_actions(n_actions)
+        for i in range(n_obses_list[0].shape[1]):
+            _, rnn_state = self.model_rep([o[:, i:i + 1, ...] for o in n_obses_list],
+                                          n_actions[:, i:i + 1, ...],
                                           rnn_state)
-        return n_rnn_states
+            n_rnn_states.append(rnn_state)
+
+        return tf.stack(n_rnn_states, axis=1)
 
     @tf.function
     def choose_action(self, obs_list):
@@ -766,7 +771,7 @@ class SAC_Base(object):
         """
         obs_list = [tf.reshape(obs, (-1, 1, *obs.shape[1:])) for obs in obs_list]
         pre_action = tf.reshape(pre_action, (-1, 1, *pre_action.shape[1:]))
-        state, next_rnn_state, _ = self.model_rep(obs_list, pre_action, rnn_state)
+        state, next_rnn_state = self.model_rep(obs_list, pre_action, rnn_state)
         policy = self.model_policy(state)
         if self.is_discrete:
             action = policy.sample()
@@ -792,9 +797,9 @@ class SAC_Base(object):
         m_obses_list = [tf.concat([n_obses, tf.reshape(next_obs, (-1, 1, *next_obs.shape[1:]))], axis=1)
                         for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
         if self.use_rnn:
-            tmp_states, *_ = self.model_rep([m_obses[:, :self.burn_in_step + 1, ...] for m_obses in m_obses_list],
-                                            gen_pre_n_actions(n_actions[:, :self.burn_in_step + 1, ...]),
-                                            rnn_state)
+            tmp_states, _ = self.model_rep([m_obses[:, :self.burn_in_step + 1, ...] for m_obses in m_obses_list],
+                                           gen_pre_n_actions(n_actions[:, :self.burn_in_step + 1, ...]),
+                                           rnn_state)
             state = tmp_states[:, self.burn_in_step, ...]
             m_target_states, *_ = self.model_target_rep(m_obses_list,
                                                         gen_pre_n_actions(n_actions,

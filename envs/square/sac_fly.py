@@ -94,7 +94,7 @@ class ModelRep(m.ModelBaseGRURep):
         outputs, next_rnn_state = self.gru(obs_list[2][..., :-2], initial_state=rnn_state)
         state = self.dense(tf.concat([obs_list[0], obs_list[1], outputs], axis=-1))
 
-        return state, next_rnn_state, outputs
+        return state, next_rnn_state
 
 
 class ModelQ(m.ModelContinuesQ):
