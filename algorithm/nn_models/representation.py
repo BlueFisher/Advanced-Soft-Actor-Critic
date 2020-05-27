@@ -44,3 +44,20 @@ class ModelBaseGRURep(ModelBaseRNNRep):
         self.gru = tf.keras.layers.RNN(tf.keras.layers.GRUCell(rnn_units),
                                        return_sequences=True,
                                        return_state=True)
+
+
+class ModelBaseLSTMRep(ModelBaseRNNRep):
+    def __init__(self, obs_dims, action_dim,
+                 rnn_units=64):
+        super().__init__(obs_dims, action_dim, rnn_units)
+
+        # TODO Disabled temporarily because of the issue
+        # https://github.com/tensorflow/tensorflow/issues/39697
+        self.lstm = tf.keras.layers.RNN(tf.keras.layers.LSTMCell(rnn_units),
+                                        return_sequences=True,
+                                        return_state=True)
+
+    def init(self):
+        return self.call([tf.keras.Input(shape=(None, *o)) for o in self.obs_dims],
+                         tf.keras.Input(shape=(None, self.action_dim)),
+                         tf.keras.Input(shape=(self.rnn_units * 2,)))

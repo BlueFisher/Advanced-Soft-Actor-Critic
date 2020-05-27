@@ -100,7 +100,7 @@ class ModelRep(m.ModelBaseGRURep):
         outputs, next_rnn_state = self.gru(vis_obs, initial_state=rnn_state)
         state = self.dense(outputs)
 
-        return state, next_rnn_state, outputs
+        return state, next_rnn_state
 
 
 class ModelQ(m.ModelContinuesQ):
