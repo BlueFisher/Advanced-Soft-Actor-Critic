@@ -68,7 +68,7 @@ class UnityWrapper:
         self._env.reset()
         decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
 
-        return len(decision_steps), [obs.astype(np.float32) for obs in decision_steps.obs]
+        return [obs.astype(np.float32) for obs in decision_steps.obs]
 
     def step(self, action):
         self._env.set_actions(self.bahavior_name, action)
