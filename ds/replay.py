@@ -35,7 +35,11 @@ class Replay(object):
         self.burn_in_step = sac_config['burn_in_step']
         self.n_step = sac_config['n_step']
 
-        self._run_replay_server(net_config)
+        try:
+            self._run_replay_server(net_config)
+        except KeyboardInterrupt:
+            self.logger.warning('KeyboardInterrupt')
+            self.close()
 
     def _init_config(self, config_path, args):
         config_file_path = f'{config_path}/config_ds.yaml'
@@ -177,12 +181,15 @@ class Replay(object):
                                  self._update_td_error,
                                  self._update_transitions,
                                  self._clear)
-        server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-        replay_pb2_grpc.add_ReplayServiceServicer_to_server(servicer, server)
-        server.add_insecure_port(f'[::]:{net_config["replay_port"]}')
-        server.start()
+        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+        replay_pb2_grpc.add_ReplayServiceServicer_to_server(servicer, self.server)
+        self.server.add_insecure_port(f'[::]:{net_config["replay_port"]}')
+        self.server.start()
         self.logger.info(f'Replay server is running on [{net_config["replay_port"]}]...')
-        server.wait_for_termination()
+        self.server.wait_for_termination()
+
+    def close(self):
+        self.server.stop(None)
 
 
 class ReplayService(replay_pb2_grpc.ReplayServiceServicer):

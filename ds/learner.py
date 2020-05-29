@@ -48,7 +48,11 @@ class Learner(object):
          model_root_path) = self._init_config(config_path, args)
 
         self._init_env(config_path, replay_config, sac_config, model_root_path)
-        self._run()
+        try:
+            self._run()
+        except KeyboardInterrupt:
+            self.logger.warning('KeyboardInterrupt')
+            self.close()
 
     def _init_config(self, config_path, args):
         config_file_path = f'{config_path}/config_ds.yaml'
@@ -69,7 +73,7 @@ class Learner(object):
         if args.sac is not None:
             config['base_config']['sac'] = args.sac
         if args.agents is not None:
-            config['reset_config']['copy'] = args.agents
+            config['base_config']['n_agents'] = args.agents
 
         config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now)
         model_root_path = f'models/ds/{config["base_config"]["scene"]}/{config["base_config"]["name"]}'
@@ -189,10 +193,10 @@ class Learner(object):
         iteration = 0
         start_time = time.time()
 
-        n_agents, obs_list = self.env.reset(reset_config=self.reset_config)
+        obs_list = self.env.reset(reset_config=self.reset_config)
 
         agents = [self._agent_class(i, use_rnn=use_rnn)
-                  for i in range(n_agents)]
+                  for i in range(self.config['n_agents'])]
 
         if use_rnn:
             initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))
@@ -201,11 +205,13 @@ class Learner(object):
         while True:
             # not training, waiting...
             if self.train_mode and not self._is_training:
+                if self._t_evaluation_terminated:
+                    break
                 time.sleep(EVALUATION_WAITING_TIME)
                 continue
 
             if self.config['reset_on_iteration']:
-                _, obs_list = self.env.reset(reset_config=self.reset_config)
+                obs_list = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
 
@@ -319,6 +325,7 @@ class Learner(object):
 
     def _run(self):
         t_evaluation = threading.Thread(target=self._policy_evaluation)
+        self._t_evaluation_terminated = False
         t_evaluation.start()
 
         if self.train_mode:
@@ -326,13 +333,19 @@ class Learner(object):
                                       self._get_policy_variables,
                                       self._get_td_error,
                                       self._post_rewards)
-            server = grpc.server(futures.ThreadPoolExecutor(max_workers=20))
-            learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, server)
-            server.add_insecure_port(f'[::]:{self.net_config["learner_port"]}')
-            server.start()
+            self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=20))
+            learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, self.server)
+            self.server.add_insecure_port(f'[::]:{self.net_config["learner_port"]}')
+            self.server.start()
             self.logger.info(f'Learner server is running on [{self.net_config["learner_port"]}]...')
 
             self._run_training_client()
+
+    def close(self):
+        self._t_evaluation_terminated = True
+        self.env.close()
+        if self.train_mode:
+            self.server.stop(None)
 
 
 class LearnerService(learner_pb2_grpc.LearnerServiceServicer):

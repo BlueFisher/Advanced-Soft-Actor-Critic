@@ -290,22 +290,23 @@ class SAC_Base(object):
             if isinstance(m, tf.keras.Model):
                 m.init()
 
-        ckpt = tf.train.Checkpoint(**ckpt_saved)
-        self.ckpt_manager = tf.train.CheckpointManager(ckpt, f'{model_path}/model', max_to_keep=10)
+        if model_path is not None:
+            ckpt = tf.train.Checkpoint(**ckpt_saved)
+            self.ckpt_manager = tf.train.CheckpointManager(ckpt, f'{model_path}/model', max_to_keep=10)
 
-        if self.ckpt_manager.latest_checkpoint:
-            if last_ckpt is None:
-                latest_checkpoint = self.ckpt_manager.latest_checkpoint
+            if self.ckpt_manager.latest_checkpoint:
+                if last_ckpt is None:
+                    latest_checkpoint = self.ckpt_manager.latest_checkpoint
+                else:
+                    latest_checkpoint = self.ckpt_manager.latest_checkpoint.split('-')[0] + f'-{last_ckpt}'
+                ckpt.restore(latest_checkpoint)
+                logger.info(f'Restored from {latest_checkpoint}')
+                self.init_iteration = int(latest_checkpoint.split('-')[1])
             else:
-                latest_checkpoint = self.ckpt_manager.latest_checkpoint.split('-')[0] + f'-{last_ckpt}'
-            ckpt.restore(latest_checkpoint)
-            logger.info(f'Restored from {latest_checkpoint}')
-            self.init_iteration = int(latest_checkpoint.split('-')[1])
-        else:
-            ckpt.restore(None)
-            logger.info('Initializing from scratch')
-            self.init_iteration = 0
-            self._update_target_variables()
+                ckpt.restore(None)
+                logger.info('Initializing from scratch')
+                self.init_iteration = 0
+                self._update_target_variables()
 
     def _init_tf_function(self):
         """

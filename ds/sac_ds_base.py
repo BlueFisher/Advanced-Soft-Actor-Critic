@@ -42,7 +42,7 @@ class SAC_DS_Base(SAC_Base):
                  use_extra_data=True,
                  use_curiosity=False,
                  curiosity_strength=1,
-                 use_normalization
+                 use_normalization=False,
 
                  noise=0.):
 
@@ -83,8 +83,7 @@ class SAC_DS_Base(SAC_Base):
             tf.random.set_seed(seed)
 
         self._build_model(model, init_log_alpha, learning_rate)
-        if model_root_path is not None:
-            self._init_or_restore(model_root_path, last_ckpt)
+        self._init_or_restore(model_root_path, last_ckpt)
 
         if train_mode:
             summary_path = f'{model_root_path}/log'
