@@ -73,7 +73,7 @@ class Actor(object):
         if self.cmd_args.sac is not None:
             config['base_config']['sac'] = self.cmd_args.sac
         if self.cmd_args.agents is not None:
-            config['reset_config']['copy'] = self.cmd_args.agents
+            config['base_config']['n_agents'] = self.cmd_args.agents
         if self.cmd_args.noise is not None:
             config['sac_config']['noise'] = self.cmd_args.noise
 
@@ -181,17 +181,17 @@ class Actor(object):
                 self._init_env()
                 use_rnn = self.sac_actor.use_rnn
 
-                n_agents, obs_list = self.env.reset(reset_config=self.reset_config)
+                obs_list = self.env.reset(reset_config=self.reset_config)
 
                 agents = [self._agent_class(i, use_rnn=use_rnn)
-                          for i in range(n_agents)]
+                          for i in range(self.config['n_agents'])]
 
                 if use_rnn:
                     initial_rnn_state = self.sac_actor.get_initial_rnn_state(len(agents))
                     rnn_state = initial_rnn_state
 
             if self.config['reset_on_iteration']:
-                _, obs_list = self.env.reset(reset_config=self.reset_config)
+                obs_list = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
 

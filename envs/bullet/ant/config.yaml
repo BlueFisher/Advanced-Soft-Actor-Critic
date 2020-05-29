@@ -15,8 +15,8 @@ default:
     _lambda: 0.99
 
     use_normalization: true
-    use_curiosity: true
-    curiosity_strength: 0.2
+    # use_curiosity: true
+    # curiosity_strength: 0.3
 
 hard:
   base_config: &hard_base

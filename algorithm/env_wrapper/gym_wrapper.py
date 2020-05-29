@@ -1,6 +1,7 @@
 import logging
 import time
 import multiprocessing
+import os
 
 import numpy as np
 import gym
@@ -27,20 +28,29 @@ CLOSE = 2
 
 
 def start_gym(env_name, render, conn):
+    logger.info(f'Process {os.getpid()} created')
+
     env = gym.make(env_name)
     if render:
         env.render()
 
-    while True:
-        cmd, data = conn.recv()
-        if cmd == RESET:
-            obs = env.reset()
-            conn.send(obs)
-        elif cmd == CLOSE:
-            env.close()
-            break
-        elif cmd == STEP:
-            conn.send(env.step(data))
+    try:
+        while True:
+            cmd, data = conn.recv()
+            if cmd == RESET:
+                obs = env.reset()
+                conn.send(obs)
+            elif cmd == CLOSE:
+                env.close()
+                break
+            elif cmd == STEP:
+                conn.send(env.step(data))
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        logger.error(e)
+
+    logger.warning(f'Process {os.getpid()} exits')
 
 
 class GymWrapper:
