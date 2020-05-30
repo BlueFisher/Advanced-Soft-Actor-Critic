@@ -93,17 +93,17 @@ class SAC_DS_Base(SAC_Base):
 
     @tf.function
     def choose_action(self, obs_list):
-        """
-        tf.function
-        obs_list: list([None, obs_dim_i], ...)
-        """
-        state = self.model_rep(obs_list)
-        policy = self.model_policy(state)
-        if self.is_discrete:
-            return tf.one_hot(policy.sample(), self.action_dim)
-        else:
-            action = tf.tanh(policy.sample())
-            return tf.clip_by_value(action + tf.random.normal(tf.shape(action), stddev=self.noise), -1., 1.)
+        action = super().choose_action(obs_list)
+        action = tf.clip_by_value(action + tf.random.normal(tf.shape(action),
+                                                            stddev=self.noise), -1., 1.)
+        return action
+
+    @tf.function
+    def choose_rnn_action(self, obs_list, pre_action, rnn_state):
+        action, next_rnn_state = super().choose_rnn_action(obs_list, pre_action, rnn_state)
+        action = tf.clip_by_value(action + tf.random.normal(tf.shape(action),
+                                                            stddev=self.noise), -1., 1.)
+        return action, next_rnn_state
 
     # For learner to send variables to actors
     @tf.function
@@ -178,7 +178,7 @@ class SAC_DS_Base(SAC_Base):
         if self.use_rnn:
             pointers_list = [pointers + i for i in range(1, self.burn_in_step + self.n_step + 1)]
             tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-            n_rnn_states = self.get_n_rnn_states(n_obses_list, rnn_state).numpy()
+            n_rnn_states = self.get_n_rnn_states(n_obses_list, n_actions, rnn_state).numpy()
             rnn_states = n_rnn_states.reshape(-1, n_rnn_states.shape[-1])
             update_data.append((tmp_pointers, 'rnn_state', rnn_states))
 

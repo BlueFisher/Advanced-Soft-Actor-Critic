@@ -3,7 +3,7 @@ default:
     env_type: GYM
     scene: Walker2D
 
-    build_path: 'Walker2DBulletEnv-v0'
+    build_path: "Walker2DBulletEnv-v0"
 
     n_agents: 10
 
@@ -14,8 +14,20 @@ default:
     learner_port: 61001
 
   sac_config:
-    seed: 42
+    write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
+    save_model_per_step: 10000 # Save model every N steps
+    save_model_per_minute: 5 # Save model every N minutes
 
     n_step: 3
-
     _lambda: 0.99
+    use_normalization: true
+
+hard:
+  base_config: &hard_base
+    scene: Walker2DHard
+    sac: sac_hard
+
+  sac_config: &hard_sac
+    burn_in_step: 20
+    use_rnn: true
+    use_prediction: true

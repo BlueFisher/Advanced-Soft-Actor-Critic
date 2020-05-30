@@ -201,6 +201,7 @@ class Actor(object):
                 for agent in agents:
                     agent.reset()
 
+            action = np.zeros([len(agents), self.action_dim], dtype=np.float32)
             step = 0
 
             if self.config['update_policy_mode'] and self.config['update_policy_variables_per_step'] == -1:
@@ -224,6 +225,7 @@ class Actor(object):
 
                     if use_rnn:
                         action, next_rnn_state = self.sac_actor.choose_rnn_action([o.astype(np.float32) for o in obs_list],
+                                                                                  action,
                                                                                   rnn_state)
                         next_rnn_state = next_rnn_state.numpy()
                     else:
@@ -265,6 +267,7 @@ class Actor(object):
                             self._add_trans(*episode_trans)
 
                 obs_list = next_obs_list
+                action[local_done] = np.zeros(self.action_dim)
                 if use_rnn:
                     rnn_state = next_rnn_state
                     rnn_state[local_done] = initial_rnn_state[local_done]
