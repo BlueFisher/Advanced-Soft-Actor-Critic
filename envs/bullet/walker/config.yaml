@@ -9,6 +9,7 @@ default:
     n_agents: 10
 
   sac_config:
+    seed: 42
     write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
     save_model_per_step: 10000 # Save model every N steps
     save_model_per_minute: 5 # Save model every N minutes

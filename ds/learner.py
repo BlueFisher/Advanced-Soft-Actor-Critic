@@ -51,7 +51,7 @@ class Learner(object):
         try:
             self._run()
         except KeyboardInterrupt:
-            self.logger.warning('KeyboardInterrupt')
+            self.logger.warning('KeyboardInterrupt in _run')
             self.close()
 
     def _init_config(self, config_path, args):
@@ -118,7 +118,7 @@ class Learner(object):
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')
 
-        obs_dims, action_dim, is_discrete = self.env.init()
+        self.obs_dims, self.action_dim, is_discrete = self.env.init()
 
         self.logger.info(f'{self.config["build_path"]} initialized')
 
@@ -129,8 +129,8 @@ class Learner(object):
             custom_sac_model = importlib.import_module(f'{config_path.replace("/",".")}.{self.config["sac"]}')
             shutil.copyfile(f'{config_path}/{self.config["sac"]}.py', f'{model_root_path}/sac_model.py')
 
-        self.sac = SAC_DS_Base(obs_dims=obs_dims,
-                               action_dim=action_dim,
+        self.sac = SAC_DS_Base(obs_dims=self.obs_dims,
+                               action_dim=self.action_dim,
                                is_discrete=is_discrete,
                                model_root_path=model_root_path,
                                model=custom_sac_model,
@@ -188,84 +188,92 @@ class Learner(object):
         pass
 
     def _policy_evaluation(self):
-        use_rnn = self.sac.use_rnn
+        try:
+            use_rnn = self.sac.use_rnn
 
-        iteration = 0
-        start_time = time.time()
+            iteration = 0
+            start_time = time.time()
 
-        obs_list = self.env.reset(reset_config=self.reset_config)
+            obs_list = self.env.reset(reset_config=self.reset_config)
 
-        agents = [self._agent_class(i, use_rnn=use_rnn)
-                  for i in range(self.config['n_agents'])]
+            agents = [self._agent_class(i, use_rnn=use_rnn)
+                      for i in range(self.config['n_agents'])]
 
-        if use_rnn:
-            initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))
-            rnn_state = initial_rnn_state
+            if use_rnn:
+                initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))
+                rnn_state = initial_rnn_state
 
-        while True:
-            # not training, waiting...
-            if self.train_mode and not self._is_training:
-                if self._t_evaluation_terminated:
-                    break
-                time.sleep(EVALUATION_WAITING_TIME)
-                continue
+            while True:
+                # not training, waiting...
+                if self.train_mode and not self._is_training:
+                    if self._t_evaluation_terminated:
+                        break
+                    time.sleep(EVALUATION_WAITING_TIME)
+                    continue
 
-            if self.config['reset_on_iteration']:
-                obs_list = self.env.reset(reset_config=self.reset_config)
-                for agent in agents:
-                    agent.clear()
+                if self.config['reset_on_iteration']:
+                    obs_list = self.env.reset(reset_config=self.reset_config)
+                    for agent in agents:
+                        agent.clear()
 
-                if use_rnn:
-                    rnn_state = initial_rnn_state
-            else:
-                for agent in agents:
-                    agent.reset()
-
-            step = 0
-
-            while False in [a.done for a in agents] and (not self.train_mode or self._is_training):
-                with self._training_lock:
                     if use_rnn:
-                        action, next_rnn_state = self.sac.choose_rnn_action([o.astype(np.float32) for o in obs_list],
-                                                                            rnn_state)
-                        next_rnn_state = next_rnn_state.numpy()
-                    else:
-                        action = self.sac.choose_action([o.astype(np.float32) for o in obs_list])
+                        rnn_state = initial_rnn_state
+                else:
+                    for agent in agents:
+                        agent.reset()
 
-                action = action.numpy()
+                action = np.zeros([len(agents), self.action_dim], dtype=np.float32)
+                step = 0
 
-                next_obs_list, reward, local_done, max_reached = self.env.step(action)
+                while False in [a.done for a in agents] and (not self.train_mode or self._is_training):
+                    with self._training_lock:
+                        if use_rnn:
+                            action, next_rnn_state = self.sac.choose_rnn_action([o.astype(np.float32) for o in obs_list],
+                                                                                action,
+                                                                                rnn_state)
+                            next_rnn_state = next_rnn_state.numpy()
+                        else:
+                            action = self.sac.choose_action([o.astype(np.float32) for o in obs_list])
 
-                if step == self.config['max_step']:
-                    local_done = [True] * len(agents)
-                    max_reached = [True] * len(agents)
+                    action = action.numpy()
 
-                for i, agent in enumerate(agents):
-                    agent.add_transition([o[i] for o in obs_list],
-                                         action[i],
-                                         reward[i],
-                                         local_done[i],
-                                         max_reached[i],
-                                         [o[i] for o in next_obs_list],
-                                         rnn_state[i] if use_rnn else None)
+                    next_obs_list, reward, local_done, max_reached = self.env.step(action)
 
-                obs_list = next_obs_list
-                if use_rnn:
-                    rnn_state = next_rnn_state
-                    rnn_state[local_done] = initial_rnn_state[local_done]
+                    if step == self.config['max_step']:
+                        local_done = [True] * len(agents)
+                        max_reached = [True] * len(agents)
 
-                step += 1
+                    for i, agent in enumerate(agents):
+                        agent.add_transition([o[i] for o in obs_list],
+                                             action[i],
+                                             reward[i],
+                                             local_done[i],
+                                             max_reached[i],
+                                             [o[i] for o in next_obs_list],
+                                             rnn_state[i] if use_rnn else None)
 
-            if self.train_mode:
-                with self._training_lock:
-                    self._log_episode_summaries(iteration, agents)
+                    obs_list = next_obs_list
+                    action[local_done] = np.zeros(self.action_dim)
+                    if use_rnn:
+                        rnn_state = next_rnn_state
+                        rnn_state[local_done] = initial_rnn_state[local_done]
 
-            self._log_episode_info(iteration, start_time, agents)
+                    step += 1
 
-            iteration += 1
+                if self.train_mode:
+                    with self._training_lock:
+                        self._log_episode_summaries(iteration, agents)
 
-            if self.train_mode:
-                time.sleep(EVALUATION_INTERVAL)
+                self._log_episode_info(iteration, start_time, agents)
+
+                iteration += 1
+
+                if self.train_mode:
+                    time.sleep(EVALUATION_INTERVAL)
+        except KeyboardInterrupt:
+            self.logger.warning('KeyboardInterrupt in _policy_evaluation')
+        except Exception as e:
+            self.logger.error(e)
 
     def _log_episode_summaries(self, iteration, agents):
         rewards = np.array([a.reward for a in agents])

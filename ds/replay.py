@@ -38,7 +38,7 @@ class Replay(object):
         try:
             self._run_replay_server(net_config)
         except KeyboardInterrupt:
-            self.logger.warning('KeyboardInterrupt')
+            self.logger.warning('KeyboardInterrupt in _run_replay_server')
             self.close()
 
     def _init_config(self, config_path, args):
