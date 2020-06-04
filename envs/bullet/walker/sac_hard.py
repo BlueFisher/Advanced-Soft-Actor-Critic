@@ -76,25 +76,25 @@ class ModelObservation(m.ModelBaseObservation):
         return tf.reduce_mean(tf.square(approx_obs - obs))
 
 
-class ModelRep(m.ModelBaseLSTMRep):
+class ModelRep(m.ModelBaseGRURep):
     def __init__(self, obs_dims, action_dim):
-        super().__init__(obs_dims, action_dim, rnn_units=64)
+        super().__init__(obs_dims, action_dim, rnn_units=8)
 
         self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.tanh)
+            tf.keras.layers.Dense(32, activation=tf.nn.tanh)
         ])
 
     def call(self, obs_list, pre_action, rnn_state):
         obs = obs_list[0]
         obs = tf.concat([obs[..., :3], obs[..., 6:]], axis=-1)
-        obs = tf.concat([obs, pre_action], axis=-1)
 
-        rnn_state = tf.split(rnn_state, num_or_size_splits=2, axis=-1)
-        outputs, *next_rnn_state = self.lstm(obs, initial_state=rnn_state)
+        # rnn_state = tf.split(rnn_state, num_or_size_splits=2, axis=-1)
+        outputs, next_rnn_state = self.gru(tf.concat([obs, pre_action], axis=-1),
+                                           initial_state=rnn_state)
 
-        state = self.dense(outputs)
+        state = self.dense(tf.concat([obs, outputs], axis=-1))
 
-        return state, tf.concat(next_rnn_state, axis=-1)
+        return state, next_rnn_state  # tf.concat(next_rnn_state, axis=-1)
 
 
 class ModelQ(m.ModelContinuesQ):
