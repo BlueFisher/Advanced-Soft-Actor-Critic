@@ -20,7 +20,7 @@ default:
 
     n_step: 3
     _lambda: 0.99
-    use_normalization: true
+    use_normalization: false
 
 hard:
   base_config: &hard_base

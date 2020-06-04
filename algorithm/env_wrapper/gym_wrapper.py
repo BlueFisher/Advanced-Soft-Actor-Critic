@@ -65,6 +65,7 @@ class GymWrapper:
         self.render = render
         self.n_agents = n_agents
 
+        # If use multiple processes
         if force_seq is None:
             self._seq_envs = n_agents == 1 or env_name in VANILLA_ENVS
         else:
@@ -110,7 +111,8 @@ class GymWrapper:
                 p = multiprocessing.Process(target=start_gym,
                                             args=(self.env_name,
                                                   (self.render or not self.train_mode) and i == 0,
-                                                  child_conn))
+                                                  child_conn),
+                                            daemon=True)
                 p.start()
 
         return [(self._state_dim, )], action_dim, self.is_discrete
