@@ -5,7 +5,7 @@ default:
 
     build_path: "AntBulletEnv-v0"
 
-    max_iter: 3000
+    max_iter: -1
     n_agents: 10
 
   sac_config:

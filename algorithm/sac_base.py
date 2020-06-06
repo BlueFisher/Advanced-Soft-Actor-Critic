@@ -1090,3 +1090,5 @@ class SAC_Base(object):
             self.replay_buffer.update_transitions(tmp_pointers, 'mu_prob', pi_probs)
 
         self.global_step.assign_add(1)
+
+        return step + 1

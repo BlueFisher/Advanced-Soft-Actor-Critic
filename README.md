@@ -56,8 +56,10 @@ base_config:
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
   sac: sac # Neural network models file
   n_agents: 1 # N agents running in parallel
-  max_iter: 1000 # Max iteration
-  max_step: -1 # Max step in each iteration
+  max_iter: -1 # Max iteration
+  max_step: -1 # Max step
+               # Training will be terminated if max_iter or max_step encounters
+  max_step_per_iter: -1 # Max step in each iteration
   reset_on_iteration: true # If to force reset agent if an episode terminated
 
 reset_config: null # Reset parameters sent to Unity
@@ -102,34 +104,40 @@ sac_config:
   use_curiosity: false # If use curiosity
   curiosity_strength: 1 # Curiosity strength if use curiosity
   use_normalization: false # If use observation normalization
+
 ```
 
 ## Start Training
 
 ```
-usage: main.py env_folder [--config CONFIG] [--run] [--render] [--editor]
-               [--logger_file LOGGER_FILE] [--name NAME] [--port PORT]
-               [--sac SAC] [--agents AGENTS] [--repeat REPEAT]
+usage: main.py [-h] [--config CONFIG] [--run] [--render] [--editor] [--logger_file LOGGER_FILE] [--name NAME] [--port PORT]
+               [--sac SAC] [--ckpt CKPT] [--agents AGENTS] [--repeat REPEAT]
+               env
 
 positional arguments:
-  env_folder
+  env
 
 optional arguments:
+  -h, --help            show this help message and exit
   --config CONFIG, -c CONFIG
                         config file
   --run                 inference mode
-  --render              render mode
+  --render              render
   --editor              running in Unity Editor
   --logger_file LOGGER_FILE
                         logging into a file
-  --name NAME, -n NAME  training name, base_config.name
-  --port PORT, -p PORT  communication port in Unity
-  --sac SAC             neural network model, base_config.sac
-  --agents AGENTS       number of agents, base_config.n_agents
+  --name NAME, -n NAME  training name
+  --port PORT, -p PORT  communication port
+  --sac SAC             neural network model
+  --ckpt CKPT           ckeckpoint to restore
+  --agents AGENTS       number of agents
   --repeat REPEAT       number of repeated experiments
 
 examples:
-python main.py pendulum -c config.yaml -n "test_{time}" --agents=10 --repeat=2
-python main.py simple_roller -c config_hard.yaml -p 5006
-python main.py simple_roller -c config.yaml -n nowall_202003251644192jWy --run
+# Train gym environment mountain_car with name "test_{time}", 10 agents and repeating training two times
+python main.py gym/mountain_car -n "test_{time}" --agents=10 --repeat=2
+# Train unity environment roller with vanilla config and port 5006
+python main.py roller -c vanilla -p 5006
+# Inference unity environment roller with model "nowall_202003251644192jWy"
+python main.py roller -c vanilla -n nowall_202003251644192jWy --run
 ```

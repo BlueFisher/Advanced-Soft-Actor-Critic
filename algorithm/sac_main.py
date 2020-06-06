@@ -141,8 +141,13 @@ class Main(object):
             rnn_state = initial_rnn_state
 
         is_max_reached = False
+        iteration = 0
+        trained_steps = 0
 
-        for iteration in range(self.config['max_iter'] + 1):
+        while iteration != self.config['max_iter']:
+            if self.config['max_step'] != -1 and trained_steps >= self.config['max_step']:
+                break
+
             if self.config['reset_on_iteration'] or is_max_reached:
                 obs_list = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
@@ -180,7 +185,7 @@ class Main(object):
 
                 next_obs_list, reward, local_done, max_reached = self.env.step(action)
 
-                if step == self.config['max_step']:
+                if step == self.config['max_step_per_iter']:
                     local_done = [True] * len(agents)
                     max_reached = [True] * len(agents)
                     is_max_reached = True
@@ -201,7 +206,7 @@ class Main(object):
                         # n_rnn_states
                         for episode_trans in episode_trans_list:
                             self.sac.fill_replay_buffer(*episode_trans)
-                    self.sac.train()
+                    trained_steps = self.sac.train()
 
                 obs_list = next_obs_list
                 action[local_done] = np.zeros(self.action_dim)
@@ -215,6 +220,8 @@ class Main(object):
                 self._log_episode_summaries(iteration, agents)
 
             self._log_episode_info(iteration, agents)
+
+            iteration += 1
 
         self.sac.save_model()
         self.env.close()
