@@ -73,8 +73,7 @@ class ModelObservation(m.ModelBaseObservation):
         return obs[..., :44], obs[..., 44:]
 
     def get_loss(self, state, obs_list):
-        approx_obs = self(state)
-        approx_ray_obs, approx_vec_obs = approx_obs[..., :44], approx_obs[..., 44:]
+        approx_ray_obs, approx_vec_obs = self(state)
 
         ray_obs, vec_obs = obs_list
         vec_obs = vec_obs[..., :-2]
