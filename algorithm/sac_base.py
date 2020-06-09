@@ -82,6 +82,7 @@ class SAC_Base(object):
                  use_priority=True,
                  use_n_step_is=True,
                  use_prediction=False,
+                 transition_kl=0.8,
                  use_extra_data=True,
                  use_curiosity=False,
                  curiosity_strength=1,
@@ -117,6 +118,7 @@ class SAC_Base(object):
         use_priority: If use PER importance ratio
         use_n_step_is: If use importance sampling
         use_prediction: If train a transition model
+        transition_kl: The coefficient of KL of transition and standard normal
         use_extra_data: If use extra data to train prediction model
         use_curiosity: If use curiosity
         curiosity_strength: Curiosity strength if use curiosity
@@ -148,6 +150,7 @@ class SAC_Base(object):
         self.use_priority = use_priority
         self.use_n_step_is = use_n_step_is
         self.use_prediction = use_prediction
+        self.transition_kl = transition_kl
         self.use_extra_data = use_extra_data
         self.use_curiosity = use_curiosity
         self.curiosity_strength = curiosity_strength
@@ -639,7 +642,7 @@ class SAC_Base(object):
                 # loss_transition = -tf.maximum(loss_transition, -2.)
                 std_normal = tfp.distributions.Normal(tf.zeros_like(approx_next_state_dist.loc),
                                                       tf.ones_like(approx_next_state_dist.scale))
-                loss_transition += 0.8 * tfp.distributions.kl_divergence(approx_next_state_dist, std_normal)
+                loss_transition += self.transition_kl * tfp.distributions.kl_divergence(approx_next_state_dist, std_normal)
                 loss_transition = tf.reduce_mean(loss_transition)
 
                 approx_n_rewards = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])

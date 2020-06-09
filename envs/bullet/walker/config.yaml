@@ -6,6 +6,7 @@ default:
     build_path: "Walker2DBulletEnv-v0"
 
     max_iter: -1
+    max_step: 1000000
     n_agents: 10
 
   sac_config:
@@ -36,6 +37,7 @@ hard:
     burn_in_step: 20
     use_rnn: true
     use_prediction: true
+    transition_kl: 1.
 
 hard_noextra:
   base_config:

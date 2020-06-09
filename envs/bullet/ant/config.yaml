@@ -26,7 +26,7 @@ hard:
     sac: sac_hard
 
   sac_config: &hard_sac
-    burn_in_step: 30
+    burn_in_step: 20
     use_rnn: true
     use_prediction: true
 

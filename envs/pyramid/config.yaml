@@ -5,7 +5,7 @@ default:
       linux: /data/linux-RL-Envs/RL-Envs.x86_64
 
     max_iter: -1
-    max_step: 200000
+    max_step: 100000
     reset_on_iteration: false
     n_agents: 10
 
@@ -27,6 +27,14 @@ ray:
     name: "ray20_pre_kn_{time}"
   reset_config: &ray_reset
     ray_length: 20
+
+ray_noextra:
+  base_config:
+    <<: *ray_base
+    name: "ray20_noextra_{time}"
+  reset_config: *ray_reset
+  sac_config:
+    use_extra_data: false
 
 ray_nopre:
   base_config:
