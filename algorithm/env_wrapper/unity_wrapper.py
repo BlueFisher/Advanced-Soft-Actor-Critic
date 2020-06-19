@@ -28,7 +28,7 @@ class UnityWrapper:
         self._env = UnityEnvironment(file_name=file_name,
                                      base_port=base_port,
                                      seed=seed,
-                                     args=['--scene', scene, '--n_agents', str(n_agents)],
+                                     additional_args=['--scene', scene, '--n_agents', str(n_agents)],
                                      side_channels=[self.engine_configuration_channel,
                                                     self.environment_parameters_channel])
 
@@ -45,10 +45,10 @@ class UnityWrapper:
                                                                            target_frame_rate=60)
 
         self._env.reset()
-        self.bahavior_name = self._env.get_behavior_names()[0]
+        self.bahavior_name = list(self._env.behavior_specs)[0]
 
     def init(self):
-        behavior_spec = self._env.get_behavior_spec(self.bahavior_name)
+        behavior_spec = self._env.behavior_specs[self.bahavior_name]
         logger.info(f'Observation shapes: {behavior_spec.observation_shapes}')
         is_discrete = behavior_spec.is_action_discrete()
         logger.info(f'Action size: {behavior_spec.action_size}. Is discrete: {is_discrete}')
@@ -95,7 +95,7 @@ class UnityWrapper:
         done[tmp_terminal_steps.agent_id] = True
 
         max_step = np.full([len(decision_steps), ], False, dtype=np.bool)
-        max_step[tmp_terminal_steps.agent_id] = tmp_terminal_steps.max_step
+        max_step[tmp_terminal_steps.agent_id] = tmp_terminal_steps.interrupted
 
         return ([obs.astype(np.float32) for obs in decision_steps.obs],
                 decision_steps.reward.astype(np.float32),
