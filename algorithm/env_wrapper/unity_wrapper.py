@@ -85,8 +85,8 @@ class UnityWrapper:
                                                           terminal_steps.agent_id])
             tmp_terminal_steps.reward = np.concatenate([tmp_terminal_steps.reward,
                                                         terminal_steps.reward])
-            tmp_terminal_steps.max_step = np.concatenate([tmp_terminal_steps.max_step,
-                                                          terminal_steps.max_step])
+            tmp_terminal_steps.interrupted = np.concatenate([tmp_terminal_steps.interrupted,
+                                                             terminal_steps.interrupted])
 
         reward = decision_steps.reward
         reward[tmp_terminal_steps.agent_id] = tmp_terminal_steps.reward
