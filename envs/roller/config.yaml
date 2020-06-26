@@ -22,7 +22,7 @@ default:
 
 vanilla:
   base_config:
-    scene: SimpleRoller
+    scene: Roller
     max_iter: 100
   sac_config:
     n_step: 10
@@ -30,7 +30,7 @@ vanilla:
 
 hard:
   base_config: &hard_base
-    scene: HardRoller
+    scene: Roller
     name: "pre_{time}"
     sac: sac_hard
     max_iter: 200

@@ -3,6 +3,7 @@ default:
     build_path:
       win32: C:\Users\Fisher\OneDrive\Documents\Unity\build-RL-Envs\RL-Envs.exe
       linux: /data/linux-RL-Envs/RL-Envs.x86_64
+    scene: 3DBall
 
     max_iter: 200
     max_step: 500
@@ -17,17 +18,8 @@ default:
     n_step: 5
     init_log_alpha: -4.6
 
-vanilla:
-  base_config:
-    scene: 3DBall
-
-hard_stack:
-  base_config:
-    scene: 3DBallHardStack
-
 hard:
   base_config: &hard_base
-    scene: 3DBallHard
     sac: sac_hard
     name: "pre_{time}"
   sac_config: &hard_sac
