@@ -72,6 +72,7 @@ class ModelRep(m.ModelBaseGRURep):
 
     def call(self, obs_list, pre_action, rnn_state):
         obs = obs_list[0]
+        obs = obs[..., :-2]
         obs = tf.concat([obs, pre_action], axis=-1)
         outputs, next_rnn_state = self.gru(obs, initial_state=rnn_state)
 

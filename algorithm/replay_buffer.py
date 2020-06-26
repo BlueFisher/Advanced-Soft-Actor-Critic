@@ -31,9 +31,7 @@ class DataStorage:
         for k, v in data.items():
             self._buffer[k][pointers] = v
 
-        self._size += tmp_len
-        if self._size > self.capacity:
-            self._size = self.capacity
+        self._size = min(self._size + tmp_len, self.capacity)
 
         self._pointer = pointers[-1] + 1
         if self._pointer == self.capacity:
