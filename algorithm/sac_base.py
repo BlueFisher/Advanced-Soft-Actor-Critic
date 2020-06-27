@@ -985,7 +985,7 @@ class SAC_Base(object):
         # Sample from replay buffer
         sampled = self.replay_buffer.sample()
         if sampled is None:
-            return
+            return 0
 
         """
         trans:
