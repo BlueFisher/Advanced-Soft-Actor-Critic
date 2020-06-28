@@ -23,7 +23,7 @@ default:
 vanilla:
   base_config:
     scene: Roller
-    max_iter: 100
+    max_iter: 200
   sac_config:
     n_step: 10
     tau: 0.9
@@ -33,7 +33,7 @@ hard:
     scene: Roller
     name: "pre_{time}"
     sac: sac_hard
-    max_iter: 200
+    max_iter: 500
   sac_config: &hard_sac
     burn_in_step: 10
     n_step: 5
@@ -49,17 +49,34 @@ hard_nopre:
     use_prediction: false
 
 visual:
-  base_config: &visual_base
+  base_config:
     scene: VisualRoller
-    name: "pre_{time}"
+    name: "{time}"
     sac: sac_visual
     max_iter: 100000
-  replay_config: &visual_replay
+  replay_config:
     batch_size: 64
     capacity: 131072
     beta: 0.4
     beta_increment_per_sampling: 0.001
-  sac_config: &visual_sac
+  sac_config:
+    write_summary_per_step: 100
+    n_step: 5
+    clip_epsilon: 0.2
+    init_log_alpha: -2.3
+
+visual_hard:
+  base_config: &visual_hard_base
+    scene: VisualRoller
+    name: "pre_{time}"
+    sac: sac_visual_hard
+    max_iter: 100000
+  replay_config: &visual_hard_replay
+    batch_size: 64
+    capacity: 131072
+    beta: 0.4
+    beta_increment_per_sampling: 0.001
+  sac_config: &visual_hard_sac
     write_summary_per_step: 100
     burn_in_step: 40
     n_step: 5
@@ -68,11 +85,11 @@ visual:
     clip_epsilon: 0.2
     init_log_alpha: -2.3
 
-visual_nopre:
+visual_hard_nopre:
   base_config:
-    <<: *visual_base
+    <<: *visual_hard_base
     name: "nopre_{time}"
   sac_config:
-    <<: *visual_sac
+    <<: *visual_hard_sac
     use_prediction: false
-  replay_config: *visual_replay
+  replay_config: *visual_hard_replay
