@@ -25,10 +25,15 @@ class DataStorage:
         if self._buffer is None:
             self._buffer = dict()
             for k, v in data.items():
-                self._buffer[k] = np.empty([self.capacity] + list(v.shape[1:]), dtype=np.float32)
+                # Store uint8 if data is image
+                dtype = np.uint8 if len(v.shape[1:]) == 3 else np.float32
+                self._buffer[k] = np.empty([self.capacity] + list(v.shape[1:]), dtype=dtype)
 
         pointers = (np.arange(tmp_len) + self._pointer) % self.capacity
         for k, v in data.items():
+            # Store uint8 [0, 255] if data is image
+            if len(self._buffer[k].shape[1:]) == 3:
+                v = v * 255
             self._buffer[k][pointers] = v
 
         self._size = min(self._size + tmp_len, self.capacity)
@@ -43,7 +48,14 @@ class DataStorage:
         self._buffer[key][pointers] = data
 
     def get(self, pointers):
-        return {k: v[pointers] for k, v in self._buffer.items()}
+        data = {k: v[pointers] for k, v in self._buffer.items()}
+
+        for k in data:
+            # Restore float [0, 1] if data is image
+            if len(self._buffer[k].shape[1:]) == 3:
+                data[k] = data[k].astype(np.float32) / 255.
+
+        return data
 
     def clear(self):
         self._size = 0
