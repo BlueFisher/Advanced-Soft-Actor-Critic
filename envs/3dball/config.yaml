@@ -6,7 +6,6 @@ default:
     scene: 3DBall
 
     max_iter: 200
-    max_step: 500
     n_agents: 10
 
   replay_config:
