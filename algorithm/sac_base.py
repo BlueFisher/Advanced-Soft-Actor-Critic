@@ -315,6 +315,8 @@ class SAC_Base(object):
         Initialize some @tf.function and specify tf.TensorSpec
         """
 
+        None_tensor = tf.TensorSpec((0, ))
+
         """ _udpate_normalizer
         obses_list """
         if self.use_normalization:
@@ -325,17 +327,11 @@ class SAC_Base(object):
 
         """ get_n_probs
         n_obses_list, n_selected_actions, rnn_state=None """
-        if self.use_rnn:
-            tmp_get_n_probs = tf.function(self.get_n_probs.python_function, input_signature=[
-                [tf.TensorSpec(shape=(None, None, *t)) for t in self.obs_dims],
-                tf.TensorSpec(shape=(None, None, self.action_dim)),
-                tf.TensorSpec(shape=(None, self.rnn_state_dim)),
-            ])
-        else:
-            tmp_get_n_probs = tf.function(self.get_n_probs.python_function, input_signature=[
-                [tf.TensorSpec(shape=(None, None, *t)) for t in self.obs_dims],
-                tf.TensorSpec(shape=(None, None, self.action_dim)),
-            ])
+        tmp_get_n_probs = tf.function(self.get_n_probs.python_function, input_signature=[
+            [tf.TensorSpec(shape=(None, None, *t)) for t in self.obs_dims],
+            tf.TensorSpec(shape=(None, None, self.action_dim)),
+            tf.TensorSpec(shape=(None, self.rnn_state_dim)) if self.use_rnn else None_tensor,
+        ])
         self.get_n_probs = _np_to_tensor(tmp_get_n_probs)
 
         if self.train_mode:
@@ -350,8 +346,8 @@ class SAC_Base(object):
                 tf.TensorSpec(shape=(None, step_size)),
                 [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims],
                 tf.TensorSpec(shape=(None, step_size)),
-                tf.TensorSpec(shape=(None, step_size)) if self.use_n_step_is else tf.TensorSpec((0, )),
-                tf.TensorSpec(shape=(None, self.rnn_state_dim)) if self.use_rnn else tf.TensorSpec((0, )),
+                tf.TensorSpec(shape=(None, step_size)) if self.use_n_step_is else None_tensor,
+                tf.TensorSpec(shape=(None, self.rnn_state_dim)) if self.use_rnn else None_tensor,
             ]
             self.get_td_error = _np_to_tensor(tf.function(self.get_td_error.python_function,
                                                           input_signature=signature))
@@ -366,9 +362,9 @@ class SAC_Base(object):
                 tf.TensorSpec(shape=(None, step_size)),
                 [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims],
                 tf.TensorSpec(shape=(None, step_size)),
-                tf.TensorSpec(shape=(None, step_size)) if self.use_n_step_is else tf.TensorSpec((0, )),
-                tf.TensorSpec(shape=(None, 1)) if self.use_priority else tf.TensorSpec((0, )),
-                tf.TensorSpec(shape=(None, self.rnn_state_dim)) if self.use_rnn else tf.TensorSpec((0, )),
+                tf.TensorSpec(shape=(None, step_size)) if self.use_n_step_is else None_tensor,
+                tf.TensorSpec(shape=(None, 1)) if self.use_priority else None_tensor,
+                tf.TensorSpec(shape=(None, self.rnn_state_dim)) if self.use_rnn else None_tensor,
             ]
             self._train = _np_to_tensor(tf.function(self._train.python_function,
                                                     input_signature=signature))
@@ -945,11 +941,8 @@ class SAC_Base(object):
         }
 
         if self.use_n_step_is:
-            if self.use_rnn:
-                n_mu_probs = self.get_n_probs(n_obses_list, n_actions,
-                                              n_rnn_states[:, 0, ...]).numpy()
-            else:
-                n_mu_probs = self.get_n_probs(n_obses_list, n_actions).numpy()
+            n_mu_probs = self.get_n_probs(n_obses_list, n_actions,
+                                          n_rnn_states[:, 0, ...] if self.use_rnn else None).numpy()
 
             mu_prob = n_mu_probs.reshape([-1])
             mu_prob = np.concatenate([mu_prob,
