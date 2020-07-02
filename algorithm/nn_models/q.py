@@ -57,6 +57,7 @@ class ModelBaseDiscreteQ(tf.keras.Model):
 class ModelDiscreteQ(ModelBaseDiscreteQ):
     def __init__(self, state_dim, action_dim,
                  dense_n=64, dense_depth=3):
+        super().__init__(state_dim, action_dim)
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(dense_n, tf.nn.relu) for _ in range(dense_depth)
         ] + [tf.keras.layers.Dense(action_dim)])

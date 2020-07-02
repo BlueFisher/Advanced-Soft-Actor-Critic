@@ -42,8 +42,8 @@ def gen_pre_n_actions(n_actions, keep_last_action=False):
 
 def _np_to_tensor(fn):
     def c(*args, **kwargs):
-        return fn(*[k for k in args if k is not None],
-                  **{k: v for k, v in kwargs.items() if v is not None})
+        return fn(*[k if k is not None else tf.zeros((0,)) for k in args],
+                  **{k: v if v is not None else tf.zeros((0,)) for k, v in kwargs.items()})
 
     return c
 
@@ -349,12 +349,10 @@ class SAC_Base(object):
                 tf.TensorSpec(shape=(None, step_size, self.action_dim)),
                 tf.TensorSpec(shape=(None, step_size)),
                 [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims],
-                tf.TensorSpec(shape=(None, step_size))
+                tf.TensorSpec(shape=(None, step_size)),
+                tf.TensorSpec(shape=(None, step_size)) if self.use_n_step_is else tf.TensorSpec((0, )),
+                tf.TensorSpec(shape=(None, self.rnn_state_dim)) if self.use_rnn else tf.TensorSpec((0, )),
             ]
-            if self.use_n_step_is:
-                signature.append(tf.TensorSpec(shape=(None, step_size)))
-            if self.use_rnn:
-                signature.append(tf.TensorSpec(shape=(None, self.rnn_state_dim)))
             self.get_td_error = _np_to_tensor(tf.function(self.get_td_error.python_function,
                                                           input_signature=signature))
 
@@ -367,14 +365,11 @@ class SAC_Base(object):
                 tf.TensorSpec(shape=(None, step_size, self.action_dim)),
                 tf.TensorSpec(shape=(None, step_size)),
                 [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims],
-                tf.TensorSpec(shape=(None, step_size))
+                tf.TensorSpec(shape=(None, step_size)),
+                tf.TensorSpec(shape=(None, step_size)) if self.use_n_step_is else tf.TensorSpec((0, )),
+                tf.TensorSpec(shape=(None, 1)) if self.use_priority else tf.TensorSpec((0, )),
+                tf.TensorSpec(shape=(None, self.rnn_state_dim)) if self.use_rnn else tf.TensorSpec((0, )),
             ]
-            if self.use_n_step_is:
-                signature.append(tf.TensorSpec(shape=(None, step_size)))
-            if self.use_priority:
-                signature.append(tf.TensorSpec(shape=(None, 1)))
-            if self.use_rnn:
-                signature.append(tf.TensorSpec(shape=(None, self.rnn_state_dim)))
             self._train = _np_to_tensor(tf.function(self._train.python_function,
                                                     input_signature=signature))
 
