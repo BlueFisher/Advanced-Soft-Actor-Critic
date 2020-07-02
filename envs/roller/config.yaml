@@ -55,13 +55,11 @@ visual:
     sac: sac_visual
     max_iter: 100000
   replay_config:
-    batch_size: 64
-    capacity: 131072
     beta: 0.4
     beta_increment_per_sampling: 0.001
   sac_config:
     write_summary_per_step: 100
-    n_step: 5
+    n_step: 3
     clip_epsilon: 0.2
     init_log_alpha: -2.3
 
@@ -72,14 +70,12 @@ visual_hard:
     sac: sac_visual_hard
     max_iter: 100000
   replay_config: &visual_hard_replay
-    batch_size: 64
-    capacity: 131072
     beta: 0.4
     beta_increment_per_sampling: 0.001
   sac_config: &visual_hard_sac
     write_summary_per_step: 100
     burn_in_step: 40
-    n_step: 5
+    n_step: 3
     use_rnn: true
     use_prediction: true
     clip_epsilon: 0.2

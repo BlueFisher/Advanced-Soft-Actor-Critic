@@ -10,10 +10,10 @@ ModelRep = m.ModelSimpleRep
 class ModelQ(m.ModelDiscreteQ):
     def __init__(self, state_dim, action_dim):
         super().__init__(state_dim, action_dim,
-                         dense_n=64, dense_depth=1)
+                         dense_n=64, dense_depth=2)
 
 
 class ModelPolicy(m.ModelDiscretePolicy):
     def __init__(self, state_dim, action_dim):
         super().__init__(state_dim, action_dim,
-                         dense_n=64, dense_depth=1)
+                         dense_n=64, dense_depth=2)
