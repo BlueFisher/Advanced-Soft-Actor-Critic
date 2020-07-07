@@ -4,6 +4,7 @@ from .policy import *
 from .q import *
 from .representation import *
 from .predictions import *
+from .exploration import *
 
 
 def dense(n=64, depth=2, pri=None, post=None):
