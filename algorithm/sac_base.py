@@ -48,6 +48,15 @@ def _np_to_tensor(fn):
     return c
 
 
+def scale_h(x, epsilon=0.001):
+    return tf.sign(x) * (tf.sqrt(tf.abs(x) + 1) - 1) + epsilon * x
+
+
+def scale_inverse_h(x, epsilon=0.001):
+    t = 1 + 4 * epsilon * (tf.abs(x) + 1 + epsilon)
+    return tf.sign(x) * ((tf.sqrt(t) - 1) / (2 * epsilon) - 1)
+
+
 class SAC_Base(object):
     _last_save_time = 0
 
@@ -85,6 +94,8 @@ class SAC_Base(object):
                  use_extra_data=True,
                  use_curiosity=False,
                  curiosity_strength=1,
+                 use_rnd=False,
+                 rnd_n_sample=10,
                  use_normalization=False,
 
                  replay_config=None):
@@ -153,6 +164,8 @@ class SAC_Base(object):
         self.use_extra_data = use_extra_data
         self.use_curiosity = use_curiosity
         self.curiosity_strength = curiosity_strength
+        self.use_rnd = use_rnd
+        self.rnd_n_sample = rnd_n_sample
         self.use_normalization = use_normalization
 
         self.use_add_with_td = False
@@ -238,6 +251,11 @@ class SAC_Base(object):
             self.model_forward = model.ModelForward(state_dim, self.action_dim)
             self.optimizer_forward = adam_optimizer()
 
+        if self.use_rnd:
+            self.model_rnd = model.ModelRND(state_dim, self.action_dim)
+            self.model_target_rnd = model.ModelRND(state_dim, self.action_dim)
+            self.optimizer_rnd = tf.keras.optimizers.Adam(learning_rate)
+
         self.model_q1 = model.ModelQ(state_dim, self.action_dim)
         self.model_target_q1 = model.ModelQ(state_dim, self.action_dim)
 
@@ -286,6 +304,10 @@ class SAC_Base(object):
         if self.use_curiosity:
             ckpt_saved['model_forward'] = self.model_forward
             ckpt_saved['optimizer_forward'] = self.optimizer_forward
+
+        if self.use_rnd:
+            ckpt_saved['model_rnd'] = self.model_rnd
+            ckpt_saved['optimizer_rnd'] = self.optimizer_rnd
 
         # Execute init() of all models from nn_models
         for m in ckpt_saved.values():
@@ -458,7 +480,7 @@ class SAC_Base(object):
             approx_next_n_states = self.model_forward(n_states, n_actions)
             in_n_rewards = tf.reduce_sum(tf.math.squared_difference(approx_next_n_states, next_n_states), axis=2) * 0.5
             in_n_rewards = in_n_rewards * self.curiosity_strength
-            n_rewards = n_rewards + in_n_rewards
+            n_rewards += in_n_rewards
 
         if self.is_discrete:
             q1 = self.model_target_q1(n_states)  # [Batch, n, action_dim]
@@ -501,6 +523,9 @@ class SAC_Base(object):
             v = min_q - alpha * n_actions_log_prob  # [Batch, n]
             next_v = min_next_q - alpha * next_n_actions_log_prob
 
+            # v = scale_inverse_h(v)
+            # next_v = scale_inverse_h(next_v)
+
         td_error = n_rewards + self.gamma * (1 - n_dones) * next_v - v  # [Batch, n]
         td_error = gamma_ratio * td_error
         if self.use_n_step_is:
@@ -526,6 +551,7 @@ class SAC_Base(object):
 
         # V_s + \sum{td_error}
         y = v[:, 0:1] + r  # [Batch, 1]
+        # y = scale_h(y)
 
         return y  # [None, 1]
 
@@ -649,6 +675,13 @@ class SAC_Base(object):
                 next_n_states = m_states[:, self.burn_in_step + 1:, ...]
                 loss_forward = loss_mse(approx_next_n_states, next_n_states)
 
+            if self.use_rnd:
+                approx_f = self.model_rnd(n_states[:, self.burn_in_step:, ...],
+                                          n_actions[:, self.burn_in_step:, ...])
+                f = self.model_target_rnd(n_states[:, self.burn_in_step:, ...],
+                                          n_actions[:, self.burn_in_step:, ...])
+                loss_rnd = tf.reduce_mean(tf.math.squared_difference(f, approx_f))
+
             if self.is_discrete:
                 # policy, q1, q2: [Batch, action_dim]
                 probs = tf.nn.softmax(policy.logits)
@@ -688,6 +721,10 @@ class SAC_Base(object):
             grads_forward = tape.gradient(loss_forward, self.model_forward.trainable_variables)
             self.optimizer_forward.apply_gradients(zip(grads_forward, self.model_forward.trainable_variables))
 
+        if self.use_rnd:
+            grads_rnd = tape.gradient(loss_rnd, self.model_rnd.trainable_variables)
+            self.optimizer_rnd.apply_gradients(zip(grads_rnd, self.model_rnd.trainable_variables))
+
         grads_policy = tape.gradient(loss_policy, self.model_policy.trainable_variables)
         self.optimizer_policy.apply_gradients(zip(grads_policy, self.model_policy.trainable_variables))
 
@@ -713,6 +750,9 @@ class SAC_Base(object):
         }
         if self.use_curiosity:
             summary['scalar']['loss/forward'] = loss_forward
+
+        if self.use_rnd:
+            summary['scalar']['loss/rnd'] = loss_rnd
 
         if self.use_prediction:
             summary['scalar']['loss/transition'] = tf.reduce_mean(approx_next_state_dist.entropy())
@@ -744,6 +784,26 @@ class SAC_Base(object):
         return tf.stack(n_rnn_states, axis=1)
 
     @tf.function
+    def rnd_sample(self, state, policy):
+        n_sample = self.rnd_n_sample
+        if self.is_discrete:
+            actions = policy.sample(n_sample)
+            actions = tf.one_hot(policy.sample(n_sample), self.action_dim)  # [n_sample, batch, action_dim]
+        else:
+            actions = tf.tanh(policy.sample(n_sample))  # [n_sample, batch, action_dim]
+
+        actions = tf.transpose(actions, [1, 0, 2])  # [batch, n_sample, action_dim]
+        states = tf.repeat(tf.expand_dims(state, 1), n_sample, axis=1)
+        approx_f = self.model_rnd(states, actions)
+        f = self.model_target_rnd(states, actions)  # [batch, n_sample, f]
+        loss = tf.reduce_sum(tf.math.squared_difference(f, approx_f), axis=2)  # [batch, n_sample]
+
+        idx = tf.argmax(loss, axis=1, output_type=tf.int32)  # [batch, ]
+        idx = tf.stack([tf.range(states.shape[0]), idx], axis=1)  # [batch, 2]
+
+        return tf.gather_nd(actions, idx)
+
+    @tf.function
     def choose_action(self, obs_list):
         """
         tf.function
@@ -751,10 +811,13 @@ class SAC_Base(object):
         """
         state = self.model_rep(obs_list)
         policy = self.model_policy(state)
-        if self.is_discrete:
-            return tf.one_hot(policy.sample(), self.action_dim)
+        if self.use_rnd:
+            return self.rnd_sample(state, policy)
         else:
-            return tf.tanh(policy.sample())
+            if self.is_discrete:
+                return tf.one_hot(policy.sample(), self.action_dim)
+            else:
+                return tf.tanh(policy.sample())
 
     @tf.function
     def choose_rnn_action(self, obs_list, pre_action, rnn_state):
@@ -766,14 +829,17 @@ class SAC_Base(object):
         obs_list = [tf.reshape(obs, (-1, 1, *obs.shape[1:])) for obs in obs_list]
         pre_action = tf.reshape(pre_action, (-1, 1, *pre_action.shape[1:]))
         state, next_rnn_state = self.model_rep(obs_list, pre_action, rnn_state)
-        policy = self.model_policy(state)
-        if self.is_discrete:
-            action = policy.sample()
-            action = tf.one_hot(action, self.action_dim)
-        else:
-            action = tf.tanh(policy.sample())
+        state = tf.reshape(state, (-1, state.shape[-1]))
 
-        action = tf.reshape(action, (-1, action.shape[-1]))
+        policy = self.model_policy(state)
+        if self.use_rnd:
+            action = self.rnd_sample(state, policy)
+        else:
+            if self.is_discrete:
+                action = tf.one_hot(policy.sample(), self.action_dim)
+            else:
+                action = tf.tanh(policy.sample())
+
         return action, next_rnn_state
 
     @tf.function
