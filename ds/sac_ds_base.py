@@ -43,6 +43,8 @@ class SAC_DS_Base(SAC_Base):
                  use_extra_data=True,
                  use_curiosity=False,
                  curiosity_strength=1,
+                 use_rnd=False,
+                 rnd_n_sample=10,
                  use_normalization=False,
 
                  noise=0.):
@@ -75,6 +77,8 @@ class SAC_DS_Base(SAC_Base):
         self.use_extra_data = use_extra_data
         self.use_curiosity = use_curiosity
         self.curiosity_strength = curiosity_strength
+        self.use_rnd = use_rnd
+        self.rnd_n_sample = rnd_n_sample
         self.use_normalization = use_normalization
         self.use_priority = True
         self.use_n_step_is = True
