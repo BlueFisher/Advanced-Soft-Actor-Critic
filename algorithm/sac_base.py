@@ -132,6 +132,9 @@ class SAC_Base(object):
         use_extra_data: If use extra data to train prediction model
         use_curiosity: If use curiosity
         curiosity_strength: Curiosity strength if use curiosity
+        use_rnd: If use RND
+        rnd_n_sample: RND sample times
+        use_normalization: If use observation normalization
         """
 
         physical_devices = tf.config.experimental.list_physical_devices('GPU')
@@ -793,7 +796,7 @@ class SAC_Base(object):
             actions = tf.tanh(policy.sample(n_sample))  # [n_sample, batch, action_dim]
 
         actions = tf.transpose(actions, [1, 0, 2])  # [batch, n_sample, action_dim]
-        states = tf.repeat(tf.expand_dims(state, 1), n_sample, axis=1)
+        states = tf.repeat(tf.expand_dims(state, 1), n_sample, axis=1)  # [batch, n_sample, state_dim]
         approx_f = self.model_rnd(states, actions)
         f = self.model_target_rnd(states, actions)  # [batch, n_sample, f]
         loss = tf.reduce_sum(tf.math.squared_difference(f, approx_f), axis=2)  # [batch, n_sample]

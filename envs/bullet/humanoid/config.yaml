@@ -1,0 +1,73 @@
+default:
+  base_config:
+    env_type: GYM
+    scene: Humanoid
+
+    build_path: "HumanoidBulletEnv-v0"
+
+    max_iter: -1
+    n_agents: 10
+
+  sac_config:
+    write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
+    save_model_per_step: 100000 # Save model every N steps
+    save_model_per_minute: 5 # Save model every N minutes
+
+    init_log_alpha: 0.
+    n_step: 3
+    _lambda: 0.995
+
+  replay_config:
+    batch_size: 1024
+    capacity: 2000000
+
+curiosity:
+  base_config:
+    name: "curiosity_{time}"
+  sac_config:
+    use_curiosity: true
+    curiosity_strength: 0.6
+
+rnd:
+  base_config:
+    name: "rnd_{time}"
+  sac_config:
+    use_rnd: true
+    rnd_n_sample: 30
+
+curiosity_rnd:
+  base_config:
+    name: "curiosityrnd_{time}"
+  sac_config:
+    use_curiosity: true
+    curiosity_strength: 0.6
+    use_rnd: true
+    rnd_n_sample: 30
+
+hard:
+  base_config: &hard_base
+    scene: HumanoidHard
+    sac: sac_hard
+
+  sac_config: &hard_sac
+    burn_in_step: 20
+    use_rnn: true
+    use_prediction: true
+
+hard_noextra:
+  base_config:
+    <<: *hard_base
+    name: "noextra_{time}"
+
+  sac_config:
+    <<: *hard_sac
+    use_extra_data: false
+
+hard_nopre:
+  base_config:
+    <<: *hard_base
+    name: "nopre_{time}"
+
+  sac_config:
+    <<: *hard_sac
+    use_prediction: false
