@@ -1,0 +1,38 @@
+default:
+  base_config:
+    env_type: GYM
+    scene: Humanoid
+
+    build_path: "HumanoidBulletEnv-v0"
+
+    n_agents: 10
+
+  net_config:
+    replay_host: 58.199.161.234
+    replay_port: 61000
+    learner_host: 58.199.161.234
+    learner_port: 61001
+
+  sac_config:
+    write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
+    save_model_per_step: 100000 # Save model every N steps
+    save_model_per_minute: 5 # Save model every N minutes
+
+    init_log_alpha: 0.
+    n_step: 3
+    _lambda: 0.995
+    use_normalization: false
+
+  replay_config:
+    batch_size: 1024
+    capacity: 2000000
+
+hard:
+  base_config: &hard_base
+    scene: Walker2DHard
+    sac: sac_hard
+
+  sac_config: &hard_sac
+    burn_in_step: 20
+    use_rnn: true
+    use_prediction: true

@@ -1,15 +1,17 @@
 base_config:
-  env_type: UNITY # UNITY, GYM
-  scene: scene
+  env_type: UNITY # UNITY or GYM
+  scene: scene # The scene name. 
+               # If in Unity envs, it indicates the specific scene. 
+               # If in Gym envs, it is just a readable name displayed in TensorBoard
 
-  # only for Unity Environments
-  build_path: 
+  # Only for Unity Environments
+  build_path: # Unity executable path
     win32: path_win32
     linux: path_linux
-  build_port: 7000
+  port: 5005
   
-  # only for Gym Enviroments
-  build_path: GymEnv
+  # Only for Gym Enviroments
+  # build_path: GymEnv # Like CartPole-v1
   
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
   sac: sac # Neural network models file
@@ -66,4 +68,6 @@ sac_config:
   use_extra_data: true # If use extra data to train prediction model
   use_curiosity: false # If use curiosity
   curiosity_strength: 1 # Curiosity strength if use curiosity
+  use_rnd: false # If use RND
+  rnd_n_sample: 10 # RND sample times
   use_normalization: false # If use observation normalization

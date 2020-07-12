@@ -150,7 +150,8 @@ class Actor(object):
                                        n_mu_probs,
                                        n_rnn_states)
         else:
-            n_mu_probs = self.sac_actor.get_n_probs(n_obses_list, n_actions).numpy()
+            n_mu_probs = self.sac_actor.get_n_probs(n_obses_list, n_actions,
+                                                    None).numpy()
             self._stub.add_transitions(n_obses_list,
                                        n_actions,
                                        n_rewards,

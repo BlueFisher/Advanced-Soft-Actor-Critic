@@ -177,9 +177,11 @@ class PrioritizedReplayBuffer:
 
         data_pointers = self._trans_storage.add(transitions)
         probs = np.full(len(data_pointers), max_p, dtype=np.float32)
-        # don't sample last ignore_size transitions
-        probs[np.isin(data_pointers, np.arange(self.capacity - ignore_size, self.capacity))] = 0
-        probs[-ignore_size:] = 0
+
+        if ignore_size > 0:
+            # Don't sample last ignore_size transitions
+            probs[np.isin(data_pointers, np.arange(self.capacity - ignore_size, self.capacity))] = 0
+            probs[-ignore_size:] = 0
         self._sum_tree.add(data_pointers, probs)
 
     def add_with_td_error(self, td_error, transitions: dict, ignore_size=0):
@@ -189,9 +191,11 @@ class PrioritizedReplayBuffer:
         data_pointers = self._trans_storage.add(transitions)
         clipped_errors = np.clip(td_error, self.td_error_min, self.td_error_max)
         probs = np.power(clipped_errors, self.alpha)
-        # don't sample last ignore_size transitions
-        probs[np.isin(data_pointers, np.arange(self.capacity - ignore_size, self.capacity))] = 0
-        probs[-ignore_size:] = 0
+
+        if ignore_size > 0:
+            # Don't sample last ignore_size transitions
+            probs[np.isin(data_pointers, np.arange(self.capacity - ignore_size, self.capacity))] = 0
+            probs[-ignore_size:] = 0
         self._sum_tree.add(data_pointers, probs)
 
     def sample(self):
