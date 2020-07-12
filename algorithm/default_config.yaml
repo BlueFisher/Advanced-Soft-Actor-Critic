@@ -11,7 +11,7 @@ base_config:
   port: 5005
   
   # Only for Gym Enviroments
-  build_path: GymEnv # Like CartPole-v1
+  # build_path: GymEnv # Like CartPole-v1
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
   sac: sac # Neural network models file
