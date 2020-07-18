@@ -25,6 +25,7 @@ from algorithm.agent import Agent
 import algorithm.config_helper as config_helper
 
 
+MAX_THREAD_WORKERS = 64
 EVALUATION_INTERVAL = 10
 EVALUATION_WAITING_TIME = 1
 RESAMPLE_TIME = 2
@@ -341,7 +342,7 @@ class Learner(object):
                                       self._get_policy_variables,
                                       self._get_td_error,
                                       self._post_rewards)
-            self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=20))
+            self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS))
             learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, self.server)
             self.server.add_insecure_port(f'[::]:{self.net_config["learner_port"]}')
             self.server.start()

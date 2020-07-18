@@ -21,6 +21,9 @@ from algorithm.replay_buffer import PrioritizedReplayBuffer
 import algorithm.config_helper as config_helper
 
 
+MAX_THREAD_WORKERS = 64
+
+
 class Replay(object):
     _replay_buffer_lock = threading.Lock()
 
@@ -181,7 +184,7 @@ class Replay(object):
                                  self._update_td_error,
                                  self._update_transitions,
                                  self._clear)
-        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS))
         replay_pb2_grpc.add_ReplayServiceServicer_to_server(servicer, self.server)
         self.server.add_insecure_port(f'[::]:{net_config["replay_port"]}')
         self.server.start()
