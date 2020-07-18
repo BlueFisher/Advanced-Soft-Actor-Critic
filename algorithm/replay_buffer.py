@@ -4,6 +4,11 @@ import random
 import time
 
 import numpy as np
+import logging
+
+
+logger = logging.getLogger('replay')
+logger.setLevel(level=logging.INFO)
 
 
 class DataStorage:
@@ -111,19 +116,23 @@ class SumTree:
         Array type for storing:
         [0,1,2,3,4,5,6]
         """
-        pri_seg = self.total_p / batch_size       # priority segment
-        pri_seg_low = np.arange(batch_size)
-        pri_seg_high = pri_seg_low + 1
-        v = np.random.uniform(pri_seg_low * pri_seg, pri_seg_high * pri_seg)
-        leaf_idx = np.zeros(batch_size, dtype=np.int32)
+        try:
+            pri_seg = self.total_p / batch_size       # priority segment
+            pri_seg_low = np.arange(batch_size)
+            pri_seg_high = pri_seg_low + 1
+            v = np.random.uniform(pri_seg_low * pri_seg, pri_seg_high * pri_seg)
+            leaf_idx = np.zeros(batch_size, dtype=np.int32)
 
-        for _ in range(self.depth - 1):
-            node1 = leaf_idx * 2 + 1
-            node2 = leaf_idx * 2 + 2
-            t = np.logical_or(v <= self._tree[node1], self._tree[node2] == 0)
-            leaf_idx[t] = node1[t]
-            leaf_idx[~t] = node2[~t]
-            v[~t] -= self._tree[node1[~t]]
+            for _ in range(self.depth - 1):
+                node1 = leaf_idx * 2 + 1
+                node2 = leaf_idx * 2 + 2
+                t = np.logical_or(v <= self._tree[node1], self._tree[node2] == 0)
+                leaf_idx[t] = node1[t]
+                leaf_idx[~t] = node2[~t]
+                v[~t] -= self._tree[node1[~t]]
+        except Exception as e:
+            logger.error(e)
+            logger.info(self.total_p)
 
         return leaf_idx, self._tree[leaf_idx]
 
