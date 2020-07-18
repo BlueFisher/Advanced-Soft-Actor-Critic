@@ -1,5 +1,6 @@
 from collections import deque
 import math
+from math import nan
 import random
 import time
 
@@ -116,23 +117,19 @@ class SumTree:
         Array type for storing:
         [0,1,2,3,4,5,6]
         """
-        try:
-            pri_seg = self.total_p / batch_size       # priority segment
-            pri_seg_low = np.arange(batch_size)
-            pri_seg_high = pri_seg_low + 1
-            v = np.random.uniform(pri_seg_low * pri_seg, pri_seg_high * pri_seg)
-            leaf_idx = np.zeros(batch_size, dtype=np.int32)
+        pri_seg = self.total_p / batch_size       # priority segment
+        pri_seg_low = np.arange(batch_size)
+        pri_seg_high = pri_seg_low + 1
+        v = np.random.uniform(pri_seg_low * pri_seg, pri_seg_high * pri_seg)
+        leaf_idx = np.zeros(batch_size, dtype=np.int32)
 
-            for _ in range(self.depth - 1):
-                node1 = leaf_idx * 2 + 1
-                node2 = leaf_idx * 2 + 2
-                t = np.logical_or(v <= self._tree[node1], self._tree[node2] == 0)
-                leaf_idx[t] = node1[t]
-                leaf_idx[~t] = node2[~t]
-                v[~t] -= self._tree[node1[~t]]
-        except Exception as e:
-            logger.error(e)
-            logger.info(self.total_p)
+        for _ in range(self.depth - 1):
+            node1 = leaf_idx * 2 + 1
+            node2 = leaf_idx * 2 + 2
+            t = np.logical_or(v <= self._tree[node1], self._tree[node2] == 0)
+            leaf_idx[t] = node1[t]
+            leaf_idx[~t] = node2[~t]
+            v[~t] -= self._tree[node1[~t]]
 
         return leaf_idx, self._tree[leaf_idx]
 
@@ -199,6 +196,10 @@ class PrioritizedReplayBuffer:
 
         data_pointers = self._trans_storage.add(transitions)
         clipped_errors = np.clip(td_error, self.td_error_min, self.td_error_max)
+        if np.isnan(np.min(clipped_errors)):
+            logger.error('td_error has nan')
+            clipped_errors = np.nan_to_num(clipped_errors)
+
         probs = np.power(clipped_errors, self.alpha)
 
         if ignore_size > 0:
@@ -231,7 +232,9 @@ class PrioritizedReplayBuffer:
 
         clipped_errors = np.clip(td_error, self.td_error_min, self.td_error_max)
         if np.isnan(np.min(clipped_errors)):
-            raise RuntimeError('td_error has nan')
+            logger.error('td_error has nan')
+            clipped_errors = np.nan_to_num(clipped_errors)
+
         probs = np.power(clipped_errors, self.alpha)
 
         self._sum_tree.update(leaf_pointers, probs)
@@ -259,25 +262,31 @@ class PrioritizedReplayBuffer:
 
 if __name__ == "__main__":
     import time
-    replay_buffer = PrioritizedReplayBuffer(256, 524288)
+    replay_buffer = PrioritizedReplayBuffer(1024, 2000000)
     n_step = 5
 
     while True:
-        s = np.random.randint(n_step + 1, 500)
-        replay_buffer.add({
-            'state': np.random.randn(s, 1),
-            'action': np.random.randn(s)
-        }, ignore_size=n_step)
-        # print(replay_buffer._sum_tree._tree[replay_buffer.capacity - 1:])
+        batch = np.random.randint(n_step + 1, 500)
+
+        td_error = np.random.randn(batch)
+        td_error[0] = nan
+
+        replay_buffer.add_with_td_error(td_error, {
+            'state': np.random.randn(batch, 1),
+            'action': np.random.randn(batch)
+        }, ignore_size=0)
+
         sampled = replay_buffer.sample()
         if sampled is None:
             print('None')
         else:
-            points, (a, b), ratio = sampled
-            print(a, b)
-            # print(replay_buffer._sum_tree.leaf_idx_to_data_idx(points))
-            for i in range(1, n_step + 1):
-                replay_buffer.get_storage_data(points + i)
-            replay_buffer.update(points, np.random.random(len(points)).astype(np.float32))
+            print(replay_buffer._sum_tree.total_p)
+            print(replay_buffer.size)
+            # points, (a, b), ratio = sampled
+            # print(a, b)
+            # # print(replay_buffer._sum_tree.leaf_idx_to_data_idx(points))
+            # for i in range(1, n_step + 1):
+            #     replay_buffer.get_storage_data(points + i)
+            # replay_buffer.update(points, np.random.random(len(points)).astype(np.float32))
 
         # input()
