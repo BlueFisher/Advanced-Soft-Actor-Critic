@@ -11,6 +11,7 @@ This project is the algorithm [Soft Actor-Critic](https://arxiv.org/pdf/1812.059
 - R2D2 ([Recurrent Experience Replay In Distributed Reinforcement Learning](https://openreview.net/pdf?id=r1lyTjAqYX))
 - *Representation model, Q function and policy strucutres
 - *Recurrent prediction model
+- Noisy Networks for Exploration ([Noisy Networks for Exploration](https://arxiv.org/abs/1706.10295))
 - Distributed training ([Distributed Prioritized Experience Replay](http://arxiv.org/abs/1803.00933))
 - Discrete action ([Soft Actor-Critic for Discrete Action Settings](http://arxiv.org/abs/1910.07207))
 - Curiosity mechanism ([Curiosity-driven Exploration by Self-supervised Prediction](http://arxiv.org/abs/1705.05363))
