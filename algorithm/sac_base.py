@@ -856,6 +856,7 @@ class SAC_Base(object):
                      rnn_state=None):
         """
         tf.function
+        Return the td-error of (burn-in + n-step) observations (sampled from replay buffer)
         """
         m_obses_list = [tf.concat([n_obses, tf.reshape(next_obs, (-1, 1, *next_obs.shape[1:]))], axis=1)
                         for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
@@ -912,6 +913,8 @@ class SAC_Base(object):
         next_obs_list: list([1, obs_dim_i], ...)
         n_dones: [1, episode_len]
         n_rnn_states: [1, episode_len, rnn_state_dim]
+
+        Return the td-error of raw episode observations
         """
         ignore_size = self.burn_in_step + self.n_step
 
@@ -963,6 +966,7 @@ class SAC_Base(object):
 
     def save_model(self):
         self.ckpt_manager.save(self.global_step)
+        logger.info(f"Model saved at {self.global_step.numpy()}")
 
     def fill_replay_buffer(self,
                            n_obses_list,

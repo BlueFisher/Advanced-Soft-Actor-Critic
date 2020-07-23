@@ -63,6 +63,7 @@ sac_config:
 
   gamma: 0.99 # Discount factor
   _lambda: 1.0 # Discount factor for V-trace
+  clip_epsilon: 0.2 # Epsilon for q and policy clip
 
   use_prediction: false # If train a transition model
   use_extra_data: true # If use extra data to train prediction model

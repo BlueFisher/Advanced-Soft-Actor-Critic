@@ -6,7 +6,7 @@ This project is the algorithm [Soft Actor-Critic](https://arxiv.org/pdf/1812.059
 
 - N-step
 - V-trace ([IMPALA: Scalable Distributed Deep-RL with Importance Weighted Actor-Learner Architectures](http://arxiv.org/abs/1802.01561))
-- [Prioritized Experience Replay](http://arxiv.org/abs/1511.05952)
+- [Prioritized Experience Replay](http://arxiv.org/abs/1511.05952) (100% Numpy sumtree)
 - *Episode Experience Replay
 - R2D2 ([Recurrent Experience Replay In Distributed Reinforcement Learning](https://openreview.net/pdf?id=r1lyTjAqYX))
 - *Representation model, Q function and policy strucutres
