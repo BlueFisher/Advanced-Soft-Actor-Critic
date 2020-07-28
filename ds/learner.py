@@ -37,6 +37,7 @@ class Learner(object):
 
     _training_lock = threading.Lock()
     _is_training = False
+    _closed = False
 
     def __init__(self, config_path, args):
         self._now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
@@ -207,7 +208,7 @@ class Learner(object):
             while True:
                 # not training, waiting...
                 if self.train_mode and not self._is_training:
-                    if self._t_evaluation_terminated:
+                    if self._closed:
                         break
                     time.sleep(EVALUATION_WAITING_TIME)
                     continue
@@ -306,7 +307,7 @@ class Learner(object):
     def _run_training_client(self):
         self._stub.clear_replay_buffer()
 
-        while True:
+        while not self._closed:
             (pointers,
              n_obses_list,
              n_actions,
@@ -328,13 +329,18 @@ class Learner(object):
                                                        priority_is=priority_is,
                                                        rnn_state=rnn_state)
 
+            if np.isnan(np.min(td_error)):
+                self.logger.error('NAN in td_error')
+                self.sac.save_model()
+                self.close()
+                break
+
             self._stub.update_td_error(pointers, td_error)
             for pointers, key, data in update_data:
                 self._stub.update_transitions(pointers, key, data)
 
     def _run(self):
         t_evaluation = threading.Thread(target=self._policy_evaluation)
-        self._t_evaluation_terminated = False
         t_evaluation.start()
 
         if self.train_mode:
@@ -351,7 +357,8 @@ class Learner(object):
             self._run_training_client()
 
     def close(self):
-        self._t_evaluation_terminated = True
+        self._is_training = False
+        self._closed = True
         self.env.close()
         if self.train_mode:
             self.server.stop(None)

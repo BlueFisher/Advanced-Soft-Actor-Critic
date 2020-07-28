@@ -615,28 +615,29 @@ class SAC_Base(object):
                 loss_q1 = tf.square(q1_single - y)
                 loss_q2 = tf.square(q2_single - y)
             else:
-                clipped_q1 = target_q1 + tf.clip_by_value(
-                    q1 - target_q1,
-                    -self.clip_epsilon,
-                    self.clip_epsilon,
-                )
-                clipped_q2 = target_q2 + tf.clip_by_value(
-                    q2 - target_q2,
-                    -self.clip_epsilon,
-                    self.clip_epsilon,
-                )
+                if self.clip_epsilon > 0:
+                    clipped_q1 = target_q1 + tf.clip_by_value(
+                        q1 - target_q1,
+                        -self.clip_epsilon,
+                        self.clip_epsilon,
+                    )
+                    clipped_q2 = target_q2 + tf.clip_by_value(
+                        q2 - target_q2,
+                        -self.clip_epsilon,
+                        self.clip_epsilon,
+                    )
 
-                loss_q1_a = tf.square(clipped_q1 - y)
-                loss_q2_a = tf.square(clipped_q2 - y)
+                    loss_q1_a = tf.square(clipped_q1 - y)
+                    loss_q2_a = tf.square(clipped_q2 - y)
 
-                loss_q1_b = tf.square(q1 - y)
-                loss_q2_b = tf.square(q2 - y)
+                    loss_q1_b = tf.square(q1 - y)
+                    loss_q2_b = tf.square(q2 - y)
 
-                loss_q1 = tf.maximum(loss_q1_a, loss_q1_b)
-                loss_q2 = tf.maximum(loss_q2_a, loss_q2_b)
-
-                # loss_q1 = tf.square(q1 - y)
-                # loss_q2 = tf.square(q2 - y)
+                    loss_q1 = tf.maximum(loss_q1_a, loss_q1_b)
+                    loss_q2 = tf.maximum(loss_q2_a, loss_q2_b)
+                else:
+                    loss_q1 = tf.square(q1 - y)
+                    loss_q2 = tf.square(q2 - y)
 
             if self.use_priority:
                 loss_q1 *= priority_is
@@ -737,39 +738,39 @@ class SAC_Base(object):
 
         del tape
 
-        # TODO: Summaries should be returned because of the issus
-        # https://github.com/tensorflow/tensorflow/issues/28007
-        summary = {
-            'scalar': {
-                'loss/y': tf.reduce_mean(y),
-                'loss/rep_q': loss_rep_q,
-                'loss/Q1': loss_q1,
-                'loss/Q2': loss_q2,
-                'loss/policy': loss_policy,
-                'loss/entropy': tf.reduce_mean(policy.entropy()),
-                'loss/alpha': alpha,
-            },
-            'image': {}
-        }
-        if self.use_curiosity:
-            summary['scalar']['loss/forward'] = loss_forward
+        if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
+            with self.summary_writer.as_default():
+                tf.summary.scalar('loss/y', tf.reduce_mean(y), step=self.global_step)
+                tf.summary.scalar('loss/rep_q', loss_rep_q, step=self.global_step)
+                tf.summary.scalar('loss/q', tf.reduce_mean([loss_q1, loss_q2]), step=self.global_step)
+                tf.summary.scalar('loss/policy', loss_policy, step=self.global_step)
+                tf.summary.scalar('loss/entropy', tf.reduce_mean(policy.entropy()), step=self.global_step)
+                tf.summary.scalar('loss/alpha', alpha, step=self.global_step)
 
-        if self.use_rnd:
-            summary['scalar']['loss/rnd'] = loss_rnd
+                if self.use_curiosity:
+                    tf.summary.scalar('loss/forward', loss_forward, step=self.global_step)
 
-        if self.use_prediction:
-            summary['scalar']['loss/transition'] = tf.reduce_mean(approx_next_state_dist.entropy())
-            summary['scalar']['loss/reward'] = loss_reward
-            summary['scalar']['loss/observation'] = loss_obs
+                if self.use_rnd:
+                    tf.summary.scalar('loss/rnd', loss_rnd, step=self.global_step)
 
-            approx_obs_list = self.model_observation(m_states[0:1, self.burn_in_step:, ...])
-            if not isinstance(approx_obs_list, (list, tuple)):
-                approx_obs_list = [approx_obs_list]
-            for approx_obs in approx_obs_list:
-                if len(approx_obs.shape) > 3:
-                    summary['image']['observation'] = tf.reshape(approx_obs, [-1, *approx_obs.shape[2:]])
+                if self.use_prediction:
+                    tf.summary.scalar('loss/transition',
+                                      tf.reduce_mean(approx_next_state_dist.entropy()),
+                                      step=self.global_step)
+                    tf.summary.scalar('loss/reward', loss_reward, step=self.global_step)
+                    tf.summary.scalar('loss/observation', loss_obs, step=self.global_step)
 
-        return summary
+                    approx_obs_list = self.model_observation(m_states[0:1, self.burn_in_step:, ...])
+                    if not isinstance(approx_obs_list, (list, tuple)):
+                        approx_obs_list = [approx_obs_list]
+                    for approx_obs in approx_obs_list:
+                        if len(approx_obs.shape) > 3:
+                            tf.print(approx_obs)
+                            tf.summary.image('observation',
+                                             tf.reshape(approx_obs, [-1, *approx_obs.shape[2:]]),
+                                             max_outputs=self.n_step, step=self.global_step)
+
+            self.summary_writer.flush()
 
     @tf.function
     def get_n_rnn_states(self, n_obses_list, n_actions, rnn_state):
@@ -1096,14 +1097,14 @@ class SAC_Base(object):
             m_rnn_states = trans['rnn_state']
             rnn_state = m_rnn_states[:, 0, ...]
 
-        summary = self._train(n_obses_list=n_obses_list,
-                              n_actions=n_actions,
-                              n_rewards=n_rewards,
-                              next_obs_list=next_obs_list,
-                              n_dones=n_dones,
-                              n_mu_probs=n_mu_probs if self.use_n_step_is else None,
-                              priority_is=priority_is if self.use_priority else None,
-                              initial_rnn_state=rnn_state if self.use_rnn else None)
+        self._train(n_obses_list=n_obses_list,
+                    n_actions=n_actions,
+                    n_rewards=n_rewards,
+                    next_obs_list=next_obs_list,
+                    n_dones=n_dones,
+                    n_mu_probs=n_mu_probs if self.use_n_step_is else None,
+                    priority_is=priority_is if self.use_priority else None,
+                    initial_rnn_state=rnn_state if self.use_rnn else None)
 
         step = self.global_step.numpy()
 
@@ -1111,15 +1112,6 @@ class SAC_Base(object):
                 and (time.time() - self._last_save_time) / 60 >= self.save_model_per_minute:
             self.save_model()
             self._last_save_time = time.time()
-
-        if self.summary_writer is not None and step % self.write_summary_per_step == 0:
-            with self.summary_writer.as_default():
-                for k, v in summary['scalar'].items():
-                    tf.summary.scalar(k, v, step=step)
-                for k, v in summary['image'].items():
-                    tf.summary.image(k, v, max_outputs=self.n_step, step=step)
-
-            self.summary_writer.flush()
 
         if self.use_n_step_is:
             n_pi_probs = self.get_n_probs(n_obses_list,
