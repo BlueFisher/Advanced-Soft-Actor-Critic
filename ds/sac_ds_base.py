@@ -137,14 +137,14 @@ class SAC_DS_Base(SAC_Base):
               priority_is,
               rnn_state=None):
 
-        summary = self._train(n_obses_list=n_obses_list,
-                              n_actions=n_actions,
-                              n_rewards=n_rewards,
-                              next_obs_list=next_obs_list,
-                              n_dones=n_dones,
-                              n_mu_probs=n_mu_probs,
-                              priority_is=priority_is,
-                              initial_rnn_state=rnn_state if self.use_rnn else None)
+        self._train(n_obses_list=n_obses_list,
+                    n_actions=n_actions,
+                    n_rewards=n_rewards,
+                    next_obs_list=next_obs_list,
+                    n_dones=n_dones,
+                    n_mu_probs=n_mu_probs,
+                    priority_is=priority_is,
+                    initial_rnn_state=rnn_state if self.use_rnn else None)
 
         step = self.global_step.numpy()
 
@@ -152,13 +152,6 @@ class SAC_DS_Base(SAC_Base):
                 and (time.time() - self._last_save_time) / 60 >= self.save_model_per_minute:
             self.save_model()
             self._last_save_time = time.time()
-
-        if self.summary_writer is not None and step % self.write_summary_per_step == 0:
-            with self.summary_writer.as_default():
-                for k, v in summary['scalar'].items():
-                    tf.summary.scalar(k, v, step=step)
-                for k, v in summary['image'].items():
-                    tf.summary.image(k, v, max_outputs=self.n_step, step=step)
 
             self.summary_writer.flush()
 

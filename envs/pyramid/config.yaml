@@ -1,7 +1,7 @@
 default:
   base_config:
     build_path:
-      win32: C:\Users\Fisher\OneDrive\Documents\Unity\build-RL-Envs\RL-Envs.exe
+      win32: C:\Users\Fisher\Nextcloud\Documents\Unity\win-RL-Envs\RL-Envs.exe
       linux: /data/linux-RL-Envs/RL-Envs.x86_64
 
     max_iter: -1
