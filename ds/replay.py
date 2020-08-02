@@ -27,8 +27,8 @@ MAX_THREAD_WORKERS = 64
 class Replay(object):
     _replay_buffer_lock = threading.Lock()
 
-    def __init__(self, config_path, args):
-        self.config, net_config, replay_config, sac_config = self._init_config(config_path, args)
+    def __init__(self, root_dir, config_dir, args):
+        self.config, net_config, replay_config, sac_config = self._init_config(root_dir, config_dir, args)
 
         self._replay_buffer = PrioritizedReplayBuffer(**replay_config)
 
@@ -44,10 +44,12 @@ class Replay(object):
             self.logger.warning('KeyboardInterrupt in _run_replay_server')
             self.close()
 
-    def _init_config(self, config_path, args):
-        config_file_path = f'{config_path}/config_ds.yaml'
-        config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
-                                                           config_file_path,
+    def _init_config(self, root_dir, config_dir, args):
+        config_abs_dir = Path(root_dir).joinpath(config_dir)
+        config_abs_path = config_abs_dir.joinpath('config_ds.yaml')
+        default_config_abs_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
+        config = config_helper.initialize_config_from_yaml(default_config_abs_path,
+                                                           config_abs_path,
                                                            args.config)
 
         self.logger = config_helper.set_logger('ds.replay', args.logger_file)

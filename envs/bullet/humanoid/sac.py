@@ -37,5 +37,32 @@ class ModelPolicy(m.ModelContinuesPolicy):
     def __init__(self, state_dim, action_dim):
         super().__init__(state_dim, action_dim,
                          dense_n=256, dense_depth=3,
-                         mean_n=256, mean_depth=2,
-                         logstd_n=256, logstd_depth=2)
+                         mean_n=256, mean_depth=1,
+                         logstd_n=256, logstd_depth=1)
+
+
+# class ModelPolicy(m.ModelBasePolicy):
+#     def __init__(self, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
+
+#         self.dense = tf.keras.Sequential([
+#             m.Noisy(512, tf.nn.relu) for _ in range(3)
+#         ])
+#         self.mean_model = tf.keras.Sequential([
+#             m.Noisy(512, tf.nn.relu),
+#             m.Noisy(self.action_dim)
+#         ])
+#         self.logstd_model = tf.keras.Sequential([
+#             m.Noisy(512, tf.nn.relu),
+#             m.Noisy(self.action_dim)
+#         ])
+#         self.tfpd = tfp.layers.DistributionLambda(
+#             make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
+
+#     def call(self, state):
+#         l = self.dense(state)
+
+#         mean = self.mean_model(l)
+#         logstd = self.logstd_model(l)
+
+#         return self.tfpd([tf.tanh(mean), tf.clip_by_value(tf.exp(logstd), 0.1, 1.0)])

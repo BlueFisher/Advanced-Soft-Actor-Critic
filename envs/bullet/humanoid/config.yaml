@@ -15,11 +15,14 @@ default:
 
     init_log_alpha: 0.
     n_step: 3
-    _lambda: 0.995
+    clip_epsilon: 0.2
+    learning_rate: 0.0001
+
+    use_normalization: true
 
   replay_config:
     batch_size: 1024
-    capacity: 2000000
+    capacity: 1048576
 
 curiosity:
   base_config:

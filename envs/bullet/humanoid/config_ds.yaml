@@ -8,9 +8,9 @@ default:
     n_agents: 10
 
   net_config:
-    replay_host: 58.199.166.11
+    replay_host: 127.0.0.1
     replay_port: 61000
-    learner_host: 58.199.166.11
+    learner_host: 127.0.0.1
     learner_port: 61001
 
   sac_config:
@@ -20,12 +20,16 @@ default:
 
     init_log_alpha: 0.
     n_step: 3
-    _lambda: 0.995
-    use_normalization: false
+    clip_epsilon: 1.
+    learning_rate: 0.0001
+
+    # use_curiosity: true
+    # curiosity_strength: 0.6
 
   replay_config:
     batch_size: 1024
-    capacity: 2000000
+    capacity: 1048576
+    td_error_max: 5. # Clipped abs error
 
 hard:
   base_config: &hard_base

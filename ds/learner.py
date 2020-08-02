@@ -3,11 +3,12 @@ import importlib
 import logging
 import os
 from pathlib import Path
+import random
 import shutil
+import string
 import sys
 import threading
 import time
-import yaml
 
 import numpy as np
 import grpc
@@ -39,7 +40,7 @@ class Learner(object):
     _is_training = False
     _closed = False
 
-    def __init__(self, config_path, args):
+    def __init__(self, root_dir, config_dir, args):
         self._now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
         (self.config,
@@ -47,19 +48,23 @@ class Learner(object):
          self.reset_config,
          replay_config,
          sac_config,
-         model_root_path) = self._init_config(config_path, args)
+         model_abs_dir,
+         config_abs_dir) = self._init_config(root_dir, config_dir, args)
 
-        self._init_env(config_path, replay_config, sac_config, model_root_path)
+        self._init_env(model_abs_dir, config_abs_dir,
+                       sac_config)
         try:
             self._run()
         except KeyboardInterrupt:
             self.logger.warning('KeyboardInterrupt in _run')
             self.close()
 
-    def _init_config(self, config_path, args):
-        config_file_path = f'{config_path}/config_ds.yaml'
-        config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
-                                                           config_file_path,
+    def _init_config(self, root_dir, config_dir, args):
+        config_abs_dir = Path(root_dir).joinpath(config_dir)
+        config_abs_path = config_abs_dir.joinpath('config_ds.yaml')
+        default_config_file_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
+        config = config_helper.initialize_config_from_yaml(default_config_file_path,
+                                                           config_abs_path,
                                                            args.config)
 
         # Initialize config from command line arguments
@@ -77,14 +82,16 @@ class Learner(object):
         if args.agents is not None:
             config['base_config']['n_agents'] = args.agents
 
-        config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now)
-        model_root_path = f'models/ds/{config["base_config"]["scene"]}/{config["base_config"]["name"]}'
+        # Replace {time} from current time and random letters
+        rand = ''.join(random.sample(string.ascii_letters, 4))
+        config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now + rand)
+        model_abs_dir = Path(root_dir).joinpath(f'models/{config["base_config"]["scene"]}/{config["base_config"]["name"]}')
 
-        logger_file = f'{model_root_path}/{args.logger_file}' if args.logger_file is not None else None
+        logger_file = f'{model_abs_dir}/{args.logger_file}' if args.logger_file is not None else None
         self.logger = config_helper.set_logger('ds.learner', logger_file)
 
         if self.train_mode:
-            config_helper.save_config(config, model_root_path, 'config.yaml')
+            config_helper.save_config(config, model_abs_dir, 'config_ds.yaml')
 
         config_helper.display_config(config, self.logger)
 
@@ -93,9 +100,11 @@ class Learner(object):
                 config['reset_config'],
                 config['replay_config'],
                 config['sac_config'],
-                model_root_path)
+                model_abs_dir,
+                config_abs_dir)
 
-    def _init_env(self, config_path, replay_config, sac_config, model_root_path):
+    def _init_env(self, model_abs_dir, config_abs_dir,
+                  sac_config):
         self._stub = StubController(self.net_config)
 
         if self.config['env_type'] == 'UNITY':
@@ -125,16 +134,19 @@ class Learner(object):
         self.logger.info(f'{self.config["build_path"]} initialized')
 
         # If model exists, load saved model, or copy a new one
-        if os.path.isfile(f'{model_root_path}/sac_model.py'):
-            custom_sac_model = importlib.import_module(f'{model_root_path.replace("/",".")}.sac_model')
+        if os.path.isfile(f'{config_abs_dir}/sac_model.py'):
+            spec = importlib.util.spec_from_file_location('nn',  f'{model_abs_dir}/sac_model.py')
         else:
-            custom_sac_model = importlib.import_module(f'{config_path.replace("/",".")}.{self.config["sac"]}')
-            shutil.copyfile(f'{config_path}/{self.config["sac"]}.py', f'{model_root_path}/sac_model.py')
+            spec = importlib.util.spec_from_file_location('nn', f'{config_abs_dir}/{self.config["sac"]}.py')
+            shutil.copyfile(f'{config_abs_dir}/{self.config["sac"]}.py', f'{model_abs_dir}/sac_model.py')
+
+        custom_sac_model = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(custom_sac_model)
 
         self.sac = SAC_DS_Base(obs_dims=self.obs_dims,
                                action_dim=self.action_dim,
                                is_discrete=is_discrete,
-                               model_root_path=model_root_path,
+                               model_abs_dir=model_abs_dir,
                                model=custom_sac_model,
                                train_mode=self.train_mode,
                                last_ckpt=self.last_ckpt,
