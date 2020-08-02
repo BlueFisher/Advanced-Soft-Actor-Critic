@@ -328,7 +328,7 @@ class SAC_Base(object):
                     latest_checkpoint = self.ckpt_manager.latest_checkpoint.split('-')[0] + f'-{last_ckpt}'
                 ckpt.restore(latest_checkpoint)
                 logger.info(f'Restored from {latest_checkpoint}')
-                self.init_iteration = int(latest_checkpoint.split('-')[1])
+                self.init_iteration = int(latest_checkpoint.split('-')[-1])
             else:
                 ckpt.restore(None)
                 logger.info('Initializing from scratch')
