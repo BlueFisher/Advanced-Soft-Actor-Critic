@@ -1,6 +1,6 @@
-import sys
-
 import argparse
+import os
+import sys
 
 
 if __name__ == '__main__':
@@ -24,10 +24,11 @@ if __name__ == '__main__':
     else:
         from algorithm.sac_main import Main
 
+    root_dir = os.path.dirname(os.path.abspath(__file__))
     if sys.platform == 'win32':
         for _ in range(args.repeat):
-            Main(f'envs/{args.env}', args)
+            Main(root_dir, f'envs/{args.env}', args)
     elif sys.platform == 'linux':
         for i in range(args.repeat):
-            Main(f'envs/{args.env}', args)
+            Main(root_dir, f'envs/{args.env}', args)
             args.port += 1

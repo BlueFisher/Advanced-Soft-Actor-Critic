@@ -15,7 +15,7 @@ class SAC_DS_Base(SAC_Base):
                  obs_dims,
                  action_dim,
                  is_discrete,
-                 model_root_path,  # None in actor
+                 model_abs_dir,  # None in actor
                  model,
                  train_mode=True,
                  last_ckpt=None,
@@ -89,10 +89,10 @@ class SAC_DS_Base(SAC_Base):
             tf.random.set_seed(seed)
 
         self._build_model(model, init_log_alpha, learning_rate)
-        self._init_or_restore(model_root_path, last_ckpt)
+        self._init_or_restore(model_abs_dir, last_ckpt)
 
         if train_mode:
-            summary_path = f'{model_root_path}/log'
+            summary_path = f'{model_abs_dir}/log'
             self.summary_writer = tf.summary.create_file_writer(summary_path)
 
         self._init_tf_function()

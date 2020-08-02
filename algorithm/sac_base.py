@@ -64,7 +64,7 @@ class SAC_Base(object):
                  obs_dims,
                  action_dim,
                  is_discrete,
-                 model_root_path,
+                 model_abs_dir,
                  model,
                  train_mode=True,
                  last_ckpt=None,
@@ -102,7 +102,7 @@ class SAC_Base(object):
         """
         obs_dims: List of dimensions of observations
         action_dim: Dimension of action
-        model_root_path: The path that saves summary, checkpoints, config etc.
+        model_abs_dir: The directory that saves summary, checkpoints, config etc.
         model: Custom Model Class
         train_mode: Is training or inference
         last_ckpt: The checkpoint to restore
@@ -177,14 +177,14 @@ class SAC_Base(object):
             tf.random.set_seed(seed)
 
         if self.train_mode:
-            summary_path = f'{model_root_path}/log'
+            summary_path = f'{model_abs_dir}/log'
             self.summary_writer = tf.summary.create_file_writer(summary_path)
 
             replay_config = {} if replay_config is None else replay_config
             self.replay_buffer = PrioritizedReplayBuffer(**replay_config)
 
         self._build_model(model, init_log_alpha, learning_rate)
-        self._init_or_restore(model_root_path, last_ckpt)
+        self._init_or_restore(model_abs_dir, last_ckpt)
 
         self._init_tf_function()
 
@@ -267,9 +267,9 @@ class SAC_Base(object):
 
         self.model_policy = model.ModelPolicy(state_dim, self.action_dim)
 
-    def _init_or_restore(self, model_path, last_ckpt):
+    def _init_or_restore(self, model_abs_dir, last_ckpt):
         """
-        Initialize network weights from scratch or restore from model_root_path
+        Initialize network weights from scratch or restore from model_abs_dir
         """
         ckpt_saved = {
             'log_alpha': self.log_alpha,
@@ -317,9 +317,9 @@ class SAC_Base(object):
             if isinstance(m, tf.keras.Model):
                 m.init()
 
-        if model_path is not None:
+        if model_abs_dir is not None:
             ckpt = tf.train.Checkpoint(**ckpt_saved)
-            self.ckpt_manager = tf.train.CheckpointManager(ckpt, f'{model_path}/model', max_to_keep=10)
+            self.ckpt_manager = tf.train.CheckpointManager(ckpt, f'{model_abs_dir}/model', max_to_keep=10)
 
             if self.ckpt_manager.latest_checkpoint:
                 if last_ckpt is None:
@@ -765,7 +765,6 @@ class SAC_Base(object):
                         approx_obs_list = [approx_obs_list]
                     for approx_obs in approx_obs_list:
                         if len(approx_obs.shape) > 3:
-                            tf.print(approx_obs)
                             tf.summary.image('observation',
                                              tf.reshape(approx_obs, [-1, *approx_obs.shape[2:]]),
                                              max_outputs=self.n_step, step=self.global_step)
@@ -844,6 +843,62 @@ class SAC_Base(object):
             else:
                 action = tf.tanh(policy.sample())
 
+        return action, next_rnn_state
+
+    @tf.function
+    def _cal_cem_reward(self, state, action):
+        cem_horizon = 12
+
+        if self.cem_rewards is None:
+            self.cem_rewards = tf.Variable(tf.zeros([state.shape[0], cem_horizon]))
+
+        for j in range(cem_horizon):
+            state_ = self.model_transition(state, action).sample()
+            self.cem_rewards[:, j:j + 1].assign(self.model_reward(state_))
+            state = state_
+            action = tf.tanh(self.model_policy(state).sample())
+
+        return self.cem_rewards
+
+    @tf.function
+    def choose_action_by_cem(self, obs, rnn_state):
+        obs = tf.reshape(obs, (-1, 1, obs.shape[-1]))
+        state, next_rnn_state, _ = self.model_rnn(obs, [rnn_state])
+
+        state = tf.reshape(state, (-1, state.shape[-1]))
+
+        repeat = 1000
+        top = 100
+        iteration = 10
+
+        batch = state.shape[0]
+        dist = self.model_policy(state)
+        mean, std = dist.loc, dist.scale
+
+        for i in range(iteration):
+            state_repeated = tf.repeat(state, repeat, axis=0)
+            mean_repeated = tf.repeat(mean, repeat, axis=0)
+            std_repeated = tf.repeat(std, repeat, axis=0)
+
+            action_repeated = tfp.distributions.Normal(mean_repeated, std_repeated)
+            action_repeated = tf.tanh(action_repeated.sample())
+
+            rewards = self._cal_cem_reward(state_repeated, action_repeated)
+
+            cum_reward = tf.reshape(tf.reduce_sum(rewards, axis=1), [batch, repeat])
+            sorted_index = tf.argsort(cum_reward, axis=1)
+            sorted_index = sorted_index[..., -top:]
+            sorted_index = tf.reshape(sorted_index, [-1])
+            tmp_index = tf.repeat(tf.range(batch), top, axis=0)
+
+            action_repeated = tf.reshape(action_repeated, [batch, repeat, 2])
+            action_repeated = tf.gather_nd(action_repeated, tf.unstack([tmp_index, sorted_index], axis=1))
+            action_repeated = tf.reshape(action_repeated, [batch, top, 2])
+            mean = tf.reduce_mean(tf.atanh(action_repeated * 0.9999), axis=1)
+            std = tf.math.reduce_std(tf.atanh(action_repeated * 0.9999), axis=1)
+
+        action = tfp.distributions.Normal(mean, std)
+        action = tf.tanh(action.sample())
         return action, next_rnn_state
 
     @tf.function

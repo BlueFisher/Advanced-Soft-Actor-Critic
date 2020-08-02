@@ -36,20 +36,24 @@ class Actor(object):
     _agent_class = Agent
     _logged_waiting_for_connection = False
 
-    def __init__(self, config_path, args):
-        self.config_path = config_path
+    def __init__(self, root_dir, config_dir, args):
+        self.root_dir = root_dir
+        self.config_dir = config_dir
+
         self.cmd_args = args
-        net_config = self._init_constant_config(self.config_path, args)
+        net_config = self._init_constant_config(self.root_dir,
+                                                self.config_dir,
+                                                args)
 
         self._stub = StubController(net_config)
         self._run()
 
-    def _init_constant_config(self, config_path, args):
-        config_file_path = f'{config_path}/config_ds.yaml'
+    def _init_constant_config(self, root_dir, config_dir, args):
+        self.config_abs_dir = Path(root_dir).joinpath(config_dir)
+        self.config_abs_path = self.config_abs_dir.joinpath('config_ds.yaml')
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
-                                                           config_file_path,
+                                                           self.config_abs_path,
                                                            args.config)
-        self.config_file_path = config_file_path
 
         # Initialize config from command line arguments
         self.train_mode = not args.run
@@ -65,7 +69,7 @@ class Actor(object):
 
         # Initialize config
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
-                                                           self.config_file_path,
+                                                           self.config_abs_path,
                                                            self.config_cat)
 
         if self.cmd_args.build_port is not None:
@@ -108,12 +112,14 @@ class Actor(object):
 
         self.logger.info(f'{self.config["build_path"]} initialized')
 
-        custom_sac_model = importlib.import_module(f'{self.config_path.replace("/",".")}.{self.config["sac"]}')
+        spec = importlib.util.spec_from_file_location('nn', f'{self.config_abs_dir}/{self.config["sac"]}.py')
+        custom_sac_model = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(custom_sac_model)
 
         self.sac_actor = SAC_DS_Base(obs_dims=self.obs_dims,
                                      action_dim=self.action_dim,
                                      is_discrete=is_discrete,
-                                     model_root_path=None,
+                                     model_abs_dir=None,
                                      model=custom_sac_model,
                                      train_mode=False,
 

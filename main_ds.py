@@ -1,4 +1,5 @@
 import argparse
+import os
 from pathlib import Path
 import sys
 
@@ -22,20 +23,21 @@ if __name__ == '__main__':
     parser.add_argument('--noise', type=float, default=0, help='additional noise for actor')
     args = parser.parse_args()
 
-    config_path = f'envs/{args.env}'
+    root_dir = os.path.dirname(os.path.abspath(__file__))
+    config_dir = f'envs/{args.env}'
 
     if args.process_type in ['replay', 'r']:
         from ds.replay import Replay
-        Replay(config_path, args)
+        Replay(root_dir, config_dir, args)
     elif args.process_type in ['learner', 'l']:
         if args.env in ['simple_roller', 'ray_roller']:
             from ds.main_hitted import LearnerHitted as Learner
         else:
             from ds.learner import Learner
-        Learner(config_path, args)
+        Learner(root_dir, config_dir, args)
     elif args.process_type in ['actor', 'a']:
         if args.env in ['simple_roller', 'ray_roller']:
             from ds.main_hitted import ActorHitted as Actor
         else:
             from ds.actor import Actor
-        Actor(config_path, args)
+        Actor(root_dir, config_dir, args)
