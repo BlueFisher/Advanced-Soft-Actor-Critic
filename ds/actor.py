@@ -46,7 +46,12 @@ class Actor(object):
                                                 args)
 
         self._stub = StubController(net_config)
-        self._run()
+
+        try:
+            self._run()
+        except KeyboardInterrupt:
+            self.logger.warning('KeyboardInterrupt in _run')
+            self._stub.close()
 
     def _init_constant_config(self, root_dir, config_dir, args):
         self.config_abs_dir = Path(root_dir).joinpath(config_dir)
@@ -291,6 +296,8 @@ class Actor(object):
 
 
 class StubController:
+    _closed = False
+
     def __init__(self, net_config):
         self._replay_channel = grpc.insecure_channel(f'{net_config["replay_host"]}:{net_config["replay_port"]}',
                                                      [('grpc.max_reconnect_backoff_ms', 5000)])
@@ -364,7 +371,7 @@ class StubController:
                 if not self._replay_connected:
                     break
 
-        while True:
+        while not self._closed:
             try:
                 reponse_iterator = self._replay_stub.Persistence(request_messages())
                 for response in reponse_iterator:
@@ -386,7 +393,7 @@ class StubController:
                 if not self._learner_connected:
                     break
 
-        while True:
+        while not self._closed:
             try:
                 reponse_iterator = self._learner_stub.Persistence(request_messages())
                 for response in reponse_iterator:
@@ -399,3 +406,6 @@ class StubController:
                     self._logger.error('Learner disconnected')
             finally:
                 time.sleep(RECONNECT_TIME)
+
+    def close(self):
+        self._closed = True

@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 
 # for correctly import protoc
-sys.path.append(str(Path(__file__).parent.joinpath('ds/proto')))
+sys.path.append(str(Path(__file__).resolve().parent.joinpath('ds/proto')))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

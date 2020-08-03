@@ -284,8 +284,6 @@ class Learner(object):
 
                 if self.train_mode:
                     time.sleep(EVALUATION_INTERVAL)
-        except KeyboardInterrupt:
-            self.logger.warning('KeyboardInterrupt in _policy_evaluation')
         except Exception as e:
             self.logger.error(e)
 
