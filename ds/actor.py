@@ -74,8 +74,8 @@ class Actor(object):
 
         if self.cmd_args.build_port is not None:
             config['base_config']['build_port'] = self.cmd_args.build_port
-        if self.cmd_args.sac is not None:
-            config['base_config']['sac'] = self.cmd_args.sac
+        if self.cmd_args.nn is not None:
+            config['base_config']['nn'] = self.cmd_args.nn
         if self.cmd_args.agents is not None:
             config['base_config']['n_agents'] = self.cmd_args.agents
         if self.cmd_args.noise is not None:
@@ -112,15 +112,15 @@ class Actor(object):
 
         self.logger.info(f'{self.config["build_path"]} initialized')
 
-        spec = importlib.util.spec_from_file_location('nn', f'{self.config_abs_dir}/{self.config["sac"]}.py')
-        custom_sac_model = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(custom_sac_model)
+        spec = importlib.util.spec_from_file_location('nn', f'{self.config_abs_dir}/{self.config["nn"]}.py')
+        custom_nn_model = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(custom_nn_model)
 
         self.sac_actor = SAC_DS_Base(obs_dims=self.obs_dims,
                                      action_dim=self.action_dim,
                                      is_discrete=is_discrete,
                                      model_abs_dir=None,
-                                     model=custom_sac_model,
+                                     model=custom_nn_model,
                                      train_mode=False,
 
                                      **sac_config)

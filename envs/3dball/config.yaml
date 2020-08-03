@@ -19,7 +19,7 @@ default:
 
 hard:
   base_config: &hard_base
-    sac: sac_hard
+    nn: nn_hard
     name: "pre_{time}"
   sac_config: &hard_sac
     use_rnn: true

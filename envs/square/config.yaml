@@ -54,7 +54,7 @@ nowall_nopre:
 fly:
   base_config: &fly_base
     scene: RaySquareFly
-    sac: sac_fly
+    nn: nn_fly
     name: "pre_kn_{time}"
     max_iter: 10000
   reset_config: &fly_reset
@@ -71,7 +71,7 @@ fly_nopre:
 visual_fly:
   base_config: &visual_fly_base
     scene: VisualSquareFly
-    sac: sac_visual_fly
+    nn: nn_visual_fly
     name: "pre_kn_{time}"
     max_iter: 2000
   replay_config: &visual_fly_replay

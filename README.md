@@ -32,7 +32,7 @@ Not supporting multi-agent environments.
 
 ### Training Settings
 
-All neural network models should be in a .py file (default `sac.py`). All training configurations should be specified in `config.yaml`.
+All neural network models should be in a .py file (default `nn.py`). All training configurations should be specified in `config.yaml`.
 
 Both neural network models and training configurations should be placed in the same folder under `envs`.
 
@@ -55,7 +55,7 @@ base_config:
   build_path: GymEnv # Like CartPole-v1
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
-  sac: sac # Neural network models file
+  nn: nn # Neural network models file
   n_agents: 1 # N agents running in parallel
   max_iter: -1 # Max iteration
   max_step: -1 # Max step

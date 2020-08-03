@@ -32,7 +32,7 @@ hard:
   base_config: &hard_base
     scene: Roller
     name: "pre_{time}"
-    sac: sac_hard
+    nn: nn_hard
     max_iter: 500
   sac_config: &hard_sac
     burn_in_step: 10
@@ -52,7 +52,7 @@ visual:
   base_config:
     scene: VisualRoller
     name: "{time}"
-    sac: sac_visual
+    nn: nn_visual
     max_iter: 100000
   replay_config:
     beta: 0.4
@@ -67,7 +67,7 @@ visual_hard:
   base_config: &visual_hard_base
     scene: VisualRoller
     name: "pre_{time}"
-    sac: sac_visual_hard
+    nn: nn_visual_hard
     max_iter: 100000
   replay_config: &visual_hard_replay
     beta: 0.4

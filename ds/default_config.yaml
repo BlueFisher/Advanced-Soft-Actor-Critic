@@ -14,7 +14,7 @@ base_config:
   # build_path: GymEnv # Like CartPole-v1
   
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
-  sac: sac # Neural network models file
+  nn: nn # Neural network models file
   update_policy_mode: true # update policy variables each "update_policy_variables_per_step" 
                            # or get action from learner each step
   update_policy_variables_per_step: -1 # -1 for policy variables being updated each 

@@ -44,7 +44,7 @@ curiosity_rnd:
 hard:
   base_config: &hard_base
     scene: HalfCheetahHard
-    sac: sac_hard
+    nn: nn_hard
 
   sac_config: &hard_sac
     burn_in_step: 20
