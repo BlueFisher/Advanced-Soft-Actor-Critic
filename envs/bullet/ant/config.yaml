@@ -23,7 +23,7 @@ default:
 hard:
   base_config: &hard_base
     scene: AntHard
-    sac: sac_hard
+    nn: nn_hard
 
   sac_config: &hard_sac
     burn_in_step: 20

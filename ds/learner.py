@@ -77,8 +77,8 @@ class Learner(object):
             config['base_config']['name'] = args.name
         if args.build_port is not None:
             config['base_config']['build_port'] = args.build_port
-        if args.sac is not None:
-            config['base_config']['sac'] = args.sac
+        if args.nn is not None:
+            config['base_config']['nn'] = args.nn
         if args.agents is not None:
             config['base_config']['n_agents'] = args.agents
 
@@ -134,20 +134,20 @@ class Learner(object):
         self.logger.info(f'{self.config["build_path"]} initialized')
 
         # If model exists, load saved model, or copy a new one
-        if os.path.isfile(f'{config_abs_dir}/sac_model.py'):
-            spec = importlib.util.spec_from_file_location('nn',  f'{model_abs_dir}/sac_model.py')
+        if os.path.isfile(f'{config_abs_dir}/nn_models.py'):
+            spec = importlib.util.spec_from_file_location('nn',  f'{model_abs_dir}/nn_models.py')
         else:
-            spec = importlib.util.spec_from_file_location('nn', f'{config_abs_dir}/{self.config["sac"]}.py')
-            shutil.copyfile(f'{config_abs_dir}/{self.config["sac"]}.py', f'{model_abs_dir}/sac_model.py')
+            spec = importlib.util.spec_from_file_location('nn', f'{config_abs_dir}/{self.config["nn"]}.py')
+            shutil.copyfile(f'{config_abs_dir}/{self.config["nn"]}.py', f'{model_abs_dir}/nn_models.py')
 
-        custom_sac_model = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(custom_sac_model)
+        custom_nn_model = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(custom_nn_model)
 
         self.sac = SAC_DS_Base(obs_dims=self.obs_dims,
                                action_dim=self.action_dim,
                                is_discrete=is_discrete,
                                model_abs_dir=model_abs_dir,
-                               model=custom_sac_model,
+                               model=custom_nn_model,
                                train_mode=self.train_mode,
                                last_ckpt=self.last_ckpt,
 

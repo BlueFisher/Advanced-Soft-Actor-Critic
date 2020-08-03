@@ -23,7 +23,7 @@ default:
 ray:
   base_config: &ray_base
     scene: RayPyramid
-    sac: sac_ray
+    nn: nn_ray
     name: "ray20_pre_kn_{time}"
   reset_config: &ray_reset
     ray_length: 20
@@ -47,7 +47,7 @@ ray_nopre:
 visual:
   base_config: &visual_base
     scene: VisualPyramid
-    sac: sac_visual
+    nn: nn_visual
     name: "pre_kn_{time}"
     max_iter: 10000
   replay_config: &visual_replay
