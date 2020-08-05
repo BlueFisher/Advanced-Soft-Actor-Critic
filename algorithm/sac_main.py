@@ -72,6 +72,7 @@ class Main(object):
         rand = ''.join(random.sample(string.ascii_letters, 4))
         config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now + rand)
         model_abs_dir = Path(root_dir).joinpath(f'models/{config["base_config"]["scene"]}/{config["base_config"]["name"]}')
+        os.makedirs(model_abs_dir)
 
         logger_file = f'{model_abs_dir}/{args.logger_file}' if args.logger_file is not None else None
         self.logger = config_helper.set_logger('sac', logger_file)
@@ -117,7 +118,7 @@ class Main(object):
 
         # If model exists, load saved model, or copy a new one
         if os.path.isfile(f'{config_abs_dir}/nn_models.py'):
-            spec = importlib.util.spec_from_file_location('nn',  f'{model_abs_dir}/nn_models.py')
+            spec = importlib.util.spec_from_file_location('nn', f'{model_abs_dir}/nn_models.py')
         else:
             spec = importlib.util.spec_from_file_location('nn', f'{config_abs_dir}/{self.config["nn"]}.py')
             shutil.copyfile(f'{config_abs_dir}/{self.config["nn"]}.py', f'{model_abs_dir}/nn_models.py')

@@ -86,6 +86,7 @@ class Learner(object):
         rand = ''.join(random.sample(string.ascii_letters, 4))
         config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now + rand)
         model_abs_dir = Path(root_dir).joinpath(f'models/{config["base_config"]["scene"]}/{config["base_config"]["name"]}')
+        os.makedirs(model_abs_dir)
 
         logger_file = f'{model_abs_dir}/{args.logger_file}' if args.logger_file is not None else None
         self.logger = config_helper.set_logger('ds.learner', logger_file)
@@ -306,7 +307,7 @@ class Learner(object):
             sampled = self._stub.get_sampled_data()
 
             if sampled is None:
-                self.logger.warning('no data sampled')
+                self.logger.warning('No data sampled')
                 self._is_training = False
                 time.sleep(RESAMPLE_TIME)
                 continue
