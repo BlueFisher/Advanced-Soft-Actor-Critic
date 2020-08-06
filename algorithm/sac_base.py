@@ -210,6 +210,10 @@ class SAC_Base(object):
 
             p_self = self
 
+            import inspect
+
+            has_training = 'training' in inspect.signature(model.ModelRep.call).parameters.keys()
+
             class ModelRep(model.ModelRep):
                 def call(self, obs_list, *args, **kwargs):
                     obs_list = [
@@ -221,6 +225,10 @@ class SAC_Base(object):
                             -5, 5
                         ) for obs in obs_list
                     ]
+
+                    if 'training' in kwargs and not has_training:
+                        del kwargs['training']
+
                     return super().call(obs_list, *args, **kwargs)
         else:
             ModelRep = model.ModelRep
