@@ -6,6 +6,7 @@ default:
     build_path: "AntBulletEnv-v0"
 
     max_iter: -1
+    max_step: 1000000
     n_agents: 10
 
   sac_config:
@@ -17,8 +18,6 @@ default:
     _lambda: 0.99
 
     use_normalization: true
-    # use_curiosity: true
-    # curiosity_strength: 0.3
 
 hard:
   base_config: &hard_base
@@ -26,7 +25,7 @@ hard:
     nn: nn_hard
 
   sac_config: &hard_sac
-    burn_in_step: 20
+    burn_in_step: 30
     use_rnn: true
     use_prediction: true
 

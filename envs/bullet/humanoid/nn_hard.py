@@ -18,6 +18,7 @@ class ModelTransition(m.ModelBaseTransition):
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(256, activation=tf.nn.tanh),
             tf.keras.layers.Dense(256, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(state_dim + state_dim)
         ])
 
@@ -39,6 +40,7 @@ class ModelReward(m.ModelBaseReward):
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(256, activation=tf.nn.relu),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(1)
         ])
 
@@ -53,6 +55,7 @@ class ModelObservation(m.ModelBaseObservation):
         super().__init__(state_dim, obs_dims, use_extra_data)
 
         self.dense = tf.keras.Sequential([
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(obs_dims[0][0] if use_extra_data else obs_dims[0][0] - 3)
@@ -78,7 +81,7 @@ class ModelRep(m.ModelBaseGRURep):
         super().__init__(obs_dims, action_dim, rnn_units=8)
 
         self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(22)
+            tf.keras.layers.Dense(32, activation=tf.nn.tanh)
         ])
 
     def call(self, obs_list, pre_action, rnn_state):

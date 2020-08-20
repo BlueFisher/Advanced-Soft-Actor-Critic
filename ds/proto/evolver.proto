@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+import "ndarray.proto";
+import "pingpong.proto";
+
+service EvolverService {
+  rpc Persistence(stream Ping) returns (stream Pong);
+
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc PostRewards(PostRewardsToEvolverRequest) returns (Empty);
+}
+
+message RegisterRequest {
+  string host = 1;
+  int32 port = 2;
+}
+message RegisterResponse{
+  string name = 1;
+}
+message PostRewardsToEvolverRequest {
+  NDarray rewards = 1;
+}

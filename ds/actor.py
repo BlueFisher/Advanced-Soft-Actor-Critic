@@ -28,7 +28,7 @@ import algorithm.config_helper as config_helper
 
 WAITING_CONNECTION_TIME = 2
 PING_INTERVAL = 5
-RECONNECT_TIME = 2
+RECONNECTION_TIME = 2
 
 
 class Actor(object):
@@ -311,9 +311,9 @@ class StubController:
         self._learner_connected = False
         self._logger = logging.getLogger('ds.actor.stub')
 
-        t_replay = threading.Thread(target=self._start_replay_persistence)
+        t_replay = threading.Thread(target=self._start_replay_persistence, daemon=True)
         t_replay.start()
-        t_learner = threading.Thread(target=self._start_learner_persistence)
+        t_learner = threading.Thread(target=self._start_learner_persistence, daemon=True)
         t_learner.start()
 
     @property
@@ -361,11 +361,11 @@ class StubController:
 
     @rpc_error_inspector
     def post_rewards(self, n_rewards):
-        self._learner_stub.PostRewards(learner_pb2.PostRewardsRequest(n_rewards=ndarray_to_proto(n_rewards)))
+        self._learner_stub.PostRewards(learner_pb2.PostRewardsToLearnerRequest(n_rewards=ndarray_to_proto(n_rewards)))
 
     def _start_replay_persistence(self):
         def request_messages():
-            while True:
+            while not self._closed:
                 yield Ping(time=int(time.time() * 1000))
                 time.sleep(PING_INTERVAL)
                 if not self._replay_connected:
@@ -383,11 +383,11 @@ class StubController:
                     self._replay_connected = False
                     self._logger.error('Replay disconnected')
             finally:
-                time.sleep(RECONNECT_TIME)
+                time.sleep(RECONNECTION_TIME)
 
     def _start_learner_persistence(self):
         def request_messages():
-            while True:
+            while not self._closed:
                 yield Ping(time=int(time.time() * 1000))
                 time.sleep(PING_INTERVAL)
                 if not self._learner_connected:
@@ -405,7 +405,7 @@ class StubController:
                     self._learner_connected = False
                     self._logger.error('Learner disconnected')
             finally:
-                time.sleep(RECONNECT_TIME)
+                time.sleep(RECONNECTION_TIME)
 
     def close(self):
         self._closed = True

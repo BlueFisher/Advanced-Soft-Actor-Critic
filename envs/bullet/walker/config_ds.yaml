@@ -8,9 +8,11 @@ default:
     n_agents: 10
 
   net_config:
-    replay_host: 58.199.166.11
+    evolver_host: 127.0.0.1
+    evolver_port: 61002
+    replay_host: 127.0.0.1
     replay_port: 61000
-    learner_host: 58.199.166.11
+    learner_host: 127.0.0.1
     learner_port: 61001
 
   sac_config:

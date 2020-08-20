@@ -21,15 +21,16 @@ def rpc_error_inspector(func):
 class PeerSet(object):
     def __init__(self, logger):
         self._peers_lock = threading.RLock()
-        self._peers = {}
+        self._peers = dict()
         self._logger = logger
 
     def connect(self, peer):
         with self._peers_lock:
             if peer not in self._peers:
-                self._peers[peer] = 1
+                self._peers[peer] = dict()
+                self._peers[peer]['__conn'] = 1
             else:
-                self._peers[peer] += 1
+                self._peers[peer]['__conn'] += 1
 
         self._logger.info(f'{peer} connected')
 
@@ -37,12 +38,19 @@ class PeerSet(object):
         with self._peers_lock:
             if peer not in self._peers:
                 raise RuntimeError(f'Tried to disconnect peer {peer} but it was never connected')
-            self._peers[peer] -= 1
-            if self._peers[peer] == 0:
+            self._peers[peer]['__conn'] -= 1
+            if self._peers[peer]['__conn'] == 0:
                 del self._peers[peer]
 
         self._logger.info(f'{peer} disconnected')
 
+    def add_info(self, peer, info):
+        with self._peers_lock:
+            if peer not in self._peers:
+                raise RuntimeError(f'Tried to add peer {peer} info but it was never connected')
+            for k, v in info.items():
+                self._peers[peer][k] = v
+
     def peers(self):
         with self._peers_lock:
-            return list(self._peers.keys())
+            return list(self._peers.keys()), self._peers

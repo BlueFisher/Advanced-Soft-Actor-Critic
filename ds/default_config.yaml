@@ -24,6 +24,8 @@ base_config:
   reset_on_iteration: true # If to force reset agent if an episode terminated
   
 net_config:
+  evolver_host: 127.0.0.1
+  evolver_port: 61002
   replay_host: 127.0.0.1
   replay_port: 61000
   learner_host: 127.0.0.1
