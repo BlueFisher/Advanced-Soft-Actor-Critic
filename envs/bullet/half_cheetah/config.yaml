@@ -6,6 +6,7 @@ default:
     build_path: "HalfCheetahBulletEnv-v0"
 
     max_iter: -1
+    max_step: 1000000
     n_agents: 10
 
   sac_config:
@@ -13,33 +14,10 @@ default:
     save_model_per_step: 10000 # Save model every N steps
     save_model_per_minute: 5 # Save model every N minutes
 
-    n_step: 3
+    n_step: 5
     _lambda: 0.99
 
-    use_normalization: false
-
-curiosity:
-  base_config:
-    name: "curiosity_{time}"
-  sac_config:
-    use_curiosity: true
-    curiosity_strength: 0.6
-
-rnd:
-  base_config:
-    name: "rnd_{time}"
-  sac_config:
-    use_rnd: true
-    rnd_n_sample: 30
-
-curiosity_rnd:
-  base_config:
-    name: "curiosityrnd_{time}"
-  sac_config:
-    use_curiosity: true
-    curiosity_strength: 0.6
-    use_rnd: true
-    rnd_n_sample: 30
+    use_normalization: true
 
 hard:
   base_config: &hard_base
@@ -47,11 +25,9 @@ hard:
     nn: nn_hard
 
   sac_config: &hard_sac
-    burn_in_step: 20
+    burn_in_step: 30
     use_rnn: true
     use_prediction: true
-    use_rnd: true
-    rnd_n_sample: 20
 
 hard_noextra:
   base_config:

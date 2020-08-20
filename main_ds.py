@@ -1,4 +1,5 @@
 import argparse
+from logging import root
 import os
 from pathlib import Path
 import sys
@@ -9,9 +10,13 @@ sys.path.append(str(Path(__file__).resolve().parent.joinpath('ds/proto')))
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('env')
-    parser.add_argument('process_type', choices=['replay', 'r', 'learner', 'l', 'actor', 'a'])
+    parser.add_argument('process_type', choices=['replay', 'r',
+                                                 'learner', 'l',
+                                                 'actor', 'a',
+                                                 'evolver', 'e'])
     parser.add_argument('--config', '-c', help='config file')
     parser.add_argument('--run', action='store_true', help='inference mode')
+    parser.add_argument('--standalone', action='store_true', help='standalone mode (no evolver)')
     parser.add_argument('--render', action='store_true', help='render')
     parser.add_argument('--editor', action='store_true', help='running in Unity Editor')
     parser.add_argument('--logger_file', help='logging into a file')
@@ -41,3 +46,6 @@ if __name__ == '__main__':
         else:
             from ds.actor import Actor
         Actor(root_dir, config_dir, args)
+    elif args.process_type in ['evolver', 'e']:
+        from ds.evolver import Evolver
+        Evolver(root_dir, config_dir, args)

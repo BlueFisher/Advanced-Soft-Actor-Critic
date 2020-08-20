@@ -13,12 +13,10 @@ default:
     save_model_per_step: 100000 # Save model every N steps
     save_model_per_minute: 5 # Save model every N minutes
 
-    init_log_alpha: 0.
     n_step: 3
-    clip_epsilon: 0.2
-    learning_rate: 0.0001
+    _lambda: 0.99
 
-    use_normalization: true
+    use_normalization: false
 
   replay_config:
     batch_size: 1024
@@ -56,6 +54,7 @@ hard:
     burn_in_step: 20
     use_rnn: true
     use_prediction: true
+    transition_kl: 1.
 
 hard_noextra:
   base_config:

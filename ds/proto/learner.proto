@@ -9,7 +9,9 @@ service LearnerService {
   rpc GetAction(GetActionRequest) returns (Action);
   rpc GetPolicyVariables(Empty) returns (PolicyVariables);
   rpc GetTDError(GetTDErrorRequest) returns (TDError);
-  rpc PostRewards(PostRewardsRequest) returns (Empty);
+  rpc PostRewards(PostRewardsToLearnerRequest) returns (Empty);
+  // Update variables from evolver
+  rpc UpdatePolicyVariables(PolicyVariables) returns (Empty);
 }
 
 message GetActionRequest {
@@ -38,6 +40,6 @@ message TDError {
   NDarray td_error = 1;
 }
 
-message PostRewardsRequest {
+message PostRewardsToLearnerRequest {
   NDarray n_rewards = 1;
 }

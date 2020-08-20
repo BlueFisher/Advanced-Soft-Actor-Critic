@@ -13,6 +13,7 @@ import time
 import numpy as np
 import grpc
 
+from .proto import evolver_pb2, evolver_pb2_grpc
 from .proto import learner_pb2, learner_pb2_grpc
 from .proto import replay_pb2, replay_pb2_grpc
 from .proto.ndarray_pb2 import Empty
@@ -29,7 +30,8 @@ import algorithm.config_helper as config_helper
 MAX_THREAD_WORKERS = 64
 EVALUATION_INTERVAL = 10
 EVALUATION_WAITING_TIME = 1
-RESAMPLE_TIME = 2
+RECONNECTION_TIME = 2
+PING_INTERVAL = 5
 
 
 class Learner(object):
@@ -37,76 +39,89 @@ class Learner(object):
     _agent_class = Agent
 
     _training_lock = threading.Lock()
-    _is_training = False
-    _closed = False
 
     def __init__(self, root_dir, config_dir, args):
         self._now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
-        (self.config,
-         self.net_config,
-         self.reset_config,
-         replay_config,
-         sac_config,
-         model_abs_dir,
-         config_abs_dir) = self._init_config(root_dir, config_dir, args)
+        self.root_dir = root_dir
+        self.config_dir = config_dir
+        self.cmd_args = args
 
-        self._init_env(model_abs_dir, config_abs_dir,
-                       sac_config)
-        try:
-            self._run()
-        except KeyboardInterrupt:
-            self.logger.warning('KeyboardInterrupt in _run')
+        self.net_config = self._init_constant_config(root_dir, config_dir, args)
+
+        while True:
+            self._is_training = False
+            self._closed = False
+
+            try:
+                self._init_env()
+                self._run()
+            except KeyboardInterrupt:
+                self.logger.warning('KeyboardInterrupt in _run')
+                self.close()
+                break
+
             self.close()
+            time.sleep(RECONNECTION_TIME)
 
-    def _init_config(self, root_dir, config_dir, args):
-        config_abs_dir = Path(root_dir).joinpath(config_dir)
-        config_abs_path = config_abs_dir.joinpath('config_ds.yaml')
-        default_config_file_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
-        config = config_helper.initialize_config_from_yaml(default_config_file_path,
-                                                           config_abs_path,
+    def _init_constant_config(self, root_dir, config_dir, args):
+        self.config_abs_dir = Path(root_dir).joinpath(config_dir)
+        self.config_abs_path = self.config_abs_dir.joinpath('config_ds.yaml')
+        config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
+                                                           self.config_abs_path,
                                                            args.config)
 
         # Initialize config from command line arguments
         self.train_mode = not args.run
+        self.standalone = args.standalone
         self.last_ckpt = args.ckpt
         self.render = args.render
         self.run_in_editor = args.editor
 
-        if args.name is not None:
-            config['base_config']['name'] = args.name
-        if args.build_port is not None:
-            config['base_config']['build_port'] = args.build_port
-        if args.nn is not None:
-            config['base_config']['nn'] = args.nn
-        if args.agents is not None:
-            config['base_config']['n_agents'] = args.agents
+        return config['net_config']
 
-        # Replace {time} from current time and random letters
-        rand = ''.join(random.sample(string.ascii_letters, 4))
-        config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now + rand)
-        model_abs_dir = Path(root_dir).joinpath(f'models/{config["base_config"]["scene"]}/{config["base_config"]["name"]}')
-        os.makedirs(model_abs_dir)
+    def _init_env(self):
+        self._stub = StubController(self.net_config, self.standalone)
 
-        logger_file = f'{model_abs_dir}/{args.logger_file}' if args.logger_file is not None else None
+        config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
+                                                           self.config_abs_path,
+                                                           self.cmd_args.config)
+
+        if self.cmd_args.name is not None:
+            config['base_config']['name'] = self.cmd_args.name
+        if self.cmd_args.build_port is not None:
+            config['base_config']['build_port'] = self.cmd_args.build_port
+        if self.cmd_args.nn is not None:
+            config['base_config']['nn'] = self.cmd_args.nn
+        if self.cmd_args.agents is not None:
+            config['base_config']['n_agents'] = self.cmd_args.agents
+
+        self.config = config['base_config']
+        sac_config = config['sac_config']
+        self.reset_config = config['reset_config']
+
+        if self.standalone:
+            # Replace {time} from current time and random letters
+            rand = ''.join(random.sample(string.ascii_letters, 4))
+            self.config['name'] = self.config['name'].replace('{time}', self._now + rand)
+            model_abs_dir = Path(self.root_dir).joinpath(f'models/{self.config["scene"]}/{self.config["name"]}')
+            os.makedirs(model_abs_dir)
+        else:
+            # Get name from evolver register
+            name = None
+            while name is None:
+                name = self._stub.register_to_evolver()
+                time.sleep(RECONNECTION_TIME)
+            self.config['name'] = name
+            model_abs_dir = Path(self.root_dir).joinpath(f'models/{self.config["scene"]}/{self.config["name"]}')
+
+        logger_file = f'{model_abs_dir}/{self.cmd_args.logger_file}' if self.cmd_args.logger_file is not None else None
         self.logger = config_helper.set_logger('ds.learner', logger_file)
 
         if self.train_mode:
             config_helper.save_config(config, model_abs_dir, 'config_ds.yaml')
 
         config_helper.display_config(config, self.logger)
-
-        return (config['base_config'],
-                config['net_config'],
-                config['reset_config'],
-                config['replay_config'],
-                config['sac_config'],
-                model_abs_dir,
-                config_abs_dir)
-
-    def _init_env(self, model_abs_dir, config_abs_dir,
-                  sac_config):
-        self._stub = StubController(self.net_config)
 
         if self.config['env_type'] == 'UNITY':
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
@@ -135,11 +150,11 @@ class Learner(object):
         self.logger.info(f'{self.config["build_path"]} initialized')
 
         # If model exists, load saved model, or copy a new one
-        if os.path.isfile(f'{config_abs_dir}/nn_models.py'):
-            spec = importlib.util.spec_from_file_location('nn',  f'{model_abs_dir}/nn_models.py')
+        if os.path.isfile(f'{self.config_abs_dir}/nn_models.py'):
+            spec = importlib.util.spec_from_file_location('nn', f'{model_abs_dir}/nn_models.py')
         else:
-            spec = importlib.util.spec_from_file_location('nn', f'{config_abs_dir}/{self.config["nn"]}.py')
-            shutil.copyfile(f'{config_abs_dir}/{self.config["nn"]}.py', f'{model_abs_dir}/nn_models.py')
+            spec = importlib.util.spec_from_file_location('nn', f'{self.config_abs_dir}/{self.config["nn"]}.py')
+            shutil.copyfile(f'{self.config_abs_dir}/{self.config["nn"]}.py', f'{model_abs_dir}/nn_models.py')
 
         custom_nn_model = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(custom_nn_model)
@@ -154,11 +169,16 @@ class Learner(object):
 
                                **sac_config)
 
+        self.logger.info(f'sac_learner initialized')
+
     def _get_policy_variables(self):
         with self._training_lock:
             variables = self.sac.get_policy_variables()
 
         return [v.numpy() for v in variables]
+
+    def _udpate_policy_variables(self, variables):
+        pass
 
     def _get_action(self, obs_list, rnn_state=None):
         if self.sac.use_rnn:
@@ -279,11 +299,14 @@ class Learner(object):
                     with self._training_lock:
                         self._log_episode_summaries(iteration, agents)
 
+                    if not self.standalone:
+                        self._stub.post_rewards(np.array([a.reward for a in agents]))
+
                 self._log_episode_info(iteration, start_time, agents)
 
                 iteration += 1
 
-                if self.train_mode:
+                if self.train_mode and self.standalone:
                     time.sleep(EVALUATION_INTERVAL)
         except Exception as e:
             self.logger.error(e)
@@ -302,32 +325,29 @@ class Learner(object):
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
         self.logger.info(f'{iteration}, {time_elapse:.2f}, rewards {rewards}')
 
-    def _get_sampled_data(self):
-        while True:
+    def _run_training_client(self):
+        self._stub.clear_replay_buffer()
+
+        while self._stub.connected:
             sampled = self._stub.get_sampled_data()
 
             if sampled is None:
                 self.logger.warning('No data sampled')
                 self._is_training = False
-                time.sleep(RESAMPLE_TIME)
+                time.sleep(RECONNECTION_TIME)
                 continue
             else:
                 self._is_training = True
-                return sampled
 
-    def _run_training_client(self):
-        self._stub.clear_replay_buffer()
-
-        while not self._closed:
-            (pointers,
-             n_obses_list,
-             n_actions,
-             n_rewards,
-             next_obs_list,
-             n_dones,
-             n_mu_probs,
-             rnn_state,
-             priority_is) = self._get_sampled_data()
+                (pointers,
+                 n_obses_list,
+                 n_actions,
+                 n_rewards,
+                 next_obs_list,
+                 n_dones,
+                 n_mu_probs,
+                 rnn_state,
+                 priority_is) = sampled
 
             with self._training_lock:
                 td_error, update_data = self.sac.train(pointers=pointers,
@@ -351,12 +371,13 @@ class Learner(object):
                 self._stub.update_transitions(pointers, key, data)
 
     def _run(self):
-        t_evaluation = threading.Thread(target=self._policy_evaluation)
+        t_evaluation = threading.Thread(target=self._policy_evaluation, daemon=True)
         t_evaluation.start()
 
         if self.train_mode:
             servicer = LearnerService(self._get_action,
                                       self._get_policy_variables,
+                                      self._udpate_policy_variables,
                                       self._get_td_error,
                                       self._post_rewards)
             self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS))
@@ -373,13 +394,21 @@ class Learner(object):
         self.env.close()
         if self.train_mode:
             self.server.stop(None)
+            self._stub.close()
+
+        self.logger.warn('Closed')
 
 
 class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
     def __init__(self,
-                 get_action, get_policy_variables, get_td_error, post_rewards):
+                 get_action,
+                 get_policy_variables,
+                 udpate_policy_variables,
+                 get_td_error,
+                 post_rewards):
         self._get_action = get_action
         self._get_policy_variables = get_policy_variables
+        self._udpate_policy_variables = udpate_policy_variables
         self._get_td_error = get_td_error
         self._post_rewards = post_rewards
 
@@ -413,6 +442,10 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
         variables = self._get_policy_variables()
         return learner_pb2.PolicyVariables(variables=[ndarray_to_proto(v) for v in variables])
 
+    def UpdatePolicyVariables(self, request, context):
+        variables = [proto_to_ndarray(v) for v in request.variabels]
+        self._udpate_policy_variables(variables)
+
     def GetTDError(self, request: learner_pb2.GetTDErrorRequest, context):
         n_obses_list = [proto_to_ndarray(n_obses) for n_obses in request.n_obses_list]
         n_actions = proto_to_ndarray(request.n_actions)
@@ -431,22 +464,43 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
                                       n_rnn_states)
         return learner_pb2.TDError(td_error=ndarray_to_proto(td_error))
 
-    def PostRewards(self, request: learner_pb2.PostRewardsRequest, context):
+    def PostRewards(self, request: learner_pb2.PostRewardsToLearnerRequest, context):
         n_rewards = proto_to_ndarray(request.n_rewards)
         self._post_rewards(context.peer(), n_rewards)
         return Empty()
 
 
 class StubController:
-    def __init__(self, net_config):
-        self._replay_channel = grpc.insecure_channel(f'{net_config["replay_host"]}:{net_config["replay_port"]}')
+    _closed = False
+
+    def __init__(self, net_config, standalone):
+        self.net_config = net_config
+        self.standalone = standalone
+
+        self._replay_channel = grpc.insecure_channel(f'{net_config["replay_host"]}:{net_config["replay_port"]}',
+                                                     [('grpc.max_reconnect_backoff_ms', 5000)])
         self._replay_stub = replay_pb2_grpc.ReplayServiceStub(self._replay_channel)
+
         self._logger = logging.getLogger('ds.learner.stub')
+
+        if not standalone:
+            self._evolver_channel = grpc.insecure_channel(f'{net_config["evolver_host"]}:{net_config["evolver_port"]}',
+                                                          [('grpc.max_reconnect_backoff_ms', 5000)])
+            self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
+
+            self._evolver_connected = False
+
+            t_evolver = threading.Thread(target=self._start_evolver_persistence, daemon=True)
+            t_evolver.start()
+
+    @property
+    def connected(self):
+        return not self._closed and (self.standalone or self._evolver_connected)
 
     @rpc_error_inspector
     def get_sampled_data(self):
         response = self._replay_stub.Sample(Empty())
-        if response.has_data:
+        if response and response.has_data:
             return (proto_to_ndarray(response.pointers),
                     [proto_to_ndarray(n_obses) for n_obses in response.n_obses_list],
                     proto_to_ndarray(response.n_actions),
@@ -456,8 +510,6 @@ class StubController:
                     proto_to_ndarray(response.n_mu_probs),
                     proto_to_ndarray(response.rnn_state),
                     proto_to_ndarray(response.priority_is))
-        else:
-            return None
 
     @rpc_error_inspector
     def update_td_error(self, pointers, td_error):
@@ -475,3 +527,42 @@ class StubController:
     @rpc_error_inspector
     def clear_replay_buffer(self):
         self._replay_stub.Clear(Empty())
+
+    @rpc_error_inspector
+    def register_to_evolver(self):
+        response = self._evolver_stub.Register(
+            evolver_pb2.RegisterRequest(host=self.net_config["learner_host"],
+                                        port=self.net_config["learner_port"]))
+
+        if response:
+            return response.name
+
+    @rpc_error_inspector
+    def post_rewards(self, rewards):
+        self._evolver_stub.PostRewards(
+            evolver_pb2.PostRewardsToEvolverRequest(rewards=ndarray_to_proto(rewards)))
+
+    def _start_evolver_persistence(self):
+        def request_messages():
+            while not self._closed:
+                yield Ping(time=int(time.time() * 1000))
+                time.sleep(PING_INTERVAL)
+                if not self._evolver_connected:
+                    break
+
+        while not self._closed:
+            try:
+                reponse_iterator = self._evolver_stub.Persistence(request_messages())
+                for response in reponse_iterator:
+                    if not self._evolver_connected:
+                        self._evolver_connected = True
+                        self._logger.info('Evolver connected')
+            except grpc.RpcError:
+                if self._evolver_connected:
+                    self._evolver_connected = False
+                    self._logger.error('Evolver disconnected')
+            finally:
+                time.sleep(RECONNECTION_TIME)
+
+    def close(self):
+        self._closed = True
