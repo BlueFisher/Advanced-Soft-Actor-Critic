@@ -21,11 +21,50 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\rlearner.proto\x1a\rndarray.proto\x1a\x0epingpong.proto\"K\n\x10GetActionRequest\x12\x1a\n\x08obs_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"?\n\x06\x41\x63tion\x12\x18\n\x06\x61\x63tion\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\".\n\x0fPolicyVariables\x12\x1b\n\tvariables\x18\x01 \x03(\x0b\x32\x08.NDarray\"\xe7\x01\n\x11GetTDErrorRequest\x12\x1e\n\x0cn_obses_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x1f\n\rnext_obs_list\x18\x04 \x03(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cn_rnn_states\x18\x07 \x01(\x0b\x32\x08.NDarray\"%\n\x07TDError\x12\x1a\n\x08td_error\x18\x01 \x01(\x0b\x32\x08.NDarray\":\n\x1bPostRewardsToLearnerRequest\x12\x1b\n\tn_rewards\x18\x01 \x01(\x0b\x32\x08.NDarray2\x9e\x02\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\'\n\tGetAction\x12\x11.GetActionRequest\x1a\x07.Action\x12.\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x10.PolicyVariables\x12*\n\nGetTDError\x12\x12.GetTDErrorRequest\x1a\x08.TDError\x12\x33\n\x0bPostRewards\x12\x1c.PostRewardsToLearnerRequest\x1a\x06.Empty\x12\x31\n\x15UpdatePolicyVariables\x12\x10.PolicyVariables\x1a\x06.Emptyb\x06proto3'
+  serialized_pb=b'\n\rlearner.proto\x1a\rndarray.proto\x1a\x0epingpong.proto\"$\n\x06Replay\x12\x0c\n\x04host\x18\x01 \x01(\t\x12\x0c\n\x04port\x18\x02 \x01(\x05\"K\n\x10GetActionRequest\x12\x1a\n\x08obs_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"?\n\x06\x41\x63tion\x12\x18\n\x06\x61\x63tion\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\".\n\x0fPolicyVariables\x12\x1b\n\tvariables\x18\x01 \x03(\x0b\x32\x08.NDarray\"\xe7\x01\n\x11GetTDErrorRequest\x12\x1e\n\x0cn_obses_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x1f\n\rnext_obs_list\x18\x04 \x03(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cn_rnn_states\x18\x07 \x01(\x0b\x32\x08.NDarray\"%\n\x07TDError\x12\x1a\n\x08td_error\x18\x01 \x01(\x0b\x32\x08.NDarray\":\n\x1bPostRewardsToLearnerRequest\x12\x1b\n\tn_rewards\x18\x01 \x01(\x0b\x32\x08.NDarray2\xbc\x02\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\x1c\n\tGetReplay\x12\x06.Empty\x1a\x07.Replay\x12\'\n\tGetAction\x12\x11.GetActionRequest\x1a\x07.Action\x12.\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x10.PolicyVariables\x12*\n\nGetTDError\x12\x12.GetTDErrorRequest\x1a\x08.TDError\x12\x33\n\x0bPostRewards\x12\x1c.PostRewardsToLearnerRequest\x1a\x06.Empty\x12\x31\n\x15UpdatePolicyVariables\x12\x10.PolicyVariables\x1a\x06.Emptyb\x06proto3'
   ,
   dependencies=[ndarray__pb2.DESCRIPTOR,pingpong__pb2.DESCRIPTOR,])
 
 
+
+
+_REPLAY = _descriptor.Descriptor(
+  name='Replay',
+  full_name='Replay',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='host', full_name='Replay.host', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='port', full_name='Replay.port', index=1,
+      number=2, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=48,
+  serialized_end=84,
+)
 
 
 _GETACTIONREQUEST = _descriptor.Descriptor(
@@ -62,8 +101,8 @@ _GETACTIONREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=48,
-  serialized_end=123,
+  serialized_start=86,
+  serialized_end=161,
 )
 
 
@@ -101,8 +140,8 @@ _ACTION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=125,
-  serialized_end=188,
+  serialized_start=163,
+  serialized_end=226,
 )
 
 
@@ -133,8 +172,8 @@ _POLICYVARIABLES = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=190,
-  serialized_end=236,
+  serialized_start=228,
+  serialized_end=274,
 )
 
 
@@ -207,8 +246,8 @@ _GETTDERRORREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=239,
-  serialized_end=470,
+  serialized_start=277,
+  serialized_end=508,
 )
 
 
@@ -239,8 +278,8 @@ _TDERROR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=472,
-  serialized_end=509,
+  serialized_start=510,
+  serialized_end=547,
 )
 
 
@@ -271,8 +310,8 @@ _POSTREWARDSTOLEARNERREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=511,
-  serialized_end=569,
+  serialized_start=549,
+  serialized_end=607,
 )
 
 _GETACTIONREQUEST.fields_by_name['obs_list'].message_type = ndarray__pb2._NDARRAY
@@ -289,6 +328,7 @@ _GETTDERRORREQUEST.fields_by_name['n_mu_probs'].message_type = ndarray__pb2._NDA
 _GETTDERRORREQUEST.fields_by_name['n_rnn_states'].message_type = ndarray__pb2._NDARRAY
 _TDERROR.fields_by_name['td_error'].message_type = ndarray__pb2._NDARRAY
 _POSTREWARDSTOLEARNERREQUEST.fields_by_name['n_rewards'].message_type = ndarray__pb2._NDARRAY
+DESCRIPTOR.message_types_by_name['Replay'] = _REPLAY
 DESCRIPTOR.message_types_by_name['GetActionRequest'] = _GETACTIONREQUEST
 DESCRIPTOR.message_types_by_name['Action'] = _ACTION
 DESCRIPTOR.message_types_by_name['PolicyVariables'] = _POLICYVARIABLES
@@ -296,6 +336,13 @@ DESCRIPTOR.message_types_by_name['GetTDErrorRequest'] = _GETTDERRORREQUEST
 DESCRIPTOR.message_types_by_name['TDError'] = _TDERROR
 DESCRIPTOR.message_types_by_name['PostRewardsToLearnerRequest'] = _POSTREWARDSTOLEARNERREQUEST
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
+
+Replay = _reflection.GeneratedProtocolMessageType('Replay', (_message.Message,), {
+  'DESCRIPTOR' : _REPLAY,
+  '__module__' : 'learner_pb2'
+  # @@protoc_insertion_point(class_scope:Replay)
+  })
+_sym_db.RegisterMessage(Replay)
 
 GetActionRequest = _reflection.GeneratedProtocolMessageType('GetActionRequest', (_message.Message,), {
   'DESCRIPTOR' : _GETACTIONREQUEST,
@@ -348,8 +395,8 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=572,
-  serialized_end=858,
+  serialized_start=610,
+  serialized_end=926,
   methods=[
   _descriptor.MethodDescriptor(
     name='Persistence',
@@ -362,9 +409,19 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
     create_key=_descriptor._internal_create_key,
   ),
   _descriptor.MethodDescriptor(
+    name='GetReplay',
+    full_name='LearnerService.GetReplay',
+    index=1,
+    containing_service=None,
+    input_type=ndarray__pb2._EMPTY,
+    output_type=_REPLAY,
+    serialized_options=None,
+    create_key=_descriptor._internal_create_key,
+  ),
+  _descriptor.MethodDescriptor(
     name='GetAction',
     full_name='LearnerService.GetAction',
-    index=1,
+    index=2,
     containing_service=None,
     input_type=_GETACTIONREQUEST,
     output_type=_ACTION,
@@ -374,7 +431,7 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='GetPolicyVariables',
     full_name='LearnerService.GetPolicyVariables',
-    index=2,
+    index=3,
     containing_service=None,
     input_type=ndarray__pb2._EMPTY,
     output_type=_POLICYVARIABLES,
@@ -384,7 +441,7 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='GetTDError',
     full_name='LearnerService.GetTDError',
-    index=3,
+    index=4,
     containing_service=None,
     input_type=_GETTDERRORREQUEST,
     output_type=_TDERROR,
@@ -394,7 +451,7 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='PostRewards',
     full_name='LearnerService.PostRewards',
-    index=4,
+    index=5,
     containing_service=None,
     input_type=_POSTREWARDSTOLEARNERREQUEST,
     output_type=ndarray__pb2._EMPTY,
@@ -404,7 +461,7 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='UpdatePolicyVariables',
     full_name='LearnerService.UpdatePolicyVariables',
-    index=5,
+    index=6,
     containing_service=None,
     input_type=_POLICYVARIABLES,
     output_type=ndarray__pb2._EMPTY,

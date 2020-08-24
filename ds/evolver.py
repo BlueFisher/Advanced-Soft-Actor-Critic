@@ -75,17 +75,27 @@ class Evolver:
     def close(self):
         self.server.stop(0)
 
-        self.logger.warn('Closed')
+        self.logger.warning('Closed')
 
 
 class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
     def __init__(self, name):
-        self._peer_set = PeerSet(logging.getLogger('ds.evolver.service'))
+        self._logger = logging.getLogger('ds.evolver.service')
+        self._peer_set = PeerSet(self._logger)
+        self._learner_actors = dict()
+        self._actor_learner = dict()
         self.name = name
 
     def _record_peer(self, context):
         def _unregister_peer():
             self._peer_set.disconnect(context.peer())
+            if context.peer() in self._learner_actors:
+                del self._learner_actors[context.peer()]
+            elif context.peer() in self._actor_learner:
+                learner_peer = self._actor_learner[context.peer()]
+                self._learner_actors[learner_peer].remove(context.peer())
+                del self._actor_learner[context.peer()]
+
         context.add_callback(_unregister_peer)
         self._peer_set.connect(context.peer())
 
@@ -94,13 +104,37 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
         for request in request_iterator:
             yield Pong(time=int(time.time() * 1000))
 
-    def Register(self, request: evolver_pb2.RegisterRequest, context):
+    def RegisterLearner(self, request: evolver_pb2.RegisterLearnerRequest, context):
         self._peer_set.add_info(context.peer(), {
-            'host': request.host,
-            'port': request.port
+            'learner_host': request.learner_host,
+            'learner_port': request.learner_port,
+            'replay_host': request.replay_host,
+            'replay_port': request.replay_port
         })
+        self._learner_actors[context.peer()] = set()
 
-        return evolver_pb2.RegisterResponse(name=self.name)
+        self._logger.info(f'Learner {context.peer()} registered')
+
+        return evolver_pb2.RegisterLearnerResponse(name=self.name)
+
+    def RegisterActor(self, request, context):
+        if len(self._learner_actors) == 0:
+            self._logger.info(f'Actor {context.peer()} register failed')
+            return evolver_pb2.RegisterActorResponse(succeeded=False)
+
+        assigned_learner = sorted(self._learner_actors.items(),
+                                       key=lambda t: len(t[1]))[0][0]
+
+        self._learner_actors[assigned_learner].add(context.peer())
+        self._actor_learner[context.peer()] = assigned_learner
+
+        assigned_learner = self._peer_set[assigned_learner]
+        self._logger.info(f'Actor {context.peer()} registered')
+        return evolver_pb2.RegisterActorResponse(succeeded=True,
+                                                 learner_host=assigned_learner['learner_host'],
+                                                 learner_port=assigned_learner['learner_port'],
+                                                 replay_host=assigned_learner['replay_host'],
+                                                 replay_port=assigned_learner['replay_port'])
 
     def PostRewards(self, request: evolver_pb2.PostRewardsToEvolverRequest, context):
         print(proto_to_ndarray(request.rewards))

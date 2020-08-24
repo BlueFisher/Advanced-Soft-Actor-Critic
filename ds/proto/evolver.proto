@@ -6,16 +6,27 @@ import "pingpong.proto";
 service EvolverService {
   rpc Persistence(stream Ping) returns (stream Pong);
 
-  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc RegisterLearner(RegisterLearnerRequest) returns (RegisterLearnerResponse);
+  rpc RegisterActor(Empty) returns (RegisterActorResponse);
   rpc PostRewards(PostRewardsToEvolverRequest) returns (Empty);
 }
 
-message RegisterRequest {
-  string host = 1;
-  int32 port = 2;
+message RegisterLearnerRequest {
+  string learner_host = 2;
+  int32 learner_port = 3;
+  string replay_host = 4;
+  int32 replay_port = 5;
 }
-message RegisterResponse{
+message RegisterLearnerResponse {
   string name = 1;
+}
+
+message RegisterActorResponse {
+  bool succeeded = 1;
+  string learner_host = 2;
+  int32 learner_port = 3;
+  string replay_host = 4;
+  int32 replay_port = 5;
 }
 message PostRewardsToEvolverRequest {
   NDarray rewards = 1;

@@ -21,10 +21,15 @@ class EvolverServiceStub(object):
                 request_serializer=pingpong__pb2.Ping.SerializeToString,
                 response_deserializer=pingpong__pb2.Pong.FromString,
                 )
-        self.Register = channel.unary_unary(
-                '/EvolverService/Register',
-                request_serializer=evolver__pb2.RegisterRequest.SerializeToString,
-                response_deserializer=evolver__pb2.RegisterResponse.FromString,
+        self.RegisterLearner = channel.unary_unary(
+                '/EvolverService/RegisterLearner',
+                request_serializer=evolver__pb2.RegisterLearnerRequest.SerializeToString,
+                response_deserializer=evolver__pb2.RegisterLearnerResponse.FromString,
+                )
+        self.RegisterActor = channel.unary_unary(
+                '/EvolverService/RegisterActor',
+                request_serializer=ndarray__pb2.Empty.SerializeToString,
+                response_deserializer=evolver__pb2.RegisterActorResponse.FromString,
                 )
         self.PostRewards = channel.unary_unary(
                 '/EvolverService/PostRewards',
@@ -42,7 +47,13 @@ class EvolverServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def Register(self, request, context):
+    def RegisterLearner(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RegisterActor(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -62,10 +73,15 @@ def add_EvolverServiceServicer_to_server(servicer, server):
                     request_deserializer=pingpong__pb2.Ping.FromString,
                     response_serializer=pingpong__pb2.Pong.SerializeToString,
             ),
-            'Register': grpc.unary_unary_rpc_method_handler(
-                    servicer.Register,
-                    request_deserializer=evolver__pb2.RegisterRequest.FromString,
-                    response_serializer=evolver__pb2.RegisterResponse.SerializeToString,
+            'RegisterLearner': grpc.unary_unary_rpc_method_handler(
+                    servicer.RegisterLearner,
+                    request_deserializer=evolver__pb2.RegisterLearnerRequest.FromString,
+                    response_serializer=evolver__pb2.RegisterLearnerResponse.SerializeToString,
+            ),
+            'RegisterActor': grpc.unary_unary_rpc_method_handler(
+                    servicer.RegisterActor,
+                    request_deserializer=ndarray__pb2.Empty.FromString,
+                    response_serializer=evolver__pb2.RegisterActorResponse.SerializeToString,
             ),
             'PostRewards': grpc.unary_unary_rpc_method_handler(
                     servicer.PostRewards,
@@ -99,7 +115,7 @@ class EvolverService(object):
             call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
-    def Register(request,
+    def RegisterLearner(request,
             target,
             options=(),
             channel_credentials=None,
@@ -108,9 +124,25 @@ class EvolverService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/EvolverService/Register',
-            evolver__pb2.RegisterRequest.SerializeToString,
-            evolver__pb2.RegisterResponse.FromString,
+        return grpc.experimental.unary_unary(request, target, '/EvolverService/RegisterLearner',
+            evolver__pb2.RegisterLearnerRequest.SerializeToString,
+            evolver__pb2.RegisterLearnerResponse.FromString,
+            options, channel_credentials,
+            call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def RegisterActor(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/EvolverService/RegisterActor',
+            ndarray__pb2.Empty.SerializeToString,
+            evolver__pb2.RegisterActorResponse.FromString,
             options, channel_credentials,
             call_credentials, compression, wait_for_ready, timeout, metadata)
 

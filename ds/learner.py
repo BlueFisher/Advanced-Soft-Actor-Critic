@@ -49,20 +49,37 @@ class Learner(object):
 
         self.net_config = self._init_constant_config(root_dir, config_dir, args)
 
-        while True:
-            self._is_training = False
-            self._closed = False
+        self._stub = StubController(self.net_config['evolver_host'],
+                                    self.net_config['evolver_port'],
+                                    self.net_config['learner_host'],
+                                    self.net_config['learner_port'],
+                                    self.net_config['replay_host'],
+                                    self.net_config['replay_port'],
+                                    self.standalone)
 
-            try:
+        try:
+            while True:
+                self._data_feeded = False
+                self._closed = False
+
+                self.logger = config_helper.set_logger('ds.learner')
+
                 self._init_env()
                 self._run()
-            except KeyboardInterrupt:
-                self.logger.warning('KeyboardInterrupt in _run')
-                self.close()
-                break
 
+                self._closed = True
+                if hasattr(self, 'env'):
+                    self.env.close()
+                    self.logger.warning('Env closed')
+                if hasattr(self, 'server'):
+                    self.server.stop(None)
+                    self.logger.warning('Server closed')
+                
+                time.sleep(RECONNECTION_TIME)
+
+        except KeyboardInterrupt:
+            self.logger.warning('KeyboardInterrupt in _run')
             self.close()
-            time.sleep(RECONNECTION_TIME)
 
     def _init_constant_config(self, root_dir, config_dir, args):
         self.config_abs_dir = Path(root_dir).joinpath(config_dir)
@@ -81,8 +98,6 @@ class Learner(object):
         return config['net_config']
 
     def _init_env(self):
-        self._stub = StubController(self.net_config, self.standalone)
-
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
                                                            self.config_abs_path,
                                                            self.cmd_args.config)
@@ -107,11 +122,16 @@ class Learner(object):
             model_abs_dir = Path(self.root_dir).joinpath(f'models/{self.config["scene"]}/{self.config["name"]}')
             os.makedirs(model_abs_dir)
         else:
-            # Get name from evolver register
+            # Get name from evolver registry
             name = None
+            self.logger.info('Registering...')
             while name is None:
+                if not self._stub.connected:
+                    time.sleep(RECONNECTION_TIME)
+                    continue
                 name = self._stub.register_to_evolver()
-                time.sleep(RECONNECTION_TIME)
+            self.logger.info(f'Registered name: {name}')
+
             self.config['name'] = name
             model_abs_dir = Path(self.root_dir).joinpath(f'models/{self.config["scene"]}/{self.config["name"]}')
 
@@ -238,11 +258,9 @@ class Learner(object):
                 initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))
                 rnn_state = initial_rnn_state
 
-            while True:
+            while not self._closed:
                 # not training, waiting...
-                if self.train_mode and not self._is_training:
-                    if self._closed:
-                        break
+                if self.train_mode and not self._data_feeded:
                     time.sleep(EVALUATION_WAITING_TIME)
                     continue
 
@@ -260,7 +278,7 @@ class Learner(object):
                 action = np.zeros([len(agents), self.action_dim], dtype=np.float32)
                 step = 0
 
-                while False in [a.done for a in agents] and (not self.train_mode or self._is_training):
+                while False in [a.done for a in agents] and (not self.train_mode or self._data_feeded):
                     with self._training_lock:
                         if use_rnn:
                             action, next_rnn_state = self.sac.choose_rnn_action([o.astype(np.float32) for o in obs_list],
@@ -333,11 +351,11 @@ class Learner(object):
 
             if sampled is None:
                 self.logger.warning('No data sampled')
-                self._is_training = False
+                self._data_feeded = False
                 time.sleep(RECONNECTION_TIME)
                 continue
             else:
-                self._is_training = True
+                self._data_feeded = True
 
                 (pointers,
                  n_obses_list,
@@ -389,14 +407,15 @@ class Learner(object):
             self._run_training_client()
 
     def close(self):
-        self._is_training = False
         self._closed = True
-        self.env.close()
-        if self.train_mode:
+        if hasattr(self, 'env'):
+            self.env.close()
+        if hasattr(self, 'server'):
             self.server.stop(None)
-            self._stub.close()
 
-        self.logger.warn('Closed')
+        self._stub.close()
+
+        self.logger.warning('Closed')
 
 
 class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
@@ -424,6 +443,10 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
         self._record_peer(context)
         for request in request_iterator:
             yield Pong(time=int(time.time() * 1000))
+
+    def GetReplay(self, request, context):
+        return learner_pb2.Replay(host=self.net_config['replay_host'],
+                                  port=self.net_config['replay_port'])
 
     def GetAction(self, request: learner_pb2.GetActionRequest, context):
         obs_list = [proto_to_ndarray(obs) for obs in request.obs_list]
@@ -473,18 +496,24 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 class StubController:
     _closed = False
 
-    def __init__(self, net_config, standalone):
-        self.net_config = net_config
+    def __init__(self, evolver_host, evolver_port,
+                 learner_host, learner_port,
+                 replay_host, replay_port,
+                 standalone):
+        self.learner_host = learner_host
+        self.learner_port = learner_port
+        self.replay_host = replay_host
+        self.replay_port = replay_port
         self.standalone = standalone
 
-        self._replay_channel = grpc.insecure_channel(f'{net_config["replay_host"]}:{net_config["replay_port"]}',
+        self._replay_channel = grpc.insecure_channel(f'{replay_host}:{replay_port}',
                                                      [('grpc.max_reconnect_backoff_ms', 5000)])
         self._replay_stub = replay_pb2_grpc.ReplayServiceStub(self._replay_channel)
 
         self._logger = logging.getLogger('ds.learner.stub')
 
         if not standalone:
-            self._evolver_channel = grpc.insecure_channel(f'{net_config["evolver_host"]}:{net_config["evolver_port"]}',
+            self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}',
                                                           [('grpc.max_reconnect_backoff_ms', 5000)])
             self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
 
@@ -530,9 +559,11 @@ class StubController:
 
     @rpc_error_inspector
     def register_to_evolver(self):
-        response = self._evolver_stub.Register(
-            evolver_pb2.RegisterRequest(host=self.net_config["learner_host"],
-                                        port=self.net_config["learner_port"]))
+        response = self._evolver_stub.RegisterLearner(
+            evolver_pb2.RegisterLearnerRequest(learner_host=self.learner_host,
+                                               learner_port=self.learner_port,
+                                               replay_host=self.replay_host,
+                                               replay_port=self.replay_port))
 
         if response:
             return response.name
@@ -565,4 +596,7 @@ class StubController:
                 time.sleep(RECONNECTION_TIME)
 
     def close(self):
+        self._replay_channel.close()
+        if not self.standalone:
+            self._evolver_channel.close()
         self._closed = True
