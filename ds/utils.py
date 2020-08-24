@@ -51,6 +51,10 @@ class PeerSet(object):
             for k, v in info.items():
                 self._peers[peer][k] = v
 
+    def __getitem__(self, key):
+        with self._peers_lock:
+            return self._peers[key]
+
     def peers(self):
         with self._peers_lock:
             return list(self._peers.keys()), self._peers

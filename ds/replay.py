@@ -32,14 +32,14 @@ class Replay(object):
 
         self._replay_buffer = PrioritizedReplayBuffer(**replay_config)
 
-        self._stub = StubController(net_config)
+        self._stub = StubController(net_config['learner_host'], net_config['learner_port'])
 
         self.use_rnn = sac_config['use_rnn']
         self.burn_in_step = sac_config['burn_in_step']
         self.n_step = sac_config['n_step']
 
         try:
-            self._run_replay_server(net_config)
+            self._run_replay_server(net_config['replay_port'])
         except KeyboardInterrupt:
             self.logger.warning('KeyboardInterrupt in _run_replay_server')
             self.close()
@@ -180,7 +180,7 @@ class Replay(object):
         self._replay_buffer.clear()
         self.logger.info('Replay buffer cleared')
 
-    def _run_replay_server(self, net_config):
+    def _run_replay_server(self, replay_port):
         servicer = ReplayService(self._add,
                                  self._sample,
                                  self._update_td_error,
@@ -188,9 +188,9 @@ class Replay(object):
                                  self._clear)
         self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS))
         replay_pb2_grpc.add_ReplayServiceServicer_to_server(servicer, self.server)
-        self.server.add_insecure_port(f'[::]:{net_config["replay_port"]}')
+        self.server.add_insecure_port(f'[::]:{replay_port}')
         self.server.start()
-        self.logger.info(f'Replay server is running on [{net_config["replay_port"]}]...')
+        self.logger.info(f'Replay server is running on [{replay_port}]...')
         self.server.wait_for_termination()
 
     def close(self):
@@ -271,8 +271,9 @@ class ReplayService(replay_pb2_grpc.ReplayServiceServicer):
 
 
 class StubController:
-    def __init__(self, net_config):
-        self._learner_channel = grpc.insecure_channel(f'{net_config["learner_host"]}:{net_config["learner_port"]}')
+    def __init__(self, learner_host, learner_port):
+        self._learner_channel = grpc.insecure_channel(f'{learner_host}:{learner_port}',
+                                                      [('grpc.max_reconnect_backoff_ms', 5000)])
         self._learner_stub = learner_pb2_grpc.LearnerServiceStub(self._learner_channel)
 
         self._logger = logging.getLogger('ds.replay.stub')
