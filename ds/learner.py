@@ -74,7 +74,7 @@ class Learner(object):
                 if hasattr(self, 'server'):
                     self.server.stop(None)
                     self.logger.warning('Server closed')
-                
+
                 time.sleep(RECONNECTION_TIME)
 
         except KeyboardInterrupt:
@@ -120,25 +120,30 @@ class Learner(object):
             rand = ''.join(random.sample(string.ascii_letters, 4))
             self.config['name'] = self.config['name'].replace('{time}', self._now + rand)
             model_abs_dir = Path(self.root_dir).joinpath(f'models/{self.config["scene"]}/{self.config["name"]}')
-            os.makedirs(model_abs_dir)
         else:
             # Get name from evolver registry
-            name = None
+            evolver_register_response = None
             self.logger.info('Registering...')
-            while name is None:
+            while evolver_register_response is None:
                 if not self._stub.connected:
                     time.sleep(RECONNECTION_TIME)
                     continue
-                name = self._stub.register_to_evolver()
-            self.logger.info(f'Registered name: {name}')
+                evolver_register_response = self._stub.register_to_evolver()
+                if evolver_register_response is None:
+                    time.sleep(RECONNECTION_TIME)
+
+            _id, name = evolver_register_response
+            self.logger.info(f'Registered id: {_id}, name: {name}')
 
             self.config['name'] = name
-            model_abs_dir = Path(self.root_dir).joinpath(f'models/{self.config["scene"]}/{self.config["name"]}')
+            model_abs_dir = Path(self.root_dir).joinpath(f'models/{self.config["scene"]}/{self.config["name"]}/learner{_id}')
+
+        os.makedirs(model_abs_dir)
 
         logger_file = f'{model_abs_dir}/{self.cmd_args.logger_file}' if self.cmd_args.logger_file is not None else None
         self.logger = config_helper.set_logger('ds.learner', logger_file)
 
-        if self.train_mode:
+        if self.train_mode and self.standalone:
             config_helper.save_config(config, model_abs_dir, 'config_ds.yaml')
 
         config_helper.display_config(config, self.logger)
@@ -197,8 +202,14 @@ class Learner(object):
 
         return [v.numpy() for v in variables]
 
-    def _udpate_policy_variables(self, variables):
-        pass
+    def _get_nn_variables(self):
+        with self._training_lock:
+            variables = self.sac.get_policy_variables()
+
+        return [v.numpy() for v in variables]
+
+    def _udpate_nn_variables(self, variables):
+        print('update')
 
     def _get_action(self, obs_list, rnn_state=None):
         if self.sac.use_rnn:
@@ -395,7 +406,8 @@ class Learner(object):
         if self.train_mode:
             servicer = LearnerService(self._get_action,
                                       self._get_policy_variables,
-                                      self._udpate_policy_variables,
+                                      self._get_nn_variables,
+                                      self._udpate_nn_variables,
                                       self._get_td_error,
                                       self._post_rewards)
             self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS))
@@ -403,6 +415,10 @@ class Learner(object):
             self.server.add_insecure_port(f'[::]:{self.net_config["learner_port"]}')
             self.server.start()
             self.logger.info(f'Learner server is running on [{self.net_config["learner_port"]}]...')
+
+            while True:
+                self._stub.post_rewards(np.array([1.1]))
+                time.sleep(0.5)
 
             self._run_training_client()
 
@@ -422,12 +438,14 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
     def __init__(self,
                  get_action,
                  get_policy_variables,
-                 udpate_policy_variables,
+                 get_nn_variables,
+                 udpate_nn_variables,
                  get_td_error,
                  post_rewards):
         self._get_action = get_action
         self._get_policy_variables = get_policy_variables
-        self._udpate_policy_variables = udpate_policy_variables
+        self._get_nn_variables = get_nn_variables
+        self._udpate_nn_variables = udpate_nn_variables
         self._get_td_error = get_td_error
         self._post_rewards = post_rewards
 
@@ -463,11 +481,16 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
     def GetPolicyVariables(self, request, context):
         variables = self._get_policy_variables()
-        return learner_pb2.PolicyVariables(variables=[ndarray_to_proto(v) for v in variables])
+        return learner_pb2.NNVariables(variables=[ndarray_to_proto(v) for v in variables])
 
-    def UpdatePolicyVariables(self, request, context):
-        variables = [proto_to_ndarray(v) for v in request.variabels]
-        self._udpate_policy_variables(variables)
+    def GetNNVariables(self, request, context):
+        variables = self._get_nn_variables()
+        return learner_pb2.NNVariables(variables=[ndarray_to_proto(v) for v in variables])
+
+    def UpdateNNVariables(self, request, context):
+        variables = [proto_to_ndarray(v) for v in request.variables]
+        self._udpate_nn_variables(variables)
+        return Empty()
 
     def GetTDError(self, request: learner_pb2.GetTDErrorRequest, context):
         n_obses_list = [proto_to_ndarray(n_obses) for n_obses in request.n_obses_list]
@@ -566,7 +589,7 @@ class StubController:
                                                replay_port=self.replay_port))
 
         if response:
-            return response.name
+            return response.id, response.name
 
     @rpc_error_inspector
     def post_rewards(self, rewards):

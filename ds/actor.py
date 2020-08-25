@@ -184,7 +184,7 @@ class Actor(object):
         self.logger.info(f'sac_actor initialized')
 
     def _update_policy_variables(self):
-        variables = self._stub.update_policy_variables()
+        variables = self._stub.get_policy_variables()
         if variables is not None:
             self.sac_actor.update_policy_variables(variables)
 
@@ -456,7 +456,7 @@ class StubController:
             return action, rnn_state
 
     @rpc_error_inspector
-    def update_policy_variables(self):
+    def get_policy_variables(self):
         response = self._learner_stub.GetPolicyVariables(Empty())
         return [proto_to_ndarray(v) for v in response.variables]
 

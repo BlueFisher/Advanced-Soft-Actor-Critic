@@ -8,11 +8,12 @@ service LearnerService {
 
   rpc GetReplay(Empty) returns (Replay);
   rpc GetAction(GetActionRequest) returns (Action);
-  rpc GetPolicyVariables(Empty) returns (PolicyVariables);
+  rpc GetPolicyVariables(Empty) returns (NNVariables);
   rpc GetTDError(GetTDErrorRequest) returns (TDError);
   rpc PostRewards(PostRewardsToLearnerRequest) returns (Empty);
   // Update variables from evolver
-  rpc UpdatePolicyVariables(PolicyVariables) returns (Empty);
+  rpc GetNNVariables(Empty) returns (NNVariables);
+  rpc UpdateNNVariables(NNVariables) returns (Empty);
 }
 
 message Replay {
@@ -29,7 +30,7 @@ message Action {
   NDarray rnn_state = 3;
 }
 
-message PolicyVariables {
+message NNVariables {
   repeated NDarray variables = 1;
 }
 
