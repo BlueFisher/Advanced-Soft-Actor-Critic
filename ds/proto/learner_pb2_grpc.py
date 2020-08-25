@@ -41,11 +41,6 @@ class LearnerServiceStub(object):
                 request_serializer=learner__pb2.GetTDErrorRequest.SerializeToString,
                 response_deserializer=learner__pb2.TDError.FromString,
                 )
-        self.PostRewards = channel.unary_unary(
-                '/LearnerService/PostRewards',
-                request_serializer=learner__pb2.PostRewardsToLearnerRequest.SerializeToString,
-                response_deserializer=ndarray__pb2.Empty.FromString,
-                )
         self.GetNNVariables = channel.unary_unary(
                 '/LearnerService/GetNNVariables',
                 request_serializer=ndarray__pb2.Empty.SerializeToString,
@@ -91,12 +86,6 @@ class LearnerServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def PostRewards(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def GetNNVariables(self, request, context):
         """Update variables from evolver
         """
@@ -137,11 +126,6 @@ def add_LearnerServiceServicer_to_server(servicer, server):
                     servicer.GetTDError,
                     request_deserializer=learner__pb2.GetTDErrorRequest.FromString,
                     response_serializer=learner__pb2.TDError.SerializeToString,
-            ),
-            'PostRewards': grpc.unary_unary_rpc_method_handler(
-                    servicer.PostRewards,
-                    request_deserializer=learner__pb2.PostRewardsToLearnerRequest.FromString,
-                    response_serializer=ndarray__pb2.Empty.SerializeToString,
             ),
             'GetNNVariables': grpc.unary_unary_rpc_method_handler(
                     servicer.GetNNVariables,
@@ -240,22 +224,6 @@ class LearnerService(object):
         return grpc.experimental.unary_unary(request, target, '/LearnerService/GetTDError',
             learner__pb2.GetTDErrorRequest.SerializeToString,
             learner__pb2.TDError.FromString,
-            options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def PostRewards(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/LearnerService/PostRewards',
-            learner__pb2.PostRewardsToLearnerRequest.SerializeToString,
-            ndarray__pb2.Empty.FromString,
             options, channel_credentials,
             call_credentials, compression, wait_for_ready, timeout, metadata)
 

@@ -196,8 +196,6 @@ class Actor(object):
                    n_dones,
                    n_rnn_states=None):
 
-        self._stub.post_rewards(n_rewards)
-
         if n_obses_list[0].shape[1] < self.sac_actor.burn_in_step + self.sac_actor.n_step:
             return
 
@@ -459,10 +457,6 @@ class StubController:
     def get_policy_variables(self):
         response = self._learner_stub.GetPolicyVariables(Empty())
         return [proto_to_ndarray(v) for v in response.variables]
-
-    @rpc_error_inspector
-    def post_rewards(self, n_rewards):
-        self._learner_stub.PostRewards(learner_pb2.PostRewardsToLearnerRequest(n_rewards=ndarray_to_proto(n_rewards)))
 
     def _start_learner_persistence(self):
         def request_messages():
