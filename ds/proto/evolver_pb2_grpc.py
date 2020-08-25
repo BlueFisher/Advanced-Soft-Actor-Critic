@@ -31,9 +31,9 @@ class EvolverServiceStub(object):
                 request_serializer=ndarray__pb2.Empty.SerializeToString,
                 response_deserializer=evolver__pb2.RegisterActorResponse.FromString,
                 )
-        self.PostRewards = channel.unary_unary(
-                '/EvolverService/PostRewards',
-                request_serializer=evolver__pb2.PostRewardsToEvolverRequest.SerializeToString,
+        self.PostReward = channel.unary_unary(
+                '/EvolverService/PostReward',
+                request_serializer=evolver__pb2.PostRewardToEvolverRequest.SerializeToString,
                 response_deserializer=ndarray__pb2.Empty.FromString,
                 )
 
@@ -59,7 +59,7 @@ class EvolverServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def PostRewards(self, request, context):
+    def PostReward(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -83,9 +83,9 @@ def add_EvolverServiceServicer_to_server(servicer, server):
                     request_deserializer=ndarray__pb2.Empty.FromString,
                     response_serializer=evolver__pb2.RegisterActorResponse.SerializeToString,
             ),
-            'PostRewards': grpc.unary_unary_rpc_method_handler(
-                    servicer.PostRewards,
-                    request_deserializer=evolver__pb2.PostRewardsToEvolverRequest.FromString,
+            'PostReward': grpc.unary_unary_rpc_method_handler(
+                    servicer.PostReward,
+                    request_deserializer=evolver__pb2.PostRewardToEvolverRequest.FromString,
                     response_serializer=ndarray__pb2.Empty.SerializeToString,
             ),
     }
@@ -147,7 +147,7 @@ class EvolverService(object):
             call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
-    def PostRewards(request,
+    def PostReward(request,
             target,
             options=(),
             channel_credentials=None,
@@ -156,8 +156,8 @@ class EvolverService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/EvolverService/PostRewards',
-            evolver__pb2.PostRewardsToEvolverRequest.SerializeToString,
+        return grpc.experimental.unary_unary(request, target, '/EvolverService/PostReward',
+            evolver__pb2.PostRewardToEvolverRequest.SerializeToString,
             ndarray__pb2.Empty.FromString,
             options, channel_credentials,
             call_credentials, compression, wait_for_ready, timeout, metadata)

@@ -22,6 +22,7 @@ base_config:
   n_agents: 1 # N agents running in parallel
   max_step_per_iter: -1 # Max step in each iteration
   reset_on_iteration: true # If to force reset agent if an episode terminated
+  evolver_cem_length: 20
   
 net_config:
   evolver_host: 127.0.0.1

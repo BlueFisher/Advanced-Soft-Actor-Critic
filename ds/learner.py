@@ -250,9 +250,6 @@ class Learner(object):
 
         return td_error
 
-    def _post_rewards(self, peer, n_rewards):
-        pass
-
     def _policy_evaluation(self):
         try:
             use_rnn = self.sac.use_rnn
@@ -329,7 +326,7 @@ class Learner(object):
                         self._log_episode_summaries(iteration, agents)
 
                     if not self.standalone:
-                        self._stub.post_rewards(np.array([a.reward for a in agents]))
+                        self._stub.post_reward(np.mean([a.reward for a in agents]))
 
                 self._log_episode_info(iteration, start_time, agents)
 
@@ -408,8 +405,7 @@ class Learner(object):
                                       self._get_policy_variables,
                                       self._get_nn_variables,
                                       self._udpate_nn_variables,
-                                      self._get_td_error,
-                                      self._post_rewards)
+                                      self._get_td_error)
             self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS))
             learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, self.server)
             self.server.add_insecure_port(f'[::]:{self.net_config["learner_port"]}')
@@ -417,7 +413,7 @@ class Learner(object):
             self.logger.info(f'Learner server is running on [{self.net_config["learner_port"]}]...')
 
             while True:
-                self._stub.post_rewards(np.array([1.1]))
+                self._stub.post_reward(np.array([1.1]))
                 time.sleep(0.5)
 
             self._run_training_client()
@@ -440,14 +436,12 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
                  get_policy_variables,
                  get_nn_variables,
                  udpate_nn_variables,
-                 get_td_error,
-                 post_rewards):
+                 get_td_error):
         self._get_action = get_action
         self._get_policy_variables = get_policy_variables
         self._get_nn_variables = get_nn_variables
         self._udpate_nn_variables = udpate_nn_variables
         self._get_td_error = get_td_error
-        self._post_rewards = post_rewards
 
         self._peer_set = PeerSet(logging.getLogger('ds.learner.service'))
 
@@ -509,11 +503,6 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
                                       n_mu_probs,
                                       n_rnn_states)
         return learner_pb2.TDError(td_error=ndarray_to_proto(td_error))
-
-    def PostRewards(self, request: learner_pb2.PostRewardsToLearnerRequest, context):
-        n_rewards = proto_to_ndarray(request.n_rewards)
-        self._post_rewards(context.peer(), n_rewards)
-        return Empty()
 
 
 class StubController:
@@ -591,10 +580,11 @@ class StubController:
         if response:
             return response.id, response.name
 
+    # To evolver
     @rpc_error_inspector
-    def post_rewards(self, rewards):
-        self._evolver_stub.PostRewards(
-            evolver_pb2.PostRewardsToEvolverRequest(rewards=ndarray_to_proto(rewards)))
+    def post_reward(self, reward):
+        self._evolver_stub.PostReward(
+            evolver_pb2.PostRewardToEvolverRequest(reward=float(reward)))
 
     def _start_evolver_persistence(self):
         def request_messages():

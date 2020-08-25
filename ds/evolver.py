@@ -72,8 +72,8 @@ class Evolver:
         else:
             del self._learner_rewards[peer]
 
-    def _post_rewards(self, rewards, peer):
-        self._learner_rewards[peer].append(float(rewards))
+    def _post_reward(self, reward, peer):
+        self._learner_rewards[peer].append(reward)
 
         # if len(self._learner_rewards) > 1 and \
         #         all([len(i) == 10 for i in self._learner_rewards.values()]):
@@ -99,7 +99,7 @@ class Evolver:
     def _run(self):
         self.servicer = EvolverService(self.config['name'],
                                        self._learner_connected,
-                                       self._post_rewards)
+                                       self._post_reward)
         self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS))
         evolver_pb2_grpc.add_EvolverServiceServicer_to_server(self.servicer, self.server)
         self.server.add_insecure_port(f'[::]:{self.net_config["evolver_port"]}')
@@ -137,7 +137,7 @@ class LearnerStubController:
 
 
 class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
-    def __init__(self, name, learner_connected, post_rewards):
+    def __init__(self, name, learner_connected, post_reward):
         self._logger = logging.getLogger('ds.evolver.service')
         self._peer_set = PeerSet(self._logger)
         self._learner_id = 0
@@ -146,7 +146,7 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
 
         self.name = name
         self._learner_connected = learner_connected
-        self._post_rewards = post_rewards
+        self._post_reward = post_reward
 
     def _record_peer(self, context):
         peer = context.peer()
@@ -223,7 +223,8 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
                                                  replay_host=replay_host,
                                                  replay_port=replay_port)
 
-    def PostRewards(self, request: evolver_pb2.PostRewardsToEvolverRequest, context):
-        self._post_rewards(proto_to_ndarray(request.rewards), context.peer())
+    # From learner
+    def PostReward(self, request: evolver_pb2.PostRewardToEvolverRequest, context):
+        self._post_reward(float(request.reward), context.peer())
 
         return Empty()

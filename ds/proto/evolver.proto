@@ -8,7 +8,7 @@ service EvolverService {
 
   rpc RegisterLearner(RegisterLearnerRequest) returns (RegisterLearnerResponse);
   rpc RegisterActor(Empty) returns (RegisterActorResponse);
-  rpc PostRewards(PostRewardsToEvolverRequest) returns (Empty);
+  rpc PostReward(PostRewardToEvolverRequest) returns (Empty);
 }
 
 message RegisterLearnerRequest {
@@ -29,6 +29,6 @@ message RegisterActorResponse {
   string replay_host = 5;
   int32 replay_port = 6;
 }
-message PostRewardsToEvolverRequest {
-  NDarray rewards = 1;
+message PostRewardToEvolverRequest {
+  float reward = 1;
 }

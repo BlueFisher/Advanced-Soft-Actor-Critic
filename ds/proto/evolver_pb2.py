@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\revolver.proto\x1a\rndarray.proto\x1a\x0epingpong.proto\"n\n\x16RegisterLearnerRequest\x12\x14\n\x0clearner_host\x18\x02 \x01(\t\x12\x14\n\x0clearner_port\x18\x03 \x01(\x05\x12\x13\n\x0breplay_host\x18\x04 \x01(\t\x12\x13\n\x0breplay_port\x18\x05 \x01(\x05\"3\n\x17RegisterLearnerResponse\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\n\n\x02id\x18\x02 \x01(\x05\"\x80\x01\n\x15RegisterActorResponse\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x14\n\x0clearner_host\x18\x03 \x01(\t\x12\x14\n\x0clearner_port\x18\x04 \x01(\x05\x12\x13\n\x0breplay_host\x18\x05 \x01(\t\x12\x13\n\x0breplay_port\x18\x06 \x01(\x05\"8\n\x1bPostRewardsToEvolverRequest\x12\x19\n\x07rewards\x18\x01 \x01(\x0b\x32\x08.NDarray2\xdd\x01\n\x0e\x45volverService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\x44\n\x0fRegisterLearner\x12\x17.RegisterLearnerRequest\x1a\x18.RegisterLearnerResponse\x12/\n\rRegisterActor\x12\x06.Empty\x1a\x16.RegisterActorResponse\x12\x33\n\x0bPostRewards\x12\x1c.PostRewardsToEvolverRequest\x1a\x06.Emptyb\x06proto3'
+  serialized_pb=b'\n\revolver.proto\x1a\rndarray.proto\x1a\x0epingpong.proto\"n\n\x16RegisterLearnerRequest\x12\x14\n\x0clearner_host\x18\x02 \x01(\t\x12\x14\n\x0clearner_port\x18\x03 \x01(\x05\x12\x13\n\x0breplay_host\x18\x04 \x01(\t\x12\x13\n\x0breplay_port\x18\x05 \x01(\x05\"3\n\x17RegisterLearnerResponse\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\n\n\x02id\x18\x02 \x01(\x05\"\x80\x01\n\x15RegisterActorResponse\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x14\n\x0clearner_host\x18\x03 \x01(\t\x12\x14\n\x0clearner_port\x18\x04 \x01(\x05\x12\x13\n\x0breplay_host\x18\x05 \x01(\t\x12\x13\n\x0breplay_port\x18\x06 \x01(\x05\",\n\x1aPostRewardToEvolverRequest\x12\x0e\n\x06reward\x18\x01 \x01(\x02\x32\xdb\x01\n\x0e\x45volverService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\x44\n\x0fRegisterLearner\x12\x17.RegisterLearnerRequest\x1a\x18.RegisterLearnerResponse\x12/\n\rRegisterActor\x12\x06.Empty\x1a\x16.RegisterActorResponse\x12\x31\n\nPostReward\x12\x1b.PostRewardToEvolverRequest\x1a\x06.Emptyb\x06proto3'
   ,
   dependencies=[ndarray__pb2.DESCRIPTOR,pingpong__pb2.DESCRIPTOR,])
 
@@ -180,18 +180,18 @@ _REGISTERACTORRESPONSE = _descriptor.Descriptor(
 )
 
 
-_POSTREWARDSTOEVOLVERREQUEST = _descriptor.Descriptor(
-  name='PostRewardsToEvolverRequest',
-  full_name='PostRewardsToEvolverRequest',
+_POSTREWARDTOEVOLVERREQUEST = _descriptor.Descriptor(
+  name='PostRewardToEvolverRequest',
+  full_name='PostRewardToEvolverRequest',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='rewards', full_name='PostRewardsToEvolverRequest.rewards', index=0,
-      number=1, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
+      name='reward', full_name='PostRewardToEvolverRequest.reward', index=0,
+      number=1, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
@@ -208,14 +208,13 @@ _POSTREWARDSTOEVOLVERREQUEST = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=344,
-  serialized_end=400,
+  serialized_end=388,
 )
 
-_POSTREWARDSTOEVOLVERREQUEST.fields_by_name['rewards'].message_type = ndarray__pb2._NDARRAY
 DESCRIPTOR.message_types_by_name['RegisterLearnerRequest'] = _REGISTERLEARNERREQUEST
 DESCRIPTOR.message_types_by_name['RegisterLearnerResponse'] = _REGISTERLEARNERRESPONSE
 DESCRIPTOR.message_types_by_name['RegisterActorResponse'] = _REGISTERACTORRESPONSE
-DESCRIPTOR.message_types_by_name['PostRewardsToEvolverRequest'] = _POSTREWARDSTOEVOLVERREQUEST
+DESCRIPTOR.message_types_by_name['PostRewardToEvolverRequest'] = _POSTREWARDTOEVOLVERREQUEST
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 RegisterLearnerRequest = _reflection.GeneratedProtocolMessageType('RegisterLearnerRequest', (_message.Message,), {
@@ -239,12 +238,12 @@ RegisterActorResponse = _reflection.GeneratedProtocolMessageType('RegisterActorR
   })
 _sym_db.RegisterMessage(RegisterActorResponse)
 
-PostRewardsToEvolverRequest = _reflection.GeneratedProtocolMessageType('PostRewardsToEvolverRequest', (_message.Message,), {
-  'DESCRIPTOR' : _POSTREWARDSTOEVOLVERREQUEST,
+PostRewardToEvolverRequest = _reflection.GeneratedProtocolMessageType('PostRewardToEvolverRequest', (_message.Message,), {
+  'DESCRIPTOR' : _POSTREWARDTOEVOLVERREQUEST,
   '__module__' : 'evolver_pb2'
-  # @@protoc_insertion_point(class_scope:PostRewardsToEvolverRequest)
+  # @@protoc_insertion_point(class_scope:PostRewardToEvolverRequest)
   })
-_sym_db.RegisterMessage(PostRewardsToEvolverRequest)
+_sym_db.RegisterMessage(PostRewardToEvolverRequest)
 
 
 
@@ -255,8 +254,8 @@ _EVOLVERSERVICE = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=403,
-  serialized_end=624,
+  serialized_start=391,
+  serialized_end=610,
   methods=[
   _descriptor.MethodDescriptor(
     name='Persistence',
@@ -289,11 +288,11 @@ _EVOLVERSERVICE = _descriptor.ServiceDescriptor(
     create_key=_descriptor._internal_create_key,
   ),
   _descriptor.MethodDescriptor(
-    name='PostRewards',
-    full_name='EvolverService.PostRewards',
+    name='PostReward',
+    full_name='EvolverService.PostReward',
     index=3,
     containing_service=None,
-    input_type=_POSTREWARDSTOEVOLVERREQUEST,
+    input_type=_POSTREWARDTOEVOLVERREQUEST,
     output_type=ndarray__pb2._EMPTY,
     serialized_options=None,
     create_key=_descriptor._internal_create_key,
