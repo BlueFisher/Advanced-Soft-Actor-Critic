@@ -34,7 +34,7 @@ class LearnerServiceStub(object):
         self.GetPolicyVariables = channel.unary_unary(
                 '/LearnerService/GetPolicyVariables',
                 request_serializer=ndarray__pb2.Empty.SerializeToString,
-                response_deserializer=learner__pb2.PolicyVariables.FromString,
+                response_deserializer=learner__pb2.NNVariables.FromString,
                 )
         self.GetTDError = channel.unary_unary(
                 '/LearnerService/GetTDError',
@@ -46,9 +46,14 @@ class LearnerServiceStub(object):
                 request_serializer=learner__pb2.PostRewardsToLearnerRequest.SerializeToString,
                 response_deserializer=ndarray__pb2.Empty.FromString,
                 )
-        self.UpdatePolicyVariables = channel.unary_unary(
-                '/LearnerService/UpdatePolicyVariables',
-                request_serializer=learner__pb2.PolicyVariables.SerializeToString,
+        self.GetNNVariables = channel.unary_unary(
+                '/LearnerService/GetNNVariables',
+                request_serializer=ndarray__pb2.Empty.SerializeToString,
+                response_deserializer=learner__pb2.NNVariables.FromString,
+                )
+        self.UpdateNNVariables = channel.unary_unary(
+                '/LearnerService/UpdateNNVariables',
+                request_serializer=learner__pb2.NNVariables.SerializeToString,
                 response_deserializer=ndarray__pb2.Empty.FromString,
                 )
 
@@ -92,9 +97,15 @@ class LearnerServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def UpdatePolicyVariables(self, request, context):
+    def GetNNVariables(self, request, context):
         """Update variables from evolver
         """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateNNVariables(self, request, context):
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -120,7 +131,7 @@ def add_LearnerServiceServicer_to_server(servicer, server):
             'GetPolicyVariables': grpc.unary_unary_rpc_method_handler(
                     servicer.GetPolicyVariables,
                     request_deserializer=ndarray__pb2.Empty.FromString,
-                    response_serializer=learner__pb2.PolicyVariables.SerializeToString,
+                    response_serializer=learner__pb2.NNVariables.SerializeToString,
             ),
             'GetTDError': grpc.unary_unary_rpc_method_handler(
                     servicer.GetTDError,
@@ -132,9 +143,14 @@ def add_LearnerServiceServicer_to_server(servicer, server):
                     request_deserializer=learner__pb2.PostRewardsToLearnerRequest.FromString,
                     response_serializer=ndarray__pb2.Empty.SerializeToString,
             ),
-            'UpdatePolicyVariables': grpc.unary_unary_rpc_method_handler(
-                    servicer.UpdatePolicyVariables,
-                    request_deserializer=learner__pb2.PolicyVariables.FromString,
+            'GetNNVariables': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetNNVariables,
+                    request_deserializer=ndarray__pb2.Empty.FromString,
+                    response_serializer=learner__pb2.NNVariables.SerializeToString,
+            ),
+            'UpdateNNVariables': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateNNVariables,
+                    request_deserializer=learner__pb2.NNVariables.FromString,
                     response_serializer=ndarray__pb2.Empty.SerializeToString,
             ),
     }
@@ -207,7 +223,7 @@ class LearnerService(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/LearnerService/GetPolicyVariables',
             ndarray__pb2.Empty.SerializeToString,
-            learner__pb2.PolicyVariables.FromString,
+            learner__pb2.NNVariables.FromString,
             options, channel_credentials,
             call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -244,7 +260,7 @@ class LearnerService(object):
             call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
-    def UpdatePolicyVariables(request,
+    def GetNNVariables(request,
             target,
             options=(),
             channel_credentials=None,
@@ -253,8 +269,24 @@ class LearnerService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/LearnerService/UpdatePolicyVariables',
-            learner__pb2.PolicyVariables.SerializeToString,
+        return grpc.experimental.unary_unary(request, target, '/LearnerService/GetNNVariables',
+            ndarray__pb2.Empty.SerializeToString,
+            learner__pb2.NNVariables.FromString,
+            options, channel_credentials,
+            call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def UpdateNNVariables(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/LearnerService/UpdateNNVariables',
+            learner__pb2.NNVariables.SerializeToString,
             ndarray__pb2.Empty.FromString,
             options, channel_credentials,
             call_credentials, compression, wait_for_ready, timeout, metadata)
