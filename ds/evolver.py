@@ -19,6 +19,7 @@ from .proto.pingpong_pb2 import Ping, Pong
 from .utils import PeerSet, rpc_error_inspector
 
 MAX_THREAD_WORKERS = 64
+MAX_MESSAGE_LENGTH = 256 * 1024 * 1024
 
 
 class Evolver:
@@ -43,6 +44,11 @@ class Evolver:
         config = config_helper.initialize_config_from_yaml(default_config_file_path,
                                                            config_abs_path,
                                                            args.config)
+
+        if args.evolver_host is not None:
+            config['net_config']['evolver_host'] = args.evolver_host
+        if args.evolver_port is not None:
+            config['net_config']['evolver_port'] = args.evolver_port
         if args.name is not None:
             config['base_config']['name'] = args.name
 
@@ -68,19 +74,23 @@ class Evolver:
 
     def _learner_connected(self, peer, connected):
         if connected:
-            self._learner_rewards[peer] = deque(maxlen=10)
+            self._learner_rewards[peer] = deque(maxlen=self.config['evolver_cem_length'])
         else:
             del self._learner_rewards[peer]
 
     def _post_reward(self, reward, peer):
         self._learner_rewards[peer].append(reward)
 
-        # if len(self._learner_rewards) > 1 and \
-        #         all([len(i) == 10 for i in self._learner_rewards.values()]):
-        if all([len(i) == 10 for i in self._learner_rewards.values()]):
+        if len(self._learner_rewards) > 1 and \
+                all([len(i) == self.config['evolver_cem_length'] for i in self._learner_rewards.values()]):
+            # if all([len(i) == self.config['evolver_cem_length'] for i in self._learner_rewards.values()]):
             learner_reward = [(l, float(np.mean(r))) for l, r in self._learner_rewards.items()]
-            learner_reward.sort(key=lambda i: i[1])
-            best_learners = [i[0] for i in learner_reward]
+            learner_reward.sort(key=lambda i: i[1], reverse=True)
+
+            best_size = int(len(learner_reward) * self.config['evolver_cem_best'])
+            best_size = max(best_size, 1)
+
+            best_learners = [i[0] for i in learner_reward[:best_size]]
             nn_variable_list = list()
             for learner in best_learners:
                 stub = self.servicer.get_learner_info(learner)['stub']
@@ -95,6 +105,8 @@ class Evolver:
                 stub.update_nn_variables(nn_variables)
 
                 self._learner_rewards[learner].clear()
+
+            self.logger.info('Dispatched all nn variables')
 
     def _run(self):
         self.servicer = EvolverService(self.config['name'],
@@ -116,8 +128,11 @@ class Evolver:
 
 class LearnerStubController:
     def __init__(self, host, port):
-        self._channel = grpc.insecure_channel(f'{host}:{port}',
-                                              [('grpc.max_reconnect_backoff_ms', 5000)])
+        self._channel = grpc.insecure_channel(f'{host}:{port}', [
+            ('grpc.max_reconnect_backoff_ms', 5000),
+            ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+            ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH)
+        ])
         self._stub = learner_pb2_grpc.LearnerServiceStub(self._channel)
 
         self._logger = logging.getLogger('ds.evolver.learner_stub')
@@ -173,6 +188,7 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
     def get_learner_info(self, peer):
         return self._peer_set[peer]
 
+    # From learner and actor
     def Persistence(self, request_iterator, context):
         self._record_peer(context)
         for request in request_iterator:

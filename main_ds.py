@@ -17,6 +17,15 @@ if __name__ == '__main__':
     parser.add_argument('--config', '-c', help='config file')
     parser.add_argument('--run', action='store_true', help='inference mode')
     parser.add_argument('--standalone', action='store_true', help='standalone mode (no evolver)')
+
+    parser.add_argument('--evolver_host', help='evolver host')
+    parser.add_argument('--evolver_port', type=int, help='evolver port')
+    parser.add_argument('--learner_host', help='learner host')
+    parser.add_argument('--learner_port', type=int, help='learner port')
+    parser.add_argument('--replay_host', help='replay host')
+    parser.add_argument('--replay_port', type=int, help='replay port')
+    parser.add_argument('--in_k8s', action='store_true')
+
     parser.add_argument('--render', action='store_true', help='render')
     parser.add_argument('--editor', action='store_true', help='running in Unity Editor')
     parser.add_argument('--logger_file', help='logging into a file')
@@ -24,7 +33,7 @@ if __name__ == '__main__':
     parser.add_argument('--build_port', '-p', type=int, default=5005, help='communication port')
     parser.add_argument('--nn', help='neural network model')
     parser.add_argument('--ckpt', help='ckeckpoint to restore')
-    parser.add_argument('--agents', type=int, default=1, help='number of agents')
+    parser.add_argument('--agents', type=int, help='number of agents')
     parser.add_argument('--noise', type=float, default=0, help='additional noise for actor')
     args = parser.parse_args()
 

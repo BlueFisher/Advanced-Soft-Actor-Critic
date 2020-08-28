@@ -7,6 +7,7 @@ import random
 import shutil
 import string
 import sys
+import socket
 import threading
 import time
 
@@ -32,6 +33,7 @@ EVALUATION_INTERVAL = 10
 EVALUATION_WAITING_TIME = 1
 RECONNECTION_TIME = 2
 PING_INTERVAL = 5
+MAX_MESSAGE_LENGTH = 256 * 1024 * 1024
 
 
 class Learner(object):
@@ -44,10 +46,10 @@ class Learner(object):
         self._now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
         self.root_dir = root_dir
-        self.config_dir = config_dir
         self.cmd_args = args
 
-        self.net_config = self._init_constant_config(root_dir, config_dir, args)
+        constant_config = self._init_constant_config(root_dir, config_dir, args)
+        self.net_config = constant_config['net_config']
 
         self._stub = StubController(self.net_config['evolver_host'],
                                     self.net_config['evolver_port'],
@@ -64,7 +66,7 @@ class Learner(object):
 
                 self.logger = config_helper.set_logger('ds.learner')
 
-                self._init_env()
+                self._init_env(constant_config)
                 self._run()
 
                 self._closed = True
@@ -95,13 +97,30 @@ class Learner(object):
         self.render = args.render
         self.run_in_editor = args.editor
 
-        return config['net_config']
+        if args.evolver_host is not None:
+            config['net_config']['evolver_host'] = args.evolver_host
+        if args.evolver_port is not None:
+            config['net_config']['evolver_port'] = args.evolver_port
+        if args.learner_host is not None:
+            config['net_config']['learner_host'] = args.learner_host
+        if args.learner_port is not None:
+            config['net_config']['learner_port'] = args.learner_port
+        if args.replay_host is not None:
+            config['net_config']['replay_host'] = args.replay_host
+        if args.replay_port is not None:
+            config['net_config']['replay_port'] = args.replay_port
 
-    def _init_env(self):
-        config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
-                                                           self.config_abs_path,
-                                                           self.cmd_args.config)
+        if args.in_k8s:
+            hostname = socket.gethostname()
+            host_id = hostname.split('-')[-1]
+            learner_host = config['net_config']['learner_host']
+            replay_host = config['net_config']['replay_host']
+            config['net_config']['learner_host'] = f'{learner_host}-{host_id}.{learner_host}'
+            config['net_config']['replay_host'] = f'{replay_host}-{host_id}.{replay_host}'
 
+        return config
+
+    def _init_env(self, config):
         if self.cmd_args.name is not None:
             config['base_config']['name'] = self.cmd_args.name
         if self.cmd_args.build_port is not None:
@@ -204,12 +223,13 @@ class Learner(object):
 
     def _get_nn_variables(self):
         with self._training_lock:
-            variables = self.sac.get_policy_variables()
+            variables = self.sac.get_nn_variables()
 
         return [v.numpy() for v in variables]
 
     def _udpate_nn_variables(self, variables):
-        print('update')
+        with self._training_lock:
+            self.sac.update_nn_variables(variables)
 
     def _get_action(self, obs_list, rnn_state=None):
         if self.sac.use_rnn:
@@ -406,15 +426,15 @@ class Learner(object):
                                       self._get_nn_variables,
                                       self._udpate_nn_variables,
                                       self._get_td_error)
-            self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS))
+            self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS),
+                                      options=[
+                ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+                ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH)
+            ])
             learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, self.server)
             self.server.add_insecure_port(f'[::]:{self.net_config["learner_port"]}')
             self.server.start()
             self.logger.info(f'Learner server is running on [{self.net_config["learner_port"]}]...')
-
-            while True:
-                self._stub.post_reward(np.array([1.1]))
-                time.sleep(0.5)
 
             self._run_training_client()
 
@@ -456,10 +476,7 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
         for request in request_iterator:
             yield Pong(time=int(time.time() * 1000))
 
-    def GetReplay(self, request, context):
-        return learner_pb2.Replay(host=self.net_config['replay_host'],
-                                  port=self.net_config['replay_port'])
-
+    # From actor
     def GetAction(self, request: learner_pb2.GetActionRequest, context):
         obs_list = [proto_to_ndarray(obs) for obs in request.obs_list]
         rnn_state = proto_to_ndarray(request.rnn_state)
@@ -473,19 +490,23 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
         return learner_pb2.Action(action=ndarray_to_proto(action),
                                   rnn_state=ndarray_to_proto(next_rnn_state))
 
+    # From actor
     def GetPolicyVariables(self, request, context):
         variables = self._get_policy_variables()
         return learner_pb2.NNVariables(variables=[ndarray_to_proto(v) for v in variables])
 
+    # From evolver
     def GetNNVariables(self, request, context):
         variables = self._get_nn_variables()
         return learner_pb2.NNVariables(variables=[ndarray_to_proto(v) for v in variables])
 
+    # From evolver
     def UpdateNNVariables(self, request, context):
         variables = [proto_to_ndarray(v) for v in request.variables]
         self._udpate_nn_variables(variables)
         return Empty()
 
+    # From replay
     def GetTDError(self, request: learner_pb2.GetTDErrorRequest, context):
         n_obses_list = [proto_to_ndarray(n_obses) for n_obses in request.n_obses_list]
         n_actions = proto_to_ndarray(request.n_actions)
@@ -518,8 +539,9 @@ class StubController:
         self.replay_port = replay_port
         self.standalone = standalone
 
-        self._replay_channel = grpc.insecure_channel(f'{replay_host}:{replay_port}',
-                                                     [('grpc.max_reconnect_backoff_ms', 5000)])
+        self._replay_channel = grpc.insecure_channel(f'{replay_host}:{replay_port}', [
+            ('grpc.max_reconnect_backoff_ms', 5000)
+        ])
         self._replay_stub = replay_pb2_grpc.ReplayServiceStub(self._replay_channel)
 
         self._logger = logging.getLogger('ds.learner.stub')
@@ -538,6 +560,7 @@ class StubController:
     def connected(self):
         return not self._closed and (self.standalone or self._evolver_connected)
 
+    # To replay
     @rpc_error_inspector
     def get_sampled_data(self):
         response = self._replay_stub.Sample(Empty())
@@ -552,12 +575,14 @@ class StubController:
                     proto_to_ndarray(response.rnn_state),
                     proto_to_ndarray(response.priority_is))
 
+    # To replay
     @rpc_error_inspector
     def update_td_error(self, pointers, td_error):
         self._replay_stub.UpdateTDError(
             replay_pb2.UpdateTDErrorRequest(pointers=ndarray_to_proto(pointers),
                                             td_error=ndarray_to_proto(td_error)))
 
+    # To replay
     @rpc_error_inspector
     def update_transitions(self, pointers, key, data):
         self._replay_stub.UpdateTransitions(
@@ -565,6 +590,7 @@ class StubController:
                                                 key=key,
                                                 data=ndarray_to_proto(data)))
 
+    # To replay
     @rpc_error_inspector
     def clear_replay_buffer(self):
         self._replay_stub.Clear(Empty())

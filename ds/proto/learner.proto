@@ -6,18 +6,12 @@ import "pingpong.proto";
 service LearnerService {
   rpc Persistence(stream Ping) returns (stream Pong);
 
-  rpc GetReplay(Empty) returns (Replay);
   rpc GetAction(GetActionRequest) returns (Action);
   rpc GetPolicyVariables(Empty) returns (NNVariables);
   rpc GetTDError(GetTDErrorRequest) returns (TDError);
   // Update variables from evolver
   rpc GetNNVariables(Empty) returns (NNVariables);
   rpc UpdateNNVariables(NNVariables) returns (Empty);
-}
-
-message Replay {
-  string host = 1;
-  int32 port = 2;
 }
 
 message GetActionRequest {

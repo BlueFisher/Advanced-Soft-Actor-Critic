@@ -22,15 +22,16 @@ base_config:
   n_agents: 1 # N agents running in parallel
   max_step_per_iter: -1 # Max step in each iteration
   reset_on_iteration: true # If to force reset agent if an episode terminated
-  evolver_cem_length: 20
+  evolver_cem_length: 10
+  evolver_cem_best: 0.3
   
 net_config:
   evolver_host: 127.0.0.1
-  evolver_port: 61002
-  replay_host: 127.0.0.1
-  replay_port: 61000
+  evolver_port: 61000
   learner_host: 127.0.0.1
   learner_port: 61001
+  replay_host: 127.0.0.1
+  replay_port: 61002
 
 reset_config:
   copy: 1
