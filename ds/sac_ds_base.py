@@ -124,7 +124,34 @@ class SAC_DS_Base(SAC_Base):
         variables = self.model_rep.trainable_variables + self.model_policy.trainable_variables
 
         for v, n_v in zip(variables, policy_variables):
-            v.assign(n_v)
+            v.assign(tf.cast(n_v, tf.float32))
+
+    # For learner to send variables to evolver
+    @tf.function
+    def get_nn_variables(self):
+        variables = self.model_rep.trainable_variables +\
+            self.model_target_rep.trainable_variables +\
+            self.model_policy.trainable_variables +\
+            self.model_q1.trainable_variables +\
+            self.model_target_q1.trainable_variables +\
+            self.model_q2.trainable_variables +\
+            self.model_target_q2.trainable_variables
+
+        return variables
+
+    # Update own network from evolver selection
+    @tf.function
+    def update_nn_variables(self, nn_variables):
+        variables = self.model_rep.trainable_variables +\
+            self.model_target_rep.trainable_variables +\
+            self.model_policy.trainable_variables +\
+            self.model_q1.trainable_variables +\
+            self.model_target_q1.trainable_variables +\
+            self.model_q2.trainable_variables +\
+            self.model_target_q2.trainable_variables
+
+        for v, n_v in zip(variables, nn_variables):
+            v.assign(tf.cast(n_v, tf.float32))
 
     def train(self,
               pointers,

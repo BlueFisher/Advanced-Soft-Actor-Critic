@@ -37,11 +37,9 @@ class Actor(object):
     _agent_class = Agent
 
     def __init__(self, root_dir, config_dir, args):
-        self.root_dir = root_dir
-        self.config_dir = config_dir
-
         self.cmd_args = args
-        net_config = self._init_constant_config(self.root_dir, self.config_dir, args)
+        constant_config = self._init_constant_config(root_dir, config_dir, args)
+        net_config = constant_config['net_config']
 
         if self.standalone:
             # If standalone, the stub is fixed
@@ -89,7 +87,7 @@ class Actor(object):
                     self.logger.warning('StubController closed')
                     continue
 
-                self._init_env()
+                self._init_env(constant_config)
                 self._run()
 
                 if hasattr(self, 'env'):
@@ -116,17 +114,25 @@ class Actor(object):
         self.run_in_editor = args.editor
         self.config_cat = args.config
 
+        if args.evolver_host is not None:
+            config['net_config']['evolver_host'] = args.evolver_host
+        if args.evolver_port is not None:
+            config['net_config']['evolver_port'] = args.evolver_port
+        if args.learner_host is not None:
+            config['net_config']['learner_host'] = args.learner_host
+        if args.learner_port is not None:
+            config['net_config']['learner_port'] = args.learner_port
+        if args.replay_host is not None:
+            config['net_config']['replay_host'] = args.replay_host
+        if args.replay_port is not None:
+            config['net_config']['replay_port'] = args.replay_port
+
         self.logger = config_helper.set_logger('ds.actor', args.logger_file)
 
-        return config['net_config']
+        return config
 
-    def _init_env(self):
+    def _init_env(self, config):
         # Each time actor connects to the learner and replay, initialize env
-
-        # Initialize config
-        config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
-                                                           self.config_abs_path,
-                                                           self.config_cat)
 
         if self.cmd_args.build_port is not None:
             config['base_config']['build_port'] = self.cmd_args.build_port

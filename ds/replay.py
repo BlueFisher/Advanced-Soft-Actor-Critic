@@ -1,10 +1,9 @@
 from concurrent import futures
 from pathlib import Path
 import logging
-import sys
+import socket
 import threading
 import time
-import yaml
 
 import numpy as np
 import grpc
@@ -51,6 +50,23 @@ class Replay(object):
         config = config_helper.initialize_config_from_yaml(default_config_abs_path,
                                                            config_abs_path,
                                                            args.config)
+
+        if args.learner_host is not None:
+            config['net_config']['learner_host'] = args.learner_host
+        if args.learner_port is not None:
+            config['net_config']['learner_port'] = args.learner_port
+        if args.replay_host is not None:
+            config['net_config']['replay_host'] = args.replay_host
+        if args.replay_port is not None:
+            config['net_config']['replay_port'] = args.replay_port
+
+        if args.in_k8s:
+            hostname = socket.gethostname()
+            host_id = hostname.split('-')[-1]
+            learner_host = config['net_config']['learner_host']
+            replay_host = config['net_config']['replay_host']
+            config['net_config']['learner_host'] = f'{learner_host}-{host_id}.{learner_host}'
+            config['net_config']['replay_host'] = f'{replay_host}-{host_id}.{replay_host}'
 
         self.logger = config_helper.set_logger('ds.replay', args.logger_file)
 

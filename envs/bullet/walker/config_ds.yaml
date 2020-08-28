@@ -8,12 +8,12 @@ default:
     n_agents: 10
 
   net_config:
-    evolver_host: 127.0.0.1
-    evolver_port: 61002
-    replay_host: 127.0.0.1
-    replay_port: 61000
-    learner_host: 127.0.0.1
+    evolver_host: walker-evolver
+    evolver_port: 61000
+    learner_host: walker-learner
     learner_port: 61001
+    replay_host: walker-replay
+    replay_port: 61002
 
   sac_config:
     write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
