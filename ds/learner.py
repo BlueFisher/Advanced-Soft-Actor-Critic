@@ -1,32 +1,29 @@
-from concurrent import futures
 import importlib
 import logging
 import os
-from pathlib import Path
 import random
 import shutil
+import socket
 import string
 import sys
-import socket
 import threading
 import time
+from concurrent import futures
+from pathlib import Path
 
-import numpy as np
 import grpc
+import numpy as np
 
-from .proto import evolver_pb2, evolver_pb2_grpc
-from .proto import learner_pb2, learner_pb2_grpc
-from .proto import replay_pb2, replay_pb2_grpc
+import algorithm.config_helper as config_helper
+from algorithm.agent import Agent
+
+from .proto import (evolver_pb2, evolver_pb2_grpc, learner_pb2,
+                    learner_pb2_grpc, replay_pb2, replay_pb2_grpc)
 from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
-from .utils import PeerSet, rpc_error_inspector
-
 from .sac_ds_base import SAC_DS_Base
-
-from algorithm.agent import Agent
-import algorithm.config_helper as config_helper
-
+from .utils import PeerSet, rpc_error_inspector
 
 MAX_THREAD_WORKERS = 64
 EVALUATION_INTERVAL = 10

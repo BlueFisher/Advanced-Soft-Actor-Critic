@@ -1,25 +1,24 @@
-from collections import deque
-from pathlib import Path
 import functools
 import getopt
 import importlib
 import logging
 import logging.handlers
 import os
-from pathlib import Path
 import random
 import shutil
 import string
 import sys
 import time
-import yaml
+from collections import deque
+from pathlib import Path
 
 import numpy as np
-
-from .sac_base import SAC_Base
-from .agent import Agent
+import yaml
 
 import algorithm.config_helper as config_helper
+
+from .agent import Agent
+from .sac_base import SAC_Base
 
 
 class Main(object):

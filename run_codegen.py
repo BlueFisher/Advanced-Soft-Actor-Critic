@@ -1,4 +1,5 @@
 import glob
+
 from grpc_tools import protoc
 
 for f in glob.glob('ds\\proto\\*.proto'):

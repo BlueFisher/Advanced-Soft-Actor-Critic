@@ -1,8 +1,8 @@
 import argparse
-from logging import root
 import os
-from pathlib import Path
 import sys
+from logging import root
+from pathlib import Path
 
 # for correctly import protoc
 sys.path.append(str(Path(__file__).resolve().parent.joinpath('ds/proto')))

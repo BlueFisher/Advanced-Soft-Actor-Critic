@@ -1,10 +1,10 @@
 import tensorflow as tf
 
+from .exploration import *
 from .policy import *
+from .predictions import *
 from .q import *
 from .representation import *
-from .predictions import *
-from .exploration import *
 
 
 class Noisy(tf.keras.layers.Layer):

@@ -1,12 +1,11 @@
-from collections import deque
+import logging
 import math
-from math import nan
 import random
 import time
+from collections import deque
+from math import nan
 
 import numpy as np
-import logging
-
 
 logger = logging.getLogger('replay')
 logger.setLevel(level=logging.INFO)

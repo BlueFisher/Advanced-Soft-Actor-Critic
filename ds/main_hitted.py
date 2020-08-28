@@ -1,14 +1,12 @@
-from pathlib import Path
-import sys
 import time
 
 import numpy as np
 
-from .learner import Learner
-from .actor import Actor
-
 from algorithm.agent import Agent
 from algorithm.sac_main_hitted import AgentHitted
+
+from .actor import Actor
+from .learner import Learner
 
 
 class LearnerHitted(Learner):

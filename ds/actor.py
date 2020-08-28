@@ -2,30 +2,24 @@ import functools
 import importlib
 import logging
 import logging.handlers
-from pathlib import Path
-from queue import Queue
 import sys
 import threading
 import time
-import yaml
+from pathlib import Path
 
-import numpy as np
-import tensorflow as tf
 import grpc
+import numpy as np
 
-from .proto import replay_pb2, replay_pb2_grpc
-from .proto import learner_pb2, learner_pb2_grpc
-from .proto import evolver_pb2, evolver_pb2_grpc
+import algorithm.config_helper as config_helper
+from algorithm.agent import Agent
+
+from .proto import (evolver_pb2, evolver_pb2_grpc, learner_pb2,
+                    learner_pb2_grpc, replay_pb2, replay_pb2_grpc)
 from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
-
 from .sac_ds_base import SAC_DS_Base
 from .utils import rpc_error_inspector
-
-from algorithm.agent import Agent
-import algorithm.config_helper as config_helper
-
 
 WAITING_CONNECTION_TIME = 2
 PING_INTERVAL = 5
