@@ -1,10 +1,10 @@
 import logging
-import time
 import multiprocessing
 import os
+import time
 
-import numpy as np
 import gym
+import numpy as np
 
 logger = logging.getLogger('GymWrapper')
 logger.setLevel(level=logging.INFO)

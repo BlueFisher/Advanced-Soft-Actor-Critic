@@ -1,12 +1,12 @@
 import sys
 from pathlib import Path
 
-
 sys.path.append(str(Path(__file__).resolve().parent.joinpath('ds/proto')))
 
-import grpc
 import threading
 import time
+
+import grpc
 
 import ds.proto.evolver_pb2 as evolver_pb2
 import ds.proto.evolver_pb2_grpc as evolver_pb2_grpc

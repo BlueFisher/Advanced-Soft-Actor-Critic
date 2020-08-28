@@ -1,24 +1,21 @@
-from concurrent import futures
-from pathlib import Path
 import logging
 import socket
 import threading
 import time
+from concurrent import futures
+from pathlib import Path
 
-import numpy as np
 import grpc
+import numpy as np
 
-from .proto import replay_pb2, replay_pb2_grpc
-from .proto import learner_pb2, learner_pb2_grpc
+import algorithm.config_helper as config_helper
+from algorithm.replay_buffer import PrioritizedReplayBuffer
+
+from .proto import learner_pb2, learner_pb2_grpc, replay_pb2, replay_pb2_grpc
 from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
 from .utils import PeerSet, rpc_error_inspector
-
-
-from algorithm.replay_buffer import PrioritizedReplayBuffer
-import algorithm.config_helper as config_helper
-
 
 MAX_THREAD_WORKERS = 64
 

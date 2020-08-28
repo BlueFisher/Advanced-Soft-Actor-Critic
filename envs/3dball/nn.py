@@ -4,7 +4,6 @@ import tensorflow_probability as tfp
 
 import algorithm.nn_models as m
 
-
 ModelRep = m.ModelSimpleRep
 
 

@@ -1,7 +1,7 @@
 import numpy as np
 
-from .sac_main import Main
 from .agent import Agent
+from .sac_main import Main
 
 
 class AgentHitted(Agent):

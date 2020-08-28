@@ -1,7 +1,8 @@
 from io import BytesIO
+
 import numpy as np
-import ndarray_pb2
-import ndarray_pb2_grpc
+
+from . import ndarray_pb2
 
 
 def ndarray_to_proto(nda: np.ndarray) -> ndarray_pb2.NDarray:
