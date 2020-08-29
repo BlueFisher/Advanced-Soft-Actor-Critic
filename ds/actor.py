@@ -1,4 +1,3 @@
-import functools
 import importlib
 import logging
 import logging.handlers
