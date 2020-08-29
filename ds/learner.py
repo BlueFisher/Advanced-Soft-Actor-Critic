@@ -30,7 +30,7 @@ EVALUATION_INTERVAL = 10
 EVALUATION_WAITING_TIME = 1
 RECONNECTION_TIME = 2
 PING_INTERVAL = 5
-MAX_MESSAGE_LENGTH = 256 * 1024 * 1024
+MAX_MESSAGE_LENGTH = 1024 * 1024 * 1024
 
 
 class Learner(object):
@@ -227,6 +227,8 @@ class Learner(object):
     def _udpate_nn_variables(self, variables):
         with self._training_lock:
             self.sac.update_nn_variables(variables)
+
+        self.logger.info('Updated all nn variables')
 
     def _get_action(self, obs_list, rnn_state=None):
         if self.sac.use_rnn:

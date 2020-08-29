@@ -197,11 +197,6 @@ class SAC_Base(object):
 
         def adam_optimizer(): return tf.keras.optimizers.Adam(learning_rate)
 
-        self.optimizer_rep = adam_optimizer()
-        self.optimizer_q1 = adam_optimizer()
-        self.optimizer_q2 = adam_optimizer()
-        self.optimizer_policy = adam_optimizer()
-
         if self.use_auto_alpha:
             self.optimizer_alpha = adam_optimizer()
 
@@ -209,6 +204,10 @@ class SAC_Base(object):
             self._create_normalizer()
 
             p_self = self
+
+            # When tensorflow executes ModelRep.call, it will add a kwarg 'training'
+            # automatically. But if the subclass does not specify the 'training' argument,
+            # it will throw exception when calling super().call(obs_list, *args, **kwargs)
 
             import inspect
 
@@ -249,7 +248,9 @@ class SAC_Base(object):
             self.rnn_state_dim = 1
         state_dim = state.shape[-1]
         logger.info(f'State Dimension: {state_dim}')
+        self.optimizer_rep = adam_optimizer()
 
+        # PRMs
         if self.use_prediction:
             self.model_transition = model.ModelTransition(state_dim, self.action_dim,
                                                           self.use_extra_data)
@@ -269,11 +270,14 @@ class SAC_Base(object):
 
         self.model_q1 = model.ModelQ(state_dim, self.action_dim)
         self.model_target_q1 = model.ModelQ(state_dim, self.action_dim)
+        self.optimizer_q1 = adam_optimizer()
 
         self.model_q2 = model.ModelQ(state_dim, self.action_dim)
         self.model_target_q2 = model.ModelQ(state_dim, self.action_dim)
+        self.optimizer_q2 = adam_optimizer()
 
         self.model_policy = model.ModelPolicy(state_dim, self.action_dim)
+        self.optimizer_policy = adam_optimizer()
 
     def _init_or_restore(self, model_abs_dir, last_ckpt):
         """
@@ -1032,6 +1036,10 @@ class SAC_Base(object):
         self.ckpt_manager.save(self.global_step)
         logger.info(f"Model saved at {self.global_step.numpy()}")
 
+    @tf.function
+    def _increase_global_step(self):
+        self.global_step.assign_add(1)
+
     def fill_replay_buffer(self,
                            n_obses_list,
                            n_actions,
@@ -1207,6 +1215,6 @@ class SAC_Base(object):
             pi_probs = n_pi_probs.reshape(-1)
             self.replay_buffer.update_transitions(tmp_pointers, 'mu_prob', pi_probs)
 
-        self.global_step.assign_add(1)
+        self._increase_global_step()
 
         return step + 1

@@ -20,7 +20,7 @@ from .proto.pingpong_pb2 import Ping, Pong
 from .utils import PeerSet, rpc_error_inspector
 
 MAX_THREAD_WORKERS = 64
-MAX_MESSAGE_LENGTH = 256 * 1024 * 1024
+MAX_MESSAGE_LENGTH = 1024 * 1024 * 1024
 
 
 class Evolver:
@@ -82,9 +82,9 @@ class Evolver:
     def _post_reward(self, reward, peer):
         self._learner_rewards[peer].append(reward)
 
-        if len(self._learner_rewards) > 1 and \
-                all([len(i) == self.config['evolver_cem_length'] for i in self._learner_rewards.values()]):
-            # if all([len(i) == self.config['evolver_cem_length'] for i in self._learner_rewards.values()]):
+        # if len(self._learner_rewards) > 1 and \
+        #         all([len(i) == self.config['evolver_cem_length'] for i in self._learner_rewards.values()]):
+        if all([len(i) == self.config['evolver_cem_length'] for i in self._learner_rewards.values()]):
             learner_reward = [(l, float(np.mean(r))) for l, r in self._learner_rewards.items()]
             learner_reward.sort(key=lambda i: i[1], reverse=True)
 

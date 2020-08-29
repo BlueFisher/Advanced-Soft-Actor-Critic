@@ -1,9 +1,9 @@
 import sys
-import threading
 import time
 from pathlib import Path
 
 import numpy as np
+from numpy.core.fromnumeric import var
 import tensorflow as tf
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -112,7 +112,7 @@ class SAC_DS_Base(SAC_Base):
         return action, next_rnn_state
 
     # For learner to send variables to actors
-    @tf.function
+    # If use @tf.function, the function will return Tensors, not Variables
     def get_policy_variables(self):
         variables = self.model_rep.trainable_variables + self.model_policy.trainable_variables
 
@@ -121,37 +121,49 @@ class SAC_DS_Base(SAC_Base):
     # For actor to update its own network from learner
     @tf.function
     def update_policy_variables(self, policy_variables):
-        variables = self.model_rep.trainable_variables + self.model_policy.trainable_variables
+        variables = self.get_policy_variables()
 
         for v, n_v in zip(variables, policy_variables):
-            v.assign(tf.cast(n_v, tf.float32))
+            v.assign(tf.cast(n_v, v.dtype))
 
     # For learner to send variables to evolver
-    @tf.function
     def get_nn_variables(self):
         variables = self.model_rep.trainable_variables +\
             self.model_target_rep.trainable_variables +\
-            self.model_policy.trainable_variables +\
+            self.optimizer_rep.weights[1:] +\
             self.model_q1.trainable_variables +\
             self.model_target_q1.trainable_variables +\
+            self.optimizer_q1.weights[1:] +\
             self.model_q2.trainable_variables +\
-            self.model_target_q2.trainable_variables
+            self.model_target_q2.trainable_variables +\
+            self.optimizer_q2.weights[1:] +\
+            self.model_policy.trainable_variables +\
+            self.optimizer_policy.weights[1:] +\
+            [self.log_alpha]
+
+        if self.use_prediction:
+            variables += self.model_transition.trainable_variables +\
+                self.model_reward.trainable_variables +\
+                self.model_observation.trainable_variables
+
+        if self.use_curiosity:
+            variables += self.model_forward.trainable_variables +\
+                self.optimizer_forward.weights[1:]
+
+        if self.use_rnd:
+            variables += self.model_rnd.trainable_variables +\
+                self.model_target_rnd.trainable_variables +\
+                self.optimizer_rnd.weights[1:]
 
         return variables
 
     # Update own network from evolver selection
     @tf.function
     def update_nn_variables(self, nn_variables):
-        variables = self.model_rep.trainable_variables +\
-            self.model_target_rep.trainable_variables +\
-            self.model_policy.trainable_variables +\
-            self.model_q1.trainable_variables +\
-            self.model_target_q1.trainable_variables +\
-            self.model_q2.trainable_variables +\
-            self.model_target_q2.trainable_variables
+        variables = self.get_nn_variables()
 
         for v, n_v in zip(variables, nn_variables):
-            v.assign(tf.cast(n_v, tf.float32))
+            v.assign(tf.cast(n_v, v.dtype))
 
     def train(self,
               pointers,
@@ -180,8 +192,6 @@ class SAC_DS_Base(SAC_Base):
             self.save_model()
             self._last_save_time = time.time()
 
-            self.summary_writer.flush()
-
         n_pi_probs = self.get_n_probs(n_obses_list,
                                       n_actions,
                                       rnn_state=rnn_state if self.use_rnn else None).numpy()
@@ -208,6 +218,6 @@ class SAC_DS_Base(SAC_Base):
             rnn_states = n_rnn_states.reshape(-1, n_rnn_states.shape[-1])
             update_data.append((tmp_pointers, 'rnn_state', rnn_states))
 
-        self.global_step.assign_add(1)
+        self._increase_global_step()
 
         return td_error, update_data

@@ -2,7 +2,7 @@ from io import BytesIO
 
 import numpy as np
 
-from . import ndarray_pb2
+import ndarray_pb2
 
 
 def ndarray_to_proto(nda: np.ndarray) -> ndarray_pb2.NDarray:
@@ -19,7 +19,7 @@ def proto_to_ndarray(nda_proto: ndarray_pb2.NDarray) -> np.ndarray:
     nda_bytes = BytesIO(nda_proto.data)
 
     nda = np.load(nda_bytes, allow_pickle=False)
-    if nda.shape[0] == 0:
+    if len(nda.shape) > 0 and nda.shape[0] == 0:
         nda = None
 
     return nda
