@@ -11,13 +11,12 @@ import numpy as np
 import algorithm.config_helper as config_helper
 from algorithm.replay_buffer import PrioritizedReplayBuffer
 
+from . import constants as C
 from .proto import learner_pb2, learner_pb2_grpc, replay_pb2, replay_pb2_grpc
 from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
 from .utils import PeerSet, rpc_error_inspector
-
-MAX_THREAD_WORKERS = 64
 
 
 class Replay(object):
@@ -199,7 +198,7 @@ class Replay(object):
                                  self._update_td_error,
                                  self._update_transitions,
                                  self._clear)
-        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS))
+        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS))
         replay_pb2_grpc.add_ReplayServiceServicer_to_server(servicer, self.server)
         self.server.add_insecure_port(f'[::]:{replay_port}')
         self.server.start()
@@ -286,7 +285,7 @@ class ReplayService(replay_pb2_grpc.ReplayServiceServicer):
 class StubController:
     def __init__(self, learner_host, learner_port):
         self._learner_channel = grpc.insecure_channel(f'{learner_host}:{learner_port}',
-                                                      [('grpc.max_reconnect_backoff_ms', 5000)])
+                                                      [('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)])
         self._learner_stub = learner_pb2_grpc.LearnerServiceStub(self._learner_channel)
 
         self._logger = logging.getLogger('ds.replay.stub')

@@ -12,21 +12,18 @@ import grpc
 import numpy as np
 
 import algorithm.config_helper as config_helper
+from algorithm.utils import generate_base_name
 
+from . import constants as C
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
 from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
 from .utils import PeerSet, rpc_error_inspector
 
-MAX_THREAD_WORKERS = 64
-MAX_MESSAGE_LENGTH = 1024 * 1024 * 1024
-
 
 class Evolver:
     def __init__(self, root_dir, config_dir, args):
-        self._now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-
         (self.config,
          self.net_config,
          model_abs_dir,
@@ -53,9 +50,7 @@ class Evolver:
         if args.name is not None:
             config['base_config']['name'] = args.name
 
-        # Replace {time} from current time and random letters
-        rand = ''.join(random.sample(string.ascii_letters, 4))
-        config['base_config']['name'] = config['base_config']['name'].replace('{time}', self._now + rand)
+        config['base_config']['name'] = generate_base_name(config['base_config']['name'])
         model_abs_dir = Path(root_dir).joinpath(f'models/{config["base_config"]["scene"]}/{config["base_config"]["name"]}')
         os.makedirs(model_abs_dir)
 
@@ -82,12 +77,15 @@ class Evolver:
     def _post_reward(self, reward, peer):
         self._learner_rewards[peer].append(reward)
 
-        # if len(self._learner_rewards) > 1 and \
-        #         all([len(i) == self.config['evolver_cem_length'] for i in self._learner_rewards.values()]):
-        if all([len(i) == self.config['evolver_cem_length'] for i in self._learner_rewards.values()]):
+        # If the number of learners > 1 and all learners have evaluated more than evolver_cem_length times
+        if len(self._learner_rewards) > 1 and \
+                all([len(i) == self.config['evolver_cem_length'] for i in self._learner_rewards.values()]):
+
+            # Sort learners by the mean of evaluated rewards
             learner_reward = [(l, float(np.mean(r))) for l, r in self._learner_rewards.items()]
             learner_reward.sort(key=lambda i: i[1], reverse=True)
 
+            # Select top evolver_cem_best learners and get their nn variables
             best_size = int(len(learner_reward) * self.config['evolver_cem_best'])
             best_size = max(best_size, 1)
 
@@ -97,9 +95,11 @@ class Evolver:
                 stub = self.servicer.get_learner_info(learner)['stub']
                 nn_variable_list.append(stub.get_nn_variables())
 
+            # Calculate the mean and std of best_size variables of learners
             mean = [np.mean(i, axis=0) for i in zip(*nn_variable_list)]
             std = [np.std(i, axis=0) for i in zip(*nn_variable_list)]
 
+            # Dispatch all nn variables
             for learner in self.servicer.learners:
                 stub = self.servicer.get_learner_info(learner)['stub']
                 nn_variables = [np.random.normal(mean[i], std[i]) for i in range(len(mean))]
@@ -113,7 +113,7 @@ class Evolver:
         self.servicer = EvolverService(self.config['name'],
                                        self._learner_connected,
                                        self._post_reward)
-        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS))
+        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS))
         evolver_pb2_grpc.add_EvolverServiceServicer_to_server(self.servicer, self.server)
         self.server.add_insecure_port(f'[::]:{self.net_config["evolver_port"]}')
         self.server.start()
@@ -130,9 +130,9 @@ class Evolver:
 class LearnerStubController:
     def __init__(self, host, port):
         self._channel = grpc.insecure_channel(f'{host}:{port}', [
-            ('grpc.max_reconnect_backoff_ms', 5000),
-            ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
-            ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH)
+            ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS),
+            ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
+            ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
         ])
         self._stub = learner_pb2_grpc.LearnerServiceStub(self._channel)
 
