@@ -16,7 +16,9 @@ import numpy as np
 
 import algorithm.config_helper as config_helper
 from algorithm.agent import Agent
+from algorithm.utils import generate_base_name
 
+from . import constants as C
 from .proto import (evolver_pb2, evolver_pb2_grpc, learner_pb2,
                     learner_pb2_grpc, replay_pb2, replay_pb2_grpc)
 from .proto.ndarray_pb2 import Empty
@@ -24,13 +26,6 @@ from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
 from .sac_ds_base import SAC_DS_Base
 from .utils import PeerSet, rpc_error_inspector
-
-MAX_THREAD_WORKERS = 64
-EVALUATION_INTERVAL = 10
-EVALUATION_WAITING_TIME = 1
-RECONNECTION_TIME = 2
-PING_INTERVAL = 5
-MAX_MESSAGE_LENGTH = 1024 * 1024 * 1024
 
 
 class Learner(object):
@@ -74,7 +69,7 @@ class Learner(object):
                     self.server.stop(None)
                     self.logger.warning('Server closed')
 
-                time.sleep(RECONNECTION_TIME)
+                time.sleep(C.RECONNECTION_TIME)
 
         except KeyboardInterrupt:
             self.logger.warning('KeyboardInterrupt in _run')
@@ -132,9 +127,7 @@ class Learner(object):
         self.reset_config = config['reset_config']
 
         if self.standalone:
-            # Replace {time} from current time and random letters
-            rand = ''.join(random.sample(string.ascii_letters, 4))
-            self.config['name'] = self.config['name'].replace('{time}', self._now + rand)
+            self.config['name'] = generate_base_name(self.config['name'])
             model_abs_dir = Path(self.root_dir).joinpath(f'models/{self.config["scene"]}/{self.config["name"]}')
         else:
             # Get name from evolver registry
@@ -142,11 +135,11 @@ class Learner(object):
             self.logger.info('Registering...')
             while evolver_register_response is None:
                 if not self._stub.connected:
-                    time.sleep(RECONNECTION_TIME)
+                    time.sleep(C.RECONNECTION_TIME)
                     continue
                 evolver_register_response = self._stub.register_to_evolver()
                 if evolver_register_response is None:
-                    time.sleep(RECONNECTION_TIME)
+                    time.sleep(C.RECONNECTION_TIME)
 
             _id, name = evolver_register_response
             self.logger.info(f'Registered id: {_id}, name: {name}')
@@ -288,7 +281,7 @@ class Learner(object):
             while not self._closed:
                 # not training, waiting...
                 if self.train_mode and not self._data_feeded:
-                    time.sleep(EVALUATION_WAITING_TIME)
+                    time.sleep(C.EVALUATION_WAITING_TIME)
                     continue
 
                 if self.config['reset_on_iteration']:
@@ -352,7 +345,7 @@ class Learner(object):
                 iteration += 1
 
                 if self.train_mode and self.standalone:
-                    time.sleep(EVALUATION_INTERVAL)
+                    time.sleep(C.EVALUATION_INTERVAL)
         except Exception as e:
             self.logger.error(e)
 
@@ -379,7 +372,7 @@ class Learner(object):
             if sampled is None:
                 self.logger.warning('No data sampled')
                 self._data_feeded = False
-                time.sleep(RECONNECTION_TIME)
+                time.sleep(C.RECONNECTION_TIME)
                 continue
             else:
                 self._data_feeded = True
@@ -425,10 +418,10 @@ class Learner(object):
                                       self._get_nn_variables,
                                       self._udpate_nn_variables,
                                       self._get_td_error)
-            self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS),
+            self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS),
                                       options=[
-                ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
-                ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH)
+                ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
+                ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
             ])
             learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, self.server)
             self.server.add_insecure_port(f'[::]:{self.net_config["learner_port"]}')
@@ -539,15 +532,16 @@ class StubController:
         self.standalone = standalone
 
         self._replay_channel = grpc.insecure_channel(f'{replay_host}:{replay_port}', [
-            ('grpc.max_reconnect_backoff_ms', 5000)
+            ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)
         ])
         self._replay_stub = replay_pb2_grpc.ReplayServiceStub(self._replay_channel)
 
         self._logger = logging.getLogger('ds.learner.stub')
 
         if not standalone:
-            self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}',
-                                                          [('grpc.max_reconnect_backoff_ms', 5000)])
+            self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}', [
+                ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)
+            ])
             self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
 
             self._evolver_connected = False
@@ -615,7 +609,7 @@ class StubController:
         def request_messages():
             while not self._closed:
                 yield Ping(time=int(time.time() * 1000))
-                time.sleep(PING_INTERVAL)
+                time.sleep(C.PING_INTERVAL)
                 if not self._evolver_connected:
                     break
 
@@ -631,7 +625,7 @@ class StubController:
                     self._evolver_connected = False
                     self._logger.error('Evolver disconnected')
             finally:
-                time.sleep(RECONNECTION_TIME)
+                time.sleep(C.RECONNECTION_TIME)
 
     def close(self):
         self._replay_channel.close()

@@ -12,6 +12,7 @@ import numpy as np
 import algorithm.config_helper as config_helper
 from algorithm.agent import Agent
 
+from . import constants as C
 from .proto import (evolver_pb2, evolver_pb2_grpc, learner_pb2,
                     learner_pb2_grpc, replay_pb2, replay_pb2_grpc)
 from .proto.ndarray_pb2 import Empty
@@ -19,10 +20,6 @@ from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
 from .sac_ds_base import SAC_DS_Base
 from .utils import rpc_error_inspector
-
-WAITING_CONNECTION_TIME = 2
-PING_INTERVAL = 5
-RECONNECTION_TIME = 2
 
 
 class Actor(object):
@@ -54,11 +51,11 @@ class Actor(object):
                     self.logger.info('Registering...')
                     while evolver_register_response is None:
                         if not self._evolver_stub.connected:
-                            time.sleep(RECONNECTION_TIME)
+                            time.sleep(C.RECONNECTION_TIME)
                             continue
                         evolver_register_response = self._evolver_stub.register()
                         if evolver_register_response is None:
-                            time.sleep(RECONNECTION_TIME)
+                            time.sleep(C.RECONNECTION_TIME)
 
                     learner_host, learner_port, replay_host, replay_port = evolver_register_response
                     self.logger.info(f'Assigned to learner {learner_host}:{learner_port}')
@@ -71,7 +68,7 @@ class Actor(object):
                 # Learner or replay is offline, waiting...
                 self.logger.warning('waiting for connection')
                 while not self._stub.connected and (self.standalone or self._evolver_stub.connected):
-                    time.sleep(WAITING_CONNECTION_TIME)
+                    time.sleep(C.RECONNECTION_TIME)
                     continue
 
                 # If not standalone and evolver is disconnected, go back to registry
@@ -343,8 +340,9 @@ class EvolverStubController:
     _closed = False
 
     def __init__(self, evolver_host, evolver_port):
-        self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}',
-                                                      [('grpc.max_reconnect_backoff_ms', 5000)])
+        self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}', [
+            ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)
+        ])
         self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
 
         self._evolver_connected = False
@@ -367,7 +365,7 @@ class EvolverStubController:
         def request_messages():
             while not self._closed:
                 yield Ping(time=int(time.time() * 1000))
-                time.sleep(PING_INTERVAL)
+                time.sleep(C.PING_INTERVAL)
                 if not self._evolver_connected:
                     break
 
@@ -383,7 +381,7 @@ class EvolverStubController:
                     self._evolver_connected = False
                     self._logger.error('Evolver disconnected')
             finally:
-                time.sleep(RECONNECTION_TIME)
+                time.sleep(C.RECONNECTION_TIME)
 
     def close(self):
         self._closed = True
@@ -397,12 +395,14 @@ class StubController:
                  standalone):
         self.standalone = standalone
 
-        self._learner_channel = grpc.insecure_channel(f'{learner_host}:{learner_port}',
-                                                      [('grpc.max_reconnect_backoff_ms', 5000)])
+        self._learner_channel = grpc.insecure_channel(f'{learner_host}:{learner_port}', [
+            ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)
+        ])
         self._learner_stub = learner_pb2_grpc.LearnerServiceStub(self._learner_channel)
 
-        self._replay_channel = grpc.insecure_channel(f'{replay_host}:{replay_port}',
-                                                     [('grpc.max_reconnect_backoff_ms', 5000)])
+        self._replay_channel = grpc.insecure_channel(f'{replay_host}:{replay_port}', [
+            ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)
+        ])
         self._replay_stub = replay_pb2_grpc.ReplayServiceStub(self._replay_channel)
 
         self._learner_connected = False
@@ -461,7 +461,7 @@ class StubController:
         def request_messages():
             while not self._closed:
                 yield Ping(time=int(time.time() * 1000))
-                time.sleep(PING_INTERVAL)
+                time.sleep(C.PING_INTERVAL)
                 if not self._learner_connected:
                     break
 
@@ -477,13 +477,13 @@ class StubController:
                     self._learner_connected = False
                     self._logger.error('Learner disconnected')
             finally:
-                time.sleep(RECONNECTION_TIME)
+                time.sleep(C.RECONNECTION_TIME)
 
     def _start_replay_persistence(self):
         def request_messages():
             while not self._closed:
                 yield Ping(time=int(time.time() * 1000))
-                time.sleep(PING_INTERVAL)
+                time.sleep(C.PING_INTERVAL)
                 if not self._replay_connected:
                     break
 
@@ -499,7 +499,7 @@ class StubController:
                     self._replay_connected = False
                     self._logger.error('Replay disconnected')
             finally:
-                time.sleep(RECONNECTION_TIME)
+                time.sleep(C.RECONNECTION_TIME)
 
     def close(self):
         self._closed = True
