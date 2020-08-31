@@ -10,6 +10,7 @@ import threading
 import time
 from concurrent import futures
 from pathlib import Path
+from typing import final
 
 import grpc
 import numpy as np
@@ -35,10 +36,10 @@ class Learner(object):
     _training_lock = threading.Lock()
 
     def __init__(self, root_dir, config_dir, args):
-        self._now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-
         self.root_dir = root_dir
         self.cmd_args = args
+
+        self.logger = config_helper.set_logger('ds.learner')
 
         constant_config = self._init_constant_config(root_dir, config_dir, args)
         self.net_config = constant_config['net_config']
@@ -48,31 +49,20 @@ class Learner(object):
                                     self.net_config['learner_host'],
                                     self.net_config['learner_port'],
                                     self.net_config['replay_host'],
-                                    self.net_config['replay_port'],
-                                    self.standalone)
+                                    self.net_config['replay_port'])
 
         try:
-            while True:
-                self._data_feeded = False
-                self._closed = False
+            self.registered = False
+            self._data_feeded = False
+            self._closed = False
 
-                self.logger = config_helper.set_logger('ds.learner')
-
-                self._init_env(constant_config)
-                self._run()
-
-                self._closed = True
-                if hasattr(self, 'env'):
-                    self.env.close()
-                    self.logger.warning('Env closed')
-                if hasattr(self, 'server'):
-                    self.server.stop(None)
-                    self.logger.warning('Server closed')
-
-                time.sleep(C.RECONNECTION_TIME)
+            self._init_env(constant_config)
+            self._run()
 
         except KeyboardInterrupt:
             self.logger.warning('KeyboardInterrupt in _run')
+
+        finally:
             self.close()
 
     def _init_constant_config(self, root_dir, config_dir, args):
@@ -126,34 +116,32 @@ class Learner(object):
         sac_config = config['sac_config']
         self.reset_config = config['reset_config']
 
-        if self.standalone:
-            self.config['name'] = generate_base_name(self.config['name'])
-            model_abs_dir = Path(self.root_dir).joinpath(f'models/{self.config["scene"]}/{self.config["name"]}')
-        else:
-            # Get name from evolver registry
-            evolver_register_response = None
-            self.logger.info('Registering...')
-            while evolver_register_response is None:
-                if not self._stub.connected:
-                    time.sleep(C.RECONNECTION_TIME)
-                    continue
-                evolver_register_response = self._stub.register_to_evolver()
-                if evolver_register_response is None:
-                    time.sleep(C.RECONNECTION_TIME)
+        # Get name from evolver registry
+        evolver_register_response = None
+        self.logger.info('Registering...')
+        while evolver_register_response is None:
+            if not self._stub.connected:
+                time.sleep(C.RECONNECTION_TIME)
+                continue
+            evolver_register_response = self._stub.register_to_evolver()
+            if evolver_register_response is None:
+                time.sleep(C.RECONNECTION_TIME)
 
-            _id, name = evolver_register_response
-            self.logger.info(f'Registered id: {_id}, name: {name}')
+        _id, name = evolver_register_response
+        self.id = _id
+        self.config['name'] = name
+        self.registered = True
+        self.logger.info(f'Registered id: {_id}, name: {name}')
 
-            self.config['name'] = name
-            model_abs_dir = Path(self.root_dir).joinpath(f'models/{self.config["scene"]}/{self.config["name"]}/learner{_id}')
-
+        model_abs_dir = Path(self.root_dir).joinpath('models',
+                                                     self.config['scene'],
+                                                     self.config['name'],
+                                                     f'learner{_id}')
+        self.model_abs_dir = model_abs_dir
         os.makedirs(model_abs_dir)
 
-        logger_file = f'{model_abs_dir}/{self.cmd_args.logger_file}' if self.cmd_args.logger_file is not None else None
+        logger_file = Path(model_abs_dir).joinpath(f'learner.log') if self.cmd_args.logger_in_file else None
         self.logger = config_helper.set_logger('ds.learner', logger_file)
-
-        if self.train_mode and self.standalone:
-            config_helper.save_config(config, model_abs_dir, 'config_ds.yaml')
 
         config_helper.display_config(config, self.logger)
 
@@ -204,6 +192,13 @@ class Learner(object):
                                **sac_config)
 
         self.logger.info(f'sac_learner initialized')
+
+    _unique_id = -1
+
+    def _get_model_abs_dir(self):
+        if self.registered:
+            self._unique_id += 1
+            return str(self.model_abs_dir), self._unique_id
 
     def _get_policy_variables(self):
         with self._training_lock:
@@ -298,7 +293,9 @@ class Learner(object):
                 action = np.zeros([len(agents), self.action_dim], dtype=np.float32)
                 step = 0
 
-                while False in [a.done for a in agents] and (not self.train_mode or self._data_feeded):
+                while False in [a.done for a in agents] and \
+                        not self._closed and \
+                        (not self.train_mode or self._data_feeded):
                     with self._training_lock:
                         if use_rnn:
                             action, next_rnn_state = self.sac.choose_rnn_action([o.astype(np.float32) for o in obs_list],
@@ -346,6 +343,8 @@ class Learner(object):
 
                 if self.train_mode and self.standalone:
                     time.sleep(C.EVALUATION_INTERVAL)
+
+            self.logger.warning('Evaluation exits')
         except Exception as e:
             self.logger.error(e)
 
@@ -371,6 +370,9 @@ class Learner(object):
 
             if sampled is None:
                 self.logger.warning('No data sampled')
+                if self._data_feeded:
+                    self.logger.warning('Replay is offline, exit training')
+                    break
                 self._data_feeded = False
                 time.sleep(C.RECONNECTION_TIME)
                 continue
@@ -408,12 +410,15 @@ class Learner(object):
             for pointers, key, data in update_data:
                 self._stub.update_transitions(pointers, key, data)
 
+        self.logger.warning('Training exits')
+
     def _run(self):
         t_evaluation = threading.Thread(target=self._policy_evaluation, daemon=True)
         t_evaluation.start()
 
         if self.train_mode:
-            servicer = LearnerService(self._get_action,
+            servicer = LearnerService(self._get_model_abs_dir,
+                                      self._get_action,
                                       self._get_policy_variables,
                                       self._get_nn_variables,
                                       self._udpate_nn_variables,
@@ -432,6 +437,7 @@ class Learner(object):
 
     def close(self):
         self._closed = True
+
         if hasattr(self, 'env'):
             self.env.close()
         if hasattr(self, 'server'):
@@ -444,11 +450,13 @@ class Learner(object):
 
 class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
     def __init__(self,
+                 get_model_abs_dir,
                  get_action,
                  get_policy_variables,
                  get_nn_variables,
                  udpate_nn_variables,
                  get_td_error):
+        self._get_model_abs_dir = get_model_abs_dir
         self._get_action = get_action
         self._get_policy_variables = get_policy_variables
         self._get_nn_variables = get_nn_variables
@@ -467,6 +475,14 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
         self._record_peer(context)
         for request in request_iterator:
             yield Pong(time=int(time.time() * 1000))
+
+    def GetModelAbsDir(self, request, context):
+        dir_id = self._get_model_abs_dir()
+        if dir_id is not None:
+            _dir, _id = dir_id
+            return learner_pb2.ModelAbsDir(dir=_dir, unique_id=_id)
+        else:
+            return learner_pb2.ModelAbsDir(unique_id=-1)
 
     # From actor
     def GetAction(self, request: learner_pb2.GetActionRequest, context):
@@ -523,13 +539,17 @@ class StubController:
 
     def __init__(self, evolver_host, evolver_port,
                  learner_host, learner_port,
-                 replay_host, replay_port,
-                 standalone):
+                 replay_host, replay_port):
         self.learner_host = learner_host
         self.learner_port = learner_port
         self.replay_host = replay_host
         self.replay_port = replay_port
-        self.standalone = standalone
+
+        self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}', [
+            ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)
+        ])
+        self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
+        self._evolver_connected = False
 
         self._replay_channel = grpc.insecure_channel(f'{replay_host}:{replay_port}', [
             ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)
@@ -538,20 +558,12 @@ class StubController:
 
         self._logger = logging.getLogger('ds.learner.stub')
 
-        if not standalone:
-            self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}', [
-                ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)
-            ])
-            self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
-
-            self._evolver_connected = False
-
-            t_evolver = threading.Thread(target=self._start_evolver_persistence, daemon=True)
-            t_evolver.start()
+        t_evolver = threading.Thread(target=self._start_evolver_persistence, daemon=True)
+        t_evolver.start()
 
     @property
     def connected(self):
-        return not self._closed and (self.standalone or self._evolver_connected)
+        return not self._closed and self._evolver_connected
 
     # To replay
     @rpc_error_inspector
@@ -628,7 +640,6 @@ class StubController:
                 time.sleep(C.RECONNECTION_TIME)
 
     def close(self):
+        self._evolver_channel.close()
         self._replay_channel.close()
-        if not self.standalone:
-            self._evolver_channel.close()
         self._closed = True

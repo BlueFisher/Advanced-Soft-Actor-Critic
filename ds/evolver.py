@@ -29,6 +29,9 @@ class Evolver:
          model_abs_dir,
          config_abs_dir) = self._init_config(root_dir, config_dir, args)
 
+        self._learner_rewards = dict()
+        self._learner_rewards_lock = threading.Lock()
+
         try:
             self._run()
         except KeyboardInterrupt:
@@ -51,11 +54,13 @@ class Evolver:
             config['base_config']['name'] = args.name
 
         config['base_config']['name'] = generate_base_name(config['base_config']['name'])
-        model_abs_dir = Path(root_dir).joinpath(f'models/{config["base_config"]["scene"]}/{config["base_config"]["name"]}')
+        model_abs_dir = Path(root_dir).joinpath('models',
+                                                config['base_config']['scene'],
+                                                config['base_config']['name'])
         os.makedirs(model_abs_dir)
 
-        logger_file = f'{model_abs_dir}/{args.logger_file}' if args.logger_file is not None else None
-        self.logger = config_helper.set_logger('ds.learner', logger_file)
+        logger_file = Path(model_abs_dir).joinpath('evolver.log') if args.logger_in_file else None
+        self.logger = config_helper.set_logger('ds.evolver', logger_file)
 
         config_helper.save_config(config, model_abs_dir, 'config_ds.yaml')
 
@@ -66,48 +71,50 @@ class Evolver:
                 model_abs_dir,
                 config_abs_dir)
 
-    _learner_rewards = dict()
-
     def _learner_connected(self, peer, connected):
-        if connected:
-            self._learner_rewards[peer] = deque(maxlen=self.config['evolver_cem_length'])
-        else:
-            del self._learner_rewards[peer]
+        with self._learner_rewards_lock:
+            if connected:
+                self._learner_rewards[peer] = deque(maxlen=self.config['evolver_cem_length'])
+            else:
+                del self._learner_rewards[peer]
 
     def _post_reward(self, reward, peer):
-        self._learner_rewards[peer].append(reward)
+        with self._learner_rewards_lock:
+            self._learner_rewards[peer].append(reward)
 
-        # If the number of learners > 1 and all learners have evaluated more than evolver_cem_length times
-        if len(self._learner_rewards) > 1 and \
-                all([len(i) == self.config['evolver_cem_length'] for i in self._learner_rewards.values()]):
+            # If the number of learners > 1 and all learners have evaluated more than evolver_cem_length times
+            if len(self._learner_rewards) > 1 and \
+                    all([len(i) == self.config['evolver_cem_length'] for i in self._learner_rewards.values()]):
 
-            # Sort learners by the mean of evaluated rewards
-            learner_reward = [(l, float(np.mean(r))) for l, r in self._learner_rewards.items()]
-            learner_reward.sort(key=lambda i: i[1], reverse=True)
+                # Sort learners by the mean of evaluated rewards
+                learner_reward = [(l, float(np.mean(r))) for l, r in self._learner_rewards.items()]
+                learner_reward.sort(key=lambda i: i[1], reverse=True)
 
-            # Select top evolver_cem_best learners and get their nn variables
-            best_size = int(len(learner_reward) * self.config['evolver_cem_best'])
-            best_size = max(best_size, 1)
+                # Select top evolver_cem_best learners and get their nn variables
+                best_size = int(len(learner_reward) * self.config['evolver_cem_best'])
+                best_size = max(best_size, 1)
 
-            best_learners = [i[0] for i in learner_reward[:best_size]]
-            nn_variable_list = list()
-            for learner in best_learners:
-                stub = self.servicer.get_learner_info(learner)['stub']
-                nn_variable_list.append(stub.get_nn_variables())
+                best_learners = [i[0] for i in learner_reward[:best_size]]
+                nn_variable_list = list()
+                for learner in best_learners:
+                    stub = self.servicer.get_learner_info(learner)['stub']
+                    nn_variable_list.append(stub.get_nn_variables())
 
-            # Calculate the mean and std of best_size variables of learners
-            mean = [np.mean(i, axis=0) for i in zip(*nn_variable_list)]
-            std = [np.std(i, axis=0) for i in zip(*nn_variable_list)]
+                # Calculate the mean and std of best_size variables of learners
+                mean = [np.mean(i, axis=0) for i in zip(*nn_variable_list)]
+                std = [np.std(i, axis=0) for i in zip(*nn_variable_list)]
 
-            # Dispatch all nn variables
-            for learner in self.servicer.learners:
-                stub = self.servicer.get_learner_info(learner)['stub']
-                nn_variables = [np.random.normal(mean[i], std[i]) for i in range(len(mean))]
-                stub.update_nn_variables(nn_variables)
+                self.logger.info(np.max(std), np.mean(std), np.min(std))
 
-                self._learner_rewards[learner].clear()
+                # Dispatch all nn variables
+                for learner in self.servicer.learners:
+                    stub = self.servicer.get_learner_info(learner)['stub']
+                    nn_variables = [np.random.normal(mean[i], std[i]) for i in range(len(mean))]
+                    stub.update_nn_variables(nn_variables)
 
-            self.logger.info('Dispatched all nn variables')
+                    self._learner_rewards[learner].clear()
+
+                self.logger.info('Dispatched all nn variables')
 
     def _run(self):
         self.servicer = EvolverService(self.config['name'],
@@ -178,7 +185,8 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
                     self._logger.warning(f'Learner {peer} disconnected')
                 elif peer in self._actor_learner:
                     learner_peer = self._actor_learner[peer]
-                    self._learner_actors[learner_peer].remove(peer)
+                    if learner_peer in self._learner_actors:
+                        self._learner_actors[learner_peer].remove(peer)
                     del self._actor_learner[peer]
                     self._logger.warning(f'Actor {peer} disconnected')
 

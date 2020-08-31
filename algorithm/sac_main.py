@@ -67,10 +67,12 @@ class Main(object):
             config['base_config']['n_agents'] = args.agents
 
         config['base_config']['name'] = generate_base_name(config['base_config']['name'])
-        model_abs_dir = Path(root_dir).joinpath(f'models/{config["base_config"]["scene"]}/{config["base_config"]["name"]}')
+        model_abs_dir = Path(root_dir).joinpath('models',
+                                                config['base_config']['scene'],
+                                                config['base_config']['name'])
         os.makedirs(model_abs_dir)
 
-        logger_file = f'{model_abs_dir}/{args.logger_file}' if args.logger_file is not None else None
+        logger_file = Path(model_abs_dir).joinpath(f'log.log') if args.logger_in_file else None
         self.logger = config_helper.set_logger('sac', logger_file)
 
         if self.train_mode:
