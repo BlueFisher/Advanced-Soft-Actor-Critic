@@ -21,6 +21,11 @@ class LearnerServiceStub(object):
                 request_serializer=pingpong__pb2.Ping.SerializeToString,
                 response_deserializer=pingpong__pb2.Pong.FromString,
                 )
+        self.GetModelAbsDir = channel.unary_unary(
+                '/LearnerService/GetModelAbsDir',
+                request_serializer=ndarray__pb2.Empty.SerializeToString,
+                response_deserializer=learner__pb2.ModelAbsDir.FromString,
+                )
         self.GetAction = channel.unary_unary(
                 '/LearnerService/GetAction',
                 request_serializer=learner__pb2.GetActionRequest.SerializeToString,
@@ -52,6 +57,12 @@ class LearnerServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def Persistence(self, request_iterator, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetModelAbsDir(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -95,6 +106,11 @@ def add_LearnerServiceServicer_to_server(servicer, server):
                     servicer.Persistence,
                     request_deserializer=pingpong__pb2.Ping.FromString,
                     response_serializer=pingpong__pb2.Pong.SerializeToString,
+            ),
+            'GetModelAbsDir': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetModelAbsDir,
+                    request_deserializer=ndarray__pb2.Empty.FromString,
+                    response_serializer=learner__pb2.ModelAbsDir.SerializeToString,
             ),
             'GetAction': grpc.unary_unary_rpc_method_handler(
                     servicer.GetAction,
@@ -144,6 +160,22 @@ class LearnerService(object):
         return grpc.experimental.stream_stream(request_iterator, target, '/LearnerService/Persistence',
             pingpong__pb2.Ping.SerializeToString,
             pingpong__pb2.Pong.FromString,
+            options, channel_credentials,
+            call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def GetModelAbsDir(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/LearnerService/GetModelAbsDir',
+            ndarray__pb2.Empty.SerializeToString,
+            learner__pb2.ModelAbsDir.FromString,
             options, channel_credentials,
             call_credentials, compression, wait_for_ready, timeout, metadata)
 

@@ -23,6 +23,9 @@ class Replay(object):
     _replay_buffer_lock = threading.Lock()
 
     def __init__(self, root_dir, config_dir, args):
+        self.root_dir = root_dir
+        self.cmd_args = args
+
         self.config, net_config, replay_config, sac_config = self._init_config(root_dir, config_dir, args)
 
         self._replay_buffer = PrioritizedReplayBuffer(**replay_config)
@@ -32,6 +35,8 @@ class Replay(object):
         self.use_rnn = sac_config['use_rnn']
         self.burn_in_step = sac_config['burn_in_step']
         self.n_step = sac_config['n_step']
+
+        self._set_logger()
 
         try:
             self._run_replay_server(net_config['replay_port'])
@@ -64,7 +69,7 @@ class Replay(object):
             config['net_config']['learner_host'] = f'{learner_host}-{host_id}.{learner_host}'
             config['net_config']['replay_host'] = f'{replay_host}-{host_id}.{replay_host}'
 
-        self.logger = config_helper.set_logger('ds.replay', args.logger_file)
+        self.logger = config_helper.set_logger('ds.replay')
 
         config_helper.display_config(config, self.logger)
 
@@ -72,6 +77,23 @@ class Replay(object):
                 config['net_config'],
                 config['replay_config'],
                 config['sac_config'])
+
+    def _set_logger(self):
+        """
+        Set logger file if available
+        """
+        if self.cmd_args.logger_in_file:
+            model_abs_dir = None
+            while model_abs_dir is None:
+                model_abs_dir = self._stub.get_model_abs_dir()
+                if model_abs_dir is not None:
+                    logger_file = Path(model_abs_dir).joinpath('replay.log')
+                    self.logger = config_helper.set_logger('ds.replay', logger_file)
+                    self.logger.info(f'Set to logger {logger_file}')
+                else:
+                    time.sleep(C.RECONNECTION_TIME)
+
+    _curr_percent = -1
 
     def _add(self,
              n_obses_list,
@@ -124,15 +146,17 @@ class Replay(object):
                                            n_dones,
                                            n_mu_probs,
                                            n_rnn_states=n_rnn_states if self.use_rnn else None)
-        # td_error = np.abs(np.random.randn(n_obses.shape[0], 1).astype(np.float32))
+
         if td_error is not None:
             td_error = td_error.flatten()
             with self._replay_buffer_lock:
                 self._replay_buffer.add_with_td_error(td_error, storage_data,
                                                       ignore_size=self.burn_in_step + self.n_step)
 
-            percent = self._replay_buffer.size / self._replay_buffer.capacity * 100
-            print(f'buffer size, {percent:.2f}%', end='\r')
+            percent = int(self._replay_buffer.size / self._replay_buffer.capacity * 100)
+            if percent > self._curr_percent:
+                self.logger.info(f'Buffer size: {percent}%')
+                self._curr_percent = percent
 
     def _sample(self):
         with self._replay_buffer_lock:
@@ -190,6 +214,10 @@ class Replay(object):
 
     def _clear(self):
         self._replay_buffer.clear()
+        self._curr_percent = -1
+
+        self._set_logger()
+
         self.logger.info('Replay buffer cleared')
 
     def _run_replay_server(self, replay_port):
@@ -289,6 +317,12 @@ class StubController:
         self._learner_stub = learner_pb2_grpc.LearnerServiceStub(self._learner_channel)
 
         self._logger = logging.getLogger('ds.replay.stub')
+
+    @rpc_error_inspector
+    def get_model_abs_dir(self):
+        response = self._learner_stub.GetModelAbsDir(Empty())
+        if response.unique_id != -1:
+            return response.dir
 
     @rpc_error_inspector
     def get_td_error(self,

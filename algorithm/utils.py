@@ -9,4 +9,4 @@ def generate_base_name(name):
     """
     now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
     rand = ''.join(random.sample(string.ascii_letters, 4))
-    name.replace('{time}', now + rand)
+    return name.replace('{time}', now + rand)
