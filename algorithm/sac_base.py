@@ -10,7 +10,6 @@ import tensorflow_probability as tfp
 from .replay_buffer import PrioritizedReplayBuffer
 
 logger = logging.getLogger('sac.base')
-logger.setLevel(level=logging.INFO)
 
 
 def squash_correction_log_prob(dist, x):
@@ -782,6 +781,8 @@ class SAC_Base(object):
                                              max_outputs=self.n_step, step=self.global_step)
 
             self.summary_writer.flush()
+
+        return [v.name for v in grads_q1 + grads_policy], grads_q1 + grads_policy
 
     @tf.function
     def get_n_rnn_states(self, n_obses_list, n_actions, rnn_state):

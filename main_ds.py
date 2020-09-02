@@ -1,13 +1,16 @@
 import argparse
 import os
 import sys
-from logging import root
 from pathlib import Path
+
+from algorithm.config_helper import set_logger
 
 # for correctly import protoc
 sys.path.append(str(Path(__file__).resolve().parent.joinpath('ds/proto')))
 
 if __name__ == '__main__':
+    set_logger()
+
     parser = argparse.ArgumentParser()
     parser.add_argument('env')
     parser.add_argument('process_type', choices=['replay', 'r',

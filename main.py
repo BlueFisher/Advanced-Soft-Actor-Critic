@@ -2,14 +2,18 @@ import argparse
 import os
 import sys
 
+from algorithm.config_helper import set_logger
+
 if __name__ == '__main__':
+    set_logger()
+
     parser = argparse.ArgumentParser()
     parser.add_argument('env')
     parser.add_argument('--config', '-c', help='config file')
     parser.add_argument('--run', action='store_true', help='inference mode')
     parser.add_argument('--render', action='store_true', help='render')
     parser.add_argument('--editor', action='store_true', help='running in Unity Editor')
-    parser.add_argument('--logger_file', help='logging into a file')
+    parser.add_argument('--logger_in_file', action='store_true', help='logging into a file')
     parser.add_argument('--name', '-n', help='training name')
     parser.add_argument('--port', '-p', type=int, default=5005, help='communication port')
     parser.add_argument('--nn', help='neural network model')

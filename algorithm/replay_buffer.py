@@ -2,7 +2,6 @@ import logging
 import math
 import random
 import time
-from collections import deque
 from math import nan
 
 import numpy as np
