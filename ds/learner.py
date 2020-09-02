@@ -39,7 +39,7 @@ class Learner(object):
         self.root_dir = root_dir
         self.cmd_args = args
 
-        self.logger = config_helper.set_logger('ds.learner')
+        self.logger = logging.getLogger('ds.learner')
 
         constant_config = self._init_constant_config(root_dir, config_dir, args)
         self.net_config = constant_config['net_config']
@@ -140,8 +140,8 @@ class Learner(object):
         self.model_abs_dir = model_abs_dir
         os.makedirs(model_abs_dir)
 
-        logger_file = Path(model_abs_dir).joinpath(f'learner.log') if self.cmd_args.logger_in_file else None
-        self.logger = config_helper.set_logger('ds.learner', logger_file)
+        if self.cmd_args.logger_in_file:
+            config_helper.set_logger(Path(model_abs_dir).joinpath(f'learner.log'))
 
         config_helper.display_config(config, self.logger)
 
@@ -389,19 +389,37 @@ class Learner(object):
                  rnn_state,
                  priority_is) = sampled
 
+            origin_variables = self._get_nn_variables()
             with self._training_lock:
-                td_error, update_data = self.sac.train(pointers=pointers,
-                                                       n_obses_list=n_obses_list,
-                                                       n_actions=n_actions,
-                                                       n_rewards=n_rewards,
-                                                       next_obs_list=next_obs_list,
-                                                       n_dones=n_dones,
-                                                       n_mu_probs=n_mu_probs,
-                                                       priority_is=priority_is,
-                                                       rnn_state=rnn_state)
+                td_error, update_data, grads_name, grads = self.sac.train(pointers=pointers,
+                                                                          n_obses_list=n_obses_list,
+                                                                          n_actions=n_actions,
+                                                                          n_rewards=n_rewards,
+                                                                          next_obs_list=next_obs_list,
+                                                                          n_dones=n_dones,
+                                                                          n_mu_probs=n_mu_probs,
+                                                                          priority_is=priority_is,
+                                                                          rnn_state=rnn_state)
 
             if np.isnan(np.min(td_error)):
                 self.logger.error('NAN in td_error')
+                self.logger.info('origin_variables')
+                self.logger.info(origin_variables)
+                self.logger.info('=' * 10)
+
+                self.logger.info('n_mu_probs')
+                self.logger.info(n_mu_probs)
+                self.logger.info('=' * 10)
+
+                self.logger.info('priority_is')
+                self.logger.info(priority_is)
+                self.logger.info('=' * 10)
+
+                self.logger.info('grads')
+                self.logger.info([f'{str(i.numpy())}: {j.numpy()}' for i, j in zip(grads_name, grads)])
+                self.logger.info('=' * 10)
+                self.logger.info('updated variables')
+                self.logger.info(self._get_nn_variables())
                 self.sac.save_model()
                 self.close()
                 break

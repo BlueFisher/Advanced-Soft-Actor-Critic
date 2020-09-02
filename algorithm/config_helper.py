@@ -31,12 +31,12 @@ def initialize_config_from_yaml(default_config_path, config_file_path, config_ca
     return config
 
 
-def set_logger(logger_name, logger_file=None):
+def set_logger(logger_file=None):
     # logger config
-    _log = logging.getLogger()
-    _log.setLevel(logging.INFO)
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
     # remove default root logger handler
-    _log.handlers = []
+    logger.handlers = []
 
     # create stream handler
     sh = logging.StreamHandler()
@@ -44,21 +44,16 @@ def set_logger(logger_name, logger_file=None):
 
     # add handler and formatter to logger
     sh.setFormatter(logging.Formatter('[%(levelname)s] - [%(name)s] - %(message)s'))
-    _log.addHandler(sh)
-
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(level=logging.INFO)
+    logger.addHandler(sh)
 
     if logger_file is not None:
         # create file handler
-        fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=1024 * 100, backupCount=5)
+        fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=1024 * 1024, backupCount=5)
         fh.setLevel(logging.INFO)
 
         # add handler and formatter to logger
         fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
         logger.addHandler(fh)
-
-    return logger
 
 
 def save_config(config, model_root_path, config_name):

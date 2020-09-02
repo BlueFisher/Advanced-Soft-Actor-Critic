@@ -24,6 +24,8 @@ from .utils import PeerSet, rpc_error_inspector
 
 class Evolver:
     def __init__(self, root_dir, config_dir, args):
+        self.logger = logging.getLogger('ds.evolver')
+
         (self.config,
          self.net_config,
          model_abs_dir,
@@ -59,8 +61,8 @@ class Evolver:
                                                 config['base_config']['name'])
         os.makedirs(model_abs_dir)
 
-        logger_file = Path(model_abs_dir).joinpath('evolver.log') if args.logger_in_file else None
-        self.logger = config_helper.set_logger('ds.evolver', logger_file)
+        if args.logger_in_file:
+            config_helper.set_logger(Path(model_abs_dir).joinpath('evolver.log'))
 
         config_helper.save_config(config, model_abs_dir, 'config_ds.yaml')
 
@@ -97,20 +99,20 @@ class Evolver:
                 best_learners = [i[0] for i in learner_reward[:best_size]]
                 nn_variable_list = list()
                 for learner in best_learners:
-                    stub = self.servicer.get_learner_info(learner)['stub']
-                    nn_variable_list.append(stub.get_nn_variables())
+                    stub = self.servicer.get_learner_stub(learner)
+                    if stub:
+                        nn_variable_list.append(stub.get_nn_variables())
 
                 # Calculate the mean and std of best_size variables of learners
                 mean = [np.mean(i, axis=0) for i in zip(*nn_variable_list)]
-                std = [np.std(i, axis=0) for i in zip(*nn_variable_list)]
-
-                self.logger.info(np.max(std), np.mean(std), np.min(std))
+                std = [np.clip(np.std(i, axis=0), 0., .1) for i in zip(*nn_variable_list)]
 
                 # Dispatch all nn variables
                 for learner in self.servicer.learners:
-                    stub = self.servicer.get_learner_info(learner)['stub']
-                    nn_variables = [np.random.normal(mean[i], std[i]) for i in range(len(mean))]
-                    stub.update_nn_variables(nn_variables)
+                    stub = self.servicer.get_learner_stub(learner)
+                    if stub:
+                        nn_variables = [np.random.normal(mean[i], std[i]) for i in range(len(mean))]
+                        stub.update_nn_variables(nn_variables)
 
                     self._learner_rewards[learner].clear()
 
@@ -177,18 +179,20 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
         peer = context.peer()
 
         def _unregister_peer():
-            self._peer_set.disconnect(peer)
             with self._learner_lock:
                 if peer in self._learner_actors:
+                    info = self._peer_set.get_info(peer)
+                    _id = info['id']
                     del self._learner_actors[peer]
                     self._learner_connected(peer, connected=False)
-                    self._logger.warning(f'Learner {peer} disconnected')
+                    self._logger.warning(f'Learner {peer} (id={_id}) disconnected')
                 elif peer in self._actor_learner:
                     learner_peer = self._actor_learner[peer]
                     if learner_peer in self._learner_actors:
                         self._learner_actors[learner_peer].remove(peer)
                     del self._actor_learner[peer]
                     self._logger.warning(f'Actor {peer} disconnected')
+            self._peer_set.disconnect(peer)
 
         context.add_callback(_unregister_peer)
         self._peer_set.connect(peer)
@@ -196,16 +200,18 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
     @property
     def learners(self):
         with self._learner_lock:
-            return self._learner_actors.keys()
+            return list(self._learner_actors.keys())
 
-    def get_learner_info(self, peer):
-        return self._peer_set[peer]
+    def get_learner_stub(self, peer):
+        info = self._peer_set.get_info(peer)
+        if info:
+            return info['stub']
 
     def display_learner_actors(self):
         with self._learner_lock:
             info = 'Learner-actors:'
             for learner in self._learner_actors:
-                learner_info = self._peer_set[learner]
+                learner_info = self._peer_set.get_info(learner)
                 learner_id = learner_info['id']
                 learner_host = learner_info['learner_host']
                 learner_port = learner_info['learner_port']
@@ -256,11 +262,12 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
             self._learner_actors[assigned_learner].add(peer)
             self._actor_learner[peer] = assigned_learner
 
-        assigned_learner = self._peer_set[assigned_learner]
+        info = self._peer_set.get_info(assigned_learner)
 
-        learner_host, learner_port = assigned_learner['learner_host'], assigned_learner['learner_port']
-        replay_host, replay_port = assigned_learner['replay_host'], assigned_learner['replay_port']
-        self._logger.info(f'Actor {peer} registered to learner {learner_host}:{learner_port}, replay {replay_host}:{replay_port}')
+        learner_id = info['id']
+        learner_host, learner_port = info['learner_host'], info['learner_port']
+        replay_host, replay_port = info['replay_host'], info['replay_port']
+        self._logger.info(f'Actor {peer} registered to learner (id={learner_id}) {learner_host}:{learner_port}, replay {replay_host}:{replay_port}')
         self.display_learner_actors()
 
         return evolver_pb2.RegisterActorResponse(succeeded=True,

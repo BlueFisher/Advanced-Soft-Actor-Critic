@@ -29,7 +29,7 @@ class Actor(object):
     def __init__(self, root_dir, config_dir, args):
         self.cmd_args = args
 
-        self.logger = config_helper.set_logger('ds.actor')
+        self.logger = logging.getLogger('ds.actor')
 
         constant_config = self._init_constant_config(root_dir, config_dir, args)
         net_config = constant_config['net_config']
@@ -116,13 +116,14 @@ class Actor(object):
 
         # Set logger file if available
         if self.cmd_args.logger_in_file:
+            self.logger.info('Waiting for model_abs_dir and id...')
             model_abs_dir_id = None
             while model_abs_dir_id is None:
                 model_abs_dir_id = self._stub.get_model_abs_dir()
                 if model_abs_dir_id is not None:
                     model_abs_dir, _id = model_abs_dir_id
                     logger_file = Path(model_abs_dir).joinpath(f'actor-{_id}.log')
-                    self.logger = config_helper.set_logger('ds.actor', logger_file)
+                    config_helper.set_logger(logger_file)
                     self.logger.info(f'Set to logger {logger_file}')
                 else:
                     time.sleep(C.RECONNECTION_TIME)

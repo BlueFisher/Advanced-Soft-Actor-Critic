@@ -26,6 +26,8 @@ class Replay(object):
         self.root_dir = root_dir
         self.cmd_args = args
 
+        self.logger = logging.getLogger('ds.replay')
+
         self.config, net_config, replay_config, sac_config = self._init_config(root_dir, config_dir, args)
 
         self._replay_buffer = PrioritizedReplayBuffer(**replay_config)
@@ -69,8 +71,6 @@ class Replay(object):
             config['net_config']['learner_host'] = f'{learner_host}-{host_id}.{learner_host}'
             config['net_config']['replay_host'] = f'{replay_host}-{host_id}.{replay_host}'
 
-        self.logger = config_helper.set_logger('ds.replay')
-
         config_helper.display_config(config, self.logger)
 
         return (config['base_config'],
@@ -83,12 +83,13 @@ class Replay(object):
         Set logger file if available
         """
         if self.cmd_args.logger_in_file:
+            self.logger.info('Waiting for model_abs_dir...')
             model_abs_dir = None
             while model_abs_dir is None:
                 model_abs_dir = self._stub.get_model_abs_dir()
                 if model_abs_dir is not None:
                     logger_file = Path(model_abs_dir).joinpath('replay.log')
-                    self.logger = config_helper.set_logger('ds.replay', logger_file)
+                    config_helper.set_logger(logger_file)
                     self.logger.info(f'Set to logger {logger_file}')
                 else:
                     time.sleep(C.RECONNECTION_TIME)

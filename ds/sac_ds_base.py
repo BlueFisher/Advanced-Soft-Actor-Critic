@@ -1,3 +1,4 @@
+import logging
 import sys
 import time
 from pathlib import Path
@@ -8,6 +9,8 @@ import tensorflow as tf
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from algorithm.sac_base import SAC_Base
+
+logger = logging.getLogger('sac.base.ds')
 
 
 class SAC_DS_Base(SAC_Base):
@@ -130,15 +133,11 @@ class SAC_DS_Base(SAC_Base):
     def get_nn_variables(self):
         variables = self.model_rep.trainable_variables +\
             self.model_target_rep.trainable_variables +\
-            self.optimizer_rep.weights[1:] +\
             self.model_q1.trainable_variables +\
             self.model_target_q1.trainable_variables +\
-            self.optimizer_q1.weights[1:] +\
             self.model_q2.trainable_variables +\
             self.model_target_q2.trainable_variables +\
-            self.optimizer_q2.weights[1:] +\
             self.model_policy.trainable_variables +\
-            self.optimizer_policy.weights[1:] +\
             [self.log_alpha]
 
         if self.use_prediction:
@@ -176,14 +175,14 @@ class SAC_DS_Base(SAC_Base):
               priority_is,
               rnn_state=None):
 
-        self._train(n_obses_list=n_obses_list,
-                    n_actions=n_actions,
-                    n_rewards=n_rewards,
-                    next_obs_list=next_obs_list,
-                    n_dones=n_dones,
-                    n_mu_probs=n_mu_probs,
-                    priority_is=priority_is,
-                    initial_rnn_state=rnn_state if self.use_rnn else None)
+        grads_name, grads = self._train(n_obses_list=n_obses_list,
+                                        n_actions=n_actions,
+                                        n_rewards=n_rewards,
+                                        next_obs_list=next_obs_list,
+                                        n_dones=n_dones,
+                                        n_mu_probs=n_mu_probs,
+                                        priority_is=priority_is,
+                                        initial_rnn_state=rnn_state if self.use_rnn else None)
 
         step = self.global_step.numpy()
 
@@ -220,4 +219,4 @@ class SAC_DS_Base(SAC_Base):
 
         self._increase_global_step()
 
-        return td_error, update_data
+        return td_error, update_data, grads_name, grads
