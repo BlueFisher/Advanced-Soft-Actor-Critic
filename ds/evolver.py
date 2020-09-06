@@ -105,7 +105,7 @@ class Evolver:
 
                 # Calculate the mean and std of best_size variables of learners
                 mean = [np.mean(i, axis=0) for i in zip(*nn_variable_list)]
-                std = [np.clip(np.std(i, axis=0), 0., .1) for i in zip(*nn_variable_list)]
+                std = [np.minimum(np.std(i, axis=0), .1) for i in zip(*nn_variable_list)]
 
                 # Dispatch all nn variables
                 for learner in self.servicer.learners:

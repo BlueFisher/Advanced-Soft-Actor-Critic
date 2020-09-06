@@ -1,23 +1,20 @@
 import importlib
 import logging
 import os
-import random
 import shutil
 import socket
-import string
 import sys
 import threading
 import time
+from queue import Full, Queue
 from concurrent import futures
 from pathlib import Path
-from typing import final
 
 import grpc
 import numpy as np
 
 import algorithm.config_helper as config_helper
 from algorithm.agent import Agent
-from algorithm.utils import generate_base_name
 
 from . import constants as C
 from .proto import (evolver_pb2, evolver_pb2_grpc, learner_pb2,
@@ -29,8 +26,75 @@ from .sac_ds_base import SAC_DS_Base
 from .utils import PeerSet, rpc_error_inspector
 
 
-class Learner(object):
-    train_mode = True
+class SampledDataBuffer:
+    def __init__(self, get_sampled_data):
+        self._get_sampled_data = get_sampled_data
+
+        self._data_feeded = False
+        self._closed = False
+        self._buffer = Queue(maxsize=C.SAMPLED_DATA_BUFFER_MAXSIZE)
+        self.logger = logging.getLogger('ds.learner.sampled_data_buffer')
+
+        t = threading.Thread(target=self.run, daemon=True)
+        t.start()
+
+    def run(self):
+        while not self._closed:
+            sampled = self._get_sampled_data()
+
+            if sampled is not None:
+                self._buffer.put(sampled)
+                self._data_feeded = True
+            else:
+                self.logger.warning('No data sampled')
+                if self._data_feeded:
+                    self.logger.warning('Replay is offline')
+                    self.close()
+                    break
+
+                time.sleep(C.RECONNECTION_TIME)
+
+    def get_data(self):
+        return self._buffer.get()
+
+    def close(self):
+        self._closed = True
+
+
+class UpdateDataBuffer:
+    def __init__(self, update_td_error, update_transitions):
+        self._update_td_error = update_td_error
+        self._update_transitions = update_transitions
+
+        self._closed = False
+        self._buffer = Queue(maxsize=C.UPDATE_DATA_BUFFER_MAXSIZE)
+        self.logger = logging.getLogger('ds.learner.update_data_buffer')
+
+        ts = [threading.Thread(target=self.run, daemon=True) for _ in range(C.UPDATE_DATA_BUFFER_THREADS)]
+        for t in ts:
+            t.start()
+
+    def run(self):
+        while not self._closed:
+            is_td_error, *data = self._buffer.get()
+            if is_td_error:
+                pointers, td_error = data
+                self._update_td_error(pointers, td_error)
+            else:
+                pointers, key, data = data
+                self._update_transitions(pointers, key, data)
+
+    def add_data(self, is_td_error, *data):
+        try:
+            self._buffer.put_nowait((is_td_error, *data))
+        except Full:
+            self.logger.warning('Buffer is full, ignored')
+
+    def close(self):
+        self._closed = True
+
+
+class Learner:
     _agent_class = Agent
 
     _training_lock = threading.Lock()
@@ -53,7 +117,7 @@ class Learner(object):
 
         try:
             self.registered = False
-            self._data_feeded = False
+            self._is_training = False
             self._closed = False
 
             self._init_env(constant_config)
@@ -73,7 +137,6 @@ class Learner(object):
                                                            args.config)
 
         # Initialize config from command line arguments
-        self.train_mode = not args.run
         self.standalone = args.standalone
         self.last_ckpt = args.ckpt
         self.render = args.render
@@ -149,10 +212,9 @@ class Learner(object):
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
             if self.run_in_editor:
-                self.env = UnityWrapper(train_mode=self.train_mode, base_port=5004)
+                self.env = UnityWrapper(base_port=5004)
             else:
-                self.env = UnityWrapper(train_mode=self.train_mode,
-                                        file_name=self.config['build_path'][sys.platform],
+                self.env = UnityWrapper(file_name=self.config['build_path'][sys.platform],
                                         base_port=self.config['build_port'],
                                         scene=self.config['scene'],
                                         n_agents=self.config['n_agents'])
@@ -160,8 +222,7 @@ class Learner(object):
         elif self.config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
 
-            self.env = GymWrapper(train_mode=self.train_mode,
-                                  env_name=self.config['build_path'],
+            self.env = GymWrapper(env_name=self.config['build_path'],
                                   render=self.render,
                                   n_agents=self.config['n_agents'])
         else:
@@ -186,7 +247,6 @@ class Learner(object):
                                is_discrete=is_discrete,
                                model_abs_dir=model_abs_dir,
                                model=custom_nn_model,
-                               train_mode=self.train_mode,
                                last_ckpt=self.last_ckpt,
 
                                **sac_config)
@@ -247,14 +307,14 @@ class Learner(object):
         n_dones: [1, episode_len]
         n_rnn_states: [1, episode_len, rnn_state_dim]
         """
-        td_error = self.sac.get_episode_td_error(n_obses_list=n_obses_list,
-                                                 n_actions=n_actions,
-                                                 n_rewards=n_rewards,
-                                                 next_obs_list=next_obs_list,
-                                                 n_dones=n_dones,
-                                                 n_mu_probs=n_mu_probs,
-                                                 n_rnn_states=n_rnn_states if self.sac.use_rnn else None)
-
+        with self._training_lock:
+            td_error = self.sac.get_episode_td_error(n_obses_list=n_obses_list,
+                                                     n_actions=n_actions,
+                                                     n_rewards=n_rewards,
+                                                     next_obs_list=next_obs_list,
+                                                     n_dones=n_dones,
+                                                     n_mu_probs=n_mu_probs,
+                                                     n_rnn_states=n_rnn_states if self.sac.use_rnn else None)
         return td_error
 
     def _policy_evaluation(self):
@@ -274,8 +334,8 @@ class Learner(object):
                 rnn_state = initial_rnn_state
 
             while not self._closed:
-                # not training, waiting...
-                if self.train_mode and not self._data_feeded:
+                # Not training, waiting...
+                if not self._is_training:
                     time.sleep(C.EVALUATION_WAITING_TIME)
                     continue
 
@@ -294,8 +354,7 @@ class Learner(object):
                 step = 0
 
                 while False in [a.done for a in agents] and \
-                        not self._closed and \
-                        (not self.train_mode or self._data_feeded):
+                        not self._closed and self._is_training:
                     with self._training_lock:
                         if use_rnn:
                             action, next_rnn_state = self.sac.choose_rnn_action([o.astype(np.float32) for o in obs_list],
@@ -330,18 +389,17 @@ class Learner(object):
 
                     step += 1
 
-                if self.train_mode:
-                    with self._training_lock:
-                        self._log_episode_summaries(iteration, agents)
+                with self._training_lock:
+                    self._log_episode_summaries(iteration, agents)
 
-                    if not self.standalone:
-                        self._stub.post_reward(np.mean([a.reward for a in agents]))
+                if not self.standalone:
+                    self._stub.post_reward(np.mean([a.reward for a in agents]))
 
                 self._log_episode_info(iteration, start_time, agents)
 
                 iteration += 1
 
-                if self.train_mode and self.standalone:
+                if self.standalone:
                     time.sleep(C.EVALUATION_INTERVAL)
 
             self.logger.warning('Evaluation exits')
@@ -364,96 +422,72 @@ class Learner(object):
 
     def _run_training_client(self):
         self._stub.clear_replay_buffer()
+        sample_data_buffer = SampledDataBuffer(self._stub.get_sampled_data)
+        update_data_buffer = UpdateDataBuffer(self._stub.update_td_error,
+                                              self._stub.update_transitions)
 
         while self._stub.connected:
-            sampled = self._stub.get_sampled_data()
+            (pointers,
+             n_obses_list,
+             n_actions,
+             n_rewards,
+             next_obs_list,
+             n_dones,
+             n_mu_probs,
+             rnn_state,
+             priority_is) = sample_data_buffer.get_data()
 
-            if sampled is None:
-                self.logger.warning('No data sampled')
-                if self._data_feeded:
-                    self.logger.warning('Replay is offline, exit training')
-                    break
-                self._data_feeded = False
-                time.sleep(C.RECONNECTION_TIME)
-                continue
-            else:
-                self._data_feeded = True
+            self._is_training = True
 
-                (pointers,
-                 n_obses_list,
-                 n_actions,
-                 n_rewards,
-                 next_obs_list,
-                 n_dones,
-                 n_mu_probs,
-                 rnn_state,
-                 priority_is) = sampled
-
-            origin_variables = self._get_nn_variables()
             with self._training_lock:
-                td_error, update_data, grads_name, grads = self.sac.train(pointers=pointers,
-                                                                          n_obses_list=n_obses_list,
-                                                                          n_actions=n_actions,
-                                                                          n_rewards=n_rewards,
-                                                                          next_obs_list=next_obs_list,
-                                                                          n_dones=n_dones,
-                                                                          n_mu_probs=n_mu_probs,
-                                                                          priority_is=priority_is,
-                                                                          rnn_state=rnn_state)
+                td_error, update_data = self.sac.train(pointers=pointers,
+                                                       n_obses_list=n_obses_list,
+                                                       n_actions=n_actions,
+                                                       n_rewards=n_rewards,
+                                                       next_obs_list=next_obs_list,
+                                                       n_dones=n_dones,
+                                                       n_mu_probs=n_mu_probs,
+                                                       priority_is=priority_is,
+                                                       rnn_state=rnn_state)
 
             if np.isnan(np.min(td_error)):
                 self.logger.error('NAN in td_error')
-                self.logger.info('origin_variables')
-                self.logger.info(origin_variables)
-                self.logger.info('=' * 10)
-
-                self.logger.info('n_mu_probs')
-                self.logger.info(n_mu_probs)
-                self.logger.info('=' * 10)
-
-                self.logger.info('priority_is')
-                self.logger.info(priority_is)
-                self.logger.info('=' * 10)
-
-                self.logger.info('grads')
-                self.logger.info([f'{str(i.numpy())}: {j.numpy()}' for i, j in zip(grads_name, grads)])
-                self.logger.info('=' * 10)
-                self.logger.info('updated variables')
-                self.logger.info(self._get_nn_variables())
                 self.sac.save_model()
                 self.close()
                 break
 
-            self._stub.update_td_error(pointers, td_error)
+            update_data_buffer.add_data(True, pointers, td_error)
             for pointers, key, data in update_data:
-                self._stub.update_transitions(pointers, key, data)
+                update_data_buffer.add_data(False, pointers, key, data)
 
+        sample_data_buffer.close()
+        update_data_buffer.close()
         self.logger.warning('Training exits')
 
     def _run(self):
         t_evaluation = threading.Thread(target=self._policy_evaluation, daemon=True)
         t_evaluation.start()
 
-        if self.train_mode:
-            servicer = LearnerService(self._get_model_abs_dir,
-                                      self._get_action,
-                                      self._get_policy_variables,
-                                      self._get_nn_variables,
-                                      self._udpate_nn_variables,
-                                      self._get_td_error)
-            self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS),
-                                      options=[
-                ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
-                ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
-            ])
-            learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, self.server)
-            self.server.add_insecure_port(f'[::]:{self.net_config["learner_port"]}')
-            self.server.start()
-            self.logger.info(f'Learner server is running on [{self.net_config["learner_port"]}]...')
+        servicer = LearnerService(self._get_model_abs_dir,
+                                  self._get_action,
+                                  self._get_policy_variables,
+                                  self._get_nn_variables,
+                                  self._udpate_nn_variables,
+                                  self._get_td_error)
+        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS),
+                                  options=[
+            ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
+            ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
+        ])
+        learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, self.server)
+        self.server.add_insecure_port(f'[::]:{self.net_config["learner_port"]}')
+        self.server.start()
+        self.logger.info(f'Learner server is running on [{self.net_config["learner_port"]}]...')
 
-            self._run_training_client()
+        self._run_training_client()
 
     def close(self):
+        self._is_training = False
         self._closed = True
 
         if hasattr(self, 'env'):

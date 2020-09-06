@@ -65,7 +65,8 @@ class Main(object):
         model_abs_dir = Path(root_dir).joinpath('models',
                                                 config['base_config']['scene'],
                                                 config['base_config']['name'])
-        os.makedirs(model_abs_dir)
+
+        os.makedirs(model_abs_dir, exist_ok=True)
 
         if args.logger_in_file:
             config_helper.set_logger(Path(model_abs_dir).joinpath(f'log.log'))

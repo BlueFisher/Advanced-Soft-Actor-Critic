@@ -6,3 +6,8 @@ PING_INTERVAL = 5  # interval time between two pings
 
 EVALUATION_INTERVAL = 10  # If learner is standalone, the interval time between evaluations
 EVALUATION_WAITING_TIME = 1  # if learner is not training, the waiting time for the next evaluation
+
+SAMPLED_DATA_BUFFER_MAXSIZE = 2
+
+UPDATE_DATA_BUFFER_MAXSIZE = 20
+UPDATE_DATA_BUFFER_THREADS = 3

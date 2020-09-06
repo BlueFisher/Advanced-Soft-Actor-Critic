@@ -782,8 +782,6 @@ class SAC_Base(object):
 
             self.summary_writer.flush()
 
-        return [v.name for v in grads_q1 + grads_policy], grads_q1 + grads_policy
-
     @tf.function
     def get_n_rnn_states(self, n_obses_list, n_actions, rnn_state):
         """
