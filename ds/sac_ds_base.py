@@ -175,14 +175,14 @@ class SAC_DS_Base(SAC_Base):
               priority_is,
               rnn_state=None):
 
-        grads_name, grads = self._train(n_obses_list=n_obses_list,
-                                        n_actions=n_actions,
-                                        n_rewards=n_rewards,
-                                        next_obs_list=next_obs_list,
-                                        n_dones=n_dones,
-                                        n_mu_probs=n_mu_probs,
-                                        priority_is=priority_is,
-                                        initial_rnn_state=rnn_state if self.use_rnn else None)
+        self._train(n_obses_list=n_obses_list,
+                    n_actions=n_actions,
+                    n_rewards=n_rewards,
+                    next_obs_list=next_obs_list,
+                    n_dones=n_dones,
+                    n_mu_probs=n_mu_probs,
+                    priority_is=priority_is,
+                    initial_rnn_state=rnn_state if self.use_rnn else None)
 
         step = self.global_step.numpy()
 
@@ -219,4 +219,4 @@ class SAC_DS_Base(SAC_Base):
 
         self._increase_global_step()
 
-        return td_error, update_data, grads_name, grads
+        return td_error, update_data
