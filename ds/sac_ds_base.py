@@ -123,11 +123,11 @@ class SAC_DS_Base(SAC_Base):
 
     # For actor to update its own network from learner
     @tf.function
-    def update_policy_variables(self, policy_variables):
+    def update_policy_variables(self, t_variables):
         variables = self.get_policy_variables()
 
-        for v, n_v in zip(variables, policy_variables):
-            v.assign(tf.cast(n_v, v.dtype))
+        for v, t_v in zip(variables, t_variables):
+            v.assign(tf.cast(t_v, v.dtype))
 
     # For learner to send variables to evolver
     def get_nn_variables(self):
@@ -158,11 +158,27 @@ class SAC_DS_Base(SAC_Base):
 
     # Update own network from evolver selection
     @tf.function
-    def update_nn_variables(self, nn_variables):
+    def update_nn_variables(self, t_variables):
         variables = self.get_nn_variables()
 
-        for v, n_v in zip(variables, nn_variables):
-            v.assign(tf.cast(n_v, v.dtype))
+        for v, t_v in zip(variables, t_variables):
+            v.assign(tf.cast(t_v, v.dtype))
+
+    def get_all_variables(self):
+        variables = self.get_nn_variables()
+        if self.use_normalization:
+            variables += [self.normalizer_step] +\
+                self.running_means +\
+                self.running_variances
+
+        return variables
+
+    @tf.function
+    def update_all_variables(self, t_variables):
+        variables = self.get_all_variables()
+
+        for v, t_v in zip(variables, t_variables):
+            v.assign(t_v)
 
     def train(self,
               pointers,
@@ -219,4 +235,4 @@ class SAC_DS_Base(SAC_Base):
 
         self._increase_global_step()
 
-        return td_error, update_data
+        return step, td_error, update_data

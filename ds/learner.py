@@ -97,8 +97,6 @@ class UpdateDataBuffer:
 class Learner:
     _agent_class = Agent
 
-    _training_lock = threading.Lock()
-
     def __init__(self, root_dir, config_dir, args):
         self.root_dir = root_dir
         self.cmd_args = args
@@ -115,11 +113,13 @@ class Learner:
                                     self.net_config['replay_host'],
                                     self.net_config['replay_port'])
 
-        try:
-            self.registered = False
-            self._is_training = False
-            self._closed = False
+        self._is_training = False
+        self._closed = False
+        self._sac_lock = threading.Lock()
+        self._sac_bak_lock = threading.Lock()
+        self.registered = False
 
+        try:
             self._init_env(constant_config)
             self._run()
 
@@ -251,6 +251,17 @@ class Learner:
 
                                **sac_config)
 
+        self.sac_bak = SAC_DS_Base(train_mode=False,
+                                   obs_dims=self.obs_dims,
+                                   action_dim=self.action_dim,
+                                   is_discrete=is_discrete,
+                                   model_abs_dir=None,
+                                   model=custom_nn_model,
+                                   last_ckpt=self.last_ckpt,
+
+                                   **sac_config)
+
+        self._update_sac_bak()
         self.logger.info(f'sac_learner initialized')
 
     _unique_id = -1
@@ -261,34 +272,43 @@ class Learner:
             return str(self.model_abs_dir), self._unique_id
 
     def _get_policy_variables(self):
-        with self._training_lock:
-            variables = self.sac.get_policy_variables()
+        with self._sac_bak_lock:
+            variables = self.sac_bak.get_policy_variables()
 
         return [v.numpy() for v in variables]
 
     def _get_nn_variables(self):
-        with self._training_lock:
+        with self._sac_lock:
             variables = self.sac.get_nn_variables()
 
         return [v.numpy() for v in variables]
 
     def _udpate_nn_variables(self, variables):
-        with self._training_lock:
+        with self._sac_lock:
             self.sac.update_nn_variables(variables)
+
+        self._update_sac_bak()
 
         self.logger.info('Updated all nn variables')
 
+    def _update_sac_bak(self):
+        with self._sac_lock:
+            variables = self.sac.get_all_variables()
+
+        with self._sac_bak_lock:
+            self.sac_bak.update_all_variables(variables)
+
     def _get_action(self, obs_list, rnn_state=None):
-        if self.sac.use_rnn:
+        if self.sac_bak.use_rnn:
             assert rnn_state is not None
 
-        with self._training_lock:
-            if self.sac.use_rnn:
-                action, next_rnn_state = self.sac.choose_rnn_action(obs_list, rnn_state)
+        with self._sac_bak_lock:
+            if self.sac_bak.use_rnn:
+                action, next_rnn_state = self.sac_bak.choose_rnn_action(obs_list, rnn_state)
                 next_rnn_state = next_rnn_state
                 return action.numpy(), next_rnn_state.numpy()
             else:
-                action = self.sac.choose_action(obs_list)
+                action = self.sac_bak.choose_action(obs_list)
                 return action.numpy()
 
     def _get_td_error(self,
@@ -307,19 +327,19 @@ class Learner:
         n_dones: [1, episode_len]
         n_rnn_states: [1, episode_len, rnn_state_dim]
         """
-        with self._training_lock:
-            td_error = self.sac.get_episode_td_error(n_obses_list=n_obses_list,
-                                                     n_actions=n_actions,
-                                                     n_rewards=n_rewards,
-                                                     next_obs_list=next_obs_list,
-                                                     n_dones=n_dones,
-                                                     n_mu_probs=n_mu_probs,
-                                                     n_rnn_states=n_rnn_states if self.sac.use_rnn else None)
+        with self._sac_bak_lock:
+            td_error = self.sac_bak.get_episode_td_error(n_obses_list=n_obses_list,
+                                                         n_actions=n_actions,
+                                                         n_rewards=n_rewards,
+                                                         next_obs_list=next_obs_list,
+                                                         n_dones=n_dones,
+                                                         n_mu_probs=n_mu_probs,
+                                                         n_rnn_states=n_rnn_states if self.sac.use_rnn else None)
         return td_error
 
     def _policy_evaluation(self):
         try:
-            use_rnn = self.sac.use_rnn
+            use_rnn = self.sac_bak.use_rnn
 
             iteration = 0
             start_time = time.time()
@@ -330,7 +350,7 @@ class Learner:
                       for i in range(self.config['n_agents'])]
 
             if use_rnn:
-                initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))
+                initial_rnn_state = self.sac_bak.get_initial_rnn_state(len(agents))
                 rnn_state = initial_rnn_state
 
             while not self._closed:
@@ -355,14 +375,14 @@ class Learner:
 
                 while False in [a.done for a in agents] and \
                         not self._closed and self._is_training:
-                    with self._training_lock:
+                    with self._sac_bak_lock:
                         if use_rnn:
-                            action, next_rnn_state = self.sac.choose_rnn_action([o.astype(np.float32) for o in obs_list],
-                                                                                action,
-                                                                                rnn_state)
+                            action, next_rnn_state = self.sac_bak.choose_rnn_action([o.astype(np.float32) for o in obs_list],
+                                                                                    action,
+                                                                                    rnn_state)
                             next_rnn_state = next_rnn_state.numpy()
                         else:
-                            action = self.sac.choose_action([o.astype(np.float32) for o in obs_list])
+                            action = self.sac_bak.choose_action([o.astype(np.float32) for o in obs_list])
 
                     action = action.numpy()
 
@@ -389,8 +409,7 @@ class Learner:
 
                     step += 1
 
-                with self._training_lock:
-                    self._log_episode_summaries(iteration, agents)
+                self._log_episode_summaries(iteration, agents)
 
                 if not self.standalone:
                     self._stub.post_reward(np.mean([a.reward for a in agents]))
@@ -408,11 +427,12 @@ class Learner:
 
     def _log_episode_summaries(self, iteration, agents):
         rewards = np.array([a.reward for a in agents])
-        self.sac.write_constant_summaries([
-            {'tag': 'reward/mean', 'simple_value': rewards.mean()},
-            {'tag': 'reward/max', 'simple_value': rewards.max()},
-            {'tag': 'reward/min', 'simple_value': rewards.min()}
-        ], iteration)
+        with self._sac_lock:
+            self.sac.write_constant_summaries([
+                {'tag': 'reward/mean', 'simple_value': rewards.mean()},
+                {'tag': 'reward/max', 'simple_value': rewards.max()},
+                {'tag': 'reward/min', 'simple_value': rewards.min()}
+            ], iteration)
 
     def _log_episode_info(self, iteration, start_time, agents):
         time_elapse = (time.time() - start_time) / 60
@@ -439,22 +459,25 @@ class Learner:
 
             self._is_training = True
 
-            with self._training_lock:
-                td_error, update_data = self.sac.train(pointers=pointers,
-                                                       n_obses_list=n_obses_list,
-                                                       n_actions=n_actions,
-                                                       n_rewards=n_rewards,
-                                                       next_obs_list=next_obs_list,
-                                                       n_dones=n_dones,
-                                                       n_mu_probs=n_mu_probs,
-                                                       priority_is=priority_is,
-                                                       rnn_state=rnn_state)
+            with self._sac_lock:
+                step, td_error, update_data = self.sac.train(pointers=pointers,
+                                                             n_obses_list=n_obses_list,
+                                                             n_actions=n_actions,
+                                                             n_rewards=n_rewards,
+                                                             next_obs_list=next_obs_list,
+                                                             n_dones=n_dones,
+                                                             n_mu_probs=n_mu_probs,
+                                                             priority_is=priority_is,
+                                                             rnn_state=rnn_state)
 
             if np.isnan(np.min(td_error)):
                 self.logger.error('NAN in td_error')
                 self.sac.save_model()
                 self.close()
                 break
+
+            if step % self.config['update_sac_bak_per_step'] == 0:
+                self._update_sac_bak()
 
             update_data_buffer.add_data(True, pointers, td_error)
             for pointers, key, data in update_data:
