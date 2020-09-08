@@ -19,6 +19,7 @@ base_config:
                            # or get action from learner each step
   update_policy_variables_per_step: -1 # -1 for policy variables being updated each 
                                        # iteration
+  update_sac_bak_per_step: 1000
   n_agents: 1 # N agents running in parallel
   max_step_per_iter: -1 # Max step in each iteration
   reset_on_iteration: true # If to force reset agent if an episode terminated
