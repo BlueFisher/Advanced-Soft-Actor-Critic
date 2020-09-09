@@ -1,7 +1,6 @@
-import functools
 import logging
-import sys
 import time
+from pathlib import Path
 
 import numpy as np
 import tensorflow as tf
@@ -330,7 +329,8 @@ class SAC_Base(object):
 
         if model_abs_dir is not None:
             ckpt = tf.train.Checkpoint(**ckpt_saved)
-            self.ckpt_manager = tf.train.CheckpointManager(ckpt, f'{model_abs_dir}/model', max_to_keep=10)
+            ckpt_dir = Path(model_abs_dir).joinpath('model')
+            self.ckpt_manager = tf.train.CheckpointManager(ckpt, ckpt_dir, max_to_keep=10)
 
             if self.ckpt_manager.latest_checkpoint:
                 if last_ckpt is None:
