@@ -80,6 +80,10 @@ class Evolver:
             else:
                 del self._learner_rewards[peer]
 
+    def _get_noise(self, actors_num):
+        noise = self.config['noise_increasing_rate'] * (actors_num - 1)
+        return min(noise, self.config['noise_max'])
+
     def _post_reward(self, reward, peer):
         with self._learner_rewards_lock:
             self._learner_rewards[peer].append(reward)
@@ -121,6 +125,7 @@ class Evolver:
     def _run(self):
         self.servicer = EvolverService(self.config['name'],
                                        self._learner_connected,
+                                       self._get_noise,
                                        self._post_reward)
         self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS))
         evolver_pb2_grpc.add_EvolverServiceServicer_to_server(self.servicer, self.server)
@@ -162,7 +167,7 @@ class LearnerStubController:
 
 
 class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
-    def __init__(self, name, learner_connected, post_reward):
+    def __init__(self, name, learner_connected, get_noise, post_reward):
         self._logger = logging.getLogger('ds.evolver.service')
         self._peer_set = PeerSet(self._logger)
 
@@ -173,6 +178,7 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
 
         self.name = name
         self._learner_connected = learner_connected
+        self._get_noise = get_noise
         self._post_reward = post_reward
 
     def _record_peer(self, context):
@@ -242,6 +248,7 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
         self._learner_connected(peer, connected=True)
 
         self._logger.info(f'Learner {peer} (id={learner_id}) registered')
+
         self.display_learner_actors()
 
         self._learner_id += 1
@@ -262,19 +269,29 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
             self._learner_actors[assigned_learner].add(peer)
             self._actor_learner[peer] = assigned_learner
 
+            assigned_learner_actors_num = len(self._learner_actors[assigned_learner])
+
         info = self._peer_set.get_info(assigned_learner)
 
         learner_id = info['id']
         learner_host, learner_port = info['learner_host'], info['learner_port']
         replay_host, replay_port = info['replay_host'], info['replay_port']
-        self._logger.info(f'Actor {peer} registered to learner (id={learner_id}) {learner_host}:{learner_port}, replay {replay_host}:{replay_port}')
+        noise = self._get_noise(assigned_learner_actors_num)
+
+        log = f'Actor {peer} registered to ' +\
+            f'learner (id={learner_id}) {learner_host}:{learner_port}, ' +\
+            f'replay {replay_host}:{replay_port}, ' +\
+            f'noise={noise:.2f}'
+        self._logger.info(log)
+
         self.display_learner_actors()
 
         return evolver_pb2.RegisterActorResponse(succeeded=True,
                                                  learner_host=learner_host,
                                                  learner_port=learner_port,
                                                  replay_host=replay_host,
-                                                 replay_port=replay_port)
+                                                 replay_port=replay_port,
+                                                 noise=noise)
 
     # From learner
     def PostReward(self, request: evolver_pb2.PostRewardToEvolverRequest, context):

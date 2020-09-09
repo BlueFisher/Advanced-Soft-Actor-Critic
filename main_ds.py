@@ -37,7 +37,7 @@ if __name__ == '__main__':
     parser.add_argument('--nn', help='neural network model')
     parser.add_argument('--ckpt', help='ckeckpoint to restore')
     parser.add_argument('--agents', type=int, help='number of agents')
-    parser.add_argument('--noise', type=float, default=0, help='additional noise for actor')
+    parser.add_argument('--noise', type=float, help='additional noise for actor')
     args = parser.parse_args()
 
     root_dir = os.path.dirname(os.path.abspath(__file__))

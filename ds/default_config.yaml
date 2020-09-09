@@ -1,31 +1,33 @@
 base_config:
   env_type: UNITY # UNITY or GYM
-  scene: scene # The scene name. 
-               # If in Unity envs, it indicates the specific scene. 
-               # If in Gym envs, it is just a readable name displayed in TensorBoard
+  scene:
+    scene # The scene name.
+    # If in Unity envs, it indicates the specific scene.
+    # If in Gym envs, it is just a readable name displayed in TensorBoard
 
   # Only for Unity Environments
   build_path: # Unity executable path
     win32: path_win32
     linux: path_linux
   port: 5005
-  
+
   # Only for Gym Enviroments
   # build_path: GymEnv # Like CartPole-v1
-  
+
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
   nn: nn # Neural network models file
-  update_policy_mode: true # update policy variables each "update_policy_variables_per_step" 
-                           # or get action from learner each step
-  update_policy_variables_per_step: -1 # -1 for policy variables being updated each 
-                                       # iteration
-  update_sac_bak_per_step: 1000
+  update_policy_mode: true # update policy variables each "update_policy_variables_per_step" or get action from learner each step
+  update_policy_variables_per_step: -1 # -1 for policy variables being updated each iteration
+  update_sac_bak_per_step: 200 # Every N step update sac_bak
+  noise_increasing_rate: 0 # Noise = N * number of actors
+  noise_max: 0.1 # Max noise for actors
   n_agents: 1 # N agents running in parallel
   max_step_per_iter: -1 # Max step in each iteration
   reset_on_iteration: true # If to force reset agent if an episode terminated
+
   evolver_cem_length: 50
   evolver_cem_best: 0.3
-  
+
 net_config:
   evolver_host: 127.0.0.1
   evolver_port: 61000
@@ -40,8 +42,7 @@ reset_config:
 replay_config:
   batch_size: 256
   capacity: 524288
-  alpha: 0.9 # [0~1] convert the importance of TD error to priority
-             # If 0, PER will reduce to vanilla replay buffer
+  alpha: 0.9 # [0~1] convert the importance of TD error to priority. If 0, PER will reduce to vanilla replay buffer
   beta: 0.4 # Importance-sampling, from initial value increasing to 1
   beta_increment_per_sampling: 0.001 # Increment step
   td_error_min: 0.01 # Small amount to avoid zero priority

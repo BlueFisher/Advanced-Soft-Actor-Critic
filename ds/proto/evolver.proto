@@ -24,10 +24,11 @@ message RegisterLearnerResponse {
 
 message RegisterActorResponse {
   bool succeeded = 1;
-  string learner_host = 3;
-  int32 learner_port = 4;
-  string replay_host = 5;
-  int32 replay_port = 6;
+  string learner_host = 2;
+  int32 learner_port = 3;
+  string replay_host = 4;
+  int32 replay_port = 5;
+  float noise = 6;
 }
 message PostRewardToEvolverRequest {
   float reward = 1;
