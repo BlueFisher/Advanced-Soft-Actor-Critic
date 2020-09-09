@@ -6,6 +6,7 @@ default:
     build_path: "Walker2DBulletEnv-v0"
 
     update_policy_variables_per_step: 20
+    noise_increasing_rate: 0.01
 
     n_agents: 10
 
@@ -22,8 +23,12 @@ default:
     save_model_per_step: 10000 # Save model every N steps
     save_model_per_minute: 5 # Save model every N minutes
 
-    n_step: 5
+    n_step: 3
     _lambda: 0.99
+
+  replay_config:
+    batch_size: 1024
+    capacity: 524288
 
 hard:
   base_config: &hard_base
