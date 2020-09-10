@@ -386,24 +386,25 @@ class SAC_Base(object):
         ])
         self.get_n_probs = _np_to_tensor(tmp_get_n_probs)
 
-        if self.train_mode:
-            step_size = self.burn_in_step + self.n_step
-            """ get_td_error
-            n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
-            n_mu_probs=None,
-            rnn_state=None """
-            signature = [
-                [tf.TensorSpec(shape=(None, step_size, *t)) for t in self.obs_dims],
-                tf.TensorSpec(shape=(None, step_size, self.action_dim)),
-                tf.TensorSpec(shape=(None, step_size)),
-                [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims],
-                tf.TensorSpec(shape=(None, step_size)),
-                tf.TensorSpec(shape=(None, step_size)) if self.use_n_step_is else None_tensor,
-                tf.TensorSpec(shape=(None, self.rnn_state_dim)) if self.use_rnn else None_tensor,
-            ]
-            self.get_td_error = _np_to_tensor(tf.function(self.get_td_error.python_function,
-                                                          input_signature=signature))
+        step_size = self.burn_in_step + self.n_step
 
+        """ get_td_error
+        n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
+        n_mu_probs=None,
+        rnn_state=None """
+        signature = [
+            [tf.TensorSpec(shape=(None, step_size, *t)) for t in self.obs_dims],
+            tf.TensorSpec(shape=(None, step_size, self.action_dim)),
+            tf.TensorSpec(shape=(None, step_size)),
+            [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims],
+            tf.TensorSpec(shape=(None, step_size)),
+            tf.TensorSpec(shape=(None, step_size)) if self.use_n_step_is else None_tensor,
+            tf.TensorSpec(shape=(None, self.rnn_state_dim)) if self.use_rnn else None_tensor,
+        ]
+        self.get_td_error = _np_to_tensor(tf.function(self.get_td_error.python_function,
+                                                      input_signature=signature))
+
+        if self.train_mode:
             """ _train
             n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
             n_mu_probs=None, priority_is=None,

@@ -92,8 +92,6 @@ class SAC_DS_Base(SAC_Base):
 
         self.noise = noise
 
-        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!', noise)
-
         if seed is not None:
             tf.random.set_seed(seed)
 
