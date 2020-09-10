@@ -16,7 +16,7 @@ default:
 
   sac_config:
     seed: 42
-    _lambda: 0.99
+    v_lambda: 0.99
     clip_epsilon: 1.
     init_log_alpha: -4.6
 

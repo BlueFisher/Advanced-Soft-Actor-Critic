@@ -15,7 +15,7 @@ default:
     n_step: 10
 
     tau: 0.9
-    _lambda: 0.99
+    v_lambda: 0.99
     init_log_alpha: 0
     use_curiosity: false
     curiosity_strength: 500

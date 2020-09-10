@@ -68,7 +68,9 @@ sac_config:
   learning_rate: 0.0003 # Learning rate of all optimizers
 
   gamma: 0.99 # Discount factor
-  _lambda: 1.0 # Discount factor for V-trace
+  v_lambda: 1.0 # Discount factor for V-trace
+  v_rho: 1.0 # Rho for V-trace
+  v_c: 1.0 # C for V-trace
   clip_epsilon: 0.2 # Epsilon for q and policy clip
 
   use_prediction: false # If train a transition model
