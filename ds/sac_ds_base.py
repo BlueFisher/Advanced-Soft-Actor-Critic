@@ -38,7 +38,9 @@ class SAC_DS_Base(SAC_Base):
                  use_auto_alpha=True,
                  learning_rate=3e-4,
                  gamma=0.99,
-                 _lambda=0.9,
+                 v_lambda=0.9,
+                 v_rho=1.,
+                 v_c=1.,
                  clip_epsilon=0.2,
 
                  use_prediction=False,
@@ -72,7 +74,9 @@ class SAC_DS_Base(SAC_Base):
         self.update_target_per_step = update_target_per_step
         self.use_auto_alpha = use_auto_alpha
         self.gamma = gamma
-        self._lambda = _lambda
+        self.v_lambda = v_lambda
+        self.v_rho = v_rho
+        self.v_c = v_c
         self.clip_epsilon = clip_epsilon
 
         self.use_prediction = use_prediction

@@ -82,7 +82,9 @@ class SAC_Base(object):
                  use_auto_alpha=True,
                  learning_rate=3e-4,
                  gamma=0.99,
-                 _lambda=0.9,
+                 v_lambda=0.9,
+                 v_rho=1.,
+                 v_c=1.,
                  clip_epsilon=0.2,
 
                  use_priority=True,
@@ -120,7 +122,9 @@ class SAC_Base(object):
         use_auto_alpha: If use automating entropy adjustment
         learning_rate: Learning rate of all optimizers
         gamma: Discount factor
-        _lambda: Discount factor for V-trace
+        v_lambda: Discount factor for V-trace
+        v_rho: Rho for V-trace
+        v_c: C for V-trace
         clip_epsilon: Epsilon for q and policy clip
 
         use_priority: If use PER importance ratio
@@ -155,7 +159,9 @@ class SAC_Base(object):
         self.update_target_per_step = update_target_per_step
         self.use_auto_alpha = use_auto_alpha
         self.gamma = gamma
-        self._lambda = _lambda
+        self.v_lambda = v_lambda
+        self.v_rho = v_rho
+        self.v_c = v_c
         self.clip_epsilon = clip_epsilon
 
         self.use_priority = use_priority
@@ -276,6 +282,16 @@ class SAC_Base(object):
 
         self.model_policy = model.ModelPolicy(state_dim, self.action_dim)
         self.optimizer_policy = adam_optimizer()
+
+    def _create_normalizer(self):
+        self.normalizer_step = tf.Variable(0, dtype=tf.int32, trainable=False, name='normalizer_step')
+        self.running_means = []
+        self.running_variances = []
+        for dim in self.obs_dims:
+            self.running_means.append(
+                tf.Variable(tf.zeros(dim), trainable=False, name='running_means'))
+            self.running_variances.append(
+                tf.Variable(tf.ones(dim), trainable=False, name='running_variances'))
 
     def _init_or_restore(self, model_abs_dir, last_ckpt):
         """
@@ -423,16 +439,6 @@ class SAC_Base(object):
 
         [t.assign(tau * e + (1. - tau) * t) for t, e in zip(target_variables, eval_variables)]
 
-    def _create_normalizer(self):
-        self.normalizer_step = tf.Variable(0, dtype=tf.int32, trainable=False, name='normalizer_step')
-        self.running_means = []
-        self.running_variances = []
-        for dim in self.obs_dims:
-            self.running_means.append(
-                tf.Variable(tf.zeros(dim), trainable=False, name='running_means'))
-            self.running_variances.append(
-                tf.Variable(tf.ones(dim), trainable=False, name='running_variances'))
-
     @tf.function
     def _udpate_normalizer(self, obs_list):
         self.normalizer_step.assign(self.normalizer_step + tf.shape(obs_list[0])[0])
@@ -482,7 +488,7 @@ class SAC_Base(object):
         """
 
         gamma_ratio = [[tf.pow(self.gamma, i) for i in range(self.n_step)]]
-        lambda_ratio = [[tf.pow(self._lambda, i) for i in range(self.n_step)]]
+        lambda_ratio = [[tf.pow(self.v_lambda, i) for i in range(self.n_step)]]
         alpha = tf.exp(self.log_alpha)
 
         next_n_states = tf.concat([n_states[:, 1:, ...], tf.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)
@@ -553,12 +559,19 @@ class SAC_Base(object):
                 # [Batch, n, action_dim]
                 n_pi_probs = tf.reduce_prod(n_pi_probs, axis=-1)
                 # [Batch, n]
-            # ρ_t
-            n_step_is = tf.clip_by_value(n_pi_probs / tf.maximum(n_mu_probs, 1e-8), 0, 1.)  # [Batch, n]
 
-            # \prod{c_i}
-            cumulative_n_step_is = tf.math.cumprod(n_step_is, axis=1)
-            td_error = n_step_is * cumulative_n_step_is * td_error
+            n_step_is = n_pi_probs / tf.maximum(n_mu_probs, 1e-8)
+
+            # ρ_t, t \in [s, s+n-1]
+            rho = tf.minimum(n_step_is, self.v_rho)  # [Batch, n]
+
+            # \prod{c_i}, i \in [s, t-1]
+            c = tf.minimum(n_step_is, self.v_c)
+            c = tf.concat([tf.ones((tf.shape(n_step_is)[0], 1)), c[..., :-1]], axis=-1)
+            c = tf.math.cumprod(c, axis=1)
+
+            # \prod{c_i} * ρ_t * td_error
+            td_error = c * rho * td_error
 
         # \sum{td_error}
         r = tf.reduce_sum(td_error, axis=1, keepdims=True)  # [Batch, 1]

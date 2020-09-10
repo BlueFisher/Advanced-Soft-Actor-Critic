@@ -16,7 +16,7 @@ default:
     seed: 42
     burn_in_step: 10
     n_step: 5
-    _lambda: 0.99
+    v_lambda: 0.99
     use_rnn: true
     use_prediction: true
 
