@@ -12,11 +12,8 @@ default:
 
   net_config:
     evolver_host: walker-ds-evolver
-    evolver_port: 61000
     learner_host: walker-ds-learner
-    learner_port: 61001
     replay_host: walker-ds-replay
-    replay_port: 61002
 
   sac_config:
     write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
@@ -24,11 +21,10 @@ default:
     save_model_per_minute: 20 # Save model every N minutes
 
     n_step: 5
-    v_lambda: 0.99
+    v_lambda: 0.9
 
   replay_config:
     batch_size: 1024
-    capacity: 524288
 
 hard:
   base_config: &hard_base

@@ -153,8 +153,7 @@ net_config:
   replay_host: 127.0.0.1
   replay_port: 61002
 
-reset_config:
-  copy: 1
+reset_config: null # Reset parameters sent to Unity
 
 replay_config:
   batch_size: 256
@@ -197,7 +196,6 @@ sac_config:
   use_rnd: false # If use RND
   rnd_n_sample: 10 # RND sample times
   use_normalization: false # If use observation normalization
-
 ```
 
 ## Start Training
