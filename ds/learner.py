@@ -55,7 +55,11 @@ class SampledDataBuffer:
                 time.sleep(C.RECONNECTION_TIME)
 
     def get_data(self):
-        return self._buffer.get()
+        _t = time.time()
+        data = self._buffer.get()
+        if time.time() - _t > 0.01:
+            self.logger.warning(f'Getting data spent {time.time() - _t}s')
+        return data
 
     def close(self):
         self._closed = True
