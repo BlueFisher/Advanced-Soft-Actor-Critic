@@ -241,4 +241,4 @@ class Main(object):
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        self.logger.info(f'{iteration}, rewards {rewards}')
+        self.logger.info(f'{iteration}, R {rewards}')

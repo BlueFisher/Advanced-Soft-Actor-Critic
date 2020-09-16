@@ -31,7 +31,7 @@ class Actor(object):
 
         self.logger = logging.getLogger('ds.actor')
 
-        constant_config = self._init_constant_config(root_dir, config_dir, args)
+        constant_config, config_abs_dir = self._init_constant_config(root_dir, config_dir, args)
         net_config = constant_config['net_config']
 
         # The evolver stub is fixed,
@@ -69,7 +69,7 @@ class Actor(object):
                 time.sleep(C.RECONNECTION_TIME)
                 continue
 
-            self._init_env(constant_config)
+            self._init_env(constant_config, config_abs_dir)
             self._run()
 
         except KeyboardInterrupt:
@@ -79,10 +79,10 @@ class Actor(object):
             self.close()
 
     def _init_constant_config(self, root_dir, config_dir, args):
-        self.config_abs_dir = Path(root_dir).joinpath(config_dir)
-        self.config_abs_path = self.config_abs_dir.joinpath('config_ds.yaml')
+        config_abs_dir = Path(root_dir).joinpath(config_dir)
+        config_abs_path = config_abs_dir.joinpath('config_ds.yaml')
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
-                                                           self.config_abs_path,
+                                                           config_abs_path,
                                                            args.config)
 
         # Initialize config from command line arguments
@@ -103,9 +103,9 @@ class Actor(object):
         if args.replay_port is not None:
             config['net_config']['replay_port'] = args.replay_port
 
-        return config
+        return config, config_abs_dir
 
-    def _init_env(self, config):
+    def _init_env(self, config, config_abs_dir):
         # Each time actor connects to the learner and replay, initialize env
         if self.cmd_args.build_port is not None:
             config['base_config']['build_port'] = self.cmd_args.build_port
@@ -161,7 +161,7 @@ class Actor(object):
 
         self.logger.info(f'{self.config["build_path"]} initialized')
 
-        spec = importlib.util.spec_from_file_location('nn', f'{self.config_abs_dir}/{self.config["nn"]}.py')
+        spec = importlib.util.spec_from_file_location('nn', f'{config_abs_dir}/{self.config["nn"]}.py')
         custom_nn_model = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(custom_nn_model)
 
@@ -318,7 +318,7 @@ class Actor(object):
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        self.logger.info(f'{iteration}, rewards {rewards}')
+        self.logger.info(f'{iteration}, R {rewards}')
 
     def close(self):
         if hasattr(self, 'env'):

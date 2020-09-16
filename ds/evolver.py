@@ -1,7 +1,5 @@
 import logging
 import os
-import random
-import string
 import threading
 import time
 from collections import deque
@@ -33,6 +31,7 @@ class Evolver:
 
         self._learner_rewards = dict()
         self._learner_rewards_lock = threading.Lock()
+        self._last_update_nn_variable = time.time()
 
         try:
             self._run()
@@ -88,9 +87,14 @@ class Evolver:
         with self._learner_rewards_lock:
             self._learner_rewards[peer].append(reward)
 
-            # If the number of learners > 1 and all learners have evaluated more than evolver_cem_length times
-            if len(self._learner_rewards) > 1 and \
-                    all([len(i) == self.config['evolver_cem_length'] for i in self._learner_rewards.values()]):
+            if len(self._learner_rewards) <= 1:
+                return
+
+            rewards = self._learner_rewards.values()
+            # All learners have evaluated more than evolver_cem_length times
+            if all([len(i) == self.config['evolver_cem_length'] for i in rewards]) or \
+                    (all([len(i) >= self.config['evolver_cem_min_length'] for i in rewards]) and
+                     time.time() - self._last_update_nn_variable >= self.config['evolver_cem_time'] * 60):
 
                 # Sort learners by the mean of evaluated rewards
                 learner_reward = [(l, float(np.mean(r))) for l, r in self._learner_rewards.items()]
@@ -109,17 +113,21 @@ class Evolver:
 
                 # Calculate the mean and std of best_size variables of learners
                 mean = [np.mean(i, axis=0) for i in zip(*nn_variable_list)]
-                std = [np.minimum(np.std(i, axis=0), .1) for i in zip(*nn_variable_list)]
+                std = [np.minimum(np.std(i, axis=0), 1.) for i in zip(*nn_variable_list)]
 
                 # Dispatch all nn variables
-                for learner in self.servicer.learners:
+                for i, learner in enumerate(self.servicer.learners):
                     stub = self.servicer.get_learner_stub(learner)
                     if stub:
-                        nn_variables = [np.random.normal(mean[i], std[i]) for i in range(len(mean))]
+                        if i == 0:
+                            nn_variables = mean
+                        else:
+                            nn_variables = [np.random.normal(mean[j], std[j]) for j in range(len(mean))]
                         stub.update_nn_variables(nn_variables)
 
                     self._learner_rewards[learner].clear()
 
+                self._last_update_nn_variable = time.time()
                 self.logger.info('Dispatched all nn variables')
 
     def _run(self):
