@@ -17,6 +17,8 @@ default:
     n_step: 5
     v_lambda: 0.9
 
+    use_normalization: true
+
 hard:
   base_config: &hard_base
     scene: Walker2DHard

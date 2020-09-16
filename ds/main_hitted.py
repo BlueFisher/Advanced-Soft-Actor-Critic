@@ -40,4 +40,4 @@ class ActorHitted(Actor):
         hitted = sum([a.hitted for a in agents])
 
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        self.logger.info(f'{iteration}, rewards {rewards}, hitted {hitted}')
+        self.logger.info(f'{iteration}, R {rewards}, hitted {hitted}')

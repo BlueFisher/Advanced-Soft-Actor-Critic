@@ -107,7 +107,7 @@ class Learner:
 
         self.logger = logging.getLogger('ds.learner')
 
-        constant_config = self._init_constant_config(root_dir, config_dir, args)
+        constant_config, config_abs_dir = self._init_constant_config(root_dir, config_dir, args)
         self.net_config = constant_config['net_config']
 
         self._stub = StubController(self.net_config['evolver_host'],
@@ -124,7 +124,7 @@ class Learner:
         self.registered = False
 
         try:
-            self._init_env(constant_config)
+            self._init_env(constant_config, config_abs_dir)
             self._run()
 
         except KeyboardInterrupt:
@@ -134,10 +134,10 @@ class Learner:
             self.close()
 
     def _init_constant_config(self, root_dir, config_dir, args):
-        self.config_abs_dir = Path(root_dir).joinpath(config_dir)
-        self.config_abs_path = self.config_abs_dir.joinpath('config_ds.yaml')
+        config_abs_dir = Path(root_dir).joinpath(config_dir)
+        config_abs_path = config_abs_dir.joinpath('config_ds.yaml')
         config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
-                                                           self.config_abs_path,
+                                                           config_abs_path,
                                                            args.config)
 
         # Initialize config from command line arguments
@@ -167,9 +167,9 @@ class Learner:
             config['net_config']['learner_host'] = f'{learner_host}-{host_id}.{learner_host}'
             config['net_config']['replay_host'] = f'{replay_host}-{host_id}.{replay_host}'
 
-        return config
+        return config, config_abs_dir
 
-    def _init_env(self, config):
+    def _init_env(self, config, config_abs_dir):
         if self.cmd_args.name is not None:
             config['base_config']['name'] = self.cmd_args.name
         if self.cmd_args.build_port is not None:
@@ -237,11 +237,11 @@ class Learner:
         self.logger.info(f'{self.config["build_path"]} initialized')
 
         # If model exists, load saved model, or copy a new one
-        if os.path.isfile(f'{self.config_abs_dir}/nn_models.py'):
+        if os.path.isfile(f'{config_abs_dir}/nn_models.py'):
             spec = importlib.util.spec_from_file_location('nn', f'{model_abs_dir}/nn_models.py')
         else:
-            spec = importlib.util.spec_from_file_location('nn', f'{self.config_abs_dir}/{self.config["nn"]}.py')
-            shutil.copyfile(f'{self.config_abs_dir}/{self.config["nn"]}.py', f'{model_abs_dir}/nn_models.py')
+            spec = importlib.util.spec_from_file_location('nn', f'{config_abs_dir}/{self.config["nn"]}.py')
+            shutil.copyfile(f'{config_abs_dir}/{self.config["nn"]}.py', f'{model_abs_dir}/nn_models.py')
 
         custom_nn_model = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(custom_nn_model)
@@ -430,6 +430,7 @@ class Learner:
             self.logger.error(e)
 
     def _log_episode_summaries(self, iteration, agents):
+        # iteration has no effect, the real step is the `global_step` in sac_base
         rewards = np.array([a.reward for a in agents])
         with self._sac_lock:
             self.sac.write_constant_summaries([
@@ -442,7 +443,7 @@ class Learner:
         time_elapse = (time.time() - start_time) / 60
         rewards = [a.reward for a in agents]
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        self.logger.info(f'{iteration}, {time_elapse:.2f}, rewards {rewards}')
+        self.logger.info(f'{iteration}, {time_elapse:.2f}, R {rewards}')
 
     def _run_training_client(self):
         self._stub.clear_replay_buffer()

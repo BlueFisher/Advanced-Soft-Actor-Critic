@@ -181,8 +181,8 @@ class SAC_Base(object):
             tf.random.set_seed(seed)
 
         if self.train_mode:
-            summary_path = f'{model_abs_dir}/log'
-            self.summary_writer = tf.summary.create_file_writer(summary_path)
+            summary_path = Path(model_abs_dir).joinpath('log')
+            self.summary_writer = tf.summary.create_file_writer(str(summary_path))
 
             replay_config = {} if replay_config is None else replay_config
             self.replay_buffer = PrioritizedReplayBuffer(**replay_config)
@@ -343,7 +343,7 @@ class SAC_Base(object):
             if isinstance(m, tf.keras.Model):
                 m.init()
 
-        if model_abs_dir is not None:
+        if model_abs_dir:
             ckpt = tf.train.Checkpoint(**ckpt_saved)
             ckpt_dir = Path(model_abs_dir).joinpath('model')
             self.ckpt_manager = tf.train.CheckpointManager(ckpt, ckpt_dir, max_to_keep=10)

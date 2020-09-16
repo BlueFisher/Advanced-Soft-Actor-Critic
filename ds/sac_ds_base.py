@@ -99,8 +99,8 @@ class SAC_DS_Base(SAC_Base):
         self._init_or_restore(model_abs_dir, last_ckpt)
 
         if train_mode:
-            summary_path = f'{model_abs_dir}/log'
-            self.summary_writer = tf.summary.create_file_writer(summary_path)
+            summary_path = Path(model_abs_dir).joinpath('log')
+            self.summary_writer = tf.summary.create_file_writer(str(summary_path))
 
         self._init_tf_function()
 
