@@ -231,6 +231,7 @@ class Main(object):
         self.env.close()
 
     def _log_episode_summaries(self, iteration, agents):
+        # iteration has no effect, the real step is the `global_step` in sac_base
         rewards = np.array([a.reward for a in agents])
         self.sac.write_constant_summaries([
             {'tag': 'reward/mean', 'simple_value': rewards.mean()},
