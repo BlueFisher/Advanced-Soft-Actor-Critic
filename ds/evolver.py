@@ -116,19 +116,20 @@ class Evolver:
                 std = [np.minimum(np.std(i, axis=0), 1.) for i in zip(*nn_variable_list)]
 
                 # Dispatch all nn variables
-                for i, learner in enumerate(self.servicer.learners):
+                for learner in self.servicer.learners:
                     stub = self.servicer.get_learner_stub(learner)
                     if stub:
-                        if i == 0:
-                            nn_variables = mean
-                        else:
-                            nn_variables = [np.random.normal(mean[j], std[j]) for j in range(len(mean))]
+                        nn_variables = [np.random.normal(mean[j], std[j]) for j in range(len(mean))]
                         stub.update_nn_variables(nn_variables)
 
                     self._learner_rewards[learner].clear()
 
                 self._last_update_nn_variable = time.time()
-                self.logger.info('Dispatched all nn variables')
+
+                std = [(np.min(s), np.mean(s), np.max(s)) for s in std]
+                self.logger.info(f'Selected top {best_size} learners and dispatched all nn variables')
+                _min, _mean, _max = [np.mean(s) for s in zip(*std)]
+                self.logger.info(f'Variables std: {_min:.2f}, {_mean:.2f}, {_max:.2f}')
 
     def _run(self):
         self.servicer = EvolverService(self.config['name'],

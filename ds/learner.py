@@ -626,13 +626,17 @@ class StubController:
         self.replay_port = replay_port
 
         self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}', [
-            ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)
+            ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS),
+            ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
+            ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
         ])
         self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
         self._evolver_connected = False
 
         self._replay_channel = grpc.insecure_channel(f'{replay_host}:{replay_port}', [
-            ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)
+            ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS),
+            ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
+            ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
         ])
         self._replay_stub = replay_pb2_grpc.ReplayServiceStub(self._replay_channel)
 

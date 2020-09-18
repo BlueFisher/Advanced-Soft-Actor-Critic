@@ -227,7 +227,11 @@ class Replay(object):
                                  self._update_td_error,
                                  self._update_transitions,
                                  self._clear)
-        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS))
+        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS),
+                                  options=[
+            ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
+            ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
+        ])
         replay_pb2_grpc.add_ReplayServiceServicer_to_server(servicer, self.server)
         self.server.add_insecure_port(f'[::]:{replay_port}')
         self.server.start()
