@@ -54,7 +54,7 @@ class Evolver:
         if args.name is not None:
             config['base_config']['name'] = args.name
 
-        config['base_config']['name'] = generate_base_name(config['base_config']['name'])
+        config['base_config']['name'] = generate_base_name(config['base_config']['name'], 'ds')
         model_abs_dir = Path(root_dir).joinpath('models',
                                                 config['base_config']['scene'],
                                                 config['base_config']['name'])
@@ -126,8 +126,8 @@ class Evolver:
 
                 self._last_update_nn_variable = time.time()
 
-                std = [(np.min(s), np.mean(s), np.max(s)) for s in std]
                 self.logger.info(f'Selected top {best_size} learners and dispatched all nn variables')
+                std = [(np.min(s), np.mean(s), np.max(s)) for s in std]
                 _min, _mean, _max = [np.mean(s) for s in zip(*std)]
                 self.logger.info(f'Variables std: {_min:.2f}, {_mean:.2f}, {_max:.2f}')
 
