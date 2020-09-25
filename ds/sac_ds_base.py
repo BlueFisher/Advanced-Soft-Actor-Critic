@@ -150,13 +150,11 @@ class SAC_DS_Base(SAC_Base):
                 self.model_observation.trainable_variables
 
         if self.use_curiosity:
-            variables += self.model_forward.trainable_variables +\
-                self.optimizer_forward.weights[1:]
+            variables += self.model_forward.trainable_variables
 
         if self.use_rnd:
             variables += self.model_rnd.trainable_variables +\
-                self.model_target_rnd.trainable_variables +\
-                self.optimizer_rnd.weights[1:]
+                self.model_target_rnd.trainable_variables
 
         return variables
 

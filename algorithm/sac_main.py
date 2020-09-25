@@ -111,11 +111,13 @@ class Main(object):
         self.obs_dims, self.action_dim, is_discrete = self.env.init()
 
         # If model exists, load saved model, or copy a new one
-        if os.path.isfile(f'{config_abs_dir}/nn_models.py'):
-            spec = importlib.util.spec_from_file_location('nn', f'{model_abs_dir}/nn_models.py')
+        nn_model_abs_path = Path(model_abs_dir).joinpath('nn_models.py')
+        if os.path.isfile(nn_model_abs_path):
+            spec = importlib.util.spec_from_file_location('nn', str(nn_model_abs_path))
         else:
-            spec = importlib.util.spec_from_file_location('nn', f'{config_abs_dir}/{self.config["nn"]}.py')
-            shutil.copyfile(f'{config_abs_dir}/{self.config["nn"]}.py', f'{model_abs_dir}/nn_models.py')
+            nn_abs_path = Path(config_abs_dir).joinpath(f'{self.config["nn"]}.py')
+            spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
+            shutil.copyfile(nn_abs_path, nn_model_abs_path)
 
         custom_nn_model = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(custom_nn_model)
