@@ -95,6 +95,7 @@ class Main(object):
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         file_name=self.config['build_path'][sys.platform],
                                         base_port=self.config['port'],
+                                        no_graphics=self.config['no_graphics'],
                                         scene=self.config['scene'],
                                         n_agents=self.config['n_agents'])
 

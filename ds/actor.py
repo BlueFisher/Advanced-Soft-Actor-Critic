@@ -23,7 +23,6 @@ from .utils import rpc_error_inspector
 
 
 class Actor(object):
-    train_mode = True
     _agent_class = Agent
 
     def __init__(self, root_dir, config_dir, args):
@@ -86,7 +85,6 @@ class Actor(object):
                                                            args.config)
 
         # Initialize config from command line arguments
-        self.train_mode = not args.run
         self.run_in_editor = args.editor
         self.config_cat = args.config
 
@@ -139,20 +137,18 @@ class Actor(object):
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
             if self.run_in_editor:
-                self.env = UnityWrapper(train_mode=self.train_mode, base_port=5004)
+                self.env = UnityWrapper(base_port=5004)
             else:
-                self.env = UnityWrapper(train_mode=self.train_mode,
-                                        file_name=self.config['build_path'][sys.platform],
-                                        no_graphics=self.train_mode,
+                self.env = UnityWrapper(file_name=self.config['build_path'][sys.platform],
                                         base_port=self.config['build_port'],
+                                        no_graphics=self.config['no_graphics'],
                                         scene=self.config['scene'],
                                         n_agents=self.config['n_agents'])
 
         elif self.config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
 
-            self.env = GymWrapper(train_mode=self.train_mode,
-                                  env_name=self.config['build_path'],
+            self.env = GymWrapper(env_name=self.config['build_path'],
                                   n_agents=self.config['n_agents'])
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')
@@ -298,11 +294,10 @@ class Actor(object):
                                                                rnn_state[i] if use_rnn else None)
                                       for i in range(len(agents))]
 
-                if self.train_mode:
-                    episode_trans_list = [t for t in episode_trans_list if t is not None]
-                    if len(episode_trans_list) != 0:
-                        for episode_trans in episode_trans_list:
-                            self._add_trans(*episode_trans)
+                episode_trans_list = [t for t in episode_trans_list if t is not None]
+                if len(episode_trans_list) != 0:
+                    for episode_trans in episode_trans_list:
+                        self._add_trans(*episode_trans)
 
                 obs_list = next_obs_list
                 action[local_done] = np.zeros(self.action_dim)

@@ -47,6 +47,8 @@ base_config:
     # If in Unity envs, it indicates the specific scene.
     # If in Gym envs, it is just a readable name displayed in TensorBoard
 
+  no_graphics: true # For Unity envs, if an env does not need pixel input, set true
+
   # Only for Unity Environments
   build_path: # Unity executable path
     win32: path_win32
@@ -121,6 +123,8 @@ base_config:
     scene # The scene name.
     # If in Unity envs, it indicates the specific scene.
     # If in Gym envs, it is just a readable name displayed in TensorBoard
+
+  no_graphics: true # For Unity envs, if an env does not need pixel input, set true
 
   # Only for Unity Environments
   build_path: # Unity executable path
