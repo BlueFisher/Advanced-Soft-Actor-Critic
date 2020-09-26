@@ -220,6 +220,7 @@ class Learner:
             else:
                 self.env = UnityWrapper(file_name=self.config['build_path'][sys.platform],
                                         base_port=self.config['build_port'],
+                                        no_graphics=self.config['no_graphics'],
                                         scene=self.config['scene'],
                                         n_agents=self.config['n_agents'])
 
@@ -227,7 +228,6 @@ class Learner:
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
 
             self.env = GymWrapper(env_name=self.config['build_path'],
-                                  render=self.render,
                                   n_agents=self.config['n_agents'])
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')

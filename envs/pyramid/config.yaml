@@ -47,6 +47,7 @@ ray_nopre:
 visual:
   base_config: &visual_base
     scene: VisualPyramid
+    no_graphics: false
     nn: nn_visual
     name: "pre_kn_{time}"
     max_iter: 10000

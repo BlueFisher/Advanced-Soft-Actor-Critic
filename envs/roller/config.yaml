@@ -51,6 +51,7 @@ hard_nopre:
 visual:
   base_config:
     scene: VisualRoller
+    no_graphics: false
     name: "{time}"
     nn: nn_visual
     max_iter: 100000
@@ -66,6 +67,7 @@ visual:
 visual_hard:
   base_config: &visual_hard_base
     scene: VisualRoller
+    no_graphics: false
     name: "pre_{time}"
     nn: nn_visual_hard
     max_iter: 100000
