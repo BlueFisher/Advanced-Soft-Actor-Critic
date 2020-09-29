@@ -4,6 +4,7 @@ import threading
 import time
 from collections import deque
 from concurrent import futures
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import grpc
@@ -20,6 +21,11 @@ from .proto.pingpong_pb2 import Ping, Pong
 from .utils import PeerSet, rpc_error_inspector
 
 
+def update_nn_variables(stub, mean, std):
+    nn_variables = [np.random.normal(mean[j], std[j]) for j in range(len(mean))]
+    stub.update_nn_variables(nn_variables)
+
+
 class Evolver:
     def __init__(self, root_dir, config_dir, args):
         self.logger = logging.getLogger('ds.evolver')
@@ -32,6 +38,8 @@ class Evolver:
         self._learner_rewards = dict()
         self._learner_rewards_lock = threading.Lock()
         self._last_update_nn_variable = time.time()
+
+        self._update_nn_variables_executors = ThreadPoolExecutor(10)
 
         try:
             self._run()
@@ -119,8 +127,8 @@ class Evolver:
                 for learner in self.servicer.learners:
                     stub = self.servicer.get_learner_stub(learner)
                     if stub:
-                        nn_variables = [np.random.normal(mean[j], std[j]) for j in range(len(mean))]
-                        stub.update_nn_variables(nn_variables)
+                        self._update_nn_variables_executors.submit(update_nn_variables,
+                                                                   stub, mean, std)
 
                     self._learner_rewards[learner].clear()
 
