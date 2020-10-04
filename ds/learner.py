@@ -272,6 +272,7 @@ class Learner:
 
     _unique_id = -1
 
+    # For actors
     def _get_model_abs_dir(self):
         if self.registered:
             self._unique_id += 1
@@ -348,6 +349,7 @@ class Learner:
             use_rnn = self.sac_bak.use_rnn
 
             iteration = 0
+            force_reset = False
             start_time = time.time()
 
             obs_list = self.env.reset(reset_config=self.reset_config)
@@ -365,17 +367,20 @@ class Learner:
                     time.sleep(C.EVALUATION_WAITING_TIME)
                     continue
 
-                if self.config['reset_on_iteration']:
+                if self.config['reset_on_iteration'] or force_reset:
                     obs_list = self.env.reset(reset_config=self.reset_config)
                     for agent in agents:
                         agent.clear()
 
                     if use_rnn:
                         rnn_state = initial_rnn_state
+
+                    force_reset = False
                 else:
                     for agent in agents:
                         agent.reset()
 
+                is_useless_episode = False
                 action = np.zeros([len(agents), self.action_dim], dtype=np.float32)
                 step = 0
 
@@ -387,6 +392,12 @@ class Learner:
                                                                                     action,
                                                                                     rnn_state)
                             next_rnn_state = next_rnn_state.numpy()
+
+                            if np.isnan(np.min(next_rnn_state)):
+                                self.logger.warning('NAN in next_rnn_state, ending episode')
+                                force_reset = True
+                                is_useless_episode = True
+                                break
                         else:
                             action = self.sac_bak.choose_action([o.astype(np.float32) for o in obs_list])
 
@@ -415,12 +426,17 @@ class Learner:
 
                     step += 1
 
-                self._log_episode_summaries(iteration, agents)
+                if is_useless_episode:
+                    self.logger.warning('Useless episode')
+                else:
+                    self._log_episode_summaries(iteration, agents)
+                    self._log_episode_info(iteration, start_time, agents)
 
                 if not self.standalone:
-                    self._stub.post_reward(np.mean([a.reward for a in agents]))
-
-                self._log_episode_info(iteration, start_time, agents)
+                    if is_useless_episode:
+                        self._stub.post_reward(float('-inf'))
+                    else:
+                        self._stub.post_reward(np.mean([a.reward for a in agents]))                    
 
                 iteration += 1
 

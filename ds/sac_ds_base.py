@@ -136,11 +136,8 @@ class SAC_DS_Base(SAC_Base):
     # For learner to send variables to evolver
     def get_nn_variables(self):
         variables = self.model_rep.trainable_variables +\
-            self.model_target_rep.trainable_variables +\
             self.model_q1.trainable_variables +\
-            self.model_target_q1.trainable_variables +\
             self.model_q2.trainable_variables +\
-            self.model_target_q2.trainable_variables +\
             self.model_policy.trainable_variables +\
             [self.log_alpha]
 
@@ -165,6 +162,25 @@ class SAC_DS_Base(SAC_Base):
 
         for v, t_v in zip(variables, t_variables):
             v.assign(tf.cast(t_v, v.dtype))
+
+        opt_variables = self.optimizer_rep.weights +\
+            self.optimizer_q1.weights +\
+            self.optimizer_q2.weights +\
+            self.optimizer_policy.weights
+
+        if self.use_auto_alpha:
+            opt_variables += self.optimizer_alpha.weights
+
+        if self.use_curiosity:
+            opt_variables += self.optimizer_forward
+
+        if self.use_rnd:
+            opt_variables += self.optimizer_rnd
+
+        for v in opt_variables:
+            v.assign(tf.zeros_like(v))
+
+        self._update_target_variables()
 
     def get_all_variables(self):
         variables = self.get_nn_variables()

@@ -1,0 +1,29 @@
+default:
+  base_config:
+    env_type: GYM
+    scene: HalfCheetah
+
+    build_path: "HalfCheetahBulletEnv-v0"
+
+    update_policy_variables_per_step: 20
+    noise_increasing_rate: 0.02
+
+    n_agents: 10
+
+    evolver_cem_time: 8
+
+  net_config:
+    evolver_host: cheetah-ds-evolver
+    learner_host: cheetah-ds-learner
+    replay_host: cheetah-ds-replay
+
+  sac_config:
+    write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
+    save_model_per_step: 10000 # Save model every N steps
+    save_model_per_minute: 20 # Save model every N minutes
+
+    n_step: 5
+    v_lambda: 0.9
+
+  replay_config:
+    batch_size: 1024

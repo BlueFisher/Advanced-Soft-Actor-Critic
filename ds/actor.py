@@ -175,7 +175,11 @@ class Actor(object):
     def _update_policy_variables(self):
         variables = self._stub.get_policy_variables()
         if variables is not None:
-            self.sac_actor.update_policy_variables(variables)
+            if not any([np.isnan(np.min(v)) for v in variables]):
+                self.sac_actor.update_policy_variables(variables)
+                self.logger.info('Updated policy variables')
+            else:
+                self.logger.warning('NAN in variables, skip updating')
 
     def _add_trans(self,
                    n_obses_list,

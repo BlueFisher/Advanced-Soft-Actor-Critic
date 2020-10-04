@@ -113,15 +113,15 @@ class Evolver:
                 best_size = max(best_size, 1)
 
                 best_learners = [i[0] for i in learner_reward[:best_size]]
-                nn_variable_list = list()
+                nn_variables_list = list()
                 for learner in best_learners:
                     stub = self.servicer.get_learner_stub(learner)
                     if stub:
-                        nn_variable_list.append(stub.get_nn_variables())
+                        nn_variables_list.append(stub.get_nn_variables())
 
                 # Calculate the mean and std of best_size variables of learners
-                mean = [np.mean(i, axis=0) for i in zip(*nn_variable_list)]
-                std = [np.minimum(np.std(i, axis=0), 1.) for i in zip(*nn_variable_list)]
+                mean = [np.mean(i, axis=0) for i in zip(*nn_variables_list)]
+                std = [np.minimum(np.std(i, axis=0), 1.) for i in zip(*nn_variables_list)]
 
                 # Dispatch all nn variables
                 for learner in self.servicer.learners:
@@ -134,7 +134,9 @@ class Evolver:
 
                 self._last_update_nn_variable = time.time()
 
-                self.logger.info(f'Selected top {best_size} learners and dispatched all nn variables')
+                _best_learner_ids = [str(self.servicer.get_learner_id(l)) for l in best_learners]
+                self.logger.info(f'Selected {",".join(_best_learner_ids)} learners and dispatched all nn variables')
+
                 std = [(np.min(s), np.mean(s), np.max(s)) for s in std]
                 _min, _mean, _max = [np.mean(s) for s in zip(*std)]
                 self.logger.info(f'Variables std: {_min:.2f}, {_mean:.2f}, {_max:.2f}')
@@ -229,6 +231,11 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
         info = self._peer_set.get_info(peer)
         if info:
             return info['stub']
+
+    def get_learner_id(self, peer):
+        info = self._peer_set.get_info(peer)
+        if info:
+            return info['id']
 
     def display_learner_actors(self):
         with self._learner_lock:

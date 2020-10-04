@@ -28,7 +28,7 @@ class UnityWrapper:
 
         self._env = UnityEnvironment(file_name=file_name,
                                      base_port=base_port,
-                                     no_graphics=no_graphics,
+                                     no_graphics=no_graphics and train_mode,
                                      seed=seed,
                                      additional_args=['--scene', scene, '--n_agents', str(n_agents)],
                                      side_channels=[self.engine_configuration_channel,

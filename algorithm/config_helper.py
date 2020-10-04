@@ -48,7 +48,7 @@ def set_logger(logger_file=None):
 
     if logger_file is not None:
         # create file handler
-        fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=1024 * 1024, backupCount=5)
+        fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=10 * 1024 * 1024, backupCount=5)
         fh.setLevel(logging.INFO)
 
         # add handler and formatter to logger
