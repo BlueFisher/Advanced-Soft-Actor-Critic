@@ -10,10 +10,12 @@ default:
 
     n_agents: 10
 
+    evolver_cem_time: 8
+
   net_config:
     evolver_host: walker-ds-evolver
-    learner_host: walker-ds-learner
-    replay_host: walker-ds-replay
+    learner_host: walker-ds-lr
+    replay_host: walker-ds-lr
 
   sac_config:
     write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
@@ -31,7 +33,26 @@ hard:
     scene: Walker2DHard
     nn: nn_hard
 
+  net_config:
+    evolver_host: walker-hard-ds-evolver
+    learner_host: walker-hard-ds-lr
+    replay_host: walker-hard-ds-lr
+
   sac_config: &hard_sac
-    burn_in_step: 20
+    burn_in_step: 10
     use_rnn: true
     use_prediction: true
+
+hard_nopre:
+  base_config:
+    <<: *hard_base
+    name: "nopre_{time}"
+
+  net_config:
+    evolver_host: walker-hard-nopre-ds-evolver
+    learner_host: walker-hard-nopre-ds-lr
+    replay_host: walker-hard-nopre-ds-lr
+
+  sac_config:
+    <<: *hard_sac
+    use_prediction: false

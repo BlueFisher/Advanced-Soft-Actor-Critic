@@ -163,17 +163,18 @@ class Replay(object):
         with self._replay_buffer_lock:
             sampled = self._replay_buffer.sample()
 
-        if sampled is None:
-            return None
+            if sampled is None:
+                return None
 
-        pointers, trans, priority_is = sampled
-        # get n_step transitions
-        trans = {k: [v] for k, v in trans.items()}
-        # k: [v, v, ...]
-        for i in range(1, self.burn_in_step + self.n_step + 1):
-            t_trans = self._replay_buffer.get_storage_data(pointers + i).items()
-            for k, v in t_trans:
-                trans[k].append(v)
+            pointers, trans, priority_is = sampled
+
+            # Get n_step transitions
+            trans = {k: [v] for k, v in trans.items()}
+            # k: [v, v, ...]
+            for i in range(1, self.burn_in_step + self.n_step + 1):
+                t_trans = self._replay_buffer.get_storage_data(pointers + i).items()
+                for k, v in t_trans:
+                    trans[k].append(v)
 
         for k, v in trans.items():
             trans[k] = np.concatenate([np.expand_dims(t, 1) for t in v], axis=1)
@@ -207,11 +208,17 @@ class Replay(object):
 
     def _update_td_error(self, pointers, td_error):
         with self._replay_buffer_lock:
-            self._replay_buffer.update(pointers, td_error)
+            mask = pointers == self._replay_buffer.get_storage_data_ids(pointers)
+
+            self.logger.info(f'Mask length: {np.sum(mask)}')
+
+            self._replay_buffer.update(pointers[mask], td_error[mask])
 
     def _update_transitions(self, pointers, key, data):
         with self._replay_buffer_lock:
-            self._replay_buffer.update_transitions(pointers, key, data)
+            mask = pointers == self._replay_buffer.get_storage_data_ids(pointers)
+
+            self._replay_buffer.update_transitions(pointers[mask], key, data[mask])
 
     def _clear(self):
         self._replay_buffer.clear()

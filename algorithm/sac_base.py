@@ -1122,9 +1122,11 @@ class SAC_Base(object):
                                                  n_dones=n_dones,
                                                  n_mu_probs=n_mu_probs if self.use_n_step_is else None,
                                                  n_rnn_states=n_rnn_states if self.use_rnn else None)
-            self.replay_buffer.add_with_td_error(td_error, storage_data, self.burn_in_step + self.n_step)
+            self.replay_buffer.add_with_td_error(td_error, storage_data,
+                                                 ignore_size=self.burn_in_step + self.n_step)
         else:
-            self.replay_buffer.add(storage_data, ignore_size=self.burn_in_step + self.n_step)
+            self.replay_buffer.add(storage_data,
+                                   ignore_size=self.burn_in_step + self.n_step)
 
     def train(self):
         # Sample from replay buffer
@@ -1143,7 +1145,7 @@ class SAC_Base(object):
         """
         pointers, trans, priority_is = sampled
 
-        # Get n_step transitions
+        # Get n_step transitions TODO: could be faster
         trans = {k: [v] for k, v in trans.items()}
         # k: [v, v, ...]
         for i in range(1, self.burn_in_step + self.n_step + 1):

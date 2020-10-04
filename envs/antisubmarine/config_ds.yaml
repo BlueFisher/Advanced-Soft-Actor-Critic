@@ -1,0 +1,37 @@
+default:
+  base_config:
+    build_path:
+      win32: C:\Users\Fisher\Nextcloud\Documents\Unity\win-RL-Envs\RL-Envs.exe
+      linux: /data/linux-RL-Envs/RL-Envs.x86_64
+
+    scene: Antisubmarine
+
+    update_policy_variables_per_step: 20
+    noise_increasing_rate: 0.01
+
+    n_agents: 10
+
+    evolver_cem_time: 8
+
+  net_config:
+    evolver_host: antisub-ds-evolver
+    learner_host: antisub-ds-lr
+    replay_host: antisub-ds-lr
+
+  reset_config:
+    force_reset: true
+
+  sac_config:
+    write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
+    save_model_per_step: 10000 # Save model every N steps
+    save_model_per_minute: 20 # Save model every N minutes
+
+    use_rnn: true
+    burn_in_step: 20
+    use_prediction: true
+
+    n_step: 5
+    v_lambda: 0.9
+
+  replay_config:
+    batch_size: 1024
