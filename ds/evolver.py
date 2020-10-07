@@ -143,6 +143,7 @@ class Evolver:
 
     def _run(self):
         self.servicer = EvolverService(self.config['name'],
+                                       self.config['max_actors_each_learner'],
                                        self._learner_connected,
                                        self._get_noise,
                                        self._post_reward)
