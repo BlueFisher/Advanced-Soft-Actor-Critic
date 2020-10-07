@@ -186,7 +186,7 @@ class LearnerStubController:
 
 
 class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
-    def __init__(self, name, learner_connected, get_noise, post_reward):
+    def __init__(self, name, max_actors_each_learner, learner_connected, get_noise, post_reward):
         self._logger = logging.getLogger('ds.evolver.service')
         self._peer_set = PeerSet(self._logger)
 
@@ -196,6 +196,8 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
         self._actor_learner = dict()
 
         self.name = name
+        self.max_actors_each_learner = max_actors_each_learner
+
         self._learner_connected = learner_connected
         self._get_noise = get_noise
         self._post_reward = post_reward
@@ -284,11 +286,15 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
 
         with self._learner_lock:
             if len(self._learner_actors) == 0:
-                self._logger.info(f'Actor {peer} register failed')
+                self._logger.info(f'Actor {peer} register failed, no learner exists')
                 return evolver_pb2.RegisterActorResponse(succeeded=False)
 
             assigned_learner = sorted(self._learner_actors.items(),
                                       key=lambda t: len(t[1]))[0][0]
+
+            if len(self._learner_actors[assigned_learner]) == self.max_actors_each_learner:
+                self._logger.info(f'Actor {peer} register failed, all learners have max actors')
+                return evolver_pb2.RegisterActorResponse(succeeded=False)
 
             self._learner_actors[assigned_learner].add(peer)
             self._actor_learner[peer] = assigned_learner

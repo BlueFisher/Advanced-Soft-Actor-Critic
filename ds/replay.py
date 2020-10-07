@@ -209,15 +209,11 @@ class Replay(object):
     def _update_td_error(self, pointers, td_error):
         with self._replay_buffer_lock:
             mask = pointers == self._replay_buffer.get_storage_data_ids(pointers)
-
-            self.logger.info(f'Mask length: {np.sum(mask)}')
-
             self._replay_buffer.update(pointers[mask], td_error[mask])
 
     def _update_transitions(self, pointers, key, data):
         with self._replay_buffer_lock:
             mask = pointers == self._replay_buffer.get_storage_data_ids(pointers)
-
             self._replay_buffer.update_transitions(pointers[mask], key, data[mask])
 
     def _clear(self):
