@@ -177,7 +177,6 @@ class Actor(object):
         if variables is not None:
             if not any([np.isnan(np.min(v)) for v in variables]):
                 self.sac_actor.update_policy_variables(variables)
-                self.logger.info('Updated policy variables')
             else:
                 self.logger.warning('NAN in variables, skip updating')
 

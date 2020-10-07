@@ -12,7 +12,11 @@ logger = logging.getLogger('sac.base')
 
 
 def squash_correction_log_prob(dist, x):
-    return dist.log_prob(x) - tf.math.log(tf.maximum(1 - tf.square(tf.tanh(x)), 1e-6))
+    return dist.log_prob(x) - tf.math.log(tf.maximum(1 - tf.square(tf.tanh(x)), 1e-2))
+
+
+def squash_correction_prob(dist, x):
+    return dist.prob(x) / (tf.maximum(1 - tf.square(tf.tanh(x)), 1e-2))
 
 
 def debug(x):
@@ -474,7 +478,7 @@ class SAC_Base(object):
         if self.is_discrete:
             policy_prob = policy.prob(tf.argmax(n_selected_actions, axis=-1))  # [Batch, n]
         else:
-            policy_prob = tf.exp(squash_correction_log_prob(policy, tf.atanh(n_selected_actions)))
+            policy_prob = squash_correction_prob(policy, tf.atanh(n_selected_actions))
             # [Batch, n, action_dim]
             policy_prob = tf.reduce_prod(policy_prob, axis=-1)  # [Batch, n]
 
@@ -556,7 +560,7 @@ class SAC_Base(object):
             if self.is_discrete:
                 n_pi_probs = _policy.prob(tf.argmax(n_actions, axis=-1))  # [Batch, n]
             else:
-                n_pi_probs = tf.exp(squash_correction_log_prob(_policy, tf.atanh(n_actions)))
+                n_pi_probs = squash_correction_prob(_policy, tf.atanh(n_actions))
                 # [Batch, n, action_dim]
                 n_pi_probs = tf.reduce_prod(n_pi_probs, axis=-1)
                 # [Batch, n]
