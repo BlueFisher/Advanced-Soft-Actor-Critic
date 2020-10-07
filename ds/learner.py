@@ -405,7 +405,7 @@ class Learner:
 
                     next_obs_list, reward, local_done, max_reached = self.env.step(action)
 
-                    if step == self.config['max_step_per_iter']:
+                    if step == self.config['max_step_each_iter']:
                         local_done = [True] * len(agents)
                         max_reached = [True] * len(agents)
 

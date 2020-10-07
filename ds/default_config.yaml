@@ -24,7 +24,7 @@ base_config:
   noise_increasing_rate: 0 # Noise = N * number of actors
   noise_max: 0.1 # Max noise for actors
   n_agents: 1 # N agents running in parallel
-  max_step_per_iter: -1 # Max step in each iteration
+  max_step_each_iter: -1 # Max step in each iteration
   reset_on_iteration: true # If to force reset agent if an episode terminated
 
   max_actors_each_learner: 10 # The max number of actors of each learner
