@@ -207,13 +207,6 @@ class SAC_DS_Base(SAC_Base):
               priority_is,
               rnn_state=None):
 
-        logger.info(f'n_mu_probs, {np.mean(n_mu_probs)}, {np.max(n_mu_probs)}')
-
-        # logger.info('!!variables before update!!')
-        # for g in self.get_nn_variables():
-        #     _g = g.numpy()
-        #     logger.info(f'{g.name}, {np.mean(_g)}, {np.max(_g)}')
-
         self._train(n_obses_list=n_obses_list,
                     n_actions=n_actions,
                     n_rewards=n_rewards,
@@ -222,25 +215,6 @@ class SAC_DS_Base(SAC_Base):
                     n_mu_probs=n_mu_probs,
                     priority_is=priority_is,
                     initial_rnn_state=rnn_state if self.use_rnn else None)
-
-        # logger.info('!!loss_transition!!')
-        # logger.info(f'{np.mean(loss_transition)}, {np.max(loss_transition)}')
-
-        # logger.info('===grads===')
-        # for g, n in zip(grads, grad_names):
-        #     _g = g.numpy()
-        #     logger.info(f'{n}, {np.mean(_g)}, {np.max(_g)}')
-        # logger.info('---opts---')
-        # for g in self.optimizer_rep.weights +\
-        #         self.optimizer_policy.weights +\
-        #         self.optimizer_q1.weights:
-        #     _g = g.numpy()
-        #     logger.info(f'{g.name}, {np.mean(_g)}, {np.max(_g)}')
-
-        # logger.info('!!variables after update!!')
-        # for g in self.get_nn_variables():
-        #     _g = g.numpy()
-        #     logger.info(f'{g.name}, {np.mean(_g)}, {np.max(_g)}')
 
         step = self.global_step.numpy()
 
