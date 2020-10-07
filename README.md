@@ -63,7 +63,7 @@ base_config:
   n_agents: 1 # N agents running in parallel
   max_iter: -1 # Max iteration
   max_step: -1 # Max step. Training will be terminated if max_iter or max_step encounters
-  max_step_per_iter: -1 # Max step in each iteration
+  max_step_each_iter: -1 # Max step in each iteration
   reset_on_iteration: true # If to force reset agent if an episode terminated
 
 reset_config: null # Reset parameters sent to Unity
@@ -143,11 +143,16 @@ base_config:
   noise_increasing_rate: 0 # Noise = N * number of actors
   noise_max: 0.1 # Max noise for actors
   n_agents: 1 # N agents running in parallel
-  max_step_per_iter: -1 # Max step in each iteration
+  max_step_each_iter: -1 # Max step in each iteration
   reset_on_iteration: true # If to force reset agent if an episode terminated
 
-  evolver_cem_length: 50
-  evolver_cem_best: 0.3
+  max_actors_each_learner: 10 # The max number of actors of each learner
+  evolver_cem_length: 50 # Start CEM if all learners have eavluated evolver_cem_length times
+  evolver_cem_best: 0.3 # The ratio of best learners
+  evolver_cem_min_length:
+    2 # Start CEM if all learners have eavluated `evolver_cem_min_length` times,
+    # and it has been more than `evolver_cem_time` minutes since the last update
+  evolver_cem_time: 3
 
 net_config:
   evolver_host: 127.0.0.1
