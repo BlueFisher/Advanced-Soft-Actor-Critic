@@ -161,6 +161,36 @@ class SAC_DS_Base(SAC_Base):
         for v, t_v in zip(variables, t_variables):
             v.assign(tf.cast(t_v, v.dtype))
 
+        self._update_target_variables()
+
+    def get_all_variables(self):
+        variables = self.get_nn_variables()
+        variables += self.model_target_rep.trainable_variables +\
+            self.model_target_q1.trainable_variables +\
+            self.model_target_q2.trainable_variables
+
+        if self.use_normalization:
+            variables += [self.normalizer_step] +\
+                self.running_means +\
+                self.running_variances
+
+        return variables
+
+    @tf.function
+    def update_all_variables(self, t_variables):
+        if tf.reduce_any([tf.math.is_nan(tf.reduce_min(tf.cast(v, dtype=tf.float32)))
+                          for v in t_variables]):
+            return False
+
+        variables = self.get_all_variables()
+
+        for v, t_v in zip(variables, t_variables):
+            v.assign(t_v)
+
+        return True
+
+    @tf.function
+    def reset_optimizers(self):
         opt_variables = self.optimizer_rep.weights +\
             self.optimizer_q1.weights +\
             self.optimizer_q2.weights +\
@@ -177,24 +207,6 @@ class SAC_DS_Base(SAC_Base):
 
         for v in opt_variables:
             v.assign(tf.zeros_like(v))
-
-        self._update_target_variables()
-
-    def get_all_variables(self):
-        variables = self.get_nn_variables()
-        if self.use_normalization:
-            variables += [self.normalizer_step] +\
-                self.running_means +\
-                self.running_variances
-
-        return variables
-
-    @tf.function
-    def update_all_variables(self, t_variables):
-        variables = self.get_all_variables()
-
-        for v, t_v in zip(variables, t_variables):
-            v.assign(t_v)
 
     def train(self,
               pointers,

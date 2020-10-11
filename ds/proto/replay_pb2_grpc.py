@@ -136,6 +136,7 @@ class ReplayService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -144,7 +145,7 @@ class ReplayService(object):
             pingpong__pb2.Ping.SerializeToString,
             pingpong__pb2.Pong.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def Add(request,
@@ -152,6 +153,7 @@ class ReplayService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -160,7 +162,7 @@ class ReplayService(object):
             replay__pb2.AddRequest.SerializeToString,
             ndarray__pb2.Empty.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def Sample(request,
@@ -168,6 +170,7 @@ class ReplayService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -176,7 +179,7 @@ class ReplayService(object):
             ndarray__pb2.Empty.SerializeToString,
             replay__pb2.SampledData.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def UpdateTDError(request,
@@ -184,6 +187,7 @@ class ReplayService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -192,7 +196,7 @@ class ReplayService(object):
             replay__pb2.UpdateTDErrorRequest.SerializeToString,
             ndarray__pb2.Empty.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def UpdateTransitions(request,
@@ -200,6 +204,7 @@ class ReplayService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -208,7 +213,7 @@ class ReplayService(object):
             replay__pb2.UpdateTransitionsRequest.SerializeToString,
             ndarray__pb2.Empty.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def Clear(request,
@@ -216,6 +221,7 @@ class ReplayService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -224,4 +230,4 @@ class ReplayService(object):
             ndarray__pb2.Empty.SerializeToString,
             ndarray__pb2.Empty.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

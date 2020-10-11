@@ -36,6 +36,11 @@ class EvolverServiceStub(object):
                 request_serializer=evolver__pb2.PostRewardToEvolverRequest.SerializeToString,
                 response_deserializer=ndarray__pb2.Empty.FromString,
                 )
+        self.GetNNVariables = channel.unary_unary(
+                '/EvolverService/GetNNVariables',
+                request_serializer=ndarray__pb2.Empty.SerializeToString,
+                response_deserializer=evolver__pb2.GetNNVariablesResponse.FromString,
+                )
 
 
 class EvolverServiceServicer(object):
@@ -65,6 +70,12 @@ class EvolverServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetNNVariables(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_EvolverServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -88,6 +99,11 @@ def add_EvolverServiceServicer_to_server(servicer, server):
                     request_deserializer=evolver__pb2.PostRewardToEvolverRequest.FromString,
                     response_serializer=ndarray__pb2.Empty.SerializeToString,
             ),
+            'GetNNVariables': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetNNVariables,
+                    request_deserializer=ndarray__pb2.Empty.FromString,
+                    response_serializer=evolver__pb2.GetNNVariablesResponse.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
             'EvolverService', rpc_method_handlers)
@@ -104,6 +120,7 @@ class EvolverService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -112,7 +129,7 @@ class EvolverService(object):
             pingpong__pb2.Ping.SerializeToString,
             pingpong__pb2.Pong.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def RegisterLearner(request,
@@ -120,6 +137,7 @@ class EvolverService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -128,7 +146,7 @@ class EvolverService(object):
             evolver__pb2.RegisterLearnerRequest.SerializeToString,
             evolver__pb2.RegisterLearnerResponse.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def RegisterActor(request,
@@ -136,6 +154,7 @@ class EvolverService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -144,7 +163,7 @@ class EvolverService(object):
             ndarray__pb2.Empty.SerializeToString,
             evolver__pb2.RegisterActorResponse.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def PostReward(request,
@@ -152,6 +171,7 @@ class EvolverService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -160,4 +180,21 @@ class EvolverService(object):
             evolver__pb2.PostRewardToEvolverRequest.SerializeToString,
             ndarray__pb2.Empty.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def GetNNVariables(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/EvolverService/GetNNVariables',
+            ndarray__pb2.Empty.SerializeToString,
+            evolver__pb2.GetNNVariablesResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

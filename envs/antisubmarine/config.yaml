@@ -12,9 +12,17 @@ default:
     force_reset: true
 
   sac_config:
-    seed: 42
-    burn_in_step: 20
-    n_step: 3
+    burn_in_step: 10
+    n_step: 5
     use_rnn: true
     use_prediction: true
-    init_log_alpha: 0.
+
+vanilla:
+  base_config:
+    name: "vanilla_{time}"
+    nn: "nn_vanilla"
+
+  sac_config:
+    use_rnn: false
+    burn_in_step: 0
+    use_prediction: false
