@@ -293,8 +293,10 @@ class Learner:
     def _udpate_nn_variables(self, variables):
         with self._sac_lock:
             self.sac.update_nn_variables(variables)
+            all_variables = self.sac.get_all_variables()
 
-        self._update_sac_bak()
+            with self._sac_bak_lock:
+                self.sac_bak.update_all_variables(all_variables)
 
         self.logger.info('Updated all nn variables')
 
@@ -302,8 +304,27 @@ class Learner:
         with self._sac_lock:
             variables = self.sac.get_all_variables()
 
-        with self._sac_bak_lock:
-            self.sac_bak.update_all_variables(variables)
+            with self._sac_bak_lock:
+                res = self.sac_bak.update_all_variables(variables).numpy()
+
+                if not res:
+                    self.logger.warning('NAN in variables, getting new variables from evolver...')
+                    nn_variables = self._stub.get_nn_variables()
+                    if not nn_variables:
+                        self.logger.warning('Getting new variables failed')
+                        return
+
+                    self.sac.update_nn_variables(nn_variables)
+                    self.logger.info('Updated all nn variables from evolver')
+                    self.sac.reset_optimizers()
+                    self.logger.info('Reset all optimizers')
+
+                    all_variables = self.sac.get_all_variables()
+                    res = self.sac_bak.update_all_variables(all_variables).numpy()
+                    if not res:
+                        self.logger.warning('NAN still in variables')
+
+        self.logger.info('Updated sac_bak')
 
     def _get_action(self, obs_list, rnn_state=None):
         if self.sac_bak.use_rnn:
@@ -436,7 +457,7 @@ class Learner:
                     if is_useless_episode:
                         self._stub.post_reward(float('-inf'))
                     else:
-                        self._stub.post_reward(np.mean([a.reward for a in agents]))                    
+                        self._stub.post_reward(np.mean([a.reward for a in agents]))
 
                 iteration += 1
 
@@ -493,14 +514,12 @@ class Learner:
                                                              priority_is=priority_is,
                                                              rnn_state=rnn_state)
 
-            if np.isnan(np.min(td_error)):
-                self.logger.error('NAN in td_error')
-                self.sac.save_model()
-                self.close()
-                break
-
             if step % self.config['update_sac_bak_per_step'] == 0:
                 self._update_sac_bak()
+
+            if np.isnan(np.min(td_error)):
+                self.logger.error('NAN in td_error')
+                continue
 
             update_data_buffer.add_data(True, pointers, td_error)
             for pointers, key, data in update_data:
@@ -718,6 +737,15 @@ class StubController:
     def post_reward(self, reward):
         self._evolver_stub.PostReward(
             evolver_pb2.PostRewardToEvolverRequest(reward=float(reward)))
+
+    @rpc_error_inspector
+    def get_nn_variables(self):
+        response = self._evolver_stub.GetNNVariables(Empty())
+        if response.succeeded:
+            variables = [proto_to_ndarray(v) for v in response.variables]
+            return variables
+        else:
+            return None
 
     def _start_evolver_persistence(self):
         def request_messages():

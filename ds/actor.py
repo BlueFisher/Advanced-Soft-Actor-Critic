@@ -132,6 +132,8 @@ class Actor(object):
                 else:
                     time.sleep(C.RECONNECTION_TIME)
 
+        config_helper.display_config(config, self.logger)
+
         # Initialize environment
         if self.config['env_type'] == 'UNITY':
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper

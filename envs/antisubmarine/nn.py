@@ -60,7 +60,7 @@ class ModelObservation(m.ModelBaseObservation):
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(129)
+            tf.keras.layers.Dense(130)
         ])
 
     def call(self, state):
@@ -78,27 +78,54 @@ class ModelObservation(m.ModelBaseObservation):
         return mse(approx_obs, obs)
 
 
-class ModelRep(m.ModelBaseGRURep):
+# class ModelRep(m.ModelBaseGRURep):
+#     def __init__(self, obs_dims, action_dim):
+#         super().__init__(obs_dims, action_dim, rnn_units=64)
+
+#         self.dense = tf.keras.Sequential([
+#             tf.keras.layers.Dense(64, activation=tf.nn.relu)
+#         ])
+
+#         self.dense2 = tf.keras.Sequential([
+#             tf.keras.layers.Dense(64)
+#         ])
+
+#     def call(self, obs_list, pre_action, rnn_state):
+#         obs = tf.concat([obs_list[0][..., :-2], pre_action], axis=-1)
+#         obs = self.dense(obs)
+#         outputs, next_rnn_state = self.gru(obs, initial_state=rnn_state)
+#         state = self.dense2(tf.concat([obs, outputs], axis=-1))
+
+#         return state, next_rnn_state
+
+class ModelRep(m.ModelBaseLSTMRep):
     def __init__(self, obs_dims, action_dim):
         super().__init__(obs_dims, action_dim, rnn_units=64)
 
         self.dense = tf.keras.Sequential([
+            tf.keras.layers.Dense(64, activation=tf.nn.relu)
+        ])
+
+        self.dense2 = tf.keras.Sequential([
             tf.keras.layers.Dense(64)
         ])
 
     def call(self, obs_list, pre_action, rnn_state):
         obs = tf.concat([obs_list[0][..., :-2], pre_action], axis=-1)
-        outputs, next_rnn_state = self.gru(obs, initial_state=rnn_state)
-        state = self.dense(tf.concat([obs, outputs], axis=-1))
+        obs = self.dense(obs)
 
-        return state, next_rnn_state
+        rnn_state = tf.split(rnn_state, num_or_size_splits=2, axis=-1)
+        outputs, *next_rnn_state = self.lstm(obs, initial_state=rnn_state)
+        state = self.dense2(tf.concat([obs, outputs], axis=-1))
+
+        return state, tf.concat(next_rnn_state, axis=-1)
 
 
 class ModelQ(m.ModelContinuesQ):
     def __init__(self, state_dim, action_dim):
         super().__init__(state_dim, action_dim,
-                         state_n=128, state_depth=1,
-                         action_n=128, action_depth=1,
+                         state_n=128, state_depth=2,
+                         action_n=128, action_depth=2,
                          dense_n=128, dense_depth=3)
 
 
@@ -106,5 +133,5 @@ class ModelPolicy(m.ModelContinuesPolicy):
     def __init__(self, state_dim, action_dim):
         super().__init__(state_dim, action_dim,
                          dense_n=128, dense_depth=2,
-                         mean_n=128, mean_depth=1,
-                         logstd_n=128, logstd_depth=1)
+                         mean_n=128, mean_depth=2,
+                         logstd_n=128, logstd_depth=2)

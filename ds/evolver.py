@@ -22,7 +22,7 @@ from .utils import PeerSet, rpc_error_inspector
 
 
 def update_nn_variables(stub, mean, std):
-    nn_variables = [np.random.normal(mean[j], std[j]) for j in range(len(mean))]
+    nn_variables = [np.random.normal(mean[i], std[i]) for i in range(len(mean))]
     stub.update_nn_variables(nn_variables)
 
 
@@ -38,6 +38,8 @@ class Evolver:
         self._learner_rewards = dict()
         self._learner_rewards_lock = threading.Lock()
         self._last_update_nn_variable = time.time()
+        self._saved_nn_variables_mean = None
+        self._saved_nn_variables_std = None
 
         self._update_nn_variables_executors = ThreadPoolExecutor(10)
 
@@ -95,12 +97,12 @@ class Evolver:
         with self._learner_rewards_lock:
             self._learner_rewards[peer].append(reward)
 
-            if len(self._learner_rewards) <= 1:
-                return
+            # if len(self._learner_rewards) <= 1:
+            #     return
 
             rewards = self._learner_rewards.values()
             # All learners have evaluated more than evolver_cem_length times
-            if all([len(i) == self.config['evolver_cem_length'] for i in rewards]) or \
+            if all([len(i) == 5 for i in rewards]) or \
                     (all([len(i) >= self.config['evolver_cem_min_length'] for i in rewards]) and
                      time.time() - self._last_update_nn_variable >= self.config['evolver_cem_time'] * 60):
 
@@ -123,6 +125,8 @@ class Evolver:
                 mean = [np.mean(i, axis=0) for i in zip(*nn_variables_list)]
                 std = [np.minimum(np.std(i, axis=0), 1.) for i in zip(*nn_variables_list)]
 
+                self._saved_nn_variables_mean, self._saved_nn_variables_std = mean, std
+
                 # Dispatch all nn variables
                 for learner in self.servicer.learners:
                     stub = self.servicer.get_learner_stub(learner)
@@ -141,12 +145,20 @@ class Evolver:
                 _min, _mean, _max = [np.mean(s) for s in zip(*std)]
                 self.logger.info(f'Variables std: {_min:.2f}, {_mean:.2f}, {_max:.2f}')
 
+    def _get_nn_variables(self):
+        if self._saved_nn_variables_mean is None:
+            return None
+
+        mean, std = self._saved_nn_variables_mean, self._saved_nn_variables_std
+        return [np.random.normal(mean[i], std[i]) for i in range(len(mean))]
+
     def _run(self):
         self.servicer = EvolverService(self.config['name'],
                                        self.config['max_actors_each_learner'],
                                        self._learner_connected,
                                        self._get_noise,
-                                       self._post_reward)
+                                       self._post_reward,
+                                       self._get_nn_variables)
         self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS))
         evolver_pb2_grpc.add_EvolverServiceServicer_to_server(self.servicer, self.server)
         self.server.add_insecure_port(f'[::]:{self.net_config["evolver_port"]}')
@@ -187,7 +199,10 @@ class LearnerStubController:
 
 
 class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
-    def __init__(self, name, max_actors_each_learner, learner_connected, get_noise, post_reward):
+    def __init__(self, name, max_actors_each_learner, learner_connected,
+                 get_noise,
+                 post_reward,
+                 get_nn_variables):
         self._logger = logging.getLogger('ds.evolver.service')
         self._peer_set = PeerSet(self._logger)
 
@@ -202,6 +217,7 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
         self._learner_connected = learner_connected
         self._get_noise = get_noise
         self._post_reward = post_reward
+        self._get_nn_variables = get_nn_variables
 
     def _record_peer(self, context):
         peer = context.peer()
@@ -329,3 +345,13 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
         self._post_reward(float(request.reward), context.peer())
 
         return Empty()
+
+    # From learner
+    def GetNNVariables(self, request, context):
+        variables = self._get_nn_variables()
+        if variables is None:
+            return evolver_pb2.GetNNVariablesResponse(succeeded=False)
+        else:
+            return evolver_pb2.GetNNVariablesResponse(
+                succeeded=True,
+                variables=[ndarray_to_proto(v) for v in variables])

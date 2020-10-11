@@ -153,6 +153,7 @@ class LearnerService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -161,7 +162,7 @@ class LearnerService(object):
             pingpong__pb2.Ping.SerializeToString,
             pingpong__pb2.Pong.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def GetModelAbsDir(request,
@@ -169,6 +170,7 @@ class LearnerService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -177,7 +179,7 @@ class LearnerService(object):
             ndarray__pb2.Empty.SerializeToString,
             learner__pb2.ModelAbsDir.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def GetAction(request,
@@ -185,6 +187,7 @@ class LearnerService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -193,7 +196,7 @@ class LearnerService(object):
             learner__pb2.GetActionRequest.SerializeToString,
             learner__pb2.Action.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def GetPolicyVariables(request,
@@ -201,6 +204,7 @@ class LearnerService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -209,7 +213,7 @@ class LearnerService(object):
             ndarray__pb2.Empty.SerializeToString,
             learner__pb2.NNVariables.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def GetTDError(request,
@@ -217,6 +221,7 @@ class LearnerService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -225,7 +230,7 @@ class LearnerService(object):
             learner__pb2.GetTDErrorRequest.SerializeToString,
             learner__pb2.TDError.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def GetNNVariables(request,
@@ -233,6 +238,7 @@ class LearnerService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -241,7 +247,7 @@ class LearnerService(object):
             ndarray__pb2.Empty.SerializeToString,
             learner__pb2.NNVariables.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def UpdateNNVariables(request,
@@ -249,6 +255,7 @@ class LearnerService(object):
             options=(),
             channel_credentials=None,
             call_credentials=None,
+            insecure=False,
             compression=None,
             wait_for_ready=None,
             timeout=None,
@@ -257,4 +264,4 @@ class LearnerService(object):
             learner__pb2.NNVariables.SerializeToString,
             ndarray__pb2.Empty.FromString,
             options, channel_credentials,
-            call_credentials, compression, wait_for_ready, timeout, metadata)
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
