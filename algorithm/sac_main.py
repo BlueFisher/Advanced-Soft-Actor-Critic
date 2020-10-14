@@ -9,7 +9,6 @@ from pathlib import Path
 import numpy as np
 
 import algorithm.config_helper as config_helper
-from algorithm.utils import generate_base_name
 
 from .agent import Agent
 from .sac_base import SAC_Base
@@ -61,7 +60,7 @@ class Main(object):
         if args.agents is not None:
             config['base_config']['n_agents'] = args.agents
 
-        config['base_config']['name'] = generate_base_name(config['base_config']['name'])
+        config['base_config']['name'] = config_helper.generate_base_name(config['base_config']['name'])
         model_abs_dir = Path(root_dir).joinpath('models',
                                                 config['base_config']['scene'],
                                                 config['base_config']['name'])
@@ -95,7 +94,7 @@ class Main(object):
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         file_name=self.config['build_path'][sys.platform],
                                         base_port=self.config['port'],
-                                        no_graphics=self.config['no_graphics'],
+                                        no_graphics=self.config['no_graphics'] and not self.render,
                                         scene=self.config['scene'],
                                         n_agents=self.config['n_agents'])
 

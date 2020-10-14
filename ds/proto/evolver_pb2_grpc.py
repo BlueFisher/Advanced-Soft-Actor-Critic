@@ -17,27 +17,27 @@ class EvolverServiceStub(object):
             channel: A grpc.Channel.
         """
         self.Persistence = channel.stream_stream(
-                '/EvolverService/Persistence',
+                '/evolver.EvolverService/Persistence',
                 request_serializer=pingpong__pb2.Ping.SerializeToString,
                 response_deserializer=pingpong__pb2.Pong.FromString,
                 )
         self.RegisterLearner = channel.unary_unary(
-                '/EvolverService/RegisterLearner',
+                '/evolver.EvolverService/RegisterLearner',
                 request_serializer=evolver__pb2.RegisterLearnerRequest.SerializeToString,
                 response_deserializer=evolver__pb2.RegisterLearnerResponse.FromString,
                 )
         self.RegisterActor = channel.unary_unary(
-                '/EvolverService/RegisterActor',
+                '/evolver.EvolverService/RegisterActor',
                 request_serializer=ndarray__pb2.Empty.SerializeToString,
                 response_deserializer=evolver__pb2.RegisterActorResponse.FromString,
                 )
         self.PostReward = channel.unary_unary(
-                '/EvolverService/PostReward',
+                '/evolver.EvolverService/PostReward',
                 request_serializer=evolver__pb2.PostRewardToEvolverRequest.SerializeToString,
                 response_deserializer=ndarray__pb2.Empty.FromString,
                 )
         self.GetNNVariables = channel.unary_unary(
-                '/EvolverService/GetNNVariables',
+                '/evolver.EvolverService/GetNNVariables',
                 request_serializer=ndarray__pb2.Empty.SerializeToString,
                 response_deserializer=evolver__pb2.GetNNVariablesResponse.FromString,
                 )
@@ -106,7 +106,7 @@ def add_EvolverServiceServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'EvolverService', rpc_method_handlers)
+            'evolver.EvolverService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
 
 
@@ -125,7 +125,7 @@ class EvolverService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.stream_stream(request_iterator, target, '/EvolverService/Persistence',
+        return grpc.experimental.stream_stream(request_iterator, target, '/evolver.EvolverService/Persistence',
             pingpong__pb2.Ping.SerializeToString,
             pingpong__pb2.Pong.FromString,
             options, channel_credentials,
@@ -142,7 +142,7 @@ class EvolverService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/EvolverService/RegisterLearner',
+        return grpc.experimental.unary_unary(request, target, '/evolver.EvolverService/RegisterLearner',
             evolver__pb2.RegisterLearnerRequest.SerializeToString,
             evolver__pb2.RegisterLearnerResponse.FromString,
             options, channel_credentials,
@@ -159,7 +159,7 @@ class EvolverService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/EvolverService/RegisterActor',
+        return grpc.experimental.unary_unary(request, target, '/evolver.EvolverService/RegisterActor',
             ndarray__pb2.Empty.SerializeToString,
             evolver__pb2.RegisterActorResponse.FromString,
             options, channel_credentials,
@@ -176,7 +176,7 @@ class EvolverService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/EvolverService/PostReward',
+        return grpc.experimental.unary_unary(request, target, '/evolver.EvolverService/PostReward',
             evolver__pb2.PostRewardToEvolverRequest.SerializeToString,
             ndarray__pb2.Empty.FromString,
             options, channel_credentials,
@@ -193,7 +193,7 @@ class EvolverService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/EvolverService/GetNNVariables',
+        return grpc.experimental.unary_unary(request, target, '/evolver.EvolverService/GetNNVariables',
             ndarray__pb2.Empty.SerializeToString,
             evolver__pb2.GetNNVariablesResponse.FromString,
             options, channel_credentials,

@@ -43,6 +43,16 @@ hard:
     use_rnn: true
     use_prediction: true
 
+    random_params:
+      n_step:
+        in: [3, 5, 7]
+      burn_in_step:
+        in: [10, 20, 30]
+      v_rho:
+        truncated: [1.0, 2.0]
+      v_c:
+        truncated: [1.0, 2.0]
+
 hard_nopre:
   base_config:
     <<: *hard_base

@@ -86,3 +86,9 @@ sac_config:
   use_rnd: false # If use RND
   rnd_n_sample: 10 # RND sample times
   use_normalization: false # If use observation normalization
+
+  # random_params:
+  #   param_name:
+  #     in: [n1, n2, n3]
+  #     truncated: [n1 ,n2]
+  #     std: n

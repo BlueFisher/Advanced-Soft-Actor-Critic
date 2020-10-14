@@ -17,33 +17,28 @@ class ReplayServiceStub(object):
             channel: A grpc.Channel.
         """
         self.Persistence = channel.stream_stream(
-                '/ReplayService/Persistence',
+                '/replay.ReplayService/Persistence',
                 request_serializer=pingpong__pb2.Ping.SerializeToString,
                 response_deserializer=pingpong__pb2.Pong.FromString,
                 )
         self.Add = channel.unary_unary(
-                '/ReplayService/Add',
+                '/replay.ReplayService/Add',
                 request_serializer=replay__pb2.AddRequest.SerializeToString,
                 response_deserializer=ndarray__pb2.Empty.FromString,
                 )
         self.Sample = channel.unary_unary(
-                '/ReplayService/Sample',
+                '/replay.ReplayService/Sample',
                 request_serializer=ndarray__pb2.Empty.SerializeToString,
                 response_deserializer=replay__pb2.SampledData.FromString,
                 )
         self.UpdateTDError = channel.unary_unary(
-                '/ReplayService/UpdateTDError',
+                '/replay.ReplayService/UpdateTDError',
                 request_serializer=replay__pb2.UpdateTDErrorRequest.SerializeToString,
                 response_deserializer=ndarray__pb2.Empty.FromString,
                 )
         self.UpdateTransitions = channel.unary_unary(
-                '/ReplayService/UpdateTransitions',
+                '/replay.ReplayService/UpdateTransitions',
                 request_serializer=replay__pb2.UpdateTransitionsRequest.SerializeToString,
-                response_deserializer=ndarray__pb2.Empty.FromString,
-                )
-        self.Clear = channel.unary_unary(
-                '/ReplayService/Clear',
-                request_serializer=ndarray__pb2.Empty.SerializeToString,
                 response_deserializer=ndarray__pb2.Empty.FromString,
                 )
 
@@ -81,12 +76,6 @@ class ReplayServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def Clear(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
 
 def add_ReplayServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -115,14 +104,9 @@ def add_ReplayServiceServicer_to_server(servicer, server):
                     request_deserializer=replay__pb2.UpdateTransitionsRequest.FromString,
                     response_serializer=ndarray__pb2.Empty.SerializeToString,
             ),
-            'Clear': grpc.unary_unary_rpc_method_handler(
-                    servicer.Clear,
-                    request_deserializer=ndarray__pb2.Empty.FromString,
-                    response_serializer=ndarray__pb2.Empty.SerializeToString,
-            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'ReplayService', rpc_method_handlers)
+            'replay.ReplayService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
 
 
@@ -141,7 +125,7 @@ class ReplayService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.stream_stream(request_iterator, target, '/ReplayService/Persistence',
+        return grpc.experimental.stream_stream(request_iterator, target, '/replay.ReplayService/Persistence',
             pingpong__pb2.Ping.SerializeToString,
             pingpong__pb2.Pong.FromString,
             options, channel_credentials,
@@ -158,7 +142,7 @@ class ReplayService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/ReplayService/Add',
+        return grpc.experimental.unary_unary(request, target, '/replay.ReplayService/Add',
             replay__pb2.AddRequest.SerializeToString,
             ndarray__pb2.Empty.FromString,
             options, channel_credentials,
@@ -175,7 +159,7 @@ class ReplayService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/ReplayService/Sample',
+        return grpc.experimental.unary_unary(request, target, '/replay.ReplayService/Sample',
             ndarray__pb2.Empty.SerializeToString,
             replay__pb2.SampledData.FromString,
             options, channel_credentials,
@@ -192,7 +176,7 @@ class ReplayService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/ReplayService/UpdateTDError',
+        return grpc.experimental.unary_unary(request, target, '/replay.ReplayService/UpdateTDError',
             replay__pb2.UpdateTDErrorRequest.SerializeToString,
             ndarray__pb2.Empty.FromString,
             options, channel_credentials,
@@ -209,25 +193,8 @@ class ReplayService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/ReplayService/UpdateTransitions',
+        return grpc.experimental.unary_unary(request, target, '/replay.ReplayService/UpdateTransitions',
             replay__pb2.UpdateTransitionsRequest.SerializeToString,
-            ndarray__pb2.Empty.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def Clear(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/ReplayService/Clear',
-            ndarray__pb2.Empty.SerializeToString,
             ndarray__pb2.Empty.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

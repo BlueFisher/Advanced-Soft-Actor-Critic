@@ -1,4 +1,5 @@
 syntax = "proto3";
+package learner;
 
 import "ndarray.proto";
 import "pingpong.proto";
@@ -6,7 +7,8 @@ import "pingpong.proto";
 service LearnerService {
   rpc Persistence(stream Ping) returns (stream Pong);
 
-  rpc GetModelAbsDir(Empty) returns (ModelAbsDir);
+  rpc RegisterReplay(Empty) returns (RegisterReplayResponse);
+  rpc RegisterActor(Empty) returns (RegisterActorResponse);
 
   rpc GetAction(GetActionRequest) returns (Action);
   rpc GetPolicyVariables(Empty) returns (NNVariables);
@@ -16,9 +18,21 @@ service LearnerService {
   rpc UpdateNNVariables(NNVariables) returns (Empty);
 }
 
-message ModelAbsDir {
-  string dir = 1;
+message RegisterReplayResponse{
+  string model_abs_dir = 1;
+
+  string reset_config_json = 2;
+  string replay_config_json = 3;
+  string sac_config_json = 4;
+}
+
+message RegisterActorResponse{
+  string model_abs_dir = 1;
   int32 unique_id = 2;
+
+  string reset_config_json = 3;
+  string replay_config_json = 4;
+  string sac_config_json = 5;
 }
 
 message GetActionRequest {
