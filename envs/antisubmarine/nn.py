@@ -60,7 +60,7 @@ class ModelObservation(m.ModelBaseObservation):
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(130)
+            tf.keras.layers.Dense(129)
         ])
 
     def call(self, state):

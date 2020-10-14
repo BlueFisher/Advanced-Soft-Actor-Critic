@@ -9,6 +9,7 @@ import time
 from queue import Full, Queue
 from concurrent import futures
 from pathlib import Path
+import json
 
 import grpc
 import numpy as np
@@ -180,8 +181,9 @@ class Learner:
             config['base_config']['n_agents'] = self.cmd_args.agents
 
         self.config = config['base_config']
-        sac_config = config['sac_config']
+        self.sac_config = config['sac_config']
         self.reset_config = config['reset_config']
+        self.replay_config = config['replay_config']
 
         # Get name from evolver registry
         evolver_register_response = None
@@ -255,7 +257,7 @@ class Learner:
                                model=custom_nn_model,
                                last_ckpt=self.last_ckpt,
 
-                               **sac_config)
+                               **self.sac_config)
 
         self.sac_bak = SAC_DS_Base(train_mode=False,
                                    obs_dims=self.obs_dims,
@@ -265,18 +267,26 @@ class Learner:
                                    model=custom_nn_model,
                                    last_ckpt=self.last_ckpt,
 
-                                   **sac_config)
+                                   **self.sac_config)
 
         self._update_sac_bak()
         self.logger.info(f'sac_learner initialized')
 
     _unique_id = -1
 
-    # For actors
-    def _get_model_abs_dir(self):
+    # For actors and replay
+    def _get_register_result(self, need_unique_id):
         if self.registered:
-            self._unique_id += 1
-            return str(self.model_abs_dir), self._unique_id
+            result = (str(self.model_abs_dir),
+                      self.reset_config,
+                      self.replay_config,
+                      self.sac_config)
+
+            if need_unique_id:
+                self._unique_id += 1
+                return (*result, self._unique_id)
+            else:
+                return result
 
     def _get_policy_variables(self):
         with self._sac_bak_lock:
@@ -485,7 +495,6 @@ class Learner:
         self.logger.info(f'{iteration}, {time_elapse:.2f}, R {rewards}')
 
     def _run_training_client(self):
-        self._stub.clear_replay_buffer()
         sample_data_buffer = SampledDataBuffer(self._stub.get_sampled_data)
         update_data_buffer = UpdateDataBuffer(self._stub.update_td_error,
                                               self._stub.update_transitions)
@@ -533,7 +542,8 @@ class Learner:
         t_evaluation = threading.Thread(target=self._policy_evaluation, daemon=True)
         t_evaluation.start()
 
-        servicer = LearnerService(self._get_model_abs_dir,
+        servicer = LearnerService(self._get_register_result,
+
                                   self._get_action,
                                   self._get_policy_variables,
                                   self._get_nn_variables,
@@ -567,39 +577,89 @@ class Learner:
 
 class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
     def __init__(self,
-                 get_model_abs_dir,
+                 get_register_result,
+
                  get_action,
                  get_policy_variables,
                  get_nn_variables,
                  udpate_nn_variables,
                  get_td_error):
-        self._get_model_abs_dir = get_model_abs_dir
+        self._get_register_result = get_register_result
+
         self._get_action = get_action
         self._get_policy_variables = get_policy_variables
         self._get_nn_variables = get_nn_variables
         self._udpate_nn_variables = udpate_nn_variables
         self._get_td_error = get_td_error
 
-        self._peer_set = PeerSet(logging.getLogger('ds.learner.service'))
+        self._logger = logging.getLogger('ds.evolver.service')
+        self._peer_set = PeerSet(self._logger)
+        self._replay = None
+        self._actors = set()
 
     def _record_peer(self, context):
+        peer = context.peer()
+
         def _unregister_peer():
+            if peer == self._replay:
+                self._replay = None
+                self._logger.warning(f'Replay {peer} disconnected')
+            elif peer in self._actors:
+                self._actors.remove(peer)
+                self._logger.warning(f'Actor {peer} disconnected')
             self._peer_set.disconnect(context.peer())
+
         context.add_callback(_unregister_peer)
-        self._peer_set.connect(context.peer())
+        self._peer_set.connect(peer)
 
     def Persistence(self, request_iterator, context):
         self._record_peer(context)
         for request in request_iterator:
             yield Pong(time=int(time.time() * 1000))
 
-    def GetModelAbsDir(self, request, context):
-        dir_id = self._get_model_abs_dir()
-        if dir_id is not None:
-            _dir, _id = dir_id
-            return learner_pb2.ModelAbsDir(dir=_dir, unique_id=_id)
+    def RegisterReplay(self, request, context):
+        peer = context.peer()
+
+        if self._replay is not None:
+            self._logger.warning('Already has a replay')
+            return learner_pb2.RegisterReplayResponse()
+
+        self._replay = peer
+
+        res = self._get_register_result(need_unique_id=False)
+        if res is not None:
+            self._logger.info(f'Replay {peer} registered')
+            (model_abs_dir,
+             reset_config,
+             replay_config,
+             sac_config) = res
+            return learner_pb2.RegisterReplayResponse(model_abs_dir=model_abs_dir,
+                                                      reset_config_json=json.dumps(reset_config),
+                                                      replay_config_json=json.dumps(replay_config),
+                                                      sac_config_json=json.dumps(sac_config))
         else:
-            return learner_pb2.ModelAbsDir(unique_id=-1)
+            return learner_pb2.RegisterReplayResponse()
+
+    def RegisterActor(self, request, context):
+        peer = context.peer()
+
+        self._actors.add(peer)
+
+        res = self._get_register_result(need_unique_id=True)
+        if res is not None:
+            self._logger.info(f'Actor {peer} registered')
+            (model_abs_dir,
+             reset_config,
+             replay_config,
+             sac_config,
+             _id) = res
+            return learner_pb2.RegisterActorResponse(model_abs_dir=model_abs_dir,
+                                                     unique_id=_id,
+                                                     reset_config_json=json.dumps(reset_config),
+                                                     replay_config_json=json.dumps(replay_config),
+                                                     sac_config_json=json.dumps(sac_config))
+        else:
+            return learner_pb2.RegisterActorResponse(unique_id=-1)
 
     # From actor
     def GetAction(self, request: learner_pb2.GetActionRequest, context):
@@ -715,11 +775,6 @@ class StubController:
             replay_pb2.UpdateTransitionsRequest(pointers=ndarray_to_proto(pointers),
                                                 key=key,
                                                 data=ndarray_to_proto(data)))
-
-    # To replay
-    @rpc_error_inspector
-    def clear_replay_buffer(self):
-        self._replay_stub.Clear(Empty())
 
     @rpc_error_inspector
     def register_to_evolver(self):

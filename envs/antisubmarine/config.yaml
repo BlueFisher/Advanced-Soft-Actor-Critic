@@ -13,7 +13,7 @@ default:
 
   sac_config:
     burn_in_step: 10
-    n_step: 5
+    n_step: 3
     use_rnn: true
     use_prediction: true
 
@@ -26,3 +26,7 @@ vanilla:
     use_rnn: false
     burn_in_step: 0
     use_prediction: false
+    clip_epsilon: 1.
+
+    # use_rnd: true
+    # rnd_n_sample: 30

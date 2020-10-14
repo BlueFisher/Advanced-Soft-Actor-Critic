@@ -17,37 +17,42 @@ class LearnerServiceStub(object):
             channel: A grpc.Channel.
         """
         self.Persistence = channel.stream_stream(
-                '/LearnerService/Persistence',
+                '/learner.LearnerService/Persistence',
                 request_serializer=pingpong__pb2.Ping.SerializeToString,
                 response_deserializer=pingpong__pb2.Pong.FromString,
                 )
-        self.GetModelAbsDir = channel.unary_unary(
-                '/LearnerService/GetModelAbsDir',
+        self.RegisterReplay = channel.unary_unary(
+                '/learner.LearnerService/RegisterReplay',
                 request_serializer=ndarray__pb2.Empty.SerializeToString,
-                response_deserializer=learner__pb2.ModelAbsDir.FromString,
+                response_deserializer=learner__pb2.RegisterReplayResponse.FromString,
+                )
+        self.RegisterActor = channel.unary_unary(
+                '/learner.LearnerService/RegisterActor',
+                request_serializer=ndarray__pb2.Empty.SerializeToString,
+                response_deserializer=learner__pb2.RegisterActorResponse.FromString,
                 )
         self.GetAction = channel.unary_unary(
-                '/LearnerService/GetAction',
+                '/learner.LearnerService/GetAction',
                 request_serializer=learner__pb2.GetActionRequest.SerializeToString,
                 response_deserializer=learner__pb2.Action.FromString,
                 )
         self.GetPolicyVariables = channel.unary_unary(
-                '/LearnerService/GetPolicyVariables',
+                '/learner.LearnerService/GetPolicyVariables',
                 request_serializer=ndarray__pb2.Empty.SerializeToString,
                 response_deserializer=learner__pb2.NNVariables.FromString,
                 )
         self.GetTDError = channel.unary_unary(
-                '/LearnerService/GetTDError',
+                '/learner.LearnerService/GetTDError',
                 request_serializer=learner__pb2.GetTDErrorRequest.SerializeToString,
                 response_deserializer=learner__pb2.TDError.FromString,
                 )
         self.GetNNVariables = channel.unary_unary(
-                '/LearnerService/GetNNVariables',
+                '/learner.LearnerService/GetNNVariables',
                 request_serializer=ndarray__pb2.Empty.SerializeToString,
                 response_deserializer=learner__pb2.NNVariables.FromString,
                 )
         self.UpdateNNVariables = channel.unary_unary(
-                '/LearnerService/UpdateNNVariables',
+                '/learner.LearnerService/UpdateNNVariables',
                 request_serializer=learner__pb2.NNVariables.SerializeToString,
                 response_deserializer=ndarray__pb2.Empty.FromString,
                 )
@@ -62,7 +67,13 @@ class LearnerServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetModelAbsDir(self, request, context):
+    def RegisterReplay(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RegisterActor(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -107,10 +118,15 @@ def add_LearnerServiceServicer_to_server(servicer, server):
                     request_deserializer=pingpong__pb2.Ping.FromString,
                     response_serializer=pingpong__pb2.Pong.SerializeToString,
             ),
-            'GetModelAbsDir': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetModelAbsDir,
+            'RegisterReplay': grpc.unary_unary_rpc_method_handler(
+                    servicer.RegisterReplay,
                     request_deserializer=ndarray__pb2.Empty.FromString,
-                    response_serializer=learner__pb2.ModelAbsDir.SerializeToString,
+                    response_serializer=learner__pb2.RegisterReplayResponse.SerializeToString,
+            ),
+            'RegisterActor': grpc.unary_unary_rpc_method_handler(
+                    servicer.RegisterActor,
+                    request_deserializer=ndarray__pb2.Empty.FromString,
+                    response_serializer=learner__pb2.RegisterActorResponse.SerializeToString,
             ),
             'GetAction': grpc.unary_unary_rpc_method_handler(
                     servicer.GetAction,
@@ -139,7 +155,7 @@ def add_LearnerServiceServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'LearnerService', rpc_method_handlers)
+            'learner.LearnerService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
 
 
@@ -158,14 +174,14 @@ class LearnerService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.stream_stream(request_iterator, target, '/LearnerService/Persistence',
+        return grpc.experimental.stream_stream(request_iterator, target, '/learner.LearnerService/Persistence',
             pingpong__pb2.Ping.SerializeToString,
             pingpong__pb2.Pong.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
-    def GetModelAbsDir(request,
+    def RegisterReplay(request,
             target,
             options=(),
             channel_credentials=None,
@@ -175,9 +191,26 @@ class LearnerService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/LearnerService/GetModelAbsDir',
+        return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/RegisterReplay',
             ndarray__pb2.Empty.SerializeToString,
-            learner__pb2.ModelAbsDir.FromString,
+            learner__pb2.RegisterReplayResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def RegisterActor(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/RegisterActor',
+            ndarray__pb2.Empty.SerializeToString,
+            learner__pb2.RegisterActorResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -192,7 +225,7 @@ class LearnerService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/LearnerService/GetAction',
+        return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/GetAction',
             learner__pb2.GetActionRequest.SerializeToString,
             learner__pb2.Action.FromString,
             options, channel_credentials,
@@ -209,7 +242,7 @@ class LearnerService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/LearnerService/GetPolicyVariables',
+        return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/GetPolicyVariables',
             ndarray__pb2.Empty.SerializeToString,
             learner__pb2.NNVariables.FromString,
             options, channel_credentials,
@@ -226,7 +259,7 @@ class LearnerService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/LearnerService/GetTDError',
+        return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/GetTDError',
             learner__pb2.GetTDErrorRequest.SerializeToString,
             learner__pb2.TDError.FromString,
             options, channel_credentials,
@@ -243,7 +276,7 @@ class LearnerService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/LearnerService/GetNNVariables',
+        return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/GetNNVariables',
             ndarray__pb2.Empty.SerializeToString,
             learner__pb2.NNVariables.FromString,
             options, channel_credentials,
@@ -260,7 +293,7 @@ class LearnerService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/LearnerService/UpdateNNVariables',
+        return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/UpdateNNVariables',
             learner__pb2.NNVariables.SerializeToString,
             ndarray__pb2.Empty.FromString,
             options, channel_credentials,

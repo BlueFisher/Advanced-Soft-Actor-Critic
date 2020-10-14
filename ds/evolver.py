@@ -11,7 +11,6 @@ import grpc
 import numpy as np
 
 import algorithm.config_helper as config_helper
-from algorithm.utils import generate_base_name
 
 from . import constants as C
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
@@ -64,7 +63,7 @@ class Evolver:
         if args.name is not None:
             config['base_config']['name'] = args.name
 
-        config['base_config']['name'] = generate_base_name(config['base_config']['name'], 'ds')
+        config['base_config']['name'] = config_helper.generate_base_name(config['base_config']['name'], 'ds')
         model_abs_dir = Path(root_dir).joinpath('models',
                                                 config['base_config']['scene'],
                                                 config['base_config']['name'])
@@ -97,12 +96,12 @@ class Evolver:
         with self._learner_rewards_lock:
             self._learner_rewards[peer].append(reward)
 
-            # if len(self._learner_rewards) <= 1:
-            #     return
+            if len(self._learner_rewards) <= 1:
+                return
 
             rewards = self._learner_rewards.values()
             # All learners have evaluated more than evolver_cem_length times
-            if all([len(i) == 5 for i in rewards]) or \
+            if all([len(i) == self.config['evolver_cem_length'] for i in rewards]) or \
                     (all([len(i) >= self.config['evolver_cem_min_length'] for i in rewards]) and
                      time.time() - self._last_update_nn_variable >= self.config['evolver_cem_time'] * 60):
 
@@ -203,14 +202,6 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
                  get_noise,
                  post_reward,
                  get_nn_variables):
-        self._logger = logging.getLogger('ds.evolver.service')
-        self._peer_set = PeerSet(self._logger)
-
-        self._learner_lock = threading.Lock()
-        self._learner_id = 0
-        self._learner_actors = dict()
-        self._actor_learner = dict()
-
         self.name = name
         self.max_actors_each_learner = max_actors_each_learner
 
@@ -218,6 +209,14 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
         self._get_noise = get_noise
         self._post_reward = post_reward
         self._get_nn_variables = get_nn_variables
+
+        self._logger = logging.getLogger('ds.evolver.service')
+        self._peer_set = PeerSet(self._logger)
+
+        self._learner_lock = threading.Lock()
+        self._learner_id = 0
+        self._learner_actors = dict()
+        self._actor_learner = dict()
 
     def _record_peer(self, context):
         peer = context.peer()

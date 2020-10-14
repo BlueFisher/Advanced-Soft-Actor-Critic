@@ -4,6 +4,7 @@ import threading
 import time
 from concurrent import futures
 from pathlib import Path
+import json
 
 import grpc
 import numpy as np
@@ -28,17 +29,14 @@ class Replay(object):
 
         self.logger = logging.getLogger('ds.replay')
 
-        self.config, net_config, replay_config, sac_config = self._init_config(root_dir, config_dir, args)
+        constant_config = self._init_constant_config(root_dir, config_dir, args)
+        net_config = constant_config['net_config']
 
-        self._replay_buffer = PrioritizedReplayBuffer(**replay_config)
+        self._stub = StubController(net_config['learner_host'],
+                                    net_config['learner_port'],
+                                    self.close)
 
-        self._stub = StubController(net_config['learner_host'], net_config['learner_port'])
-
-        self.use_rnn = sac_config['use_rnn']
-        self.burn_in_step = sac_config['burn_in_step']
-        self.n_step = sac_config['n_step']
-
-        self._set_logger()
+        self._init(constant_config)
 
         try:
             self._run_replay_server(net_config['replay_port'])
@@ -46,7 +44,7 @@ class Replay(object):
             self.logger.warning('KeyboardInterrupt in _run_replay_server')
             self.close()
 
-    def _init_config(self, root_dir, config_dir, args):
+    def _init_constant_config(self, root_dir, config_dir, args):
         config_abs_dir = Path(root_dir).joinpath(config_dir)
         config_abs_path = config_abs_dir.joinpath('config_ds.yaml')
         default_config_abs_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
@@ -71,30 +69,41 @@ class Replay(object):
             config['net_config']['learner_host'] = f'{learner_host}-{host_id}.{learner_host}'
             config['net_config']['replay_host'] = f'{replay_host}-{host_id}.{replay_host}'
 
-        config_helper.display_config(config, self.logger)
+        return config
 
-        return (config['base_config'],
-                config['net_config'],
-                config['replay_config'],
-                config['sac_config'])
+    def _init(self, config):
+        register_response = None
+        self.logger.info('Registering...')
+        while register_response is None:
+            register_response = self._stub.register_to_learner()
+            if register_response:
+                self.logger.info('Registered')
+                break
 
-    def _set_logger(self):
-        """
-        Set logger file if available
-        """
+            time.sleep(C.RECONNECTION_TIME)
+
+        (model_abs_dir,
+         reset_config,
+         replay_config,
+         sac_config) = register_response
+
+        config['reset_config'] = reset_config
+        config['replay_config'] = replay_config
+        config['sac_config'] = sac_config
+
+        self.use_rnn = sac_config['use_rnn']
+        self.burn_in_step = sac_config['burn_in_step']
+        self.n_step = sac_config['n_step']
+
+        self._replay_buffer = PrioritizedReplayBuffer(**replay_config)
+        self._curr_percent = -1
+
         if self.cmd_args.logger_in_file:
-            self.logger.info('Waiting for model_abs_dir...')
-            model_abs_dir = None
-            while model_abs_dir is None:
-                model_abs_dir = self._stub.get_model_abs_dir()
-                if model_abs_dir is not None:
-                    logger_file = Path(model_abs_dir).joinpath('replay.log')
-                    config_helper.set_logger(logger_file)
-                    self.logger.info(f'Set to logger {logger_file}')
-                else:
-                    time.sleep(C.RECONNECTION_TIME)
+            logger_file = Path(model_abs_dir).joinpath('replay.log')
+            config_helper.set_logger(logger_file)
+            self.logger.info(f'Set to logger {logger_file}')
 
-    _curr_percent = -1
+        config_helper.display_config(config, self.logger)
 
     def _add(self,
              n_obses_list,
@@ -216,20 +225,11 @@ class Replay(object):
             mask = pointers == self._replay_buffer.get_storage_data_ids(pointers)
             self._replay_buffer.update_transitions(pointers[mask], key, data[mask])
 
-    def _clear(self):
-        self._replay_buffer.clear()
-        self._curr_percent = -1
-
-        self._set_logger()
-
-        self.logger.info('Replay buffer cleared')
-
     def _run_replay_server(self, replay_port):
         servicer = ReplayService(self._add,
                                  self._sample,
                                  self._update_td_error,
-                                 self._update_transitions,
-                                 self._clear)
+                                 self._update_transitions)
         self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS),
                                   options=[
             ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
@@ -247,12 +247,14 @@ class Replay(object):
 
 class ReplayService(replay_pb2_grpc.ReplayServiceServicer):
     def __init__(self,
-                 add, sample, update_td_error, update_transitions, clear):
+                 add,
+                 sample,
+                 update_td_error,
+                 update_transitions):
         self._add = add
         self._sample = sample
         self._update_td_error = update_td_error
         self._update_transitions = update_transitions
-        self._clear = clear
 
         self._peer_set = PeerSet(logging.getLogger('ds.replay.service'))
 
@@ -313,24 +315,31 @@ class ReplayService(replay_pb2_grpc.ReplayServiceServicer):
                                  proto_to_ndarray(request.data))
         return Empty()
 
-    def Clear(self, request, context):
-        self._clear()
-        return Empty()
-
 
 class StubController:
-    def __init__(self, learner_host, learner_port):
+    _closed = False
+
+    def __init__(self, learner_host, learner_port, close_replay):
         self._learner_channel = grpc.insecure_channel(f'{learner_host}:{learner_port}',
                                                       [('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)])
         self._learner_stub = learner_pb2_grpc.LearnerServiceStub(self._learner_channel)
 
+        self._learner_connected = False
         self._logger = logging.getLogger('ds.replay.stub')
 
+        self._close_replay = close_replay
+
+        t_learner = threading.Thread(target=self._start_learner_persistence, daemon=True)
+        t_learner.start()
+
     @rpc_error_inspector
-    def get_model_abs_dir(self):
-        response = self._learner_stub.GetModelAbsDir(Empty())
-        if response.unique_id != -1:
-            return response.dir
+    def register_to_learner(self):
+        response = self._learner_stub.RegisterReplay(Empty())
+        if response.model_abs_dir:
+            return (response.model_abs_dir,
+                    json.loads(response.reset_config_json),
+                    json.loads(response.replay_config_json),
+                    json.loads(response.sac_config_json))
 
     @rpc_error_inspector
     def get_td_error(self,
@@ -352,3 +361,31 @@ class StubController:
         response = self._learner_stub.GetTDError(request)
 
         return proto_to_ndarray(response.td_error)
+
+    def _start_learner_persistence(self):
+        def request_messages():
+            while not self._closed:
+                yield Ping(time=int(time.time() * 1000))
+                time.sleep(C.PING_INTERVAL)
+                if not self._learner_connected:
+                    break
+
+        while not self._closed:
+            try:
+                reponse_iterator = self._learner_stub.Persistence(request_messages())
+                for response in reponse_iterator:
+                    if not self._learner_connected:
+                        self._learner_connected = True
+                        self._logger.info('Learner connected')
+            except grpc.RpcError:
+                if self._learner_connected:
+                    self._learner_connected = False
+                    self._logger.error('Learner disconnected')
+                    self._close_replay()
+                    self.close()
+                    break
+            finally:
+                time.sleep(C.RECONNECTION_TIME)
+
+    def close(self):
+        self._closed = True

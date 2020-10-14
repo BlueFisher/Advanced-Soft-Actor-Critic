@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+import json
 
 import grpc
 import numpy as np
@@ -40,14 +41,14 @@ class Actor(object):
 
         try:
             evolver_register_response = None
-            self.logger.info('Registering...')
+            self.logger.info('Registering to evolver...')
             while evolver_register_response is None:
-                if not self._evolver_stub.connected:
-                    time.sleep(C.RECONNECTION_TIME)
-                    continue
                 evolver_register_response = self._evolver_stub.register()
-                if evolver_register_response is None:
-                    time.sleep(C.RECONNECTION_TIME)
+                if evolver_register_response:
+                    self.logger.info('Registered')
+                    break
+
+                time.sleep(C.RECONNECTION_TIME)
 
             (learner_host, learner_port,
              replay_host, replay_port,
@@ -112,25 +113,35 @@ class Actor(object):
         if self.cmd_args.agents is not None:
             config['base_config']['n_agents'] = self.cmd_args.agents
         if self.cmd_args.noise is not None:
-            config['sac_config']['noise'] = self.cmd_args.noise
+            config['sac_config']['noise'] = self.cmd_args.noise  # TODO
 
         self.config = config['base_config']
-        sac_config = config['sac_config']
-        self.reset_config = config['reset_config']
+
+        register_response = None
+        self.logger.info('Registering to learner...')
+        while register_response is None:
+            register_response = self._stub.register_to_learner()
+            if register_response:
+                self.logger.info('Registered')
+                break
+
+            time.sleep(C.RECONNECTION_TIME)
+
+        (model_abs_dir, _id,
+         self.reset_config,
+         replay_config,
+         sac_config) = register_response
+        self.logger.info(f'Assigned to id {_id}')
+
+        config['reset_config'] = self.reset_config
+        config['replay_config'] = replay_config
+        config['sac_config'] = sac_config
 
         # Set logger file if available
         if self.cmd_args.logger_in_file:
-            self.logger.info('Waiting for model_abs_dir and id...')
-            model_abs_dir_id = None
-            while model_abs_dir_id is None:
-                model_abs_dir_id = self._stub.get_model_abs_dir()
-                if model_abs_dir_id is not None:
-                    model_abs_dir, _id = model_abs_dir_id
-                    logger_file = Path(model_abs_dir).joinpath(f'actor-{_id}.log')
-                    config_helper.set_logger(logger_file)
-                    self.logger.info(f'Set to logger {logger_file}')
-                else:
-                    time.sleep(C.RECONNECTION_TIME)
+            logger_file = Path(model_abs_dir).joinpath(f'actor-{_id}.log')
+            config_helper.set_logger(logger_file)
+            self.logger.info(f'Set to logger {logger_file}')
 
         config_helper.display_config(config, self.logger)
 
@@ -414,10 +425,13 @@ class StubController:
         return self._replay_connected and self._learner_connected
 
     @rpc_error_inspector
-    def get_model_abs_dir(self):
-        response = self._learner_stub.GetModelAbsDir(Empty())
-        if response.unique_id != -1:
-            return response.dir, response.unique_id
+    def register_to_learner(self):
+        response = self._learner_stub.RegisterActor(Empty())
+        if response.model_abs_dir and response.unique_id != -1:
+            return (response.model_abs_dir, response.unique_id,
+                    json.loads(response.reset_config_json),
+                    json.loads(response.replay_config_json),
+                    json.loads(response.sac_config_json))
 
     @rpc_error_inspector
     def add_transitions(self,

@@ -1,4 +1,5 @@
 syntax = "proto3";
+package evolver;
 
 import "ndarray.proto";
 import "pingpong.proto";
