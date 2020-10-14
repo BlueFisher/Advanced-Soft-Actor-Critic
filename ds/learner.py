@@ -272,7 +272,28 @@ class Learner:
         self._update_sac_bak()
         self.logger.info(f'sac_learner initialized')
 
+    def _get_replay_register_result(self):
+        if self.registered:
+            return (str(self.model_abs_dir),
+                    self.reset_config,
+                    self.replay_config,
+                    self.sac_config)
+
     _unique_id = -1
+
+    def _get_actor_register_result(self, actors_num):
+        if self.registered:
+            self._unique_id += 1
+
+            noise = self.config['noise_increasing_rate'] * (actors_num - 1)
+            actor_sac_config = self.sac_config
+            actor_sac_config['noise'] = min(noise, self.config['noise_max'])
+
+            return (str(self.model_abs_dir),
+                    self._unique_id,
+                    self.reset_config,
+                    self.replay_config,
+                    actor_sac_config)
 
     # For actors and replay
     def _get_register_result(self, need_unique_id):
@@ -542,7 +563,8 @@ class Learner:
         t_evaluation = threading.Thread(target=self._policy_evaluation, daemon=True)
         t_evaluation.start()
 
-        servicer = LearnerService(self._get_register_result,
+        servicer = LearnerService(self._get_replay_register_result,
+                                  self._get_actor_register_result,
 
                                   self._get_action,
                                   self._get_policy_variables,
@@ -577,14 +599,16 @@ class Learner:
 
 class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
     def __init__(self,
-                 get_register_result,
+                 get_replay_register_result,
+                 get_actor_register_result,
 
                  get_action,
                  get_policy_variables,
                  get_nn_variables,
                  udpate_nn_variables,
                  get_td_error):
-        self._get_register_result = get_register_result
+        self._get_replay_register_result = get_replay_register_result
+        self._get_actor_register_result = get_actor_register_result
 
         self._get_action = get_action
         self._get_policy_variables = get_policy_variables
@@ -626,7 +650,7 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
         self._replay = peer
 
-        res = self._get_register_result(need_unique_id=False)
+        res = self._get_replay_register_result()
         if res is not None:
             self._logger.info(f'Replay {peer} registered')
             (model_abs_dir,
@@ -645,14 +669,14 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
         self._actors.add(peer)
 
-        res = self._get_register_result(need_unique_id=True)
+        res = self._get_actor_register_result(len(self._actors))
         if res is not None:
             self._logger.info(f'Actor {peer} registered')
             (model_abs_dir,
+             _id,
              reset_config,
              replay_config,
-             sac_config,
-             _id) = res
+             sac_config) = res
             return learner_pb2.RegisterActorResponse(model_abs_dir=model_abs_dir,
                                                      unique_id=_id,
                                                      reset_config_json=json.dumps(reset_config),

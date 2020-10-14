@@ -88,10 +88,6 @@ class Evolver:
             else:
                 del self._learner_rewards[peer]
 
-    def _get_noise(self, actors_num):
-        noise = self.config['noise_increasing_rate'] * (actors_num - 1)
-        return min(noise, self.config['noise_max'])
-
     def _post_reward(self, reward, peer):
         with self._learner_rewards_lock:
             self._learner_rewards[peer].append(reward)
@@ -155,7 +151,6 @@ class Evolver:
         self.servicer = EvolverService(self.config['name'],
                                        self.config['max_actors_each_learner'],
                                        self._learner_connected,
-                                       self._get_noise,
                                        self._post_reward,
                                        self._get_nn_variables)
         self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS))
@@ -199,14 +194,12 @@ class LearnerStubController:
 
 class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
     def __init__(self, name, max_actors_each_learner, learner_connected,
-                 get_noise,
                  post_reward,
                  get_nn_variables):
         self.name = name
         self.max_actors_each_learner = max_actors_each_learner
 
         self._learner_connected = learner_connected
-        self._get_noise = get_noise
         self._post_reward = post_reward
         self._get_nn_variables = get_nn_variables
 
@@ -322,12 +315,10 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
         learner_id = info['id']
         learner_host, learner_port = info['learner_host'], info['learner_port']
         replay_host, replay_port = info['replay_host'], info['replay_port']
-        noise = self._get_noise(assigned_learner_actors_num)
 
         log = f'Actor {peer} registered to ' +\
             f'learner (id={learner_id}) {learner_host}:{learner_port}, ' +\
-            f'replay {replay_host}:{replay_port}, ' +\
-            f'noise={noise:.2f}'
+            f'replay {replay_host}:{replay_port}'
         self._logger.info(log)
 
         self.display_learner_actors()
@@ -336,8 +327,7 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
                                                  learner_host=learner_host,
                                                  learner_port=learner_port,
                                                  replay_host=replay_host,
-                                                 replay_port=replay_port,
-                                                 noise=noise)
+                                                 replay_port=replay_port)
 
     # From learner
     def PostReward(self, request: evolver_pb2.PostRewardToEvolverRequest, context):
