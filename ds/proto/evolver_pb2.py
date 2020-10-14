@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\revolver.proto\x12\x07\x65volver\x1a\rndarray.proto\x1a\x0epingpong.proto\"n\n\x16RegisterLearnerRequest\x12\x14\n\x0clearner_host\x18\x02 \x01(\t\x12\x14\n\x0clearner_port\x18\x03 \x01(\x05\x12\x13\n\x0breplay_host\x18\x04 \x01(\t\x12\x13\n\x0breplay_port\x18\x05 \x01(\x05\"3\n\x17RegisterLearnerResponse\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\n\n\x02id\x18\x02 \x01(\x05\"\x8f\x01\n\x15RegisterActorResponse\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x14\n\x0clearner_host\x18\x02 \x01(\t\x12\x14\n\x0clearner_port\x18\x03 \x01(\x05\x12\x13\n\x0breplay_host\x18\x04 \x01(\t\x12\x13\n\x0breplay_port\x18\x05 \x01(\x05\x12\r\n\x05noise\x18\x06 \x01(\x02\",\n\x1aPostRewardToEvolverRequest\x12\x0e\n\x06reward\x18\x01 \x01(\x02\"H\n\x16GetNNVariablesResponse\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x1b\n\tvariables\x18\x02 \x03(\x0b\x32\x08.NDarray2\xb6\x02\n\x0e\x45volverService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12T\n\x0fRegisterLearner\x12\x1f.evolver.RegisterLearnerRequest\x1a .evolver.RegisterLearnerResponse\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.evolver.RegisterActorResponse\x12\x39\n\nPostReward\x12#.evolver.PostRewardToEvolverRequest\x1a\x06.Empty\x12\x39\n\x0eGetNNVariables\x12\x06.Empty\x1a\x1f.evolver.GetNNVariablesResponseb\x06proto3'
+  serialized_pb=b'\n\revolver.proto\x12\x07\x65volver\x1a\rndarray.proto\x1a\x0epingpong.proto\"n\n\x16RegisterLearnerRequest\x12\x14\n\x0clearner_host\x18\x02 \x01(\t\x12\x14\n\x0clearner_port\x18\x03 \x01(\x05\x12\x13\n\x0breplay_host\x18\x04 \x01(\t\x12\x13\n\x0breplay_port\x18\x05 \x01(\x05\"3\n\x17RegisterLearnerResponse\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\n\n\x02id\x18\x02 \x01(\x05\"\x80\x01\n\x15RegisterActorResponse\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x14\n\x0clearner_host\x18\x02 \x01(\t\x12\x14\n\x0clearner_port\x18\x03 \x01(\x05\x12\x13\n\x0breplay_host\x18\x04 \x01(\t\x12\x13\n\x0breplay_port\x18\x05 \x01(\x05\",\n\x1aPostRewardToEvolverRequest\x12\x0e\n\x06reward\x18\x01 \x01(\x02\"H\n\x16GetNNVariablesResponse\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x1b\n\tvariables\x18\x02 \x03(\x0b\x32\x08.NDarray2\xb6\x02\n\x0e\x45volverService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12T\n\x0fRegisterLearner\x12\x1f.evolver.RegisterLearnerRequest\x1a .evolver.RegisterLearnerResponse\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.evolver.RegisterActorResponse\x12\x39\n\nPostReward\x12#.evolver.PostRewardToEvolverRequest\x1a\x06.Empty\x12\x39\n\x0eGetNNVariables\x12\x06.Empty\x1a\x1f.evolver.GetNNVariablesResponseb\x06proto3'
   ,
   dependencies=[ndarray__pb2.DESCRIPTOR,pingpong__pb2.DESCRIPTOR,])
 
@@ -163,13 +163,6 @@ _REGISTERACTORRESPONSE = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='noise', full_name='evolver.RegisterActorResponse.noise', index=5,
-      number=6, type=2, cpp_type=6, label=1,
-      has_default_value=False, default_value=float(0),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -183,7 +176,7 @@ _REGISTERACTORRESPONSE = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=223,
-  serialized_end=366,
+  serialized_end=351,
 )
 
 
@@ -214,8 +207,8 @@ _POSTREWARDTOEVOLVERREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=368,
-  serialized_end=412,
+  serialized_start=353,
+  serialized_end=397,
 )
 
 
@@ -253,8 +246,8 @@ _GETNNVARIABLESRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=414,
-  serialized_end=486,
+  serialized_start=399,
+  serialized_end=471,
 )
 
 _GETNNVARIABLESRESPONSE.fields_by_name['variables'].message_type = ndarray__pb2._NDARRAY
@@ -309,8 +302,8 @@ _EVOLVERSERVICE = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=489,
-  serialized_end=799,
+  serialized_start=474,
+  serialized_end=784,
   methods=[
   _descriptor.MethodDescriptor(
     name='Persistence',
