@@ -59,8 +59,8 @@ class ModelObservation(m.ModelBaseObservation):
 
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(129)
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(7)
         ])
 
     def call(self, state):
@@ -71,7 +71,7 @@ class ModelObservation(m.ModelBaseObservation):
     def get_loss(self, state, obs_list):
         approx_obs = self.dense(state)
 
-        obs = obs_list[0]
+        obs = obs_list[0][..., :7]
 
         mse = tf.losses.MeanSquaredError()
 
@@ -106,17 +106,15 @@ class ModelRep(m.ModelBaseLSTMRep):
             tf.keras.layers.Dense(64, activation=tf.nn.relu)
         ])
 
-        self.dense2 = tf.keras.Sequential([
-            tf.keras.layers.Dense(64)
-        ])
-
     def call(self, obs_list, pre_action, rnn_state):
-        obs = tf.concat([obs_list[0][..., :-2], pre_action], axis=-1)
-        obs = self.dense(obs)
+        vec_obs = tf.concat([obs_list[0][..., :7], pre_action], axis=-1)
+        buoy_obs = obs_list[0][..., 7:-2]
+        # obs = self.dense(obs)
 
         rnn_state = tf.split(rnn_state, num_or_size_splits=2, axis=-1)
-        outputs, *next_rnn_state = self.lstm(obs, initial_state=rnn_state)
-        state = self.dense2(tf.concat([obs, outputs], axis=-1))
+        outputs, *next_rnn_state = self.lstm(vec_obs, initial_state=rnn_state)
+
+        state = tf.concat([outputs, self.dense(buoy_obs)], axis=-1)
 
         return state, tf.concat(next_rnn_state, axis=-1)
 

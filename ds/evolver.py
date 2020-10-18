@@ -34,8 +34,9 @@ class Evolver:
          model_abs_dir,
          config_abs_dir) = self._init_config(root_dir, config_dir, args)
 
-        self._learner_rewards = dict()
-        self._learner_rewards_lock = threading.Lock()
+        self._learners = dict()
+        self._learner_lock = threading.Lock()
+
         self._last_update_nn_variable = time.time()
         self._saved_nn_variables_mean = None
         self._saved_nn_variables_std = None
@@ -82,27 +83,33 @@ class Evolver:
                 config_abs_dir)
 
     def _learner_connected(self, peer, connected):
-        with self._learner_rewards_lock:
+        with self._learner_lock:
             if connected:
-                self._learner_rewards[peer] = deque(maxlen=self.config['evolver_cem_length'])
+                self._learners[peer] = {
+                    'rewards': deque(maxlen=self.config['evolver_cem_length']),
+                    'selected': 0
+                }
             else:
-                del self._learner_rewards[peer]
+                del self._learners[peer]
 
     def _post_reward(self, reward, peer):
-        with self._learner_rewards_lock:
-            self._learner_rewards[peer].append(reward)
+        with self._learner_lock:
+            self._learners[peer]['rewards'].append(reward)
 
-            if len(self._learner_rewards) <= 1:
+            # If there is only one learner, return
+            if len(self._learners) <= 1:
                 return
 
-            rewards = self._learner_rewards.values()
+            rewards_length_map = map(lambda x: len(x['rewards']), self._learners.values())
             # All learners have evaluated more than evolver_cem_length times
-            if all([len(i) == self.config['evolver_cem_length'] for i in rewards]) or \
-                    (all([len(i) >= self.config['evolver_cem_min_length'] for i in rewards]) and
+            # or all learners have evaluated more than evolver_cem_min_length times and
+            #   it has been more than evolver_cem_time mins since last evolution
+            if all([l == self.config['evolver_cem_length'] for l in rewards_length_map]) or \
+                    (all([l >= self.config['evolver_cem_min_length'] for l in rewards_length_map]) and
                      time.time() - self._last_update_nn_variable >= self.config['evolver_cem_time'] * 60):
 
                 # Sort learners by the mean of evaluated rewards
-                learner_reward = [(l, float(np.mean(r))) for l, r in self._learner_rewards.items()]
+                learner_reward = [(k, float(np.mean(v['rewards']))) for k, v in self._learners.items()]
                 learner_reward.sort(key=lambda i: i[1], reverse=True)
 
                 # Select top evolver_cem_best learners and get their nn variables
@@ -112,6 +119,7 @@ class Evolver:
                 best_learners = [i[0] for i in learner_reward[:best_size]]
                 nn_variables_list = list()
                 for learner in best_learners:
+                    self._learners[learner]['selected'] += 1
                     stub = self.servicer.get_learner_stub(learner)
                     if stub:
                         nn_variables_list.append(stub.get_nn_variables())
@@ -123,18 +131,23 @@ class Evolver:
                 self._saved_nn_variables_mean, self._saved_nn_variables_std = mean, std
 
                 # Dispatch all nn variables
-                for learner in self.servicer.learners:
+                for learner in self._learners.keys():
                     stub = self.servicer.get_learner_stub(learner)
                     if stub:
                         self._update_nn_variables_executors.submit(update_nn_variables,
                                                                    stub, mean, std)
 
-                    self._learner_rewards[learner].clear()
+                    self._learners[learner]['rewards'].clear()
 
                 self._last_update_nn_variable = time.time()
 
                 _best_learner_ids = [str(self.servicer.get_learner_id(l)) for l in best_learners]
-                self.logger.info(f'Selected {",".join(_best_learner_ids)} learners and dispatched all nn variables')
+                self.logger.info(f'Selected {",".join(_best_learner_ids)} learners')
+
+                _learner_id_selecteds = [(str(self.servicer.get_learner_id(l)), v['selected']) for l, v in self._learners.items()]
+                _learner_id_selecteds.sort(key=lambda x: x[1], reverse=True)
+                _learner_id_selecteds = [f'{i[0]}({i[1]})' for i in _learner_id_selecteds]
+                self.logger.info(f'Learners selection: {", ".join(_learner_id_selecteds)}')
 
                 std = [(np.min(s), np.mean(s), np.max(s)) for s in std]
                 _min, _mean, _max = [np.mean(s) for s in zip(*std)]
@@ -307,8 +320,6 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
 
             self._learner_actors[assigned_learner].add(peer)
             self._actor_learner[peer] = assigned_learner
-
-            assigned_learner_actors_num = len(self._learner_actors[assigned_learner])
 
         info = self._peer_set.get_info(assigned_learner)
 

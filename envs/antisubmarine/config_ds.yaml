@@ -27,11 +27,17 @@ default:
     save_model_per_minute: 20 # Save model every N minutes
 
     use_rnn: true
-    burn_in_step: 20
     use_prediction: true
 
-    n_step: 5
-    v_lambda: 0.9
+    random_params:
+      n_step:
+        in: [2, 3, 4]
+      burn_in_step:
+        in: [10, 20, 30]
+      v_rho:
+        truncated: [1.0, 1.5]
+      v_c:
+        truncated: [1.0, 1.5]
 
   replay_config:
     batch_size: 1024
