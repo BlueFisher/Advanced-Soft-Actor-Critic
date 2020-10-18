@@ -12,6 +12,8 @@ default:
     force_reset: true
 
   sac_config:
+    save_model_per_step: 1000
+
     burn_in_step: 10
     n_step: 3
     use_rnn: true
@@ -27,6 +29,5 @@ vanilla:
     burn_in_step: 0
     use_prediction: false
     clip_epsilon: 1.
-
     # use_rnd: true
     # rnd_n_sample: 30
