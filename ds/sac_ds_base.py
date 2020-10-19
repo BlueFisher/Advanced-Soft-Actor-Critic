@@ -4,7 +4,6 @@ import time
 from pathlib import Path
 
 import numpy as np
-from numpy.core.fromnumeric import var
 import tensorflow as tf
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -235,23 +234,23 @@ class SAC_DS_Base(SAC_Base):
             self.save_model()
             self._last_save_time = time.time()
 
-        n_pi_probs = self.get_n_probs(n_obses_list,
-                                      n_actions,
-                                      rnn_state=rnn_state if self.use_rnn else None).numpy()
+        n_pi_probs_tensor = self.get_n_probs(n_obses_list,
+                                             n_actions,
+                                             rnn_state=rnn_state if self.use_rnn else None)
 
         td_error = self.get_td_error(n_obses_list=n_obses_list,
                                      n_actions=n_actions,
                                      n_rewards=n_rewards,
                                      next_obs_list=next_obs_list,
                                      n_dones=n_dones,
-                                     n_mu_probs=n_pi_probs,
+                                     n_mu_probs=n_pi_probs_tensor,
                                      rnn_state=rnn_state if self.use_rnn else None).numpy()
 
         update_data = list()
 
         pointers_list = [pointers + i for i in range(0, self.burn_in_step + self.n_step)]
         tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-        pi_probs = n_pi_probs.reshape(-1)
+        pi_probs = n_pi_probs_tensor.numpy().reshape(-1)
         update_data.append((tmp_pointers, 'mu_prob', pi_probs))
 
         if self.use_rnn:

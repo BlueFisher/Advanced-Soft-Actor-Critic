@@ -147,7 +147,7 @@ class Evolver:
                 _learner_id_selecteds = [(str(self.servicer.get_learner_id(l)), v['selected']) for l, v in self._learners.items()]
                 _learner_id_selecteds.sort(key=lambda x: x[1], reverse=True)
                 _learner_id_selecteds = [f'{i[0]}({i[1]})' for i in _learner_id_selecteds]
-                self.logger.info(f'Learners selection: {", ".join(_learner_id_selecteds)}')
+                self.logger.info(f'Learner id (selected): {", ".join(_learner_id_selecteds)}')
 
                 std = [(np.min(s), np.mean(s), np.max(s)) for s in std]
                 _min, _mean, _max = [np.mean(s) for s in zip(*std)]

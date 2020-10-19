@@ -1205,9 +1205,9 @@ class SAC_Base(object):
             self._last_save_time = time.time()
 
         if self.use_n_step_is:
-            n_pi_probs = self.get_n_probs(n_obses_list,
-                                          n_actions,
-                                          rnn_state=rnn_state if self.use_rnn else None).numpy()
+            n_pi_probs_tensor = self.get_n_probs(n_obses_list,
+                                                 n_actions,
+                                                 rnn_state=rnn_state if self.use_rnn else None)
 
         # Update td_error
         if self.use_priority:
@@ -1216,7 +1216,7 @@ class SAC_Base(object):
                                          n_rewards=n_rewards,
                                          next_obs_list=next_obs_list,
                                          n_dones=n_dones,
-                                         n_mu_probs=n_pi_probs if self.use_n_step_is else None,
+                                         n_mu_probs=n_pi_probs_tensor if self.use_n_step_is else None,
                                          rnn_state=rnn_state if self.use_rnn else None).numpy()
             self.replay_buffer.update(pointers, td_error)
 
@@ -1232,7 +1232,7 @@ class SAC_Base(object):
         if self.use_n_step_is:
             pointers_list = [pointers + i for i in range(0, self.burn_in_step + self.n_step)]
             tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-            pi_probs = n_pi_probs.reshape(-1)
+            pi_probs = n_pi_probs_tensor.numpy().reshape(-1)
             self.replay_buffer.update_transitions(tmp_pointers, 'mu_prob', pi_probs)
 
         self._increase_global_step()

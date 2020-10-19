@@ -1,11 +1,11 @@
 import importlib
+import json
 import logging
 import logging.handlers
 import sys
 import threading
 import time
 from pathlib import Path
-import json
 
 import grpc
 import numpy as np
