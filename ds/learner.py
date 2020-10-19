@@ -1,4 +1,5 @@
 import importlib
+import json
 import logging
 import os
 import shutil
@@ -6,10 +7,9 @@ import socket
 import sys
 import threading
 import time
-from queue import Full, Queue
 from concurrent import futures
 from pathlib import Path
-import json
+from queue import Full, Queue
 
 import grpc
 import numpy as np

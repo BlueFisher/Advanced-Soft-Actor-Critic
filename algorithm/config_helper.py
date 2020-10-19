@@ -1,9 +1,9 @@
 import logging
 import logging.handlers
-import time
+import os
 import random
 import string
-import os
+import time
 
 import numpy as np
 import yaml
