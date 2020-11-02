@@ -267,6 +267,8 @@ class SAC_Base(object):
             self.model_observation = model.ModelObservation(state_dim, self.obs_dims,
                                                             self.use_extra_data)
 
+            self.optimizer_prediction = adam_optimizer()
+
         if self.use_curiosity:
             self.model_forward = model.ModelForward(state_dim, self.action_dim)
             self.optimizer_forward = adam_optimizer()
@@ -330,6 +332,7 @@ class SAC_Base(object):
             ckpt_saved['model_transition'] = self.model_transition
             ckpt_saved['model_reward'] = self.model_reward
             ckpt_saved['model_observation'] = self.model_observation
+            ckpt_saved['optimizer_prediction'] = self.optimizer_prediction
 
         if self.use_auto_alpha:
             ckpt_saved['optimizer_alpha'] = self.optimizer_alpha
@@ -676,7 +679,7 @@ class SAC_Base(object):
             loss_q1 = 0.5 * tf.reduce_mean(loss_q1)
             loss_q2 = 0.5 * tf.reduce_mean(loss_q2)
 
-            loss_rep = loss_rep_q = loss_q1 + loss_q2
+            loss_rep_q = loss_q1 + loss_q2
 
             loss_mse = tf.keras.losses.MeanSquaredError()
             if self.use_prediction:
@@ -701,7 +704,7 @@ class SAC_Base(object):
                 loss_obs = 0.5 * self.model_observation.get_loss(m_states[:, self.burn_in_step:, ...],
                                                                  [m_obses[:, self.burn_in_step:, ...] for m_obses in m_obses_list])
 
-                loss_rep = loss_rep_q + loss_transition + loss_reward + loss_obs
+                loss_prediction = loss_transition + loss_reward + loss_obs
 
             if self.use_curiosity:
                 approx_next_n_states = self.model_forward(n_states[:, self.burn_in_step:, ...],
@@ -744,12 +747,29 @@ class SAC_Base(object):
         self.optimizer_q2.apply_gradients(zip(grads_q2, self.model_q2.trainable_variables))
 
         rep_variables = self.model_rep.trainable_variables
+        grads_rep = tape.gradient(loss_rep_q, rep_variables)
+
         if self.use_prediction:
-            rep_variables += self.model_transition.trainable_variables
-            rep_variables += self.model_reward.trainable_variables
-            rep_variables += self.model_observation.trainable_variables
-        grads_rep = tape.gradient(loss_rep, rep_variables)
+            grads_rep_preds = [tape.gradient(loss_transition, rep_variables),
+                               tape.gradient(loss_reward, rep_variables),
+                               tape.gradient(loss_obs, rep_variables)]
+
+            for i in range(len(grads_rep)):
+                grad_rep = grads_rep[i]
+                grad_rep_norm = tf.norm(grad_rep)
+                for grads_rep_pred in grads_rep_preds:
+                    grad_rep_pred = grads_rep_pred[i]
+                    cos = tf.reduce_sum(grad_rep * grad_rep_pred) / (grad_rep_norm * tf.norm(grad_rep_pred))
+                    grads_rep[i] += tf.maximum(cos, 0) * grad_rep_pred
+
         self.optimizer_rep.apply_gradients(zip(grads_rep, rep_variables))
+
+        if self.use_prediction:
+            prediction_variables = self.model_transition.trainable_variables
+            prediction_variables += self.model_reward.trainable_variables
+            prediction_variables += self.model_observation.trainable_variables
+            grads_prediction = tape.gradient(loss_prediction, prediction_variables)
+            self.optimizer_prediction.apply_gradients(zip(grads_prediction, prediction_variables))
 
         if self.use_curiosity:
             grads_forward = tape.gradient(loss_forward, self.model_forward.trainable_variables)
@@ -773,7 +793,6 @@ class SAC_Base(object):
                 tf.summary.scalar('loss/y', tf.reduce_mean(y), step=self.global_step)
                 tf.summary.scalar('loss/rep_q', loss_rep_q, step=self.global_step)
                 tf.summary.scalar('loss/q', tf.reduce_mean([loss_q1, loss_q2]), step=self.global_step)
-                tf.summary.scalar('loss/policy', loss_policy, step=self.global_step)
                 tf.summary.scalar('loss/entropy', tf.reduce_mean(policy.entropy()), step=self.global_step)
                 tf.summary.scalar('loss/alpha', alpha, step=self.global_step)
 
