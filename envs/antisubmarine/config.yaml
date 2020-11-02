@@ -5,7 +5,6 @@ default:
       linux: /data/linux-RL-Envs/RL-Envs.x86_64
 
     scene: Antisubmarine
-    reset_on_iteration: false
     n_agents: 10
 
   reset_config:

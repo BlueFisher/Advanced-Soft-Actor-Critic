@@ -89,14 +89,6 @@ class Actor(object):
             config['net_config']['evolver_host'] = args.evolver_host
         if args.evolver_port is not None:
             config['net_config']['evolver_port'] = args.evolver_port
-        if args.learner_host is not None:
-            config['net_config']['learner_host'] = args.learner_host
-        if args.learner_port is not None:
-            config['net_config']['learner_port'] = args.learner_port
-        if args.replay_host is not None:
-            config['net_config']['replay_host'] = args.replay_host
-        if args.replay_port is not None:
-            config['net_config']['replay_port'] = args.replay_port
 
         return config, config_abs_dir
 

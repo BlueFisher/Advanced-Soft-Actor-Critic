@@ -57,8 +57,6 @@ class Evolver:
                                                            config_abs_path,
                                                            args.config)
 
-        if args.evolver_host is not None:
-            config['net_config']['evolver_host'] = args.evolver_host
         if args.evolver_port is not None:
             config['net_config']['evolver_port'] = args.evolver_port
         if args.name is not None:

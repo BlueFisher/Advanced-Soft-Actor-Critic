@@ -24,6 +24,8 @@ if __name__ == '__main__':
 
     if args.env in ['roller', 'square', 'pyramid']:
         from algorithm.sac_main_hitted import MainHitted as Main
+    elif args.env in ['antisubmarine']:
+        from algorithm.sac_main_hitted import MainAntisubmarineHitted as Main
     else:
         from algorithm.sac_main import Main
 
