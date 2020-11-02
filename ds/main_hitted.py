@@ -2,8 +2,7 @@ import time
 
 import numpy as np
 
-from algorithm.agent import Agent
-from algorithm.sac_main_hitted import AgentHitted
+from algorithm.sac_main_hitted import AgentHitted, AgentAntisubmarineHitted
 
 from .actor import Actor
 from .learner import Learner
@@ -41,3 +40,11 @@ class ActorHitted(Actor):
 
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
         self.logger.info(f'{iteration}, R {rewards}, hitted {hitted}')
+
+
+class LearnerAntisubmarineHitted(LearnerHitted):
+    _agent_class = AgentAntisubmarineHitted
+
+
+class ActorSubmarineHitted(ActorHitted):
+    _agent_class = AgentAntisubmarineHitted

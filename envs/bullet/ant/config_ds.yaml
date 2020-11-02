@@ -1,0 +1,53 @@
+default:
+  base_config:
+    env_type: GYM
+    scene: Ant
+
+    build_path: "AntBulletEnv-v0"
+
+    update_policy_variables_per_step: 20
+    noise_increasing_rate: 0.01
+
+    n_agents: 10
+
+    evolver_cem_time: 8
+
+  net_config:
+    evolver_host: ant-ds-evolver
+    learner_host: ant-ds-lr
+    replay_host: ant-ds-lr
+
+  sac_config:
+    write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
+    save_model_per_step: 10000 # Save model every N steps
+    save_model_per_minute: 20 # Save model every N minutes
+
+    n_step: 5
+    v_lambda: 0.9
+
+  replay_config:
+    batch_size: 1024
+
+hard:
+  base_config: &hard_base
+    scene: Ant2DHard
+    nn: nn_hard
+
+  net_config:
+    evolver_host: ant-hard-ds-evolver
+    learner_host: ant-hard-ds-lr
+    replay_host: ant-hard-ds-lr
+
+  sac_config: &hard_sac
+    use_rnn: true
+    use_prediction: true
+
+    random_params:
+      n_step:
+        in: [3, 5, 7]
+      burn_in_step:
+        in: [10, 20, 30]
+      v_rho:
+        truncated: [1.0, 2.0]
+      v_c:
+        truncated: [1.0, 2.0]

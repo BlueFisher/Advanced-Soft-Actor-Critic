@@ -47,3 +47,20 @@ class MainHitted(Main):
 
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
         self.logger.info(f'{iteration}, R {rewards}, hitted {hitted}')
+
+
+class AgentAntisubmarineHitted(AgentHitted):
+    def _extra_log(self,
+                   obs_list,
+                   action,
+                   reward,
+                   local_done,
+                   max_reached,
+                   next_obs_list):
+
+        if not self.done and reward >= 10:
+            self.hitted += 1
+
+
+class MainAntisubmarineHitted(MainHitted):
+    _agent_class = AgentAntisubmarineHitted
