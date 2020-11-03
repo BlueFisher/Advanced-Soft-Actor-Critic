@@ -269,6 +269,10 @@ class Learner:
 
                                    **self.sac_config)
 
+        nn_variables = self._stub.get_nn_variables()
+        if nn_variables:
+            self._udpate_nn_variables(nn_variables)
+            self.logger.info(f'Initialized from evolver')
         self._update_sac_bak()
         self.logger.info(f'sac_learner initialized')
 
@@ -339,21 +343,9 @@ class Learner:
                 res = self.sac_bak.update_all_variables(variables).numpy()
 
                 if not res:
-                    self.logger.warning('NAN in variables, getting new variables from evolver...')
-                    nn_variables = self._stub.get_nn_variables()
-                    if not nn_variables:
-                        self.logger.warning('Getting new variables failed')
-                        return
-
-                    self.sac.update_nn_variables(nn_variables)
-                    self.logger.info('Updated all nn variables from evolver')
-                    self.sac.reset_optimizers()
-                    self.logger.info('Reset all optimizers')
-
-                    all_variables = self.sac.get_all_variables()
-                    res = self.sac_bak.update_all_variables(all_variables).numpy()
-                    if not res:
-                        self.logger.warning('NAN still in variables')
+                    self.logger.warning('NAN in variables, closing...')
+                    self._force_close()
+                    return
 
         self.logger.info('Updated sac_bak')
 
@@ -570,7 +562,9 @@ class Learner:
                                   self._get_policy_variables,
                                   self._get_nn_variables,
                                   self._udpate_nn_variables,
-                                  self._get_td_error)
+                                  self._get_td_error,
+
+                                  self._force_close)
         self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS),
                                   options=[
             ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
@@ -582,6 +576,12 @@ class Learner:
         self.logger.info(f'Learner server is running on [{self.net_config["learner_port"]}]...')
 
         self._run_training_client()
+
+    def _force_close(self):
+        self.logger.warning('Force closing')
+        f = open(self.model_abs_dir.joinpath('force_closed'), 'w')
+        f.close()
+        self.close()
 
     def close(self):
         self._is_training = False
@@ -606,7 +606,9 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
                  get_policy_variables,
                  get_nn_variables,
                  udpate_nn_variables,
-                 get_td_error):
+                 get_td_error,
+
+                 force_close):
         self._get_replay_register_result = get_replay_register_result
         self._get_actor_register_result = get_actor_register_result
 
@@ -615,6 +617,8 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
         self._get_nn_variables = get_nn_variables
         self._udpate_nn_variables = udpate_nn_variables
         self._get_td_error = get_td_error
+
+        self._force_close = force_close
 
         self._logger = logging.getLogger('ds.evolver.service')
         self._peer_set = PeerSet(self._logger)
@@ -733,6 +737,10 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
                                       n_mu_probs,
                                       n_rnn_states)
         return learner_pb2.TDError(td_error=ndarray_to_proto(td_error))
+
+    def ForceClose(self, request, context):
+        self._force_close()
+        return Empty()
 
 
 class StubController:

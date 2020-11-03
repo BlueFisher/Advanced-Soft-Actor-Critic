@@ -56,6 +56,11 @@ class LearnerServiceStub(object):
                 request_serializer=learner__pb2.NNVariables.SerializeToString,
                 response_deserializer=ndarray__pb2.Empty.FromString,
                 )
+        self.ForceClose = channel.unary_unary(
+                '/learner.LearnerService/ForceClose',
+                request_serializer=ndarray__pb2.Empty.SerializeToString,
+                response_deserializer=ndarray__pb2.Empty.FromString,
+                )
 
 
 class LearnerServiceServicer(object):
@@ -110,6 +115,12 @@ class LearnerServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ForceClose(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_LearnerServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -151,6 +162,11 @@ def add_LearnerServiceServicer_to_server(servicer, server):
             'UpdateNNVariables': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateNNVariables,
                     request_deserializer=learner__pb2.NNVariables.FromString,
+                    response_serializer=ndarray__pb2.Empty.SerializeToString,
+            ),
+            'ForceClose': grpc.unary_unary_rpc_method_handler(
+                    servicer.ForceClose,
+                    request_deserializer=ndarray__pb2.Empty.FromString,
                     response_serializer=ndarray__pb2.Empty.SerializeToString,
             ),
     }
@@ -295,6 +311,23 @@ class LearnerService(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/UpdateNNVariables',
             learner__pb2.NNVariables.SerializeToString,
+            ndarray__pb2.Empty.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def ForceClose(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/ForceClose',
+            ndarray__pb2.Empty.SerializeToString,
             ndarray__pb2.Empty.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

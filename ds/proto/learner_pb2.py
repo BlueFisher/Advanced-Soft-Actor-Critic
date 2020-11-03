@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\rlearner.proto\x12\x07learner\x1a\rndarray.proto\x1a\x0epingpong.proto\"\x7f\n\x16RegisterReplayResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x19\n\x11reset_config_json\x18\x02 \x01(\t\x12\x1a\n\x12replay_config_json\x18\x03 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x04 \x01(\t\"\x91\x01\n\x15RegisterActorResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x11\n\tunique_id\x18\x02 \x01(\x05\x12\x19\n\x11reset_config_json\x18\x03 \x01(\t\x12\x1a\n\x12replay_config_json\x18\x04 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x05 \x01(\t\"K\n\x10GetActionRequest\x12\x1a\n\x08obs_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"?\n\x06\x41\x63tion\x12\x18\n\x06\x61\x63tion\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"*\n\x0bNNVariables\x12\x1b\n\tvariables\x18\x01 \x03(\x0b\x32\x08.NDarray\"\xe7\x01\n\x11GetTDErrorRequest\x12\x1e\n\x0cn_obses_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x1f\n\rnext_obs_list\x18\x04 \x03(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cn_rnn_states\x18\x07 \x01(\x0b\x32\x08.NDarray\"%\n\x07TDError\x12\x1a\n\x08td_error\x18\x01 \x01(\x0b\x32\x08.NDarray2\xb1\x03\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\x39\n\x0eRegisterReplay\x12\x06.Empty\x1a\x1f.learner.RegisterReplayResponse\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.learner.RegisterActorResponse\x12\x37\n\tGetAction\x12\x19.learner.GetActionRequest\x1a\x0f.learner.Action\x12\x32\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12:\n\nGetTDError\x12\x1a.learner.GetTDErrorRequest\x1a\x10.learner.TDError\x12.\n\x0eGetNNVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12\x31\n\x11UpdateNNVariables\x12\x14.learner.NNVariables\x1a\x06.Emptyb\x06proto3'
+  serialized_pb=b'\n\rlearner.proto\x12\x07learner\x1a\rndarray.proto\x1a\x0epingpong.proto\"\x7f\n\x16RegisterReplayResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x19\n\x11reset_config_json\x18\x02 \x01(\t\x12\x1a\n\x12replay_config_json\x18\x03 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x04 \x01(\t\"\x91\x01\n\x15RegisterActorResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x11\n\tunique_id\x18\x02 \x01(\x05\x12\x19\n\x11reset_config_json\x18\x03 \x01(\t\x12\x1a\n\x12replay_config_json\x18\x04 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x05 \x01(\t\"K\n\x10GetActionRequest\x12\x1a\n\x08obs_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"?\n\x06\x41\x63tion\x12\x18\n\x06\x61\x63tion\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"*\n\x0bNNVariables\x12\x1b\n\tvariables\x18\x01 \x03(\x0b\x32\x08.NDarray\"\xe7\x01\n\x11GetTDErrorRequest\x12\x1e\n\x0cn_obses_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x1f\n\rnext_obs_list\x18\x04 \x03(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cn_rnn_states\x18\x07 \x01(\x0b\x32\x08.NDarray\"%\n\x07TDError\x12\x1a\n\x08td_error\x18\x01 \x01(\x0b\x32\x08.NDarray2\xcf\x03\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\x39\n\x0eRegisterReplay\x12\x06.Empty\x1a\x1f.learner.RegisterReplayResponse\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.learner.RegisterActorResponse\x12\x37\n\tGetAction\x12\x19.learner.GetActionRequest\x1a\x0f.learner.Action\x12\x32\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12:\n\nGetTDError\x12\x1a.learner.GetTDErrorRequest\x1a\x10.learner.TDError\x12.\n\x0eGetNNVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12\x31\n\x11UpdateNNVariables\x12\x14.learner.NNVariables\x1a\x06.Empty\x12\x1c\n\nForceClose\x12\x06.Empty\x1a\x06.Emptyb\x06proto3'
   ,
   dependencies=[ndarray__pb2.DESCRIPTOR,pingpong__pb2.DESCRIPTOR,])
 
@@ -437,7 +437,7 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
   serialized_start=794,
-  serialized_end=1227,
+  serialized_end=1257,
   methods=[
   _descriptor.MethodDescriptor(
     name='Persistence',
@@ -515,6 +515,16 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
     index=7,
     containing_service=None,
     input_type=_NNVARIABLES,
+    output_type=ndarray__pb2._EMPTY,
+    serialized_options=None,
+    create_key=_descriptor._internal_create_key,
+  ),
+  _descriptor.MethodDescriptor(
+    name='ForceClose',
+    full_name='learner.LearnerService.ForceClose',
+    index=8,
+    containing_service=None,
+    input_type=ndarray__pb2._EMPTY,
     output_type=ndarray__pb2._EMPTY,
     serialized_options=None,
     create_key=_descriptor._internal_create_key,

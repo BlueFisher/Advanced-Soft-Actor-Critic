@@ -76,7 +76,7 @@ class ModelObservation(m.ModelBaseObservation):
         return tf.reduce_mean(tf.square(approx_obs - obs))
 
 
-class ModelRep(m.ModelBaseGRURep):
+class ModelRep(m.ModelBaseLSTMRep):
     def __init__(self, obs_dims, action_dim):
         super().__init__(obs_dims, action_dim, rnn_units=64)
 
@@ -88,13 +88,13 @@ class ModelRep(m.ModelBaseGRURep):
         obs = obs_list[0]
         obs = tf.concat([obs[..., :3], obs[..., 6:]], axis=-1)
 
-        # rnn_state = tf.split(rnn_state, num_or_size_splits=2, axis=-1)
-        outputs, next_rnn_state = self.gru(tf.concat([obs, pre_action], axis=-1),
-                                           initial_state=rnn_state)
+        rnn_state = tf.split(rnn_state, num_or_size_splits=2, axis=-1)
+        outputs, *next_lstm_rnn_state = self.lstm(tf.concat([obs, pre_action], axis=-1),
+                                                  initial_state=rnn_state)
 
         state = self.dense(tf.concat([obs, outputs], axis=-1))
 
-        return state, next_rnn_state  # tf.concat(next_rnn_state, axis=-1)
+        return state, tf.concat(next_lstm_rnn_state, axis=-1)  # tf.concat(next_rnn_state, axis=-1)
 
 
 class ModelQ(m.ModelContinuesQ):
