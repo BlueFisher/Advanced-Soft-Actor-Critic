@@ -16,6 +16,8 @@ service LearnerService {
   // Update variables from evolver
   rpc GetNNVariables(Empty) returns (NNVariables);
   rpc UpdateNNVariables(NNVariables) returns (Empty);
+
+  rpc ForceClose(Empty) returns (Empty);
 }
 
 message RegisterReplayResponse{

@@ -38,6 +38,7 @@ class Evolver:
         self._learner_lock = threading.Lock()
 
         self._last_update_nn_variable = time.time()
+        self._selected_times = 0
         self._saved_nn_variables_mean = None
         self._saved_nn_variables_std = None
 
@@ -88,7 +89,8 @@ class Evolver:
                     'selected': 0
                 }
             else:
-                del self._learners[peer]
+                if peer in self._learners:
+                    del self._learners[peer]
 
     def _post_reward(self, reward, peer):
         with self._learner_lock:
@@ -120,13 +122,32 @@ class Evolver:
                     self._learners[learner]['selected'] += 1
                     stub = self.servicer.get_learner_stub(learner)
                     if stub:
-                        nn_variables_list.append(stub.get_nn_variables())
+                        nn_variables = stub.get_nn_variables()
+                        for v in nn_variables:
+                            if np.isnan(np.min(v)):
+                                self.logger.warning('NAN in learner nn_variables, closing')
+                                self.close()
+                                return
+                        nn_variables_list.append(nn_variables)
 
                 # Calculate the mean and std of best_size variables of learners
                 mean = [np.mean(i, axis=0) for i in zip(*nn_variables_list)]
                 std = [np.minimum(np.std(i, axis=0), 1.) for i in zip(*nn_variables_list)]
 
                 self._saved_nn_variables_mean, self._saved_nn_variables_std = mean, std
+
+                # Remove the least selected learner
+                self._selected_times += 1
+                if self.config['evolver_remove_worst'] != -1 and self._selected_times % self.config['evolver_remove_worst'] == 0:
+                    learner_selecteds = [(l, v['selected']) for l, v in self._learners.items()]
+                    learner_selecteds.sort(key=lambda x: x[1])
+                    worst_learner = learner_selecteds[0][0]
+                    stub = self.servicer.get_learner_stub(worst_learner)
+                    stub.force_close()
+                    del self._learners[worst_learner]
+                    self.logger.info(f'Removed the least selected learner {self.servicer.get_learner_id(worst_learner)}')
+                    for l, v in self._learners.items():
+                        v['selected'] = 1 if l in best_learners else 0
 
                 # Dispatch all nn variables
                 for learner in self._learners.keys():
@@ -139,8 +160,9 @@ class Evolver:
 
                 self._last_update_nn_variable = time.time()
 
+                # Log
                 _best_learner_ids = [str(self.servicer.get_learner_id(l)) for l in best_learners]
-                self.logger.info(f'Selected {",".join(_best_learner_ids)} learners')
+                self.logger.info(f'{self._selected_times}, Selected {",".join(_best_learner_ids)} learners')
 
                 _learner_id_selecteds = [(str(self.servicer.get_learner_id(l)), v['selected']) for l, v in self._learners.items()]
                 _learner_id_selecteds.sort(key=lambda x: x[1], reverse=True)
@@ -198,6 +220,10 @@ class LearnerStubController:
     def update_nn_variables(self, variables):
         self._stub.UpdateNNVariables(learner_pb2.NNVariables(
             variables=[ndarray_to_proto(v) for v in variables]))
+
+    @rpc_error_inspector
+    def force_close(self):
+        self._stub.ForceClose(Empty())
 
     def close(self):
         self._channel.close()

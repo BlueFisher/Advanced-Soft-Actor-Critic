@@ -5,6 +5,7 @@ default:
       linux: /data/linux-RL-Envs/RL-Envs.x86_64
 
     scene: Antisubmarine
+    no_graphics: false
 
     update_policy_variables_per_step: 20
     noise_increasing_rate: 0.01
@@ -41,3 +42,21 @@ default:
 
   replay_config:
     batch_size: 1024
+
+vanilla:
+  base_config:
+    name: "vanilla_{time}"
+    nn: "nn_vanilla"
+
+  sac_config:
+    use_rnn: false
+    burn_in_step: 0
+    use_prediction: false
+
+    random_params:
+      n_step:
+        in: [2, 3, 4]
+      v_rho:
+        truncated: [1.0, 1.5]
+      v_c:
+        truncated: [1.0, 1.5]
