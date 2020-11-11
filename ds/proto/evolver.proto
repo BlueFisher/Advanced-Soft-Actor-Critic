@@ -22,6 +22,10 @@ message RegisterLearnerRequest {
 message RegisterLearnerResponse {
   string name = 1;
   int32 id = 2;
+
+  string reset_config_json = 3;
+  string replay_config_json = 4;
+  string sac_config_json = 5;
 }
 
 message RegisterActorResponse {

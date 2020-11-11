@@ -30,7 +30,7 @@ default:
 
 hard:
   base_config: &hard_base
-    scene: Ant2DHard
+    scene: AntHard
     nn: nn_hard
 
   net_config:
@@ -41,10 +41,13 @@ hard:
   sac_config: &hard_sac
     use_rnn: true
     use_prediction: true
+    v_lambda: 0.99
+
+    use_normalization: true
 
     random_params:
       n_step:
-        in: [3, 5, 7]
+        in: [3, 4, 5]
       burn_in_step:
         in: [10, 20, 30]
       v_rho:

@@ -6,6 +6,8 @@ from collections import deque
 from concurrent import futures
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import json
+import copy
 
 import grpc
 import numpy as np
@@ -25,14 +27,57 @@ def update_nn_variables(stub, mean, std):
     stub.update_nn_variables(nn_variables)
 
 
+class ConfigGenerator:
+    def __init__(self, config):
+        self._ori_config = config
+
+        for k, v in config.items():
+            if v is not None and 'random_params' in v:
+                random_params = v['random_params']
+                for param, opt in random_params.items():
+                    if 'in' in opt:
+                        opt['dirichlet'] = [1] * len(opt['in'])
+
+    def generate(self):
+        config = copy.deepcopy(self._ori_config)
+
+        for k, v in config.items():
+            if v is not None and 'random_params' in v:
+                random_params = v['random_params']
+                del v['random_params']
+
+                for param, opt in random_params.items():
+                    if 'in' in opt:
+                        probs = np.random.dirichlet(opt['dirichlet'])
+                        v[param] = np.random.choice(opt['in'], p=probs)
+                        if isinstance(v[param], np.int32) or isinstance(v[param], np.int64):
+                            v[param] = int(v[param])
+                        elif isinstance(v[param], np.float64):
+                            v[param] = float(v[param])
+                        elif isinstance(v[param], np.bool_):
+                            v[param] = bool(v[param])
+                    elif 'std' in opt:
+                        v[param] = np.random.normal(v[param], opt['std'])
+                        if 'truncated' in opt:
+                            v[param] = np.clip(v[param], opt['truncated'][0], opt['truncated'][1])
+                    elif 'truncated' in opt:
+                        v[param] = np.random.random() * (opt['truncated'][1] - opt['truncated'][0]) + opt['truncated'][0]
+
+        return config
+
+
 class Evolver:
     def __init__(self, root_dir, config_dir, args):
         self.logger = logging.getLogger('ds.evolver')
 
         (self.config,
-         self.net_config,
          model_abs_dir,
          config_abs_dir) = self._init_config(root_dir, config_dir, args)
+
+        self._config_generator = ConfigGenerator(self.config)
+
+        self.base_config = self.config['base_config']
+        self.net_config = self.config['net_config']
 
         self._learners = dict()
         self._learner_lock = threading.Lock()
@@ -56,7 +101,8 @@ class Evolver:
         default_config_file_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
         config = config_helper.initialize_config_from_yaml(default_config_file_path,
                                                            config_abs_path,
-                                                           args.config)
+                                                           args.config,
+                                                           is_evolver=True)
 
         if args.evolver_port is not None:
             config['net_config']['evolver_port'] = args.evolver_port
@@ -76,16 +122,21 @@ class Evolver:
 
         config_helper.display_config(config, self.logger)
 
-        return (config['base_config'],
-                config['net_config'],
+        return (config,
                 model_abs_dir,
                 config_abs_dir)
+
+    def _get_new_learner_config(self):
+        config = self._config_generator.generate()
+        return (config['reset_config'],
+                config['replay_config'],
+                config['sac_config'])
 
     def _learner_connected(self, peer, connected):
         with self._learner_lock:
             if connected:
                 self._learners[peer] = {
-                    'rewards': deque(maxlen=self.config['evolver_cem_length']),
+                    'rewards': deque(maxlen=self.base_config['evolver_cem_length']),
                     'selected': 0
                 }
             else:
@@ -104,16 +155,16 @@ class Evolver:
             # All learners have evaluated more than evolver_cem_length times
             # or all learners have evaluated more than evolver_cem_min_length times and
             #   it has been more than evolver_cem_time mins since last evolution
-            if all([l == self.config['evolver_cem_length'] for l in rewards_length_map]) or \
-                    (all([l >= self.config['evolver_cem_min_length'] for l in rewards_length_map]) and
-                     time.time() - self._last_update_nn_variable >= self.config['evolver_cem_time'] * 60):
+            if all([l == self.base_config['evolver_cem_length'] for l in rewards_length_map]) or \
+                    (all([l >= self.base_config['evolver_cem_min_length'] for l in rewards_length_map]) and
+                     time.time() - self._last_update_nn_variable >= self.base_config['evolver_cem_time'] * 60):
 
                 # Sort learners by the mean of evaluated rewards
                 learner_reward = [(k, float(np.mean(v['rewards']))) for k, v in self._learners.items()]
                 learner_reward.sort(key=lambda i: i[1], reverse=True)
 
                 # Select top evolver_cem_best learners and get their nn variables
-                best_size = int(len(learner_reward) * self.config['evolver_cem_best'])
+                best_size = int(len(learner_reward) * self.base_config['evolver_cem_best'])
                 best_size = max(best_size, 1)
 
                 best_learners = [i[0] for i in learner_reward[:best_size]]
@@ -123,12 +174,17 @@ class Evolver:
                     stub = self.servicer.get_learner_stub(learner)
                     if stub:
                         nn_variables = stub.get_nn_variables()
-                        for v in nn_variables:
-                            if np.isnan(np.min(v)):
-                                self.logger.warning('NAN in learner nn_variables, closing')
-                                self.close()
-                                return
-                        nn_variables_list.append(nn_variables)
+                        if nn_variables is not None:
+                            for v in nn_variables:
+                                if np.isnan(np.min(v)):
+                                    self.logger.warning('NAN in learner nn_variables, closing')
+                                    self.close()
+                                    return
+                            nn_variables_list.append(nn_variables)
+
+                if len(nn_variables_list) == 0:
+                    self.logger.warning('No nn_variables_list')
+                    return
 
                 # Calculate the mean and std of best_size variables of learners
                 mean = [np.mean(i, axis=0) for i in zip(*nn_variables_list)]
@@ -136,18 +192,25 @@ class Evolver:
 
                 self._saved_nn_variables_mean, self._saved_nn_variables_std = mean, std
 
-                # Remove the least selected learner
                 self._selected_times += 1
-                if self.config['evolver_remove_worst'] != -1 and self._selected_times % self.config['evolver_remove_worst'] == 0:
+
+                # Remove the least selected learner
+                if self.base_config['evolver_remove_worst'] != -1:
                     learner_selecteds = [(l, v['selected']) for l, v in self._learners.items()]
+                    mean_selected = np.mean([s for _, s in learner_selecteds])
                     learner_selecteds.sort(key=lambda x: x[1])
-                    worst_learner = learner_selecteds[0][0]
-                    stub = self.servicer.get_learner_stub(worst_learner)
-                    stub.force_close()
-                    del self._learners[worst_learner]
-                    self.logger.info(f'Removed the least selected learner {self.servicer.get_learner_id(worst_learner)}')
-                    for l, v in self._learners.items():
-                        v['selected'] = 1 if l in best_learners else 0
+                    worst_learner, worst_learner_selected = learner_selecteds[0]
+
+                    worst_degree = abs(mean_selected - worst_learner_selected)
+                    self.logger.info(f'Worst degree: {worst_degree}')
+
+                    if worst_degree >= self.base_config['evolver_remove_worst']:
+                        stub = self.servicer.get_learner_stub(worst_learner)
+                        stub.force_close()
+                        del self._learners[worst_learner]
+                        self.logger.info(f'Removed the least selected learner {self.servicer.get_learner_id(worst_learner)}')
+                        for l, v in self._learners.items():
+                            v['selected'] = 1 if l in best_learners else 0
 
                 # Dispatch all nn variables
                 for learner in self._learners.keys():
@@ -181,9 +244,10 @@ class Evolver:
         return [np.random.normal(mean[i], std[i]) for i in range(len(mean))]
 
     def _run(self):
-        self.servicer = EvolverService(self.config['name'],
-                                       self.config['max_actors_each_learner'],
+        self.servicer = EvolverService(self.base_config['name'],
+                                       self.base_config['max_actors_each_learner'],
                                        self._learner_connected,
+                                       self._get_new_learner_config,
                                        self._post_reward,
                                        self._get_nn_variables)
         self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS))
@@ -230,13 +294,16 @@ class LearnerStubController:
 
 
 class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
-    def __init__(self, name, max_actors_each_learner, learner_connected,
+    def __init__(self, name, max_actors_each_learner,
+                 learner_connected,
+                 get_new_learner_config,
                  post_reward,
                  get_nn_variables):
         self.name = name
         self.max_actors_each_learner = max_actors_each_learner
 
         self._learner_connected = learner_connected
+        self._get_new_learner_config = get_new_learner_config
         self._post_reward = post_reward
         self._get_nn_variables = get_nn_variables
 
@@ -325,7 +392,13 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
 
         self._learner_id += 1
 
-        return evolver_pb2.RegisterLearnerResponse(name=self.name, id=learner_id)
+        (reset_config,
+         replay_config,
+         sac_config) = self._get_new_learner_config()
+        return evolver_pb2.RegisterLearnerResponse(name=self.name, id=learner_id,
+                                                   reset_config_json=json.dumps(reset_config),
+                                                   replay_config_json=json.dumps(replay_config),
+                                                   sac_config_json=json.dumps(sac_config))
 
     def RegisterActor(self, request, context):
         peer = context.peer()

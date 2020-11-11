@@ -180,10 +180,7 @@ class Learner:
         if self.cmd_args.agents is not None:
             config['base_config']['n_agents'] = self.cmd_args.agents
 
-        self.config = config['base_config']
-        self.sac_config = config['sac_config']
-        self.reset_config = config['reset_config']
-        self.replay_config = config['replay_config']
+        self.base_config = config['base_config']
 
         # Get name from evolver registry
         evolver_register_response = None
@@ -196,15 +193,23 @@ class Learner:
             if evolver_register_response is None:
                 time.sleep(C.RECONNECTION_TIME)
 
-        _id, name = evolver_register_response
+        (_id, name,
+         reset_config,
+         replay_config,
+         sac_config) = evolver_register_response
+
         self.id = _id
-        self.config['name'] = name
+        self.base_config['name'] = name
+        self.reset_config = reset_config
+        self.replay_config = replay_config
+        self.sac_config = sac_config
+
         self.registered = True
         self.logger.info(f'Registered id: {_id}, name: {name}')
 
         model_abs_dir = Path(self.root_dir).joinpath('models',
-                                                     self.config['scene'],
-                                                     self.config['name'],
+                                                     self.base_config['scene'],
+                                                     self.base_config['name'],
                                                      f'learner{_id}')
         self.model_abs_dir = model_abs_dir
         os.makedirs(model_abs_dir)
@@ -214,36 +219,36 @@ class Learner:
 
         config_helper.display_config(config, self.logger)
 
-        if self.config['env_type'] == 'UNITY':
+        if self.base_config['env_type'] == 'UNITY':
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
             if self.run_in_editor:
                 self.env = UnityWrapper(base_port=5004)
             else:
-                self.env = UnityWrapper(file_name=self.config['build_path'][sys.platform],
-                                        base_port=self.config['build_port'],
-                                        no_graphics=self.config['no_graphics'],
-                                        scene=self.config['scene'],
-                                        n_agents=self.config['n_agents'])
+                self.env = UnityWrapper(file_name=self.base_config['build_path'][sys.platform],
+                                        base_port=self.base_config['build_port'],
+                                        no_graphics=self.base_config['no_graphics'],
+                                        scene=self.base_config['scene'],
+                                        n_agents=self.base_config['n_agents'])
 
-        elif self.config['env_type'] == 'GYM':
+        elif self.base_config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
 
-            self.env = GymWrapper(env_name=self.config['build_path'],
-                                  n_agents=self.config['n_agents'])
+            self.env = GymWrapper(env_name=self.base_config['build_path'],
+                                  n_agents=self.base_config['n_agents'])
         else:
-            raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')
+            raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
         self.obs_dims, self.action_dim, is_discrete = self.env.init()
 
-        self.logger.info(f'{self.config["build_path"]} initialized')
+        self.logger.info(f'{self.base_config["build_path"]} initialized')
 
         # If model exists, load saved model, or copy a new one
         nn_model_abs_path = Path(model_abs_dir).joinpath('nn_models.py')
         if os.path.isfile(nn_model_abs_path):
             spec = importlib.util.spec_from_file_location('nn', str(nn_model_abs_path))
         else:
-            nn_abs_path = Path(config_abs_dir).joinpath(f'{self.config["nn"]}.py')
+            nn_abs_path = Path(config_abs_dir).joinpath(f'{self.base_config["nn"]}.py')
             spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
             shutil.copyfile(nn_abs_path, nn_model_abs_path)
 
@@ -289,9 +294,9 @@ class Learner:
         if self.registered:
             self._unique_id += 1
 
-            noise = self.config['noise_increasing_rate'] * (actors_num - 1)
+            noise = self.base_config['noise_increasing_rate'] * (actors_num - 1)
             actor_sac_config = self.sac_config
-            actor_sac_config['noise'] = min(noise, self.config['noise_max'])
+            actor_sac_config['noise'] = min(noise, self.base_config['noise_max'])
 
             return (str(self.model_abs_dir),
                     self._unique_id,
@@ -399,7 +404,7 @@ class Learner:
             obs_list = self.env.reset(reset_config=self.reset_config)
 
             agents = [self._agent_class(i, use_rnn=use_rnn)
-                      for i in range(self.config['n_agents'])]
+                      for i in range(self.base_config['n_agents'])]
 
             if use_rnn:
                 initial_rnn_state = self.sac_bak.get_initial_rnn_state(len(agents))
@@ -411,7 +416,7 @@ class Learner:
                     time.sleep(C.EVALUATION_WAITING_TIME)
                     continue
 
-                if self.config['reset_on_iteration'] or force_reset:
+                if self.base_config['reset_on_iteration'] or force_reset:
                     obs_list = self.env.reset(reset_config=self.reset_config)
                     for agent in agents:
                         agent.clear()
@@ -449,7 +454,7 @@ class Learner:
 
                     next_obs_list, reward, local_done, max_reached = self.env.step(action)
 
-                    if step == self.config['max_step_each_iter']:
+                    if step == self.base_config['max_step_each_iter']:
                         local_done = [True] * len(agents)
                         max_reached = [True] * len(agents)
 
@@ -536,7 +541,7 @@ class Learner:
                                                              priority_is=priority_is,
                                                              rnn_state=rnn_state)
 
-            if step % self.config['update_sac_bak_per_step'] == 0:
+            if step % self.base_config['update_sac_bak_per_step'] == 0:
                 self._update_sac_bak()
 
             if np.isnan(np.min(td_error)):
@@ -817,7 +822,10 @@ class StubController:
                                                replay_port=self.replay_port))
 
         if response:
-            return response.id, response.name
+            return (response.id, response.name,
+                    json.loads(response.reset_config_json),
+                    json.loads(response.replay_config_json),
+                    json.loads(response.sac_config_json))
 
     # To evolver
     @rpc_error_inspector

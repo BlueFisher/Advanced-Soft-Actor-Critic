@@ -754,13 +754,25 @@ class SAC_Base(object):
                                tape.gradient(loss_reward, rep_variables),
                                tape.gradient(loss_obs, rep_variables)]
 
-            for i in range(len(grads_rep)):
-                grad_rep = grads_rep[i]
-                grad_rep_norm = tf.norm(grad_rep)
-                for grads_rep_pred in grads_rep_preds:
-                    grad_rep_pred = grads_rep_pred[i]
-                    cos = tf.reduce_sum(grad_rep * grad_rep_pred) / (grad_rep_norm * tf.norm(grad_rep_pred))
-                    grads_rep[i] += tf.maximum(cos, 0) * grad_rep_pred
+            # for i in range(len(grads_rep)):
+            #     grad_rep = grads_rep[i]
+            #     grad_rep_norm = tf.norm(grad_rep)
+            #     for grads_rep_pred in grads_rep_preds:
+            #         grad_rep_pred = grads_rep_pred[i]
+            #         cos = tf.reduce_sum(grad_rep * grad_rep_pred) / (grad_rep_norm * tf.norm(grad_rep_pred))
+            #         grads_rep[i] += tf.maximum(cos, 0) * grad_rep_pred
+
+            _grads_rep_main = tf.concat([tf.reshape(g, [-1]) for g in grads_rep], axis=0)
+            _grads_rep_preds = [tf.concat([tf.reshape(g, [-1]) for g in grads_rep_pred], axis=0)
+                                for grads_rep_pred in grads_rep_preds]
+
+            coses = [tf.reduce_sum(_grads_rep_main * grads_rep_pred) / (tf.norm(_grads_rep_main) * tf.norm(grads_rep_pred))
+                     for grads_rep_pred in _grads_rep_preds]
+            coses = [tf.maximum(0., tf.sign(cos)) for cos in coses]
+
+            for grads_rep_pred, cos in zip(grads_rep_preds, coses):
+                for i in range(len(grads_rep_pred)):
+                    grads_rep[i] += cos * grads_rep_pred[i]
 
         self.optimizer_rep.apply_gradients(zip(grads_rep, rep_variables))
 

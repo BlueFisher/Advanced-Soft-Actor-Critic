@@ -34,7 +34,7 @@ class ModelTransition(m.ModelBaseTransition):
         return next_state_dist
 
     def extra_obs(self, obs_list):
-        return obs_list[1][..., -2:]
+        return obs_list[0][..., -2:]
 
 
 class ModelReward(m.ModelBaseReward):
@@ -57,79 +57,42 @@ class ModelObservation(m.ModelBaseObservation):
     def __init__(self, state_dim, obs_dims, use_extra_data):
         super().__init__(state_dim, obs_dims, use_extra_data)
 
-        self.vis_seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(2 * 2 * 32, activation=tf.nn.relu),
-            tf.keras.layers.Reshape(target_shape=(2, 2, 32)),
-            tf.keras.layers.Conv2DTranspose(filters=32, kernel_size=4, strides=2, activation=tf.nn.relu),
-            tf.keras.layers.Conv2DTranspose(filters=16, kernel_size=8, strides=4, activation=tf.nn.relu),
-            tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=3, strides=1, activation=tf.nn.relu),
-        ])
-
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(130)
+            tf.keras.layers.Dense(53)
         ])
 
     def call(self, state):
-        batch = tf.shape(state)[0]
-        t_state = tf.reshape(state, [-1, state.shape[-1]])
-        vis_obs = self.vis_seq(t_state)
-        vis_obs = tf.reshape(vis_obs, [batch, -1, *vis_obs.shape[1:]])
+        obs = self.dense(state)
 
-        vec_obs = self.dense(state)
-
-        return vis_obs, vec_obs
+        return obs
 
     def get_loss(self, state, obs_list):
-        approx_vis_obs, approx_vec_obs = self(state)
+        approx_obs = self(state)
 
-        vis_obs, vec_obs = obs_list
-
-        mse = tf.losses.MeanSquaredError()
-
+        obs = obs_list[0]
         if not self.use_extra_data:
-            vec_obs = vec_obs[..., :-2]
+            obs = obs[..., :-2]
 
-        return 0.5 * mse(approx_vis_obs, vis_obs) + 0.5 * mse(approx_vec_obs, vec_obs)
+        return tf.reduce_mean(tf.square(approx_obs - obs))
 
 
 class ModelRep(m.ModelBaseGRURep):
     def __init__(self, obs_dims, action_dim):
-        super().__init__(obs_dims, action_dim, rnn_units=64)
+        super().__init__(obs_dims, action_dim, rnn_units=16)
 
-        self.conv = tf.keras.Sequential([
-            tf.keras.layers.Conv2D(filters=16, kernel_size=8, strides=4, activation=tf.nn.relu),
-            tf.keras.layers.Conv2D(filters=32, kernel_size=4, strides=2, activation=tf.nn.relu),
-            tf.keras.layers.Flatten(),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu)
-        ])
-        self.dense_buoy = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu)
-        ])
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(128, activation=tf.nn.relu)
         ])
 
     def call(self, obs_list, pre_action, rnn_state):
-        vis_obs, vec_obs = obs_list
-        # buoy_obs = tf.reshape(buoy_obs, tf.concat([tf.shape(buoy_obs)[:-1], [30, 4]], axis=0))
-        # buoy_obs = self.buoy_dense(buoy_obs)
-        # buoy_obs = tf.reshape(buoy_obs, tf.concat([tf.shape(buoy_obs)[:-2],
-        #                                            [buoy_obs.shape[-1] * buoy_obs.shape[-2]]],
-        #                                           axis=0))
+        rnn_obs = tf.concat([obs_list[0][..., :5], pre_action], axis=-1)
+        buoy_obs = obs_list[0][..., 5:-2]
 
-        pos_obs = tf.concat([vec_obs[..., :2], pre_action], axis=-1)
+        outputs, next_rnn_state = self.gru(rnn_obs, initial_state=rnn_state)
 
-        buoy_obs = vec_obs[..., 2:-2]
-        outputs, next_rnn_state = self.gru(pos_obs, initial_state=rnn_state)
-
-        buoy_obs = self.dense_buoy(buoy_obs)
-        vis_obs = m.through_conv(vis_obs, self.conv)
-
-        state = self.dense(tf.concat([outputs, buoy_obs, vis_obs], axis=-1))
+        state = tf.concat([outputs, self.dense(buoy_obs)], axis=-1)
 
         return state, next_rnn_state
 
