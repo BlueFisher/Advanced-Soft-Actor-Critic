@@ -83,7 +83,6 @@ class Actor(object):
 
         # Initialize config from command line arguments
         self.run_in_editor = args.editor
-        self.config_cat = args.config
 
         if args.evolver_host is not None:
             config['net_config']['evolver_host'] = args.evolver_host
@@ -101,7 +100,7 @@ class Actor(object):
         if self.cmd_args.agents is not None:
             config['base_config']['n_agents'] = self.cmd_args.agents
 
-        self.config = config['base_config']
+        self.base_config = config['base_config']
 
         register_response = None
         self.logger.info('Registering to learner...')
@@ -134,31 +133,31 @@ class Actor(object):
         config_helper.display_config(config, self.logger)
 
         # Initialize environment
-        if self.config['env_type'] == 'UNITY':
+        if self.base_config['env_type'] == 'UNITY':
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
             if self.run_in_editor:
                 self.env = UnityWrapper(base_port=5004)
             else:
-                self.env = UnityWrapper(file_name=self.config['build_path'][sys.platform],
-                                        base_port=self.config['build_port'],
-                                        no_graphics=self.config['no_graphics'],
-                                        scene=self.config['scene'],
-                                        n_agents=self.config['n_agents'])
+                self.env = UnityWrapper(file_name=self.base_config['build_path'][sys.platform],
+                                        base_port=self.base_config['build_port'],
+                                        no_graphics=self.base_config['no_graphics'],
+                                        scene=self.base_config['scene'],
+                                        n_agents=self.base_config['n_agents'])
 
-        elif self.config['env_type'] == 'GYM':
+        elif self.base_config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
 
-            self.env = GymWrapper(env_name=self.config['build_path'],
-                                  n_agents=self.config['n_agents'])
+            self.env = GymWrapper(env_name=self.base_config['build_path'],
+                                  n_agents=self.base_config['n_agents'])
         else:
-            raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')
+            raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
         self.obs_dims, self.action_dim, is_discrete = self.env.init()
 
-        self.logger.info(f'{self.config["build_path"]} initialized')
+        self.logger.info(f'{self.base_config["build_path"]} initialized')
 
-        spec = importlib.util.spec_from_file_location('nn', f'{config_abs_dir}/{self.config["nn"]}.py')
+        spec = importlib.util.spec_from_file_location('nn', f'{config_abs_dir}/{self.base_config["nn"]}.py')
         custom_nn_model = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(custom_nn_model)
 
@@ -222,13 +221,13 @@ class Actor(object):
                 obs_list = self.env.reset(reset_config=self.reset_config)
 
                 agents = [self._agent_class(i, use_rnn=use_rnn)
-                          for i in range(self.config['n_agents'])]
+                          for i in range(self.base_config['n_agents'])]
 
                 if use_rnn:
                     initial_rnn_state = self.sac_actor.get_initial_rnn_state(len(agents))
                     rnn_state = initial_rnn_state
 
-            if self.config['reset_on_iteration']:
+            if self.base_config['reset_on_iteration']:
                 obs_list = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
@@ -242,7 +241,7 @@ class Actor(object):
             action = np.zeros([len(agents), self.action_dim], dtype=np.float32)
             step = 0
 
-            if self.config['update_policy_mode'] and self.config['update_policy_variables_per_step'] == -1:
+            if self.base_config['update_policy_mode'] and self.base_config['update_policy_variables_per_step'] == -1:
                 self._update_policy_variables()
 
             while False in [a.done for a in agents] and self._stub.connected:
@@ -256,9 +255,9 @@ class Actor(object):
                                                  [np.zeros(t) for t in self.obs_dims],
                                                  initial_rnn_state[0])
 
-                if self.config['update_policy_mode']:
+                if self.base_config['update_policy_mode']:
                     # Update policy variables each "update_policy_variables_per_step"
-                    if self.config['update_policy_variables_per_step'] != -1 and step % self.config['update_policy_variables_per_step'] == 0:
+                    if self.base_config['update_policy_variables_per_step'] != -1 and step % self.base_config['update_policy_variables_per_step'] == 0:
                         self._update_policy_variables()
 
                     if use_rnn:
@@ -285,7 +284,7 @@ class Actor(object):
 
                 next_obs_list, reward, local_done, max_reached = self.env.step(action)
 
-                if step == self.config['max_step_each_iter']:
+                if step == self.base_config['max_step_each_iter']:
                     local_done = [True] * len(agents)
                     max_reached = [True] * len(agents)
 

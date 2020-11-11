@@ -1,15 +1,17 @@
+from inspect import indentsize
 import logging
 import logging.handlers
 import os
 import random
 import string
 import time
+import json
 
 import numpy as np
 import yaml
 
 
-def initialize_config_from_yaml(default_config_path, config_file_path, config_cat=None):
+def initialize_config_from_yaml(default_config_path, config_file_path, config_cat=None, is_evolver=False):
     """
     config_cat: Specific experiment name. 
                 The `config_cat` will override `defult` if it is not None
@@ -44,19 +46,26 @@ def initialize_config_from_yaml(default_config_path, config_file_path, config_ca
     for k, v in config.items():
         if v is not None and 'random_params' in v:
             random_params = v['random_params']
-            del v['random_params']
 
-            for param, opt in random_params.items():
-                assert param in v, f'{param} is invalid in random_params'
-                assert not ('in' in opt and ('truncated' in opt or 'std' in opt)), f'option "in" cannot be used with "truncated" or "std"'
-                if 'in' in opt:
-                    v[param] = random.choice(opt['in'])
-                elif 'std' in opt:
-                    v[param] = np.random.normal(v[param], opt['std'])
-                    if 'truncated' in opt:
-                        v[param] = np.clip(v[param], opt['truncated'][0], opt['truncated'][1])
-                elif 'truncated' in opt:
-                    v[param] = np.random.random() * (opt['truncated'][1] - opt['truncated'][0]) + opt['truncated'][0]
+            if is_evolver:
+                for param, opt in random_params.items():
+                    assert param in v, f'{param} is invalid in random_params'
+                    assert not ('in' in opt and ('truncated' in opt or 'std' in opt)), f'option "in" cannot be used with "truncated" or "std"'
+                    v[param] = '[placeholder]'
+            else:
+                del v['random_params']
+
+                for param, opt in random_params.items():
+                    assert param in v, f'{param} is invalid in random_params'
+                    assert not ('in' in opt and ('truncated' in opt or 'std' in opt)), f'option "in" cannot be used with "truncated" or "std"'
+                    if 'in' in opt:
+                        v[param] = random.choice(opt['in'])
+                    elif 'std' in opt:
+                        v[param] = np.random.normal(v[param], opt['std'])
+                        if 'truncated' in opt:
+                            v[param] = np.clip(v[param], opt['truncated'][0], opt['truncated'][1])
+                    elif 'truncated' in opt:
+                        v[param] = np.random.random() * (opt['truncated'][1] - opt['truncated'][0]) + opt['truncated'][0]
 
     return config
 
@@ -94,13 +103,7 @@ def save_config(config, model_root_path, config_name):
 
 
 def display_config(config, logger):
-    config_str = ''
-    for k, v in config.items():
-        if v is not None:
-            config_str += f'\n{k}'
-            for kk, vv in v.items():
-                config_str += f'\n{kk:>30}: {vv}'
-    logger.info(config_str)
+    logger.info('Config:\n' + json.dumps(config, indent=4, separators=('', ': ')))
 
 
 def generate_base_name(name, prefix=None):

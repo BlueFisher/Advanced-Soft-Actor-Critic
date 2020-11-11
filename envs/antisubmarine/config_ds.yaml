@@ -5,7 +5,6 @@ default:
       linux: /data/linux-RL-Envs/RL-Envs.x86_64
 
     scene: Antisubmarine
-    no_graphics: false
 
     update_policy_variables_per_step: 20
     noise_increasing_rate: 0.01
@@ -13,6 +12,7 @@ default:
     n_agents: 10
 
     evolver_cem_time: 8
+    evolver_remove_worst: -1
 
   net_config:
     evolver_host: antisub-ds-evolver
@@ -32,9 +32,9 @@ default:
 
     random_params:
       n_step:
-        in: [2, 3, 4]
+        in: [3, 4, 5]
       burn_in_step:
-        in: [10, 20, 30]
+        in: [10, 15, 20]
       v_rho:
         truncated: [1.0, 1.5]
       v_c:
@@ -42,21 +42,3 @@ default:
 
   replay_config:
     batch_size: 1024
-
-vanilla:
-  base_config:
-    name: "vanilla_{time}"
-    nn: "nn_vanilla"
-
-  sac_config:
-    use_rnn: false
-    burn_in_step: 0
-    use_prediction: false
-
-    random_params:
-      n_step:
-        in: [2, 3, 4]
-      v_rho:
-        truncated: [1.0, 1.5]
-      v_c:
-        truncated: [1.0, 1.5]

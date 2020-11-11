@@ -5,7 +5,6 @@ default:
       linux: /data/linux-RL-Envs/RL-Envs.x86_64
 
     scene: Antisubmarine
-    no_graphics: false
     n_agents: 10
 
   reset_config:
@@ -18,16 +17,3 @@ default:
     n_step: 3
     use_rnn: true
     use_prediction: true
-
-vanilla:
-  base_config:
-    name: "vanilla_{time}"
-    nn: "nn_vanilla"
-
-  sac_config:
-    use_rnn: false
-    burn_in_step: 0
-    use_prediction: false
-    clip_epsilon: 1.
-    # use_rnd: true
-    # rnd_n_sample: 30
