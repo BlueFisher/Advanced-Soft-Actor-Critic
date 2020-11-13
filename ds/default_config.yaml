@@ -34,7 +34,7 @@ base_config:
     2 # Start CEM if all learners have eavluated `evolver_cem_min_length` times,
     # and it has been more than `evolver_cem_time` minutes since the last update
   evolver_cem_time: 3
-  evolver_remove_worst: 1
+  evolver_remove_worst: 4
 
 net_config:
   evolver_host: 127.0.0.1

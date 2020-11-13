@@ -82,6 +82,19 @@ class Noisy(tf.keras.layers.Layer):
             return self.activation(y)
 
 
+def swish(x):
+    """Swish activation function. For more info: https://arxiv.org/abs/1710.05941"""
+    return tf.multiply(x, tf.nn.sigmoid(x))
+
+
+def mish(x):
+    """
+    Swish activation function. For more info: https://arxiv.org/abs/1908.08681
+    The original repository for Mish: https://github.com/digantamisra98/Mish
+    """
+    return tf.multiply(x, tf.nn.tanh(tf.nn.softplus(x)))
+
+
 def dense(n=64, depth=2, pri=None, post=None):
     l = [tf.keras.layers.Dense(n, tf.nn.relu) for _ in range(depth)]
     if pri:
