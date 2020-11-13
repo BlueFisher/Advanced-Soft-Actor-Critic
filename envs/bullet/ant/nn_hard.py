@@ -81,7 +81,7 @@ class ModelRep(m.ModelBaseLSTMRep):
         super().__init__(obs_dims, action_dim, rnn_units=64)
 
         self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(32, activation=tf.nn.tanh)
+            tf.keras.layers.Dense(64, activation=tf.nn.tanh)
         ])
 
     def call(self, obs_list, pre_action, rnn_state):
@@ -94,7 +94,7 @@ class ModelRep(m.ModelBaseLSTMRep):
 
         state = self.dense(tf.concat([obs, outputs], axis=-1))
 
-        return state, tf.concat(next_lstm_rnn_state, axis=-1)  # tf.concat(next_rnn_state, axis=-1)
+        return state, tf.concat(next_lstm_rnn_state, axis=-1)  # tf.concat(next_rnn_state, axis=-1)w
 
 
 class ModelQ(m.ModelContinuesQ):

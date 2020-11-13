@@ -38,7 +38,9 @@ class ConfigGenerator:
                     if 'in' in opt:
                         opt['dirichlet'] = [1] * len(opt['in'])
 
-    def generate(self):
+        self._learner_config = dict()
+
+    def generate(self, learner):
         config = copy.deepcopy(self._ori_config)
 
         for k, v in config.items():
@@ -63,7 +65,19 @@ class ConfigGenerator:
                     elif 'truncated' in opt:
                         v[param] = np.random.random() * (opt['truncated'][1] - opt['truncated'][0]) + opt['truncated'][0]
 
+        self._learner_config[learner] = config
+
         return config
+
+    def learner_selected(self, learner):
+        for k, v in self._ori_config.items():
+            if v is not None and 'random_params' in v:
+                random_params = v['random_params']
+
+                for param, opt in random_params.items():
+                    if 'in' in opt:
+                        i = opt['in'].index(self._learner_config[learner][k][param])
+                        opt['dirichlet'][i] += 1
 
 
 class Evolver:
@@ -126,8 +140,8 @@ class Evolver:
                 model_abs_dir,
                 config_abs_dir)
 
-    def _get_new_learner_config(self):
-        config = self._config_generator.generate()
+    def _get_new_learner_config(self, peer):
+        config = self._config_generator.generate(peer)
         return (config['reset_config'],
                 config['replay_config'],
                 config['sac_config'])
@@ -171,6 +185,8 @@ class Evolver:
                 nn_variables_list = list()
                 for learner in best_learners:
                     self._learners[learner]['selected'] += 1
+                    self._config_generator.learner_selected(learner)
+                    config_helper.display_config(self.config, self.logger)
                     stub = self.servicer.get_learner_stub(learner)
                     if stub:
                         nn_variables = stub.get_nn_variables()
@@ -394,7 +410,7 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
 
         (reset_config,
          replay_config,
-         sac_config) = self._get_new_learner_config()
+         sac_config) = self._get_new_learner_config(peer)
         return evolver_pb2.RegisterLearnerResponse(name=self.name, id=learner_id,
                                                    reset_config_json=json.dumps(reset_config),
                                                    replay_config_json=json.dumps(replay_config),

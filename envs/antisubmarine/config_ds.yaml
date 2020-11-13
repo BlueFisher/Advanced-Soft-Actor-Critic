@@ -12,7 +12,6 @@ default:
     n_agents: 10
 
     evolver_cem_time: 8
-    evolver_remove_worst: -1
 
   net_config:
     evolver_host: antisub-ds-evolver
