@@ -97,13 +97,13 @@ class ModelRep(m.ModelBaseGRURep):
         return state, next_rnn_state  # tf.concat(next_rnn_state, axis=-1)
 
 
-class ModelQ(m.ModelContinuesQ):
+class ModelQ(m.ModelContinuousQ):
     def __init__(self, state_dim, action_dim):
         super().__init__(state_dim, action_dim,
                          dense_n=256, dense_depth=3)
 
 
-class ModelPolicy(m.ModelContinuesPolicy):
+class ModelPolicy(m.ModelContinuousPolicy):
     def __init__(self, state_dim, action_dim):
         super().__init__(state_dim, action_dim,
                          dense_n=256, dense_depth=3,

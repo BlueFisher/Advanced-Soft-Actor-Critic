@@ -26,13 +26,13 @@ class ModelRND(m.ModelBaseRND):
         return self.dense(tf.concat([state, action], axis=-1))
 
 
-class ModelQ(m.ModelContinuesQ):
+class ModelQ(m.ModelContinuousQ):
     def __init__(self, state_dim, action_dim):
         super().__init__(state_dim, action_dim,
                          dense_n=64, dense_depth=2)
 
 
-class ModelPolicy(m.ModelContinuesPolicy):
+class ModelPolicy(m.ModelContinuousPolicy):
     def __init__(self, state_dim, action_dim):
         super().__init__(state_dim, action_dim,
                          dense_n=64, dense_depth=2)

@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 
-class ModelBaseContinuesQ(tf.keras.Model):
+class ModelBaseContinuousQ(tf.keras.Model):
     def __init__(self, state_dim, action_dim):
         super().__init__()
         self.state_dim = state_dim
@@ -12,10 +12,10 @@ class ModelBaseContinuesQ(tf.keras.Model):
              tf.keras.Input(shape=(self.action_dim,)))
 
     def call(self, state, action):
-        raise Exception("ModelContinuesQ not implemented")
+        raise Exception("ModelContinuousQ not implemented")
 
 
-class ModelContinuesQ(ModelBaseContinuesQ):
+class ModelContinuousQ(ModelBaseContinuousQ):
     def __init__(self, state_dim, action_dim,
                  state_n=64, state_depth=0,
                  action_n=64, action_depth=0,
