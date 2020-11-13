@@ -15,7 +15,7 @@ class ModelBasePolicy(tf.keras.Model):
         raise Exception("ModelPolicy not implemented")
 
 
-class ModelContinuesPolicy(ModelBasePolicy):
+class ModelContinuousPolicy(ModelBasePolicy):
     def __init__(self, state_dim, action_dim,
                  dense_n=64, dense_depth=3,
                  mean_n=64, mean_depth=0,
