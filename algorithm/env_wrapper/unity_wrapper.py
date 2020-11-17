@@ -60,7 +60,7 @@ class UnityWrapper:
                 self.engine_configuration_channel.set_configuration_parameters(quality_level=5)
                 break
 
-        return behavior_spec.observation_shapes, behavior_spec.action_size, is_discrete
+        return behavior_spec.observation_shapes, 0, behavior_spec.action_size
 
     def reset(self, reset_config=None):
         reset_config = {} if reset_config is None else reset_config
@@ -72,15 +72,15 @@ class UnityWrapper:
 
         return [obs.astype(np.float32) for obs in decision_steps.obs]
 
-    def step(self, action):
-        self._env.set_actions(self.bahavior_name, action)
+    def step(self, d_action, c_action):
+        self._env.set_actions(self.bahavior_name, c_action)
         self._env.step()
         decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
 
         tmp_terminal_steps = terminal_steps
 
         while len(decision_steps) == 0:
-            self._env.set_actions(self.bahavior_name, np.empty([0, action.shape[-1]]))
+            self._env.set_actions(self.bahavior_name, np.empty([0, c_action.shape[-1]]))
             self._env.step()
             decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
             tmp_terminal_steps.agent_id = np.concatenate([tmp_terminal_steps.agent_id,

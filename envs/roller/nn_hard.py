@@ -6,8 +6,8 @@ import algorithm.nn_models as m
 
 
 class ModelTransition(m.ModelBaseTransition):
-    def __init__(self, state_dim, action_dim, use_extra_data):
-        super().__init__(state_dim, action_dim, use_extra_data)
+    def __init__(self, state_dim, d_action_dim, c_action_dim, use_extra_data):
+        super().__init__(state_dim, d_action_dim, c_action_dim, use_extra_data)
 
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.tanh),
@@ -62,9 +62,8 @@ class ModelObservation(m.ModelBaseObservation):
 
 
 class ModelRep(m.ModelBaseGRURep):
-    def __init__(self, obs_dims, action_dim):
-        super().__init__(obs_dims, action_dim,
-                         rnn_units=64)
+    def __init__(self, obs_dims, d_action_dim, c_action_dim):
+        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units=64)
 
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.tanh)
@@ -81,13 +80,13 @@ class ModelRep(m.ModelBaseGRURep):
         return state, next_rnn_state
 
 
-class ModelQ(m.ModelContinuousQ):
-    def __init__(self, state_dim, action_dim):
-        super().__init__(state_dim, action_dim,
+class ModelQ(m.ModelQ):
+    def __init__(self, state_dim, d_action_dim, c_action_dim):
+        super().__init__(state_dim, d_action_dim, c_action_dim,
                          dense_n=64, dense_depth=2)
 
 
-class ModelPolicy(m.ModelContinuousPolicy):
-    def __init__(self, state_dim, action_dim):
-        super().__init__(state_dim, action_dim,
+class ModelPolicy(m.ModelPolicy):
+    def __init__(self, state_dim, d_action_dim, c_action_dim):
+        super().__init__(state_dim, d_action_dim, c_action_dim,
                          dense_n=64, dense_depth=2)

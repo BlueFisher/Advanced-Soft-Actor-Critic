@@ -19,15 +19,16 @@ class ModelSimpleRep(ModelBaseSimpleRep):
 
 
 class ModelBaseRNNRep(tf.keras.Model):
-    def __init__(self, obs_dims, action_dim, rnn_units):
+    def __init__(self, obs_dims, d_action_dim, c_action_dim, rnn_units):
         super().__init__()
         self.obs_dims = obs_dims
-        self.action_dim = action_dim
+        self.d_action_dim = d_action_dim
+        self.c_action_dim = c_action_dim
         self.rnn_units = rnn_units
 
     def init(self):
         return self.call([tf.keras.Input(shape=(None, *o)) for o in self.obs_dims],
-                         tf.keras.Input(shape=(None, self.action_dim)),
+                         tf.keras.Input(shape=(None, self.d_action_dim + self.c_action_dim)),
                          tf.keras.Input(shape=(self.rnn_units,)))
 
     def call(self, obs_list, pre_action, rnn_state):
@@ -35,9 +36,9 @@ class ModelBaseRNNRep(tf.keras.Model):
 
 
 class ModelBaseGRURep(ModelBaseRNNRep):
-    def __init__(self, obs_dims, action_dim,
+    def __init__(self, obs_dims, d_action_dim, c_action_dim,
                  rnn_units=64):
-        super().__init__(obs_dims, action_dim, rnn_units)
+        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units)
 
         # TODO Disabled temporarily because of the issue
         # https://github.com/tensorflow/tensorflow/issues/39697
@@ -47,9 +48,9 @@ class ModelBaseGRURep(ModelBaseRNNRep):
 
 
 class ModelBaseLSTMRep(ModelBaseRNNRep):
-    def __init__(self, obs_dims, action_dim,
+    def __init__(self, obs_dims, d_action_dim, c_action_dim,
                  rnn_units=64):
-        super().__init__(obs_dims, action_dim, rnn_units)
+        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units)
 
         # TODO Disabled temporarily because of the issue
         # https://github.com/tensorflow/tensorflow/issues/39697
@@ -59,5 +60,5 @@ class ModelBaseLSTMRep(ModelBaseRNNRep):
 
     def init(self):
         return self.call([tf.keras.Input(shape=(None, *o)) for o in self.obs_dims],
-                         tf.keras.Input(shape=(None, self.action_dim)),
+                         tf.keras.Input(shape=(None, self.d_action_dim + self.c_action_dim)),
                          tf.keras.Input(shape=(self.rnn_units * 2,)))

@@ -97,10 +97,13 @@ class GymWrapper:
 
         self._state_dim = env.observation_space.shape[0]
         self.is_discrete = isinstance(env.action_space, gym.spaces.Discrete)
+
+        d_action_dim, c_action_dim = 0, 0
+
         if self.is_discrete:
-            action_dim = env.action_space.n
+            d_action_dim = env.action_space.n
         else:
-            action_dim = env.action_space.shape[0]
+            c_action_dim = env.action_space.shape[0]
 
         if not self._seq_envs:
             env.close()
@@ -115,7 +118,7 @@ class GymWrapper:
                                             daemon=True)
                 p.start()
 
-        return [(self._state_dim, )], action_dim, self.is_discrete
+        return [(self._state_dim, )], d_action_dim, c_action_dim
 
     def reset(self, reset_config=None):
         if self._seq_envs:
@@ -133,7 +136,7 @@ class GymWrapper:
 
         return [obs]
 
-    def step(self, action):
+    def step(self, d_action, c_action):
         obs = np.empty([self.n_agents, self._state_dim], dtype=np.float32)
         reward = np.empty(self.n_agents, dtype=np.float32)
         done = np.empty(self.n_agents, dtype=np.bool)
@@ -141,8 +144,10 @@ class GymWrapper:
 
         if self.is_discrete:
             # Convert one-hot to label
-            action = np.argmax(action, axis=1)
+            action = np.argmax(d_action, axis=1)
             action = action.tolist()
+        else:
+            action = c_action
 
         if self._seq_envs:
             for i, env in enumerate(self._envs):

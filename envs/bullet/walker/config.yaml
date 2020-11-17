@@ -17,7 +17,7 @@ default:
     n_step: 5
     v_lambda: 0.9
 
-    use_normalization: true
+    use_normalization: false
 
 hard:
   base_config: &hard_base
@@ -27,7 +27,7 @@ hard:
   sac_config: &hard_sac
     burn_in_step: 30
     use_rnn: true
-    use_prediction: true
+    use_prediction: false
 
 hard_noextra:
   base_config:

@@ -108,7 +108,8 @@ class Main(object):
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')
 
-        self.obs_dims, self.action_dim, is_discrete = self.env.init()
+        self.obs_dims, self.d_action_dim, self.c_action_dim = self.env.init()
+        self.action_dim = self.d_action_dim + self.c_action_dim
 
         # If model exists, load saved model, or copy a new one
         nn_model_abs_path = Path(model_abs_dir).joinpath('nn_models.py')
@@ -123,8 +124,8 @@ class Main(object):
         spec.loader.exec_module(custom_nn_model)
 
         self.sac = SAC_Base(obs_dims=self.obs_dims,
-                            action_dim=self.action_dim,
-                            is_discrete=is_discrete,
+                            d_action_dim=self.d_action_dim,
+                            c_action_dim=self.c_action_dim,
                             model_abs_dir=model_abs_dir,
                             model=custom_nn_model,
                             train_mode=self.train_mode,
@@ -189,7 +190,8 @@ class Main(object):
 
                 action = action.numpy()
 
-                next_obs_list, reward, local_done, max_reached = self.env.step(action)
+                next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_dim],
+                                                                               action[..., :self.c_action_dim])
 
                 if step == self.config['max_step_each_iter']:
                     local_done = [True] * len(agents)
