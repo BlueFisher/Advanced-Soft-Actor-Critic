@@ -12,8 +12,8 @@ class ModelForward(m.ModelForward):
 
 
 class ModelTransition(m.ModelBaseTransition):
-    def __init__(self, state_dim, action_dim, use_extra_data):
-        super().__init__(state_dim, action_dim, use_extra_data)
+    def __init__(self, state_dim, d_action_dim, c_action_dim, use_extra_data):
+        super().__init__(state_dim, d_action_dim, c_action_dim, use_extra_data)
 
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(256, activation=m.swish),
@@ -77,8 +77,8 @@ class ModelObservation(m.ModelBaseObservation):
 
 
 class ModelRep(m.ModelBaseLSTMRep):
-    def __init__(self, obs_dims, action_dim):
-        super().__init__(obs_dims, action_dim, rnn_units=64)
+    def __init__(self, obs_dims, d_action_dim, c_action_dim):
+        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units=64)
 
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(32, activation=m.swish)
@@ -97,15 +97,15 @@ class ModelRep(m.ModelBaseLSTMRep):
         return state, tf.concat(next_lstm_rnn_state, axis=-1)  # tf.concat(next_rnn_state, axis=-1)
 
 
-class ModelQ(m.ModelContinuousQ):
-    def __init__(self, state_dim, action_dim):
-        super().__init__(state_dim, action_dim,
+class ModelQ(m.ModelQ):
+    def __init__(self, state_dim, d_action_dim, c_action_dim):
+        super().__init__(state_dim, d_action_dim, c_action_dim,
                          dense_n=256, dense_depth=3)
 
 
-class ModelPolicy(m.ModelContinuousPolicy):
-    def __init__(self, state_dim, action_dim):
-        super().__init__(state_dim, action_dim,
+class ModelPolicy(m.ModelPolicy):
+    def __init__(self, state_dim, d_action_dim, c_action_dim):
+        super().__init__(state_dim, d_action_dim, c_action_dim,
                          dense_n=256, dense_depth=3,
                          mean_n=256, mean_depth=1,
                          logstd_n=256, logstd_depth=1)

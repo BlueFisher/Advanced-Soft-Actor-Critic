@@ -76,11 +76,11 @@ class Agent(object):
         reward = np.expand_dims(reward, 0).astype(np.float32)  # [1, ep_len]
 
         next_obs_list = [np.expand_dims(t, 0).astype(np.float32)
-                     for t in self._tmp_episode_trans[-1]['next_obs_list']]
+                         for t in self._tmp_episode_trans[-1]['next_obs_list']]
         # list([1, obs_dim_i], ...)
 
         done = np.stack([t['local_done'] and not t['max_reached'] for t in self._tmp_episode_trans],
-                         axis=0)
+                        axis=0)
         done = np.expand_dims(done, 0).astype(np.float32)  # [1, ep_len]
 
         episode_trans = [obs_list, action, reward, next_obs_list, done]

@@ -34,13 +34,13 @@ class ModelRep(m.ModelBaseSimpleRep):
         return state
 
 
-class ModelQ(m.ModelContinuousQ):
-    def __init__(self, state_dim, action_dim):
-        super().__init__(state_dim, action_dim,
+class ModelQ(m.ModelQ):
+    def __init__(self, state_dim, d_action_dim, c_action_dim):
+        super().__init__(state_dim, d_action_dim, c_action_dim,
                          dense_n=128, dense_depth=2)
 
 
-class ModelPolicy(m.ModelContinuousPolicy):
-    def __init__(self, state_dim, action_dim):
-        super().__init__(state_dim, action_dim,
+class ModelPolicy(m.ModelPolicy):
+    def __init__(self, state_dim, d_action_dim, c_action_dim):
+        super().__init__(state_dim, d_action_dim, c_action_dim,
                          dense_n=128, dense_depth=2)

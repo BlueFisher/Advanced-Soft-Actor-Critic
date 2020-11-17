@@ -2,15 +2,16 @@ import tensorflow as tf
 
 
 class ModelBaseTransition(tf.keras.Model):
-    def __init__(self, state_dim, action_dim, use_extra_data):
+    def __init__(self, state_dim, d_action_dim, c_action_dim, use_extra_data):
         super().__init__()
         self.state_dim = state_dim
-        self.action_dim = action_dim
+        self.d_action_dim = d_action_dim
+        self.c_action_dim = c_action_dim
         self.use_extra_data = use_extra_data
 
     def init(self):
         return self(tf.keras.Input(shape=(self.state_dim,)),
-                    tf.keras.Input(shape=(self.action_dim,)))
+                    tf.keras.Input(shape=(self.d_action_dim + self.c_action_dim,)))
 
     def call(self, state, action):
         raise Exception("ModelBaseTransition not implemented")

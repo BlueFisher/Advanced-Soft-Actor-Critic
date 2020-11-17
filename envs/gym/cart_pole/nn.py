@@ -7,13 +7,13 @@ import algorithm.nn_models as m
 ModelRep = m.ModelSimpleRep
 
 
-class ModelQ(m.ModelDiscreteQ):
-    def __init__(self, state_dim, action_dim):
-        super().__init__(state_dim, action_dim,
+class ModelQ(m.ModelQ):
+    def __init__(self, state_dim, d_action_dim, c_action_dim):
+        super().__init__(state_dim, d_action_dim, c_action_dim,
                          dense_n=64, dense_depth=2)
 
 
-class ModelPolicy(m.ModelDiscretePolicy):
-    def __init__(self, state_dim, action_dim):
-        super().__init__(state_dim, action_dim,
+class ModelPolicy(m.ModelPolicy):
+    def __init__(self, state_dim, d_action_dim, c_action_dim):
+        super().__init__(state_dim, d_action_dim, c_action_dim,
                          dense_n=64, dense_depth=2)
