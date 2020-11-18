@@ -205,7 +205,9 @@ class SAC_Base(object):
         """
         Initialize variables, network models and optimizers
         """
-        self.log_alpha = tf.Variable(init_log_alpha, dtype=tf.float32, name='log_alpha')
+        self.log_alpha_d = tf.Variable(init_log_alpha, dtype=tf.float32, name='log_alpha_d')
+        self.log_alpha_c = tf.Variable(init_log_alpha, dtype=tf.float32, name='log_alpha_c')
+
         self.global_step = tf.Variable(0, dtype=tf.int64, trainable=False, name='global_step')
 
         def adam_optimizer(): return tf.keras.optimizers.Adam(learning_rate)
@@ -311,7 +313,8 @@ class SAC_Base(object):
         Initialize network weights from scratch or restore from model_abs_dir
         """
         ckpt_saved = {
-            'log_alpha': self.log_alpha,
+            'log_alpha_d': self.log_alpha_d,
+            'log_alpha_c': self.log_alpha_c,
             'global_step': self.global_step,
 
             'optimizer_rep': self.optimizer_rep,
@@ -511,7 +514,8 @@ class SAC_Base(object):
 
         gamma_ratio = [[tf.pow(self.gamma, i) for i in range(self.n_step)]]
         lambda_ratio = [[tf.pow(self.v_lambda, i) for i in range(self.n_step)]]
-        alpha = tf.exp(self.log_alpha)
+        alpha_d = tf.exp(self.log_alpha_d)
+        alpha_c = tf.exp(self.log_alpha_c)
 
         next_n_states = tf.concat([n_states[:, 1:, ...], tf.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)
 
@@ -548,8 +552,8 @@ class SAC_Base(object):
             next_probs = tf.nn.softmax(next_d_policy.logits)
             clipped_probs = tf.maximum(probs, 1e-8)
             clipped_next_probs = tf.maximum(next_probs, 1e-8)
-            tmp_v = min_q - alpha * tf.math.log(clipped_probs)  # [Batch, n, action_dim]
-            tmp_next_v = min_next_q - alpha * tf.math.log(clipped_next_probs)
+            tmp_v = min_q - alpha_d * tf.math.log(clipped_probs)  # [Batch, n, action_dim]
+            tmp_next_v = min_next_q - alpha_d * tf.math.log(clipped_next_probs)
 
             v += tf.reduce_sum(probs * tmp_v, axis=-1)  # [Batch, n]
             next_v += tf.reduce_sum(next_probs * tmp_next_v, axis=-1)
@@ -567,8 +571,8 @@ class SAC_Base(object):
             min_q = tf.minimum(q1, q2)
             min_next_q = tf.minimum(next_q1, next_q2)
 
-            v += min_q - alpha * n_actions_log_prob  # [Batch, n]
-            next_v += min_next_q - alpha * next_n_actions_log_prob
+            v += min_q - alpha_c * n_actions_log_prob  # [Batch, n]
+            next_v += min_next_q - alpha_c * next_n_actions_log_prob
 
             # v = scale_inverse_h(v)
             # next_v = scale_inverse_h(next_v)
@@ -742,7 +746,8 @@ class SAC_Base(object):
                                           n_actions[:, self.burn_in_step:, ...])
                 loss_rnd = tf.reduce_mean(tf.math.squared_difference(f, approx_f))
 
-            alpha = tf.exp(self.log_alpha)
+            alpha_d = tf.exp(self.log_alpha_d)
+            alpha_c = tf.exp(self.log_alpha_c)
 
             loss_policy = tf.zeros((tf.shape(state)[0], 1))
             loss_alpha = tf.zeros((tf.shape(state)[0], 1))
@@ -751,18 +756,18 @@ class SAC_Base(object):
                 probs = tf.nn.softmax(d_policy.logits)
                 clipped_probs = tf.maximum(probs, 1e-8)
 
-                _loss_policy = alpha * tf.math.log(clipped_probs) - tf.minimum(d_q1, d_q2)
+                _loss_policy = alpha_d * tf.math.log(clipped_probs) - tf.minimum(d_q1, d_q2)
                 loss_policy += tf.reduce_sum(probs * _loss_policy, axis=1, keepdims=True)  # [Batch, 1]
 
-                _loss_alpha = -alpha * (tf.math.log(clipped_probs) - self.d_action_dim)  # [Batch, action_dim]
+                _loss_alpha = -alpha_d * (tf.math.log(clipped_probs) - self.d_action_dim)  # [Batch, action_dim]
                 loss_alpha += tf.reduce_sum(probs * _loss_alpha, axis=1, keepdims=True)  # [Batch, 1]
 
             if self.c_action_dim:
                 log_prob = tf.reduce_sum(squash_correction_log_prob(c_policy, action_sampled), axis=1, keepdims=True)
 
-                loss_policy += alpha * log_prob - tf.minimum(c_q1_for_gradient, c_q2_for_gradient)  # [Batch, 1]
+                loss_policy += alpha_c * log_prob - tf.minimum(c_q1_for_gradient, c_q2_for_gradient)  # [Batch, 1]
 
-                loss_alpha += -alpha * (log_prob - self.c_action_dim)  # [Batch, 1]
+                loss_alpha += -alpha_c * (log_prob - self.c_action_dim)  # [Batch, 1]
 
             loss_policy = tf.reduce_mean(loss_policy)
             loss_alpha = tf.reduce_mean(loss_alpha)
@@ -823,8 +828,8 @@ class SAC_Base(object):
         self.optimizer_policy.apply_gradients(zip(grads_policy, self.model_policy.trainable_variables))
 
         if self.use_auto_alpha:
-            grads_alpha = tape.gradient(loss_alpha, self.log_alpha)
-            self.optimizer_alpha.apply_gradients([(grads_alpha, self.log_alpha)])
+            grads_alpha = tape.gradient(loss_alpha, [self.log_alpha_d, self.log_alpha_c])
+            self.optimizer_alpha.apply_gradients(zip(grads_alpha, [self.log_alpha_d, self.log_alpha_c]))
 
         del tape
 
@@ -833,10 +838,10 @@ class SAC_Base(object):
                 tf.summary.scalar('loss/q', tf.reduce_mean([loss_q1, loss_q2]), step=self.global_step)
                 if self.d_action_dim:
                     tf.summary.scalar('loss/d_entropy', tf.reduce_mean(d_policy.entropy()), step=self.global_step)
+                    tf.summary.scalar('loss/alpha_d', alpha_d, step=self.global_step)
                 if self.c_action_dim:
                     tf.summary.scalar('loss/c_entropy', tf.reduce_mean(c_policy.entropy()), step=self.global_step)
-
-                tf.summary.scalar('loss/alpha', alpha, step=self.global_step)
+                    tf.summary.scalar('loss/alpha_c', alpha_c, step=self.global_step)
 
                 if self.use_curiosity:
                     tf.summary.scalar('loss/forward', loss_forward, step=self.global_step)
