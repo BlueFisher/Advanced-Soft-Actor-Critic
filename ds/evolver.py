@@ -186,7 +186,6 @@ class Evolver:
                 for learner in best_learners:
                     self._learners[learner]['selected'] += 1
                     self._config_generator.learner_selected(learner)
-                    config_helper.display_config(self.config, self.logger)
                     stub = self.servicer.get_learner_stub(learner)
                     if stub:
                         nn_variables = stub.get_nn_variables()

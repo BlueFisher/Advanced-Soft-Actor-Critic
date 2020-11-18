@@ -191,7 +191,7 @@ class Main(object):
                 action = action.numpy()
 
                 next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_dim],
-                                                                               action[..., :self.c_action_dim])
+                                                                               action[..., self.d_action_dim:])
 
                 if step == self.config['max_step_each_iter']:
                     local_done = [True] * len(agents)

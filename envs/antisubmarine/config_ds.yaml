@@ -22,7 +22,6 @@ default:
     force_reset: true
 
   sac_config:
-    write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
     save_model_per_step: 10000 # Save model every N steps
     save_model_per_minute: 20 # Save model every N minutes
 
