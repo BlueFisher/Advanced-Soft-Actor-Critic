@@ -1,11 +1,10 @@
-from inspect import indentsize
+import json
 import logging
 import logging.handlers
 import os
 import random
 import string
 import time
-import json
 
 import numpy as np
 import yaml

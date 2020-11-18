@@ -748,20 +748,19 @@ class SAC_Base(object):
             loss_alpha = tf.zeros((tf.shape(state)[0], 1))
 
             if self.d_action_dim:
-                # policy, q1, q2: [Batch, action_dim]
                 probs = tf.nn.softmax(d_policy.logits)
                 clipped_probs = tf.maximum(probs, 1e-8)
+
                 _loss_policy = alpha * tf.math.log(clipped_probs) - tf.minimum(d_q1, d_q2)
-                # [Batch, 1]
-                loss_policy += tf.reduce_sum(probs * _loss_policy, axis=1, keepdims=True)
+                loss_policy += tf.reduce_sum(probs * _loss_policy, axis=1, keepdims=True)  # [Batch, 1]
 
                 _loss_alpha = -alpha * (tf.math.log(clipped_probs) - self.d_action_dim)  # [Batch, action_dim]
                 loss_alpha += tf.reduce_sum(probs * _loss_alpha, axis=1, keepdims=True)  # [Batch, 1]
 
             if self.c_action_dim:
                 log_prob = tf.reduce_sum(squash_correction_log_prob(c_policy, action_sampled), axis=1, keepdims=True)
-                # [Batch, 1]
-                loss_policy += alpha * log_prob - tf.minimum(c_q1_for_gradient, c_q2_for_gradient)
+
+                loss_policy += alpha * log_prob - tf.minimum(c_q1_for_gradient, c_q2_for_gradient)  # [Batch, 1]
 
                 loss_alpha += -alpha * (log_prob - self.c_action_dim)  # [Batch, 1]
 
@@ -930,7 +929,7 @@ class SAC_Base(object):
 
         d_policy, c_policy = self.model_policy(state)
         if self.use_rnd:
-            action = self.rnd_sample(state, policy)
+            return self.rnd_sample(state, d_policy, c_policy), next_rnn_state
         else:
             d_action = tf.one_hot(d_policy.sample(), self.d_action_dim) if self.d_action_dim else tf.zeros((tf.shape(state)[0], self.d_action_dim))
             c_action = tf.tanh(c_policy.sample()) if self.c_action_dim else tf.zeros((tf.shape(state)[0], self.c_action_dim))

@@ -10,8 +10,8 @@ class ModelTransition(m.ModelBaseTransition):
         super().__init__(state_dim, d_action_dim, c_action_dim, use_extra_data)
 
         self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(state_dim + state_dim)
         ])
 
@@ -42,8 +42,8 @@ class ModelReward(m.ModelBaseReward):
         super().__init__(state_dim, use_extra_data)
 
         self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(1)
         ])
 
@@ -58,8 +58,8 @@ class ModelObservation(m.ModelBaseObservation):
         super().__init__(state_dim, obs_dims, use_extra_data)
 
         self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(53)
         ])
 
@@ -79,11 +79,11 @@ class ModelObservation(m.ModelBaseObservation):
 
 
 class ModelRep(m.ModelBaseGRURep):
-    def __init__(self, obs_dims, action_dim):
-        super().__init__(obs_dims, action_dim, rnn_units=16)
+    def __init__(self, obs_dims, d_action_dim, c_action_dim):
+        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units=32)
 
         self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu)
+            tf.keras.layers.Dense(64, activation=tf.nn.relu)
         ])
 
     def call(self, obs_list, pre_action, rnn_state):
@@ -100,14 +100,14 @@ class ModelRep(m.ModelBaseGRURep):
 class ModelQ(m.ModelQ):
     def __init__(self, state_dim, d_action_dim, c_action_dim):
         super().__init__(state_dim, d_action_dim, c_action_dim,
-                         state_n=128, state_depth=2,
-                         action_n=128, action_depth=2,
-                         dense_n=128, dense_depth=3)
+                         state_n=64, state_depth=2,
+                         action_n=64, action_depth=2,
+                         dense_n=64, dense_depth=2)
 
 
 class ModelPolicy(m.ModelPolicy):
     def __init__(self, state_dim, d_action_dim, c_action_dim):
         super().__init__(state_dim, d_action_dim, c_action_dim,
-                         dense_n=128, dense_depth=2,
-                         mean_n=128, mean_depth=2,
-                         logstd_n=128, logstd_depth=2)
+                         dense_n=64, dense_depth=2,
+                         mean_n=64, mean_depth=2,
+                         logstd_n=64, logstd_depth=2)

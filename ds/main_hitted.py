@@ -2,7 +2,7 @@ import time
 
 import numpy as np
 
-from algorithm.sac_main_hitted import AgentHitted, AgentAntisubmarineHitted
+from algorithm.sac_main_hitted import AgentAntisubmarineHitted, AgentHitted
 
 from .actor import Actor
 from .learner import Learner
