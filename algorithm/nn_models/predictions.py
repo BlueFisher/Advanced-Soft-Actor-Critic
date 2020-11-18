@@ -9,9 +9,11 @@ class ModelBaseTransition(tf.keras.Model):
         self.c_action_dim = c_action_dim
         self.use_extra_data = use_extra_data
 
+        self.action_dim = d_action_dim + c_action_dim
+
     def init(self):
         return self(tf.keras.Input(shape=(self.state_dim,)),
-                    tf.keras.Input(shape=(self.d_action_dim + self.c_action_dim,)))
+                    tf.keras.Input(shape=(self.action_dim,)))
 
     def call(self, state, action):
         raise Exception("ModelBaseTransition not implemented")

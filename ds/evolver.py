@@ -1,3 +1,5 @@
+import copy
+import json
 import logging
 import os
 import threading
@@ -6,8 +8,6 @@ from collections import deque
 from concurrent import futures
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-import json
-import copy
 
 import grpc
 import numpy as np

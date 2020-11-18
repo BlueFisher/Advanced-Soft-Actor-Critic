@@ -15,8 +15,8 @@ logger = logging.getLogger('sac.base.ds')
 class SAC_DS_Base(SAC_Base):
     def __init__(self,
                  obs_dims,
-                 action_dim,
-                 is_discrete,
+                 d_action_dim,
+                 c_action_dim,
                  model_abs_dir,  # None in actor
                  model,
                  train_mode=True,
@@ -58,8 +58,8 @@ class SAC_DS_Base(SAC_Base):
             tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
         self.obs_dims = obs_dims
-        self.action_dim = action_dim
-        self.is_discrete = is_discrete
+        self.d_action_dim = d_action_dim
+        self.c_action_dim = c_action_dim
         self.train_mode = train_mode
 
         self.burn_in_step = burn_in_step
@@ -90,6 +90,8 @@ class SAC_DS_Base(SAC_Base):
         self.use_n_step_is = True
 
         self.noise = noise
+
+        self.action_dim = self.d_action_dim + self.c_action_dim
 
         if seed is not None:
             tf.random.set_seed(seed)

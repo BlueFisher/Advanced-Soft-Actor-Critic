@@ -239,7 +239,8 @@ class Learner:
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
-        self.obs_dims, self.action_dim, is_discrete = self.env.init()
+        self.obs_dims, self.d_action_dim, self.c_action_dim = self.env.init()
+        self.action_dim = self.d_action_dim + self.c_action_dim
 
         self.logger.info(f'{self.base_config["build_path"]} initialized')
 
@@ -256,8 +257,8 @@ class Learner:
         spec.loader.exec_module(custom_nn_model)
 
         self.sac = SAC_DS_Base(obs_dims=self.obs_dims,
-                               action_dim=self.action_dim,
-                               is_discrete=is_discrete,
+                               d_action_dim=self.d_action_dim,
+                               c_action_dim=self.c_action_dim,
                                model_abs_dir=model_abs_dir,
                                model=custom_nn_model,
                                last_ckpt=self.last_ckpt,
@@ -266,8 +267,8 @@ class Learner:
 
         self.sac_bak = SAC_DS_Base(train_mode=False,
                                    obs_dims=self.obs_dims,
-                                   action_dim=self.action_dim,
-                                   is_discrete=is_discrete,
+                                   d_action_dim=self.d_action_dim,
+                                   c_action_dim=self.c_action_dim,
                                    model_abs_dir=None,
                                    model=custom_nn_model,
                                    last_ckpt=self.last_ckpt,
@@ -452,7 +453,8 @@ class Learner:
 
                     action = action.numpy()
 
-                    next_obs_list, reward, local_done, max_reached = self.env.step(action)
+                    next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_dim],
+                                                                                   action[..., :self.c_action_dim])
 
                     if step == self.base_config['max_step_each_iter']:
                         local_done = [True] * len(agents)
