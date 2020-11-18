@@ -138,7 +138,7 @@ class SAC_DS_Base(SAC_Base):
             self.model_q1.trainable_variables +\
             self.model_q2.trainable_variables +\
             self.model_policy.trainable_variables +\
-            [self.log_alpha]
+            [self.log_alpha_d, self.log_alpha_c]
 
         if self.use_prediction:
             variables += self.model_transition.trainable_variables +\
