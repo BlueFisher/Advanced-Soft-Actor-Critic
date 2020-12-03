@@ -1,4 +1,5 @@
 import logging
+import itertools
 
 import numpy as np
 from mlagents_envs.environment import UnityEnvironment
@@ -20,6 +21,8 @@ class UnityWrapper:
                  seed=None,
                  scene=None,
                  n_agents=1):
+
+        self.scene = scene
 
         seed = seed if seed is not None else np.random.randint(0, 65536)
 
@@ -52,15 +55,27 @@ class UnityWrapper:
     def init(self):
         behavior_spec = self._env.behavior_specs[self.bahavior_name]
         logger.info(f'Observation shapes: {behavior_spec.observation_shapes}')
-        is_discrete = behavior_spec.is_action_discrete()
-        logger.info(f'Action size: {behavior_spec.action_size}. Is discrete: {is_discrete}')
+        self.is_discrete = behavior_spec.is_action_discrete()
+        logger.info(f'Action size: {behavior_spec.action_size}. Is discrete: {self.is_discrete}')
 
         for o in behavior_spec.observation_shapes:
             if len(o) >= 3:
                 self.engine_configuration_channel.set_configuration_parameters(quality_level=5)
                 break
 
-        return behavior_spec.observation_shapes, 0, behavior_spec.action_size
+        if self.is_discrete:
+            action_size = 1
+            action_product_list = []
+            for action, branch_size in enumerate(behavior_spec.discrete_action_branches):
+                action_size *= branch_size
+                action_product_list.append(range(branch_size))
+                logger.info(f"Action number {action} has {branch_size} different options")
+
+            self.action_product = np.array(list(itertools.product(*action_product_list)))
+
+            return behavior_spec.observation_shapes, action_size, 0
+        else:
+            return behavior_spec.observation_shapes, 0, behavior_spec.action_size
 
     def reset(self, reset_config=None):
         reset_config = {} if reset_config is None else reset_config
@@ -73,7 +88,13 @@ class UnityWrapper:
         return [obs.astype(np.float32) for obs in decision_steps.obs]
 
     def step(self, d_action, c_action):
-        self._env.set_actions(self.bahavior_name, c_action)
+        if self.is_discrete:
+            d_action = np.argmax(d_action, axis=1)
+            d_action = self.action_product[d_action]
+
+            self._env.set_actions(self.bahavior_name, d_action)
+        else:
+            self._env.set_actions(self.bahavior_name, c_action)
         self._env.step()
         decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
 
@@ -109,11 +130,18 @@ class UnityWrapper:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+
     env = UnityWrapper(train_mode=True, base_port=5004)
+    obs_shape_list, d_action_dim, c_action_dim = env.init()
 
     for i in range(100):
-        n_agents, obs = env.reset()
+        obs_list = env.reset()
+        n_agents = obs_list[0].shape[0]
         for _ in range(100):
-            obs, reward, done, max_step = env.step(np.random.randn(n_agents, 2))
+            action = np.random.randint(0, d_action_dim, size=n_agents)
+            action = np.eye(d_action_dim, dtype=np.int32)[action]
+            obs_list, reward, done, max_step = env.step(action, None)
+            # print(action, obs_list)
 
     env.close()
