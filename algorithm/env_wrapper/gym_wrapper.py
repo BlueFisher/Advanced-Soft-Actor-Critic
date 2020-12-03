@@ -20,7 +20,7 @@ except:
     logger.warning('No Gym Maze environments')
 
 
-VANILLA_ENVS = ['CartPole-v1', 'MountainCarContinuous-v0']
+VANILLA_ENVS = ['CartPole-v1', 'Pendulum-v0', 'MountainCarContinuous-v0']
 
 RESET = 0
 STEP = 1
