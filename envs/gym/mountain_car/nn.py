@@ -27,12 +27,12 @@ class ModelRND(m.ModelBaseRND):
 
 
 class ModelQ(m.ModelQ):
-    def __init__(self, state_dim, d_action_dim, c_action_dim):
+    def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
         super().__init__(state_dim, d_action_dim, c_action_dim,
                          dense_n=64, dense_depth=2)
 
 
 class ModelPolicy(m.ModelPolicy):
-    def __init__(self, state_dim, d_action_dim, c_action_dim):
+    def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
         super().__init__(state_dim, d_action_dim, c_action_dim,
                          dense_n=64, dense_depth=2)

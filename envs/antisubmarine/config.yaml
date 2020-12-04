@@ -17,3 +17,21 @@ default:
     n_step: 3
     use_rnn: true
     use_prediction: true
+
+nn2:
+  base_config:
+    scene: Antisubmarine2
+    nn: nn2
+  sac_config:
+    discrete_dqn_like: true
+
+vanilla:
+  base_config:
+    name: "vanilla_{time}"
+    nn: nn_vanilla
+
+  sac_config:
+    burn_in_step: 0
+    n_step: 3
+    use_rnn: false
+    use_prediction: false

@@ -85,7 +85,7 @@ class ModelRep(m.ModelBaseGRURep):
 
 
 class ModelQ(m.ModelQ):
-    def __init__(self, state_dim, d_action_dim, c_action_dim):
+    def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
         super().__init__(state_dim, d_action_dim, c_action_dim,
                          state_n=128, state_depth=1,
                          action_n=128, action_depth=1,
@@ -93,7 +93,7 @@ class ModelQ(m.ModelQ):
 
 
 class ModelPolicy(m.ModelPolicy):
-    def __init__(self, state_dim, d_action_dim, c_action_dim):
+    def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
         super().__init__(state_dim, d_action_dim, c_action_dim,
                          dense_n=128, dense_depth=2,
                          mean_n=128, mean_depth=1,
