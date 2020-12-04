@@ -10,8 +10,8 @@ class ModelTransition(m.ModelBaseTransition):
         super().__init__(state_dim, d_action_dim, c_action_dim, use_extra_data)
 
         self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(state_dim + state_dim)
         ])
 
@@ -42,8 +42,8 @@ class ModelReward(m.ModelBaseReward):
         super().__init__(state_dim, use_extra_data)
 
         self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(1)
         ])
 
@@ -58,9 +58,9 @@ class ModelObservation(m.ModelBaseObservation):
         super().__init__(state_dim, obs_dims, use_extra_data)
 
         self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(53)
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(22)
         ])
 
     def call(self, state):
@@ -80,34 +80,38 @@ class ModelObservation(m.ModelBaseObservation):
 
 class ModelRep(m.ModelBaseGRURep):
     def __init__(self, obs_dims, d_action_dim, c_action_dim):
-        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units=32)
+        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units=64)
 
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu)
         ])
 
     def call(self, obs_list, pre_action, rnn_state):
-        rnn_obs = tf.concat([obs_list[0][..., :5], pre_action], axis=-1)
-        buoy_obs = obs_list[0][..., 5:-2]
+        # rnn_obs = tf.concat([obs_list[0][..., :5], pre_action], axis=-1)
+        # buoy_obs = obs_list[0][..., 5:]
 
-        outputs, next_rnn_state = self.gru(rnn_obs, initial_state=rnn_state)
+        obs = obs_list[0][..., :-2]
+        obs = tf.concat([obs, pre_action], axis=-1)
 
-        state = tf.concat([outputs, self.dense(buoy_obs)], axis=-1)
+        outputs, next_rnn_state = self.gru(obs, initial_state=rnn_state)
+
+        # state = tf.concat([outputs, buoy_obs], axis=-1)
+        state = self.dense(outputs)
 
         return state, next_rnn_state
 
 
 class ModelQ(m.ModelQ):
-    def __init__(self, state_dim, d_action_dim, c_action_dim):
-        super().__init__(state_dim, d_action_dim, c_action_dim,
-                         state_n=64, state_depth=2,
-                         action_n=64, action_depth=2,
-                         dense_n=64, dense_depth=2)
+    def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
+        super().__init__(state_dim, d_action_dim, c_action_dim, name,
+                         c_state_n=128, c_state_depth=1,
+                         c_action_n=128, c_action_depth=1,
+                         c_dense_n=128, c_dense_depth=3)
 
 
 class ModelPolicy(m.ModelPolicy):
-    def __init__(self, state_dim, d_action_dim, c_action_dim):
-        super().__init__(state_dim, d_action_dim, c_action_dim,
-                         dense_n=64, dense_depth=2,
-                         mean_n=64, mean_depth=2,
-                         logstd_n=64, logstd_depth=2)
+    def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
+        super().__init__(state_dim, d_action_dim, c_action_dim, name,
+                         c_dense_n=128, c_dense_depth=3,
+                         mean_n=128, mean_depth=1,
+                         logstd_n=128, logstd_depth=1)

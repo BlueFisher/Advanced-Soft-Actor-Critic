@@ -22,10 +22,10 @@ if __name__ == '__main__':
     parser.add_argument('--repeat', type=int, default=1, help='number of repeated experiments')
     args = parser.parse_args()
 
-    if args.env in ['roller', 'square', 'pyramid']:
+    if args.env in ['roller', 'square', 'pyramid', 'antisubmarine']:
         from algorithm.sac_main_hitted import MainHitted as Main
-    elif args.env in ['antisubmarine']:
-        from algorithm.sac_main_hitted import MainAntisubmarineHitted as Main
+    # elif args.env in ['antisubmarine']:
+    #     from algorithm.sac_main_hitted import MainAntisubmarineHitted as Main
     else:
         from algorithm.sac_main import Main
 

@@ -42,6 +42,7 @@ class SAC_DS_Base(SAC_Base):
                  v_c=1.,
                  clip_epsilon=0.2,
 
+                 discrete_dqn_like=False,
                  use_prediction=False,
                  transition_kl=0.8,
                  use_extra_data=True,
@@ -78,6 +79,7 @@ class SAC_DS_Base(SAC_Base):
         self.v_c = v_c
         self.clip_epsilon = clip_epsilon
 
+        self.discrete_dqn_like = discrete_dqn_like
         self.use_prediction = use_prediction
         self.transition_kl = transition_kl
         self.use_extra_data = use_extra_data
@@ -108,14 +110,35 @@ class SAC_DS_Base(SAC_Base):
     @tf.function
     def choose_action(self, obs_list):
         action = super().choose_action(obs_list)
-        action = tf.tanh(tf.atanh(action) + tf.random.normal(tf.shape(action), stddev=self.noise))
-        return action
+        d_action = action[..., :self.d_action_dim]
+        c_action = action[..., self.d_action_dim:]
+
+        if self.d_action_dim:
+            action_random = tf.one_hot(tf.squeeze(tf.random.categorical(tf.ones_like(d_action), 1)), self.d_action_dim)
+            cond = tf.tile(tf.reshape(tf.random.uniform((tf.shape(d_action)[0],)) < self.noise, [-1, 1]), [1, self.d_action_dim])
+            d_action = tf.where(cond, d_action, action_random)
+
+        if self.c_action_dim:
+            c_action = tf.tanh(tf.atanh(c_action) + tf.random.normal(tf.shape(c_action), stddev=self.noise))
+
+        return tf.concat([d_action, c_action], axis=-1)
 
     @tf.function
     def choose_rnn_action(self, obs_list, pre_action, rnn_state):
         action, next_rnn_state = super().choose_rnn_action(obs_list, pre_action, rnn_state)
-        action = tf.tanh(tf.atanh(action) + tf.random.normal(tf.shape(action), stddev=self.noise))
-        return action, next_rnn_state
+
+        d_action = action[..., :self.d_action_dim]
+        c_action = action[..., self.d_action_dim:]
+
+        if self.d_action_dim:
+            action_random = tf.one_hot(tf.squeeze(tf.random.categorical(tf.ones_like(d_action), 1)), self.d_action_dim)
+            cond = tf.tile(tf.reshape(tf.random.uniform((tf.shape(d_action)[0],)) < self.noise, [-1, 1]), [1, self.d_action_dim])
+            d_action = tf.where(cond, d_action, action_random)
+
+        if self.c_action_dim:
+            c_action = tf.tanh(tf.atanh(c_action) + tf.random.normal(tf.shape(c_action), stddev=self.noise))
+
+        return tf.concat([d_action, c_action], axis=-1), next_rnn_state
 
     # For learner to send variables to actors
     # If use @tf.function, the function will return Tensors, not Variables

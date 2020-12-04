@@ -98,13 +98,13 @@ class ModelRep(m.ModelBaseLSTMRep):
 
 
 class ModelQ(m.ModelQ):
-    def __init__(self, state_dim, d_action_dim, c_action_dim):
+    def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
         super().__init__(state_dim, d_action_dim, c_action_dim,
                          dense_n=256, dense_depth=3)
 
 
 class ModelPolicy(m.ModelPolicy):
-    def __init__(self, state_dim, d_action_dim, c_action_dim):
+    def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
         super().__init__(state_dim, d_action_dim, c_action_dim,
                          dense_n=256, dense_depth=3,
                          mean_n=256, mean_depth=1,
