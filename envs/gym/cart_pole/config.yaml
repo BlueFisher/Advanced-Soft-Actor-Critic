@@ -19,9 +19,11 @@ default:
     save_model_per_step: 1000 # Save model every N steps
     save_model_per_minute: 1 # Save model every N minutes
 
-    # learning_rate: 0.0001
+    learning_rate: 0.01
 
     n_step: 3
     clip_epsilon: -1
+
+    discrete_dqn_like: true
 
     use_n_step_is: true

@@ -1,5 +1,4 @@
 import logging
-from math import gamma
 import time
 from pathlib import Path
 
@@ -75,6 +74,9 @@ class SAC_Base(object):
                  write_summary_per_step=1e3,
                  save_model_per_step=1e5,
                  save_model_per_minute=5,
+
+                 ensemble_q_num=2,
+                 ensemble_q_sample=2,
 
                  burn_in_step=0,
                  n_step=1,
@@ -152,6 +154,9 @@ class SAC_Base(object):
         self.d_action_dim = d_action_dim
         self.c_action_dim = c_action_dim
         self.train_mode = train_mode
+
+        self.ensemble_q_num = ensemble_q_num
+        self.ensemble_q_sample = ensemble_q_sample
 
         self.burn_in_step = burn_in_step
         self.n_step = n_step
@@ -286,13 +291,11 @@ class SAC_Base(object):
             self.model_target_rnd = model.ModelRND(state_dim, self.d_action_dim + self.c_action_dim)
             self.optimizer_rnd = tf.keras.optimizers.Adam(learning_rate)
 
-        self.model_q1 = model.ModelQ(state_dim, self.d_action_dim, self.c_action_dim, 'q1')
-        self.model_target_q1 = model.ModelQ(state_dim, self.d_action_dim, self.c_action_dim, 'target_q1')
-        self.optimizer_q1 = adam_optimizer()
-
-        self.model_q2 = model.ModelQ(state_dim, self.d_action_dim, self.c_action_dim, 'q2')
-        self.model_target_q2 = model.ModelQ(state_dim, self.d_action_dim, self.c_action_dim, 'target_q2')
-        self.optimizer_q2 = adam_optimizer()
+        self.model_q_list = [model.ModelQ(state_dim, self.d_action_dim, self.c_action_dim, f'q{i}')
+                             for i in range(self.ensemble_q_num)]
+        self.model_target_q_list = [model.ModelQ(state_dim, self.d_action_dim, self.c_action_dim, f'target_q{i}')
+                                    for i in range(self.ensemble_q_num)]
+        self.optimizer_q_list = [adam_optimizer() for _ in range(self.ensemble_q_num)]
 
         self.model_policy = model.ModelPolicy(state_dim, self.d_action_dim, self.c_action_dim, 'policy')
         self.optimizer_policy = adam_optimizer()
@@ -316,19 +319,18 @@ class SAC_Base(object):
             'log_alpha_c': self.log_alpha_c,
             'global_step': self.global_step,
 
-            'optimizer_rep': self.optimizer_rep,
-            'optimizer_q1': self.optimizer_q1,
-            'optimizer_q2': self.optimizer_q2,
-            'optimizer_policy': self.optimizer_policy,
-
             'model_rep': self.model_rep,
             'model_target_rep': self.model_target_rep,
-            'model_q1': self.model_q1,
-            'model_target_q1': self.model_target_q1,
-            'model_q2': self.model_q2,
-            'model_target_q2': self.model_target_q2,
-            'model_policy': self.model_policy
+            'model_policy': self.model_policy,
+
+            'optimizer_rep': self.optimizer_rep,
+            'optimizer_policy': self.optimizer_policy
         }
+
+        for i in range(self.ensemble_q_num):
+            ckpt_saved[f'model_q{i}'] = self.model_q_list[i]
+            ckpt_saved[f'model_target_q{i}'] = self.model_target_q_list[i]
+            ckpt_saved[f'optimizer_q{i}'] = self.optimizer_q_list[i]
 
         if self.use_normalization:
             ckpt_saved['normalizer_step'] = self.normalizer_step
@@ -449,8 +451,11 @@ class SAC_Base(object):
         """
         soft update target networks (default hard)
         """
-        target_variables = self.model_target_q1.trainable_variables + self.model_target_q2.trainable_variables
-        eval_variables = self.model_q1.trainable_variables + self.model_q2.trainable_variables
+        target_variables, eval_variables = [], []
+
+        for i in range(self.ensemble_q_num):
+            target_variables += self.model_target_q_list[i].trainable_variables
+            eval_variables += self.model_q_list[i].trainable_variables
 
         target_variables += self.model_target_rep.trainable_variables
         eval_variables += self.model_rep.trainable_variables
@@ -504,24 +509,33 @@ class SAC_Base(object):
 
     @tf.function
     def get_dqn_like_d_y(self, n_rewards, n_dones,
-                         next_q1, next_q2,
-                         next_target_q1, next_target_q2):
+                         stacked_next_q, stacked_next_target_q):
+        """
+        n_rewards: [Batch, n]
+        n_dones: [Batch, n]
+        stacked_next_q: [ensemble_q_sample, Batch, n, d_action_dim]
+        stacked_next_target_q: [ensemble_q_sample, Batch, n, d_action_dim]
+        """
         gamma_ratio = [[tf.pow(self.gamma, i) for i in range(self.n_step)]]
 
-        next_q1 = next_q1[:, -1, ...]
-        next_q2 = next_q2[:, -1, ...]
-        next_target_q1 = next_target_q1[:, -1, ...]
-        next_target_q2 = next_target_q2[:, -1, ...]
+        stacked_next_q = stacked_next_q[..., -1, :]  # [ensemble_q_sample, Batch, d_action_dim]
+        stacked_next_target_q = stacked_next_target_q[..., -1, :]  # [ensemble_q_sample, Batch, d_action_dim]
 
-        done = n_dones[:, -1:]
+        done = n_dones[:, -1:]  # [Batch, 1]
 
-        mask_q1 = tf.one_hot(tf.argmax(next_q1, axis=-1), self.d_action_dim)
-        mask_q2 = tf.one_hot(tf.argmax(next_q2, axis=-1), self.d_action_dim)
+        mask_stacked_q = tf.one_hot(tf.argmax(stacked_next_q, axis=-1), self.d_action_dim)
+        # [ensemble_q_sample, Batch, d_action_dim]
 
-        next_q = tf.minimum(tf.reduce_sum(next_target_q1 * mask_q1, axis=-1, keepdims=True),
-                            tf.reduce_sum(next_target_q2 * mask_q2, axis=-1, keepdims=True))
+        stacked_max_next_target_q = tf.reduce_sum(stacked_next_target_q * mask_stacked_q,
+                                                  axis=-1,
+                                                  keepdims=True)
+        # [ensemble_q_sample, Batch, 1]
 
-        y = tf.reduce_sum(gamma_ratio * n_rewards, axis=-1, keepdims=True) + tf.pow(self.gamma, self.n_step) * next_q * (1 - done)
+        next_q = tf.reduce_min(stacked_max_next_target_q, axis=0)
+        # [Batch, 1]
+
+        g = tf.reduce_sum(gamma_ratio * n_rewards, axis=-1, keepdims=True)  # [Batch, 1]
+        y = g + tf.pow(self.gamma, self.n_step) * next_q * (1 - done)  # [Batch, 1]
 
         return y
 
@@ -529,6 +543,14 @@ class SAC_Base(object):
     def _v_trace(self, n_rewards, n_dones,
                  n_mu_probs, n_pi_probs,
                  v, next_v):
+        """
+        n_rewards: [Batch, n]
+        n_dones: [Batch, n]
+        n_mu_probs: [Batch, n]
+        n_pi_probs: [Batch, n]
+        v: [Batch, n]
+        next_v: [Batch, n],
+        """
 
         gamma_ratio = [[tf.pow(self.gamma, i) for i in range(self.n_step)]]
         lambda_ratio = [[tf.pow(self.v_lambda, i) for i in range(self.n_step)]]
@@ -589,34 +611,49 @@ class SAC_Base(object):
             n_c_actions_sampled = tf.zeros((0,))
             next_n_c_actions_sampled = tf.zeros((0,))
 
-        # [Batch, n, action_dim], [Batch, n, 1]
-        d_q1, c_q1 = self.model_target_q1(n_states, tf.tanh(n_c_actions_sampled))
-        d_q2, c_q2 = self.model_target_q2(n_states, tf.tanh(n_c_actions_sampled))
-        next_d_q1, next_c_q1 = self.model_target_q1(next_n_states, tf.tanh(next_n_c_actions_sampled))
-        next_d_q2, next_c_q2 = self.model_target_q2(next_n_states, tf.tanh(next_n_c_actions_sampled))
+        # ([Batch, n, action_dim], [Batch, n, 1])
+        q_list = [q(n_states, tf.tanh(n_c_actions_sampled)) for q in self.model_target_q_list]
+        next_q_list = [q(next_n_states, tf.tanh(next_n_c_actions_sampled)) for q in self.model_target_q_list]
+
+        d_q_list = [q[0] for q in q_list]  # [Batch, n, action_dim]
+        c_q_list = [q[1] for q in q_list]  # [Batch, n, 1]
+
+        next_d_q_list = [q[0] for q in next_q_list]  # [Batch, n, action_dim]
+        next_c_q_list = [q[1] for q in next_q_list]  # [Batch, n, 1]
 
         d_y, c_y = tf.zeros((0,)), tf.zeros((0,))
 
         if self.d_action_dim:
-            next_d_eval_q1, _ = self.model_q1(next_n_states, tf.tanh(next_n_c_actions_sampled))
-            next_d_eval_q2, _ = self.model_q2(next_n_states, tf.tanh(next_n_c_actions_sampled))
+            stacked_next_d_q = tf.gather(next_d_q_list,
+                                         tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
+            # [ensemble_q_num, Batch, n, d_action_dim] -> [ensemble_q_sample, Batch, n, d_action_dim]
 
             if self.discrete_dqn_like:
-                d_y = self.get_dqn_like_d_y(n_rewards, n_dones, next_d_eval_q1, next_d_eval_q2,
-                                            next_d_q1, next_d_q2)
-            else:
-                min_q = tf.minimum(d_q1, d_q2)
-                min_next_q = tf.minimum(next_d_q1, next_d_q2)
+                next_d_eval_q_list = [q(next_n_states, tf.tanh(next_n_c_actions_sampled))[0] for q in self.model_q_list]
+                stacked_next_d_eval_q = tf.gather(next_d_eval_q_list,
+                                                  tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
+                # [ensemble_q_num, Batch, n, d_action_dim] -> [ensemble_q_sample, Batch, n, d_action_dim]
 
-                probs = tf.nn.softmax(d_policy.logits)
-                next_probs = tf.nn.softmax(next_d_policy.logits)
+                d_y = self.get_dqn_like_d_y(n_rewards, n_dones,
+                                            stacked_next_d_eval_q,
+                                            stacked_next_d_q)
+            else:
+                stacked_d_q = tf.gather(d_q_list,
+                                        tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
+                # [ensemble_q_num, Batch, n, d_action_dim] -> [ensemble_q_sample, Batch, n, d_action_dim]
+
+                min_q = tf.reduce_min(stacked_d_q, axis=0)  # [Batch, n, d_action_dim]
+                min_next_q = tf.reduce_min(stacked_next_d_q, axis=0)  # [Batch, n, d_action_dim]
+
+                probs = tf.nn.softmax(d_policy.logits)  # [Batch, n, action_dim]
+                next_probs = tf.nn.softmax(next_d_policy.logits)  # [Batch, n, action_dim]
                 clipped_probs = tf.maximum(probs, 1e-8)
                 clipped_next_probs = tf.maximum(next_probs, 1e-8)
                 tmp_v = min_q - alpha_d * tf.math.log(clipped_probs)  # [Batch, n, action_dim]
-                tmp_next_v = min_next_q - alpha_d * tf.math.log(clipped_next_probs)
+                tmp_next_v = min_next_q - alpha_d * tf.math.log(clipped_next_probs)  # [Batch, n, action_dim]
 
                 v = tf.reduce_sum(probs * tmp_v, axis=-1)  # [Batch, n]
-                next_v = tf.reduce_sum(next_probs * tmp_next_v, axis=-1)
+                next_v = tf.reduce_sum(next_probs * tmp_next_v, axis=-1)  # [Batch, n]
 
                 if self.use_n_step_is:
                     n_d_actions = n_actions[..., :self.d_action_dim]
@@ -628,20 +665,21 @@ class SAC_Base(object):
                                     v, next_v)
 
         if self.c_action_dim:
-            n_actions_log_prob = tf.reduce_sum(squash_correction_log_prob(c_policy, n_c_actions_sampled), axis=2)  # [Batch, n]
-            next_n_actions_log_prob = tf.reduce_sum(squash_correction_log_prob(next_c_policy, next_n_c_actions_sampled), axis=2)
+            n_actions_log_prob = tf.reduce_sum(squash_correction_log_prob(c_policy, n_c_actions_sampled), axis=-1)  # [Batch, n]
+            next_n_actions_log_prob = tf.reduce_sum(squash_correction_log_prob(next_c_policy, next_n_c_actions_sampled), axis=-1)
 
-            q1 = tf.squeeze(c_q1, [-1])  # [Batch, n]
-            q2 = tf.squeeze(c_q2, [-1])
+            stacked_c_q = tf.gather(c_q_list,
+                                    tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
+            # [ensemble_q_num, Batch, n, 1] -> [ensemble_q_sample, Batch, n, 1]
+            stacked_next_c_q = tf.gather(next_c_q_list,
+                                         tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
+            # [ensemble_q_num, Batch, n, 1] -> [ensemble_q_sample, Batch, n, 1]
 
-            next_q1 = tf.squeeze(next_c_q1, [-1])  # [Batch, n]
-            next_q2 = tf.squeeze(next_c_q2, [-1])
-
-            min_q = tf.minimum(q1, q2)
-            min_next_q = tf.minimum(next_q1, next_q2)
+            min_q = tf.squeeze(tf.reduce_min(stacked_c_q, axis=0), axis=-1)  # [Batch, n]
+            min_next_q = tf.squeeze(tf.reduce_min(stacked_next_c_q, axis=0), axis=-1)  # [Batch, n]
 
             v = min_q - alpha_c * n_actions_log_prob  # [Batch, n]
-            next_v = min_next_q - alpha_c * next_n_actions_log_prob
+            next_v = min_next_q - alpha_c * next_n_actions_log_prob  # [Batch, n]
 
             # v = scale_inverse_h(v)
             # next_v = scale_inverse_h(next_v)
@@ -650,8 +688,7 @@ class SAC_Base(object):
                 n_c_actions = n_actions[..., self.d_action_dim:]
                 n_pi_probs = squash_correction_prob(c_policy, tf.atanh(n_c_actions))
                 # [Batch, n, action_dim]
-                n_pi_probs = tf.reduce_prod(n_pi_probs, axis=-1)
-                # [Batch, n]
+                n_pi_probs = tf.reduce_prod(n_pi_probs, axis=-1)  # [Batch, n]
 
             c_y = self._v_trace(n_rewards, n_dones,
                                 n_mu_probs,
@@ -691,9 +728,10 @@ class SAC_Base(object):
             d_action = action[..., :self.d_action_dim]
             c_action = action[..., self.d_action_dim:]
 
-            # [Batch, action_dim], [Batch, 1]
-            d_q1, c_q1 = self.model_q1(state, c_action)
-            d_q2, c_q2 = self.model_q2(state, c_action)
+            q_list = [q(state, c_action) for q in self.model_q_list]
+            # ([Batch, action_dim], [Batch, 1])
+            d_q_list = [q[0] for q in q_list]  # [Batch, action_dim]
+            c_q_list = [q[1] for q in q_list]  # [Batch, 1]
 
             d_y, c_y = self._get_y(m_target_states[:, self.burn_in_step:-1, ...],
                                    n_actions[:, self.burn_in_step:, ...],
@@ -703,56 +741,45 @@ class SAC_Base(object):
                                    n_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
 
             d_y, c_y = tf.stop_gradient(d_y), tf.stop_gradient(c_y)
+            #  [Batch, 1], [Batch, 1]
 
             d_policy, c_policy = self.model_policy(state)
 
-            loss_q1, loss_q2 = tf.zeros((tf.shape(state)[0], 1)), tf.zeros((tf.shape(state)[0], 1))
+            loss_q_list = [tf.zeros((tf.shape(state)[0], 1)) for _ in range(self.ensemble_q_num)]
 
             if self.d_action_dim:
-                q1_single = tf.reduce_sum(d_action * d_q1, axis=-1, keepdims=True)  # [Batch, 1]
-                q2_single = tf.reduce_sum(d_action * d_q2, axis=-1, keepdims=True)
-                loss_q1 += tf.square(q1_single - d_y)
-                loss_q2 += tf.square(q2_single - d_y)
+                for i in range(self.ensemble_q_num):
+                    q_single = tf.reduce_sum(d_action * d_q_list[i], axis=-1, keepdims=True)  # [Batch, 1]
+                    loss_q_list[i] += tf.square(q_single - d_y)
 
             if self.c_action_dim:
                 action_sampled = c_policy.sample()
-                _, target_c_q1 = self.model_target_q1(state, c_action)
-                _, target_c_q2 = self.model_target_q2(state, c_action)
-                _, c_q1_for_gradient = self.model_q1(state, tf.tanh(action_sampled))
-                _, c_q2_for_gradient = self.model_q2(state, tf.tanh(action_sampled))
+                c_q_for_gradient_list = [q(state, tf.tanh(action_sampled))[1] for q in self.model_q_list]
 
                 if self.clip_epsilon > 0:
-                    clipped_q1 = target_c_q1 + tf.clip_by_value(
-                        c_q1 - target_c_q1,
+                    target_c_q_list = [q(state, c_action)[1] for q in self.model_target_q_list]
+
+                    clipped_q_list = [target_c_q_list[i] + tf.clip_by_value(
+                        c_q_list[i] - target_c_q_list[i],
                         -self.clip_epsilon,
                         self.clip_epsilon,
-                    )
-                    clipped_q2 = target_c_q2 + tf.clip_by_value(
-                        c_q2 - target_c_q2,
-                        -self.clip_epsilon,
-                        self.clip_epsilon,
-                    )
+                    ) for i in range(self.ensemble_q_num)]
 
-                    loss_q1_a = tf.square(clipped_q1 - c_y)
-                    loss_q2_a = tf.square(clipped_q2 - c_y)
+                    loss_q_a_list = [tf.square(clipped_q - c_y) for clipped_q in clipped_q_list]
+                    loss_q_b_list = [tf.square(q - c_y) for q in c_q_list]
 
-                    loss_q1_b = tf.square(c_q1 - c_y)
-                    loss_q2_b = tf.square(c_q2 - c_y)
-
-                    loss_q1 += tf.maximum(loss_q1_a, loss_q1_b)
-                    loss_q2 += tf.maximum(loss_q2_a, loss_q2_b)
+                    for i in range(self.ensemble_q_num):
+                        loss_q_list[i] += tf.maximum(loss_q_a_list[i], loss_q_b_list[i])
                 else:
-                    loss_q1 += tf.square(c_q1 - c_y)
-                    loss_q2 += tf.square(c_q2 - c_y)
+                    for i in range(self.ensemble_q_num):
+                        loss_q_list[i] += tf.square(c_q_list[i] - c_y)
 
             if self.use_priority:
-                loss_q1 *= priority_is
-                loss_q2 *= priority_is
+                loss_q_list = [loss * priority_is for loss in loss_q_list]
 
-            loss_q1 = tf.reduce_mean(loss_q1)
-            loss_q2 = tf.reduce_mean(loss_q2)
+            loss_q_list = [tf.reduce_mean(loss) for loss in loss_q_list]
 
-            loss_rep_q = loss_q1 + loss_q2
+            loss_rep_q = sum(loss_q_list)
 
             loss_mse = tf.keras.losses.MeanSquaredError()
             if self.use_prediction:
@@ -802,11 +829,15 @@ class SAC_Base(object):
             loss_c_alpha = tf.zeros((tf.shape(state)[0], 1))
 
             if self.d_action_dim and not self.discrete_dqn_like:
-                probs = tf.nn.softmax(d_policy.logits)
+                probs = tf.nn.softmax(d_policy.logits)   # [Batch, action_dim]
                 clipped_probs = tf.maximum(probs, 1e-8)
 
-                _loss_policy = alpha_d * tf.math.log(clipped_probs) - tf.minimum(d_q1, d_q2)
+                stacked_d_q = tf.gather(d_q_list,
+                                        tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
+                # [ensemble_q_num, Batch, d_action_dim] -> [ensemble_q_sample, Batch, d_action_dim]
+                min_d_q = tf.reduce_min(stacked_d_q, axis=0)  # [Batch, d_action_dim]
 
+                _loss_policy = alpha_d * tf.math.log(clipped_probs) - min_d_q  # [Batch, d_action_dim]
                 loss_d_policy = tf.reduce_sum(probs * _loss_policy, axis=1, keepdims=True)  # [Batch, 1]
 
                 _loss_alpha = -alpha_d * (tf.math.log(clipped_probs) - self.d_action_dim)  # [Batch, action_dim]
@@ -814,7 +845,15 @@ class SAC_Base(object):
 
             if self.c_action_dim:
                 log_prob = tf.reduce_sum(squash_correction_log_prob(c_policy, action_sampled), axis=1, keepdims=True)
-                loss_c_policy = alpha_c * log_prob - tf.minimum(c_q1_for_gradient, c_q2_for_gradient)  # [Batch, 1]
+
+                stacked_c_q_for_gradient = tf.gather(c_q_for_gradient_list,
+                                                     tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
+                # [ensemble_q_num, Batch, 1] -> [ensemble_q_sample, Batch, 1]
+                min_c_q_for_gradient = tf.reduce_min(stacked_c_q_for_gradient, axis=0)
+                # [Batch, 1]
+
+                loss_c_policy = alpha_c * log_prob - min_c_q_for_gradient
+                # [Batch, 1]
 
                 loss_c_alpha = -alpha_c * (log_prob - self.c_action_dim)  # [Batch, 1]
 
@@ -822,11 +861,9 @@ class SAC_Base(object):
             loss_alpha = tf.reduce_mean(loss_d_alpha + loss_c_alpha)
 
         # Compute gradients and optimize loss
-        grads_q1 = tape.gradient(loss_q1, self.model_q1.trainable_variables)
-        self.optimizer_q1.apply_gradients(zip(grads_q1, self.model_q1.trainable_variables))
-
-        grads_q2 = tape.gradient(loss_q2, self.model_q2.trainable_variables)
-        self.optimizer_q2.apply_gradients(zip(grads_q2, self.model_q2.trainable_variables))
+        for i in range(self.ensemble_q_num):
+            grads_q = tape.gradient(loss_q_list[i], self.model_q_list[i].trainable_variables)
+            self.optimizer_q_list[i].apply_gradients(zip(grads_q, self.model_q_list[i].trainable_variables))
 
         rep_variables = self.model_rep.trainable_variables
         grads_rep = tape.gradient(loss_rep_q, rep_variables)
@@ -873,10 +910,11 @@ class SAC_Base(object):
             grads_rnd = tape.gradient(loss_rnd, self.model_rnd.trainable_variables)
             self.optimizer_rnd.apply_gradients(zip(grads_rnd, self.model_rnd.trainable_variables))
 
-        grads_policy = tape.gradient(loss_policy, self.model_policy.trainable_variables)
-        self.optimizer_policy.apply_gradients(zip(grads_policy, self.model_policy.trainable_variables))
+        if (self.d_action_dim and not self.discrete_dqn_like) or self.c_action_dim:
+            grads_policy = tape.gradient(loss_policy, self.model_policy.trainable_variables)
+            self.optimizer_policy.apply_gradients(zip(grads_policy, self.model_policy.trainable_variables))
 
-        if self.use_auto_alpha:
+        if self.use_auto_alpha and ((self.d_action_dim and not self.discrete_dqn_like) or self.c_action_dim):
             grads_alpha = tape.gradient(loss_alpha, [self.log_alpha_d, self.log_alpha_c])
             self.optimizer_alpha.apply_gradients(zip(grads_alpha, [self.log_alpha_d, self.log_alpha_c]))
 
@@ -884,7 +922,7 @@ class SAC_Base(object):
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             with self.summary_writer.as_default():
-                tf.summary.scalar('loss/q', tf.reduce_mean([loss_q1, loss_q2]), step=self.global_step)
+                tf.summary.scalar('loss/q', tf.reduce_mean(loss_q_list), step=self.global_step)
                 if self.d_action_dim:
                     tf.summary.scalar('loss/d_entropy', tf.reduce_mean(d_policy.entropy()), step=self.global_step)
                     tf.summary.scalar('loss/alpha_d', alpha_d, step=self.global_step)
@@ -966,7 +1004,7 @@ class SAC_Base(object):
                                                          tf.shape(state)[0])[0]
                         d_action = tf.one_hot(d_action, self.d_action_dim)
                     else:
-                        d_q, _ = self.model_q1(state, c_policy.sample() if self.c_action_dim else tf.zeros((0,)))
+                        d_q, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_dim else tf.zeros((0,)))
                         d_action = tf.argmax(d_q, axis=-1)
                         d_action = tf.one_hot(d_action, self.d_action_dim)
                 else:
@@ -1091,13 +1129,14 @@ class SAC_Base(object):
         d_action = action[..., :self.d_action_dim]
         c_action = action[..., self.d_action_dim:]
 
-        # [Batch, d_action_dim], # [Batch, 1]
-        d_q1, c_q1 = self.model_q1(state, c_action)
-        d_q2, c_q2 = self.model_q2(state, c_action)
+        # ([Batch, action_dim], [Batch, 1])
+        q_list = [q(state, c_action) for q in self.model_q_list]
+        d_q_list = [q[0] for q in q_list]  # [Batch, action_dim]
+        c_q_list = [q[1] for q in q_list]  # [Batch, 1]
 
         if self.d_action_dim:
-            d_q1 = tf.reduce_sum(d_action * d_q1, axis=-1, keepdims=True)  # [Batch, 1]
-            d_q2 = tf.reduce_sum(d_action * d_q2, axis=-1, keepdims=True)
+            d_q_list = [tf.reduce_sum(d_action * q, axis=-1, keepdims=True) for q in d_q_list]
+            # [Batch, 1]
 
         d_y, c_y = self._get_y(m_target_states[:, self.burn_in_step:-1, ...],
                                n_actions[:, self.burn_in_step:, ...],
@@ -1107,17 +1146,17 @@ class SAC_Base(object):
                                n_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
 
         # [Batch, 1]
-        q1_td_error, q2_td_error = tf.zeros((tf.shape(state)[0], 1)), tf.zeros((tf.shape(state)[0], 1))
+        q_td_error_list = [tf.zeros((tf.shape(state)[0], 1)) for _ in range(self.ensemble_q_num)]
         if self.d_action_dim:
-            q1_td_error += tf.abs(d_q1 - d_y)
-            q2_td_error += tf.abs(d_q2 - d_y)
+            for i in range(self.ensemble_q_num):
+                q_td_error_list[i] += tf.abs(d_q_list[i] - d_y)
 
         if self.c_action_dim:
-            q1_td_error += tf.abs(c_q1 - c_y)
-            q2_td_error += tf.abs(c_q2 - c_y)
+            for i in range(self.ensemble_q_num):
+                q_td_error_list[i] += tf.abs(c_q_list[i] - c_y)
 
-        td_error = tf.reduce_mean(tf.concat([q1_td_error, q2_td_error], axis=1),
-                                  axis=1, keepdims=True)
+        td_error = tf.reduce_mean(tf.concat(q_td_error_list, axis=-1),
+                                  axis=-1, keepdims=True)
         return td_error
 
     def get_episode_td_error(self,
