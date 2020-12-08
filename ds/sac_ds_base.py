@@ -27,6 +27,9 @@ class SAC_DS_Base(SAC_Base):
                  save_model_per_step=1e5,
                  save_model_per_minute=5,
 
+                 ensemble_q_num=2,
+                 ensemble_q_sample=2,
+
                  burn_in_step=0,
                  n_step=1,
                  use_rnn=False,
@@ -62,6 +65,9 @@ class SAC_DS_Base(SAC_Base):
         self.d_action_dim = d_action_dim
         self.c_action_dim = c_action_dim
         self.train_mode = train_mode
+
+        self.ensemble_q_num = ensemble_q_num
+        self.ensemble_q_sample = ensemble_q_sample
 
         self.burn_in_step = burn_in_step
         self.n_step = n_step
@@ -158,10 +164,11 @@ class SAC_DS_Base(SAC_Base):
     # For learner to send variables to evolver
     def get_nn_variables(self):
         variables = self.model_rep.trainable_variables +\
-            self.model_q1.trainable_variables +\
-            self.model_q2.trainable_variables +\
             self.model_policy.trainable_variables +\
             [self.log_alpha_d, self.log_alpha_c]
+
+        for model_q in self.model_q_list:
+            variables += model_q.trainable_variables
 
         if self.use_prediction:
             variables += self.model_transition.trainable_variables +\
@@ -189,9 +196,10 @@ class SAC_DS_Base(SAC_Base):
 
     def get_all_variables(self):
         variables = self.get_nn_variables()
-        variables += self.model_target_rep.trainable_variables +\
-            self.model_target_q1.trainable_variables +\
-            self.model_target_q2.trainable_variables
+        variables += self.model_target_rep.trainable_variables
+
+        for model_target_q in self.model_target_q_list:
+            variables += model_target_q.trainable_variables
 
         if self.use_normalization:
             variables += [self.normalizer_step] +\
@@ -216,9 +224,10 @@ class SAC_DS_Base(SAC_Base):
     @tf.function
     def reset_optimizers(self):
         opt_variables = self.optimizer_rep.weights +\
-            self.optimizer_q1.weights +\
-            self.optimizer_q2.weights +\
             self.optimizer_policy.weights
+
+        for optimizer_q in self.optimizer_q_list:
+            opt_variables += optimizer_q.weights
 
         if self.use_auto_alpha:
             opt_variables += self.optimizer_alpha.weights

@@ -76,13 +76,15 @@ replay_config:
   beta_increment_per_sampling: 0.001 # Increment step
   td_error_min: 0.01 # Small amount to avoid zero priority
   td_error_max: 1. # Clipped abs error
-  use_mongodb: false # TODO
 
 sac_config:
   seed: null # Random seed
   write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
   save_model_per_step: 100000 # Save model every N steps
   save_model_per_minute: 5 # Save model every N minutes
+
+  ensemble_q_num: 2 # Number of Qs
+  ensemble_q_sample: 2 # Number of min Qs
 
   burn_in_step: 0 # Burn-in steps in R2D2
   n_step: 1 # Update Q function by N steps
@@ -102,6 +104,7 @@ sac_config:
   v_c: 1.0 # C for V-trace
   clip_epsilon: 0.2 # Epsilon for q and policy clip
 
+  discrete_dqn_like: false # If use policy or only Q network if discrete is in action spaces
   use_priority: true # If use PER importance ratio
   use_n_step_is: true # If use importance sampling
   use_prediction: false # If train a transition model
@@ -153,6 +156,7 @@ base_config:
     2 # Start CEM if all learners have eavluated `evolver_cem_min_length` times,
     # and it has been more than `evolver_cem_time` minutes since the last update
   evolver_cem_time: 3
+  evolver_remove_worst: 4
 
 net_config:
   evolver_host: 127.0.0.1
@@ -172,13 +176,15 @@ replay_config:
   beta_increment_per_sampling: 0.001 # Increment step
   td_error_min: 0.01 # Small amount to avoid zero priority
   td_error_max: 1. # Clipped abs error
-  use_mongodb: false # TODO
 
 sac_config:
   seed: null # Random seed
-  write_summary_per_step: 20 # Write summaries in TensorBoard every N steps
+  write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
   save_model_per_step: 100000 # Save model every N steps
   save_model_per_minute: 5 # Save model every N minutes
+
+  ensemble_q_num: 2 # Number of Qs
+  ensemble_q_sample: 2 # Number of min Qs
 
   burn_in_step: 0 # Burn-in steps in R2D2
   n_step: 1 # Update Q function by N steps
@@ -198,6 +204,7 @@ sac_config:
   v_c: 1.0 # C for V-trace
   clip_epsilon: 0.2 # Epsilon for q and policy clip
 
+  discrete_dqn_like: false # If use policy or only Q network if discrete is in action spaces
   use_prediction: false # If train a transition model
   use_extra_data: true # If use extra data to train prediction model
   use_curiosity: false # If use curiosity
@@ -205,6 +212,12 @@ sac_config:
   use_rnd: false # If use RND
   rnd_n_sample: 10 # RND sample times
   use_normalization: false # If use observation normalization
+
+  # random_params:
+  #   param_name:
+  #     in: [n1, n2, n3]
+  #     truncated: [n1 ,n2]
+  #     std: n
 ```
 
 ## Start Training

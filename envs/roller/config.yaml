@@ -25,7 +25,7 @@ vanilla:
     scene: Roller
     max_iter: 200
   sac_config:
-    n_step: 10
+    n_step: 5
     tau: 0.9
 
 hard:

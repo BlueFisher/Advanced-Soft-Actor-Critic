@@ -54,13 +54,15 @@ replay_config:
   beta_increment_per_sampling: 0.001 # Increment step
   td_error_min: 0.01 # Small amount to avoid zero priority
   td_error_max: 1. # Clipped abs error
-  use_mongodb: false # TODO
 
 sac_config:
   seed: null # Random seed
   write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
   save_model_per_step: 100000 # Save model every N steps
   save_model_per_minute: 5 # Save model every N minutes
+
+  ensemble_q_num: 2 # Number of Qs
+  ensemble_q_sample: 2 # Number of min Qs
 
   burn_in_step: 0 # Burn-in steps in R2D2
   n_step: 1 # Update Q function by N steps
