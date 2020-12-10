@@ -60,7 +60,7 @@ class ModelObservation(m.ModelBaseObservation):
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(obs_dims[0][0] if self.use_extra_data else obs_dims[0][0] - 2)
+            tf.keras.layers.Dense(obs_dims)
         ])
 
     def call(self, state):
@@ -73,7 +73,7 @@ class ModelObservation(m.ModelBaseObservation):
 
         obs = obs_list[0]
         if not self.use_extra_data:
-            obs = obs[..., :-2]
+            obs = obs[..., :-1]
 
         return tf.reduce_mean(tf.square(approx_obs - obs))
 
@@ -87,10 +87,7 @@ class ModelRep(m.ModelBaseGRURep):
         ])
 
     def call(self, obs_list, pre_action, rnn_state):
-        # rnn_obs = tf.concat([obs_list[0][..., :5], pre_action], axis=-1)
-        # buoy_obs = obs_list[0][..., 5:]
-
-        obs = obs_list[0][..., :-2]
+        obs = obs_list[0]
         obs = tf.concat([obs, pre_action], axis=-1)
 
         outputs, next_rnn_state = self.gru(obs, initial_state=rnn_state)
@@ -104,7 +101,6 @@ class ModelRep(m.ModelBaseGRURep):
 class ModelQ(m.ModelQ):
     def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
         super().__init__(state_dim, d_action_dim, c_action_dim, name,
-                         d_dense_n=128, d_dense_depth=3,
                          c_state_n=128, c_state_depth=1,
                          c_action_n=128, c_action_depth=1,
                          c_dense_n=128, c_dense_depth=3)
@@ -113,7 +109,6 @@ class ModelQ(m.ModelQ):
 class ModelPolicy(m.ModelPolicy):
     def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
         super().__init__(state_dim, d_action_dim, c_action_dim, name,
-                         d_dense_n=128, d_dense_depth=3,
                          c_dense_n=128, c_dense_depth=3,
                          mean_n=128, mean_depth=1,
                          logstd_n=128, logstd_depth=1)

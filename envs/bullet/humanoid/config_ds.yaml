@@ -5,38 +5,54 @@ default:
 
     build_path: "HumanoidBulletEnv-v0"
 
+    update_policy_variables_per_step: 20
+    noise_increasing_rate: 0.01
+
     n_agents: 10
 
+    evolver_cem_time: 8
+
   net_config:
-    replay_host: 127.0.0.1
-    replay_port: 61000
-    learner_host: 127.0.0.1
-    learner_port: 61001
+    evolver_host: human-ds-evolver
+    learner_host: human-ds-lr
+    replay_host: human-ds-lr
 
   sac_config:
     write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
-    save_model_per_step: 100000 # Save model every N steps
-    save_model_per_minute: 5 # Save model every N minutes
+    save_model_per_step: 10000 # Save model every N steps
+    save_model_per_minute: 20 # Save model every N minutes
 
-    init_log_alpha: 0.
+    ensemble_q_num: 10
+
     n_step: 3
-    clip_epsilon: 1.
-    learning_rate: 0.0001
-
-    # use_curiosity: true
-    # curiosity_strength: 0.6
+    v_lambda: 0.9
 
   replay_config:
     batch_size: 1024
-    capacity: 1048576
-    td_error_max: 5. # Clipped abs error
 
 hard:
   base_config: &hard_base
-    scene: Walker2DHard
+    scene: HumanoidHard
     nn: nn_hard
 
+  net_config:
+    evolver_host: human-hard-ds-evolver
+    learner_host: human-hard-ds-lr
+    replay_host: human-hard-ds-lr
+
   sac_config: &hard_sac
-    burn_in_step: 20
     use_rnn: true
     use_prediction: true
+    v_lambda: 0.9
+
+    use_normalization: true
+
+    random_params:
+      n_step:
+        in: [3, 4, 5]
+      burn_in_step:
+        in: [10, 20, 30]
+      v_rho:
+        truncated: [1.0, 2.0]
+      v_c:
+        truncated: [1.0, 2.0]
