@@ -27,3 +27,8 @@ default:
     discrete_dqn_like: true
 
     use_n_step_is: true
+
+no_dqn:
+  sac_config:
+    discrete_dqn_like: false
+    learning_rate: 0.0001

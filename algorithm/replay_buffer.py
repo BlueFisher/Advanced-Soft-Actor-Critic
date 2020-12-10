@@ -12,7 +12,6 @@ class DataStorage:
     _buffer = None
 
     def __init__(self, capacity):
-        # TODO: MongoDB
         self.capacity = capacity
         self.max_id = 10 * capacity
 
@@ -172,8 +171,7 @@ class PrioritizedReplayBuffer:
                  beta=0.4,  # Importance-sampling, from initial value increasing to 1
                  beta_increment_per_sampling=0.001,
                  td_error_min=0.01,  # Small amount to avoid zero priority
-                 td_error_max=1.,  # Clipped abs error
-                 use_mongodb=False):
+                 td_error_max=1.):  # Clipped abs error
         self.batch_size = batch_size
         self.capacity = int(2**math.floor(math.log2(capacity)))
         self.alpha = alpha

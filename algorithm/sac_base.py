@@ -119,6 +119,9 @@ class SAC_Base(object):
         save_model_per_step: Save model every N steps
         save_model_per_minute: Save model every N minutes
 
+        ensemble_q_num: 2 # Number of Qs
+        ensemble_q_sample: 2 # Number of min Qs
+
         burn_in_step: Burn-in steps in R2D2
         n_step: Update Q function by `n_step` steps
         use_rnn: If use RNN
@@ -745,6 +748,8 @@ class SAC_Base(object):
 
             d_policy, c_policy = self.model_policy(state)
 
+            ##### Q LOSS #####
+
             loss_q_list = [tf.zeros((tf.shape(state)[0], 1)) for _ in range(self.ensemble_q_num)]
 
             if self.d_action_dim:
@@ -753,9 +758,6 @@ class SAC_Base(object):
                     loss_q_list[i] += tf.square(q_single - d_y)
 
             if self.c_action_dim:
-                action_sampled = c_policy.sample()
-                c_q_for_gradient_list = [q(state, tf.tanh(action_sampled))[1] for q in self.model_q_list]
-
                 if self.clip_epsilon > 0:
                     target_c_q_list = [q(state, c_action)[1] for q in self.model_target_q_list]
 
@@ -819,8 +821,7 @@ class SAC_Base(object):
                                           n_actions[:, self.burn_in_step:, ...])
                 loss_rnd = tf.reduce_mean(tf.math.squared_difference(f, approx_f))
 
-            alpha_d = tf.exp(self.log_alpha_d)
-            alpha_c = tf.exp(self.log_alpha_c)
+            ##### ALPHA LOSS & POLICY LOSS #####
 
             loss_d_policy = tf.zeros((tf.shape(state)[0], 1))
             loss_c_policy = tf.zeros((tf.shape(state)[0], 1))
@@ -828,31 +829,34 @@ class SAC_Base(object):
             loss_d_alpha = tf.zeros((tf.shape(state)[0], 1))
             loss_c_alpha = tf.zeros((tf.shape(state)[0], 1))
 
+            alpha_d = tf.exp(self.log_alpha_d)
+            alpha_c = tf.exp(self.log_alpha_c)
+
             if self.d_action_dim and not self.discrete_dqn_like:
                 probs = tf.nn.softmax(d_policy.logits)   # [Batch, action_dim]
                 clipped_probs = tf.maximum(probs, 1e-8)
 
-                stacked_d_q = tf.gather(d_q_list,
-                                        tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
-                # [ensemble_q_num, Batch, d_action_dim] -> [ensemble_q_sample, Batch, d_action_dim]
-                min_d_q = tf.reduce_min(stacked_d_q, axis=0)  # [Batch, d_action_dim]
+                mean_d_q = tf.reduce_mean(d_q_list, axis=0)  
+                # [ensemble_q_num, Batch, d_action_dim] -> [Batch, d_action_dim]
 
-                _loss_policy = alpha_d * tf.math.log(clipped_probs) - min_d_q  # [Batch, d_action_dim]
+                _loss_policy = alpha_d * tf.math.log(clipped_probs) - mean_d_q  # [Batch, d_action_dim]
                 loss_d_policy = tf.reduce_sum(probs * _loss_policy, axis=1, keepdims=True)  # [Batch, 1]
 
                 _loss_alpha = -alpha_d * (tf.math.log(clipped_probs) - self.d_action_dim)  # [Batch, action_dim]
                 loss_d_alpha = tf.reduce_sum(probs * _loss_alpha, axis=1, keepdims=True)  # [Batch, 1]
 
             if self.c_action_dim:
-                log_prob = tf.reduce_sum(squash_correction_log_prob(c_policy, action_sampled), axis=1, keepdims=True)
+                action_sampled = c_policy.sample()
+                c_q_for_gradient_list = [q(state, tf.tanh(action_sampled))[1] for q in self.model_q_list]
+                # [[Batch, 1], ...]
 
-                stacked_c_q_for_gradient = tf.gather(c_q_for_gradient_list,
-                                                     tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
-                # [ensemble_q_num, Batch, 1] -> [ensemble_q_sample, Batch, 1]
-                min_c_q_for_gradient = tf.reduce_min(stacked_c_q_for_gradient, axis=0)
+                log_prob = tf.reduce_sum(squash_correction_log_prob(c_policy, action_sampled), axis=1, keepdims=True)
                 # [Batch, 1]
 
-                loss_c_policy = alpha_c * log_prob - min_c_q_for_gradient
+                mean_c_q_for_gradient = tf.reduce_mean(c_q_for_gradient_list, axis=0)
+                # [ensemble_q_num, Batch, 1] -> [Batch, 1]
+
+                loss_c_policy = alpha_c * log_prob - mean_c_q_for_gradient
                 # [Batch, 1]
 
                 loss_c_alpha = -alpha_c * (log_prob - self.c_action_dim)  # [Batch, 1]
