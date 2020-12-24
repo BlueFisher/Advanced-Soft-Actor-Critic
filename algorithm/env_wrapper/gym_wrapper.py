@@ -14,11 +14,6 @@ try:
 except:
     logger.warning('No PyBullet environments')
 
-try:
-    import gym_maze
-except:
-    logger.warning('No Gym Maze environments')
-
 
 VANILLA_ENVS = ['CartPole-v1', 'Pendulum-v0', 'MountainCarContinuous-v0']
 

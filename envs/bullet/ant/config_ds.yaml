@@ -22,10 +22,9 @@ default:
     save_model_per_step: 10000 # Save model every N steps
     save_model_per_minute: 20 # Save model every N minutes
 
-    ensemble_q_num: 10
+    ensemble_q_num: 5
 
     n_step: 3
-    v_lambda: 0.9
 
   replay_config:
     batch_size: 1024
@@ -43,9 +42,6 @@ hard:
   sac_config: &hard_sac
     use_rnn: true
     use_prediction: true
-    v_lambda: 0.9
-
-    use_normalization: true
 
     random_params:
       n_step:

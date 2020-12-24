@@ -10,40 +10,12 @@ default:
 
   sac_config:
     write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
-    save_model_per_step: 100000 # Save model every N steps
-    save_model_per_minute: 5 # Save model every N minutes
+    save_model_per_step: 10000 # Save model every N steps
+    save_model_per_minute: 20 # Save model every N minutes
 
-    n_step: 3
-    v_lambda: 0.99
+    ensemble_q_num: 5
 
-    use_normalization: false
-
-  replay_config:
-    batch_size: 1024
-    capacity: 1048576
-
-curiosity:
-  base_config:
-    name: "curiosity_{time}"
-  sac_config:
-    use_curiosity: true
-    curiosity_strength: 0.6
-
-rnd:
-  base_config:
-    name: "rnd_{time}"
-  sac_config:
-    use_rnd: true
-    rnd_n_sample: 30
-
-curiosity_rnd:
-  base_config:
-    name: "curiosityrnd_{time}"
-  sac_config:
-    use_curiosity: true
-    curiosity_strength: 0.6
-    use_rnd: true
-    rnd_n_sample: 30
+    use_normalization: true
 
 hard:
   base_config: &hard_base
@@ -54,7 +26,6 @@ hard:
     burn_in_step: 20
     use_rnn: true
     use_prediction: true
-    transition_kl: 1.
 
 hard_noextra:
   base_config:
