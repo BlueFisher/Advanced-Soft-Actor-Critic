@@ -15,9 +15,9 @@ default:
     save_model_per_minute: 5 # Save model every N minutes
 
     n_step: 5
-    v_lambda: 0.9
+    v_lambda: 0.99
 
-    use_normalization: false
+    use_normalization: true
 
 hard:
   base_config: &hard_base

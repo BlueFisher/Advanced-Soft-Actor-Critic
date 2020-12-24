@@ -16,7 +16,7 @@ class ModelTransition(m.ModelBaseTransition):
         super().__init__(state_dim, d_action_dim, c_action_dim, use_extra_data)
 
         self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(256, activation=tf.nn.tanh),
+            tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(256, activation=tf.nn.relu),
             tf.keras.layers.Dense(state_dim + state_dim)
@@ -28,7 +28,7 @@ class ModelTransition(m.ModelBaseTransition):
     def call(self, state, action):
         next_state = self.dense(tf.concat([state, action], -1))
         mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
-        next_state_dist = self.next_state_tfpd([mean, tf.exp(logstd)])
+        next_state_dist = self.next_state_tfpd([mean, tf.maximum(tf.exp(logstd), 1.0)])
 
         return next_state_dist
 
@@ -78,10 +78,10 @@ class ModelObservation(m.ModelBaseObservation):
 
 class ModelRep(m.ModelBaseLSTMRep):
     def __init__(self, obs_dims, d_action_dim, c_action_dim):
-        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units=64)
+        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units=8)
 
         self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.tanh)
+            tf.keras.layers.Dense(32, activation=tf.nn.tanh)
         ])
 
     def call(self, obs_list, pre_action, rnn_state):
@@ -94,18 +94,18 @@ class ModelRep(m.ModelBaseLSTMRep):
 
         state = self.dense(tf.concat([obs, outputs], axis=-1))
 
-        return state, tf.concat(next_lstm_rnn_state, axis=-1)  # tf.concat(next_rnn_state, axis=-1)w
+        return state, tf.concat(next_lstm_rnn_state, axis=-1)  # tf.concat(next_rnn_state, axis=-1)
 
 
 class ModelQ(m.ModelQ):
     def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
         super().__init__(state_dim, d_action_dim, c_action_dim,
-                         dense_n=256, dense_depth=3)
+                         c_dense_n=256, c_dense_depth=3)
 
 
 class ModelPolicy(m.ModelPolicy):
     def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
         super().__init__(state_dim, d_action_dim, c_action_dim,
-                         dense_n=256, dense_depth=3,
+                         c_dense_n=256, c_dense_depth=3,
                          mean_n=256, mean_depth=1,
                          logstd_n=256, logstd_depth=1)

@@ -28,7 +28,7 @@ class ModelTransition(m.ModelBaseTransition):
     def call(self, state, action):
         next_state = self.dense(tf.concat([state, action], -1))
         mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
-        next_state_dist = self.next_state_tfpd([mean, tf.exp(logstd)])
+        next_state_dist = self.next_state_tfpd([mean, tf.clip_by_value(tf.exp(logstd), 0.1, 1.0)])
 
         return next_state_dist
 
@@ -100,12 +100,12 @@ class ModelRep(m.ModelBaseLSTMRep):
 class ModelQ(m.ModelQ):
     def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
         super().__init__(state_dim, d_action_dim, c_action_dim,
-                         dense_n=256, dense_depth=3)
+                         c_dense_n=256, c_dense_depth=3)
 
 
 class ModelPolicy(m.ModelPolicy):
     def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
         super().__init__(state_dim, d_action_dim, c_action_dim,
-                         dense_n=256, dense_depth=3,
+                         c_dense_n=256, c_dense_depth=3,
                          mean_n=256, mean_depth=1,
                          logstd_n=256, logstd_depth=1)

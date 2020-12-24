@@ -75,7 +75,9 @@ class UnityWrapper:
 
             return behavior_spec.observation_shapes, action_size, 0
         else:
-            if self.scene == 'Antisubmarine2':
+            if self.scene == 'Antisubmarine':
+                return behavior_spec.observation_shapes, 2, 2
+            elif self.scene == 'Antisubmarine2':
                 return behavior_spec.observation_shapes, 2, 2
             return behavior_spec.observation_shapes, 0, behavior_spec.action_size
 
@@ -96,7 +98,11 @@ class UnityWrapper:
 
             self._env.set_actions(self.bahavior_name, d_action)
         else:
-            if self.scene == 'Antisubmarine2':
+            if self.scene == 'Antisubmarine':
+                d_action = np.argmax(d_action, axis=1).reshape([-1, 1])
+                d_action = d_action * 2 - 1
+                c_action = np.concatenate([d_action, c_action], axis=-1)
+            elif self.scene == 'Antisubmarine2':
                 d_action = np.argmax(d_action, axis=1).reshape([-1, 1])
                 d_action = d_action * 2 - 1
                 c_action = np.concatenate([c_action, d_action], axis=-1)

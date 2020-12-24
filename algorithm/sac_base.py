@@ -836,10 +836,13 @@ class SAC_Base(object):
                 probs = tf.nn.softmax(d_policy.logits)   # [Batch, action_dim]
                 clipped_probs = tf.maximum(probs, 1e-8)
 
-                mean_d_q = tf.reduce_mean(d_q_list, axis=0)  
-                # [ensemble_q_num, Batch, d_action_dim] -> [Batch, d_action_dim]
+                stacked_d_q = tf.gather(d_q_list,
+                                        tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
+                # [ensemble_q_num, Batch, d_action_dim] -> [ensemble_q_sample, Batch, d_action_dim]
+                min_d_q = tf.reduce_min(stacked_d_q, axis=0)
+                # [ensemble_q_sample, Batch, d_action_dim] -> [Batch, d_action_dim]
 
-                _loss_policy = alpha_d * tf.math.log(clipped_probs) - mean_d_q  # [Batch, d_action_dim]
+                _loss_policy = alpha_d * tf.math.log(clipped_probs) - min_d_q  # [Batch, d_action_dim]
                 loss_d_policy = tf.reduce_sum(probs * _loss_policy, axis=1, keepdims=True)  # [Batch, 1]
 
                 _loss_alpha = -alpha_d * (tf.math.log(clipped_probs) - self.d_action_dim)  # [Batch, action_dim]
@@ -850,13 +853,17 @@ class SAC_Base(object):
                 c_q_for_gradient_list = [q(state, tf.tanh(action_sampled))[1] for q in self.model_q_list]
                 # [[Batch, 1], ...]
 
+                stacked_c_q_for_gradient = tf.gather(c_q_for_gradient_list,
+                                                     tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
+                # [ensemble_q_num, Batch, 1] -> [ensemble_q_sample, Batch, 1]
+
                 log_prob = tf.reduce_sum(squash_correction_log_prob(c_policy, action_sampled), axis=1, keepdims=True)
                 # [Batch, 1]
 
-                mean_c_q_for_gradient = tf.reduce_mean(c_q_for_gradient_list, axis=0)
-                # [ensemble_q_num, Batch, 1] -> [Batch, 1]
+                min_c_q_for_gradient = tf.reduce_min(stacked_c_q_for_gradient, axis=0)
+                # [ensemble_q_sample, Batch, 1] -> [Batch, 1]
 
-                loss_c_policy = alpha_c * log_prob - mean_c_q_for_gradient
+                loss_c_policy = alpha_c * log_prob - min_c_q_for_gradient
                 # [Batch, 1]
 
                 loss_c_alpha = -alpha_c * (log_prob - self.c_action_dim)  # [Batch, 1]

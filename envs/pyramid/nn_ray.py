@@ -30,7 +30,7 @@ class ModelTransition(m.ModelBaseTransition):
     def call(self, state, action):
         next_state = self.dense(tf.concat([state, action], -1))
         mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
-        next_state_dist = self.next_state_tfpd([mean, tf.exp(logstd)])
+        next_state_dist = self.next_state_tfpd([mean, tf.clip_by_value(tf.exp(logstd), 0.1, 1.0)])
 
         return next_state_dist
 

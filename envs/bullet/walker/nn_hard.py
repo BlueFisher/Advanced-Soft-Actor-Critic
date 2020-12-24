@@ -28,7 +28,7 @@ class ModelTransition(m.ModelBaseTransition):
     def call(self, state, action):
         next_state = self.dense(tf.concat([state, action], -1))
         mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
-        next_state_dist = self.next_state_tfpd([mean, tf.exp(logstd)])
+        next_state_dist = self.next_state_tfpd([mean, tf.clip_by_value(tf.exp(logstd), 0.1, 1.0)])
 
         return next_state_dist
 
@@ -78,18 +78,18 @@ class ModelObservation(m.ModelBaseObservation):
 
 class ModelRep(m.ModelBaseLSTMRep):
     def __init__(self, obs_dims, d_action_dim, c_action_dim):
-        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units=64)
+        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units=8)
 
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(32, activation=tf.nn.tanh)
         ])
 
-    def call(self, obs_list, pre_d_action, pre_c_action, rnn_state):
+    def call(self, obs_list, pre_action, rnn_state):
         obs = obs_list[0]
         obs = tf.concat([obs[..., :3], obs[..., 6:]], axis=-1)
 
         rnn_state = tf.split(rnn_state, num_or_size_splits=2, axis=-1)
-        outputs, *next_lstm_rnn_state = self.lstm(tf.concat([obs, pre_c_action], axis=-1),
+        outputs, *next_lstm_rnn_state = self.lstm(tf.concat([obs, pre_action], axis=-1),
                                                   initial_state=rnn_state)
 
         state = self.dense(tf.concat([obs, outputs], axis=-1))
