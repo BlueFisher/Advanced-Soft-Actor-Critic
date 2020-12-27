@@ -73,6 +73,9 @@ class UnityWrapper:
 
         logger.info(f'Continuous action size: {continuous_action_size}')
 
+        self.d_action_dim = discrete_action_size
+        self.c_action_dim = continuous_action_size
+
         for o in behavior_spec.observation_shapes:
             if len(o) >= 3:
                 self.engine_configuration_channel.set_configuration_parameters(quality_level=5)
@@ -91,7 +94,7 @@ class UnityWrapper:
         return [obs.astype(np.float32) for obs in decision_steps.obs]
 
     def step(self, d_action, c_action):
-        if d_action is not None:
+        if self.d_action_dim:
             d_action = np.argmax(d_action, axis=1)
             d_action = self.action_product[d_action]
 
