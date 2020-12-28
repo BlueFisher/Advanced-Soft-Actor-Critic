@@ -318,7 +318,8 @@ class Actor(object):
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        self.logger.info(f'{iteration}, R {rewards}')
+        steps = [a.steps for a in agents]
+        self.logger.info(f'{iteration}, S {max(steps)}, R {rewards}')
 
     def close(self):
         if hasattr(self, 'env'):
