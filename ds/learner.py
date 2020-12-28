@@ -512,7 +512,8 @@ class Learner:
         time_elapse = (time.time() - start_time) / 60
         rewards = [a.reward for a in agents]
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        self.logger.info(f'{iteration}, {time_elapse:.2f}, R {rewards}')
+        steps = [a.steps for a in agents]
+        self.logger.info(f'{iteration}, S {max(steps)}, {time_elapse:.2f}, R {rewards}')
 
     def _run_training_client(self):
         sample_data_buffer = SampledDataBuffer(self._stub.get_sampled_data)

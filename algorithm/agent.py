@@ -4,9 +4,11 @@ import numpy as np
 
 
 class Agent(object):
-    reward = 0
-    last_reward = 0
-    done = False
+    reward = 0  # The reward of the first complete episode
+    _last_reward = 0  # The reward of the last episode
+    steps = 0  # The step count of the first complete episode
+    _last_steps = 0  # The step count of the last episode
+    done = False  # If has one complete episode
 
     def __init__(self, agent_id, use_rnn=False):
         self.agent_id = agent_id
@@ -36,7 +38,9 @@ class Agent(object):
 
         if not self.done:
             self.reward += reward
-        self.last_reward += reward
+            self.steps += 1
+        self._last_reward += reward
+        self._last_steps += 1
 
         self._extra_log(obs_list,
                         action,
@@ -47,7 +51,8 @@ class Agent(object):
 
         if local_done:
             self.done = True
-            self.last_reward = 0
+            self._last_reward = 0
+            self._last_steps = 0
 
             episode_trans = self._get_episode_trans()
             self._tmp_episode_trans.clear()
@@ -102,7 +107,11 @@ class Agent(object):
         self._tmp_episode_trans.clear()
 
     def reset(self):
-        self.reward = self.last_reward
+        """
+        The agent may continue in a new iteration but save its last status
+        """
+        self.reward = self._last_reward
+        self.steps = self._last_steps
         self.done = False
 
 
