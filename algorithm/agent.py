@@ -103,6 +103,7 @@ class Agent(object):
 
     def clear(self):
         self.reward = 0
+        self.steps = 0
         self.done = False
         self._tmp_episode_trans.clear()
 
