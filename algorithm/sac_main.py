@@ -89,7 +89,9 @@ class Main(object):
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
             if self.run_in_editor:
-                self.env = UnityWrapper(train_mode=self.train_mode, base_port=5004)
+                self.env = UnityWrapper(train_mode=self.train_mode,
+                                        base_port=5004,
+                                        n_agents=self.config['n_agents'])
             else:
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         file_name=self.config['build_path'][sys.platform],
