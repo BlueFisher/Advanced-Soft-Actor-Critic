@@ -29,25 +29,23 @@ class UnityWrapper:
         self.engine_configuration_channel = EngineConfigurationChannel()
         self.environment_parameters_channel = EnvironmentParametersChannel()
 
+        self.environment_parameters_channel.set_float_parameter('env_copys', float(n_agents))
+
         self._env = UnityEnvironment(file_name=file_name,
                                      base_port=base_port,
                                      no_graphics=no_graphics and train_mode,
                                      seed=seed,
-                                     additional_args=['--scene', scene, '--n_agents', str(n_agents)],
+                                     additional_args=['--scene', scene],
                                      side_channels=[self.engine_configuration_channel,
                                                     self.environment_parameters_channel])
 
-        if train_mode:
-            self.engine_configuration_channel.set_configuration_parameters(width=200,
-                                                                           height=200,
-                                                                           quality_level=0,
-                                                                           time_scale=100)
-        else:
-            self.engine_configuration_channel.set_configuration_parameters(width=1028,
-                                                                           height=720,
-                                                                           quality_level=5,
-                                                                           time_scale=5,
-                                                                           target_frame_rate=60)
+        self.engine_configuration_channel.set_configuration_parameters(
+            width=200 if train_mode else 1280,
+            height=200 if train_mode else 720,
+            quality_level=5,
+            time_scale=20 if train_mode else 5,
+            target_frame_rate=-1,
+            capture_frame_rate=60)
 
         self._env.reset()
         self.bahavior_name = list(self._env.behavior_specs)[0]
