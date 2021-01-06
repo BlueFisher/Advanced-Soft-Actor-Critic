@@ -21,7 +21,15 @@ class UnityWrapper:
                  seed=None,
                  scene=None,
                  n_agents=1):
-
+        """
+        train_mode: If in train mode, Unity will run in the highest quality
+        file_name: The executable path. The UnityEnvironment will run in editor if None
+        base_port: The port that communicate to Unity. It will be set to 5004 automatically if in editor.
+        no_graphics: If Unity runs in no graphic mode. It must be set to False if Unity has camera sensor.
+        seed: Random seed
+        scene: The scene name
+        n_agents: The agents count
+        """
         self.scene = scene
 
         seed = seed if seed is not None else np.random.randint(0, 65536)
@@ -32,7 +40,7 @@ class UnityWrapper:
         self.environment_parameters_channel.set_float_parameter('env_copys', float(n_agents))
 
         self._env = UnityEnvironment(file_name=file_name,
-                                     base_port=base_port,
+                                     base_port=base_port if file_name else 5004,
                                      no_graphics=no_graphics and train_mode,
                                      seed=seed,
                                      additional_args=['--scene', scene],
@@ -51,6 +59,12 @@ class UnityWrapper:
         self.bahavior_name = list(self._env.behavior_specs)[0]
 
     def init(self):
+        """
+        return:
+            observation shapes: list[(o1, ), (o2, ), (o3_1, o3_2, o3_3)]
+            discrete action size: int, sum of all action branches
+            continuous action size: int
+        """
         behavior_spec = self._env.behavior_specs[self.bahavior_name]
         logger.info(f'Observation shapes: {behavior_spec.observation_shapes}')
 
@@ -82,6 +96,10 @@ class UnityWrapper:
         return behavior_spec.observation_shapes, discrete_action_size, continuous_action_size
 
     def reset(self, reset_config=None):
+        """
+        return:
+            observations: list[(NAgents, o1), (NAgents, o2), (NAgents, o3_1, o3_2, o3_3)]
+        """
         reset_config = {} if reset_config is None else reset_config
         for k, v in reset_config.items():
             self.environment_parameters_channel.set_float_parameter(k, float(v))
@@ -92,6 +110,16 @@ class UnityWrapper:
         return [obs.astype(np.float32) for obs in decision_steps.obs]
 
     def step(self, d_action, c_action):
+        """
+        d_action: (NAgents, discrete_action_size), one hot like action
+        c_action: (NAgents, continuous_action_size)
+
+        returns:
+            observations: list[(NAgents, o1), (NAgents, o2), (NAgents, o3_1, o3_2, o3_3)]
+            rewards: (NAgents, )
+            done: (NAgents, ), np.bool
+            max_step: (NAgents, ), np.bool
+        """
         if self.d_action_dim:
             d_action = np.argmax(d_action, axis=1)
             d_action = self.action_product[d_action]
