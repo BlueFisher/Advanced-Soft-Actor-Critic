@@ -1,0 +1,19 @@
+default:
+  base_config:
+    build_path:
+      win32: C:\Users\Fisher\Nextcloud\Documents\Unity\win-RL-Envs\UnityEnvironment.exe
+      linux: /data/linux-RL-Envs/RL-Envs.x86_64
+
+    scene: AvoidCar
+    max_iter: -1
+    reset_on_iteration: true
+    n_agents: 10
+
+    no_graphics: false
+
+  reset_config:
+    force_reset: true
+
+  sac_config:
+    seed: 42
+    n_step: 3

@@ -26,6 +26,8 @@ default:
 
     n_step: 3
 
+    use_normalization: true
+
   replay_config:
     batch_size: 1024
 

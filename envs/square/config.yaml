@@ -1,7 +1,9 @@
 default:
   base_config:
+    scene: RaySquare
+
     build_path:
-      win32: C:\Users\Fisher\Nextcloud\Documents\Unity\win-RL-Envs\RL-Envs.exe
+      win32: C:\Users\Fisher\Nextcloud\Documents\Unity\win-RL-Envs\UnityEnvironment.exe
       linux: /data/linux-RL-Envs/RL-Envs.x86_64
 
     reset_on_iteration: false
@@ -11,80 +13,38 @@ default:
     force_reset: true
 
   sac_config:
-    seed: 42
     burn_in_step: 10
     n_step: 5
     use_rnn: true
-    use_prediction: true
 
 wall:
   base_config: &wall_base
-    scene: RaySquare
-    name: "ray5_wall_pre_{time}"
+    name: "ray5_wall_nopre_{time}"
     max_iter: 200
   reset_config: &wall_reset
     avoid_wall: false
     ray_length: 5
 
-wall_nopre:
+wall_pre:
   base_config:
     <<: *wall_base
-    name: "ray5_wall_nopre_{time}"
+    name: "ray5_wall_pre_{time}"
   reset_config: *wall_reset
   sac_config:
-    use_prediction: false
+    use_prediction: true
 
 nowall:
   base_config: &nowall_base
-    scene: RaySquare
-    name: "ray5_nowall_pre_{time}"
+    name: "ray5_nowall_nopre_{time}"
     max_iter: 200
   reset_config: &nowall_reset
     avoid_wall: true
     ray_length: 5
 
-nowall_nopre:
+nowall_pre:
   base_config:
     <<: *nowall_base
-    name: "ray5_nowall_nopre_{time}"
+    name: "ray5_nowall_pre_{time}"
   reset_config: *nowall_reset
   sac_config:
-    use_prediction: false
-
-fly:
-  base_config: &fly_base
-    scene: RaySquareFly
-    nn: nn_fly
-    name: "pre_kn_{time}"
-    max_iter: 10000
-  reset_config: &fly_reset
-    ray_length: 10
-
-fly_nopre:
-  base_config:
-    <<: *fly_base
-    name: "nopre_{time}"
-  reset_config: *fly_reset
-  sac_config:
-    use_prediction: false
-
-visual_fly:
-  base_config: &visual_fly_base
-    scene: VisualSquareFly
-    nn: nn_visual_fly
-    name: "pre_kn_{time}"
-    max_iter: 2000
-  replay_config: &visual_fly_replay
-    batch_size: 64
-    capacity: 131072
-  sac_config: &visual_fly_sac
-    burn_in_step: 20
-
-visual_fly_nopre:
-  base_config:
-    <<: *visual_fly_base
-    name: "nopre_{time}"
-  replay_config: *visual_fly_replay
-  sac_config:
-    <<: *visual_fly_sac
-    use_prediction: false
+    use_prediction: true

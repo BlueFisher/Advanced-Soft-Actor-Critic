@@ -1,4 +1,3 @@
-import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
@@ -18,12 +17,22 @@ class ModelTransition(m.ModelBaseTransition):
         self.next_state_tfpd = tfp.layers.DistributionLambda(
             make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
 
+    def init(self):
+        if self.use_extra_data:
+            self(tf.keras.Input(shape=(self.state_dim + 2,)),
+                 tf.keras.Input(shape=(self.action_dim,)))
+        else:
+            super().init()
+
     def call(self, state, action):
         next_state = self.dense(tf.concat([state, action], -1))
         mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
         next_state_dist = self.next_state_tfpd([mean, tf.clip_by_value(tf.exp(logstd), 0.1, 1.0)])
 
         return next_state_dist
+
+    def extra_obs(self, obs_list):
+        return obs_list[0][..., -2:]
 
 
 class ModelReward(m.ModelBaseReward):
@@ -45,9 +54,11 @@ class ModelObservation(m.ModelBaseObservation):
     def __init__(self, state_dim, obs_dims, use_extra_data):
         super().__init__(state_dim, obs_dims, use_extra_data)
 
+        assert obs_dims[0] == (6, )
+
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(64, tf.nn.relu),
-            tf.keras.layers.Dense(obs_dims[0][0])
+            tf.keras.layers.Dense(6 if use_extra_data else 6 - 2)
         ])
 
     def call(self, state):
@@ -58,20 +69,26 @@ class ModelObservation(m.ModelBaseObservation):
     def get_loss(self, state, obs_list):
         approx_obs = self(state)
 
-        return tf.reduce_mean(tf.square(approx_obs - obs_list[0]))
+        if self.use_extra_data:
+            obs = obs_list[0]
+        else:
+            obs = obs_list[0][..., :-2]
+
+        return tf.reduce_mean(tf.square(approx_obs - obs))
 
 
 class ModelRep(m.ModelBaseGRURep):
     def __init__(self, obs_dims, d_action_dim, c_action_dim):
         super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units=64)
 
+        assert obs_dims[0] == (6, )
+
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.tanh)
         ])
 
     def call(self, obs_list, pre_action, rnn_state):
-        obs = obs_list[0]
-        obs = obs[..., :-2]
+        obs = obs_list[0][..., :-2]
         obs = tf.concat([obs, pre_action], axis=-1)
         outputs, next_rnn_state = self.gru(obs, initial_state=rnn_state)
 

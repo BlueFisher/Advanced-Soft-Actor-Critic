@@ -1,11 +1,14 @@
 default:
   base_config:
+    scene: Roller
+
     build_path:
-      win32: C:\Users\Fisher\Nextcloud\Documents\Unity\win-RL-Envs\RL-Envs.exe
+      win32: C:\Users\Fisher\Nextcloud\Documents\Unity\win-RL-Envs\UnityEnvironment.exe
       linux: /data/linux-RL-Envs/RL-Envs.x86_64
 
-    reset_on_iteration: false
     n_agents: 10
+    max_iter: 200
+    reset_on_iteration: false
 
   reset_config:
     force_reset: true
@@ -15,79 +18,111 @@ default:
     beta_increment_per_sampling: 0
 
   sac_config:
-    seed: 42
-    v_lambda: 0.99
-    clip_epsilon: 1.
+    n_step: 5
+
+    tau: 0.9
+
     init_log_alpha: -4.6
 
-vanilla:
+    v_lambda: 0.99
+    clip_epsilon: 1.
+
+hard_nornn:
   base_config:
-    scene: Roller
-    max_iter: 200
+    name: "hard_nornn_{time}"
+    nn: nn_hard_nornn
+    max_iter: 500
   sac_config:
     n_step: 5
-    tau: 0.9
+
+    tau: 0.005
 
 hard:
   base_config: &hard_base
-    scene: Roller
-    name: "pre_{time}"
+    name: "hard_nopre_{time}"
     nn: nn_hard
     max_iter: 500
   sac_config: &hard_sac
     burn_in_step: 10
     n_step: 5
     use_rnn: true
-    use_prediction: true
 
-hard_nopre:
+    tau: 0.005
+
+hard_pre:
   base_config:
     <<: *hard_base
-    name: "nopre_{time}"
+    name: "hard_pre_{time}"
   sac_config:
     <<: *hard_sac
-    use_prediction: false
+    use_prediction: true
+
+hard_pre_noextra:
+  base_config:
+    <<: *hard_base
+    name: "hard_pre_noextra_{time}"
+  sac_config:
+    <<: *hard_sac
+    use_prediction: true
+    use_extra_data: false
 
 visual:
   base_config:
     scene: VisualRoller
+
     no_graphics: false
+    
     name: "{time}"
     nn: nn_visual
-    max_iter: 100000
   replay_config:
     beta: 0.4
     beta_increment_per_sampling: 0.001
   sac_config:
-    write_summary_per_step: 100
     n_step: 3
-    clip_epsilon: 0.2
+
+    tau: 0.005
+
     init_log_alpha: -2.3
+
+    clip_epsilon: 0.2
 
 visual_hard:
   base_config: &visual_hard_base
     scene: VisualRoller
+
     no_graphics: false
-    name: "pre_{time}"
+
+    name: "hard_nopre_{time}"
     nn: nn_visual_hard
-    max_iter: 100000
   replay_config: &visual_hard_replay
     beta: 0.4
     beta_increment_per_sampling: 0.001
   sac_config: &visual_hard_sac
-    write_summary_per_step: 100
     burn_in_step: 40
     n_step: 3
     use_rnn: true
-    use_prediction: true
-    clip_epsilon: 0.2
+
+    tau: 0.005
+
     init_log_alpha: -2.3
 
-visual_hard_nopre:
+    clip_epsilon: 0.2
+
+visual_hard_pre:
   base_config:
     <<: *visual_hard_base
-    name: "nopre_{time}"
+    name: "hard_pre_{time}"
   sac_config:
     <<: *visual_hard_sac
-    use_prediction: false
+    use_prediction: true
+  replay_config: *visual_hard_replay
+
+visual_hard_pre_noextra:
+  base_config:
+    <<: *visual_hard_base
+    name: "hard_pre_noextra_{time}"
+  sac_config:
+    <<: *visual_hard_sac
+    use_prediction: true
+    use_extra_data: false
   replay_config: *visual_hard_replay

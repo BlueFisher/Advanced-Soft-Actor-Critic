@@ -158,6 +158,9 @@ class Evolver:
                     del self._learners[peer]
 
     def _post_reward(self, reward, peer):
+        if not self.base_config['evolver_enabled']:
+            return
+
         with self._learner_lock:
             self._learners[peer]['rewards'].append(reward)
 
