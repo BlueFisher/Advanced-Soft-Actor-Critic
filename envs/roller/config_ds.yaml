@@ -1,0 +1,65 @@
+default:
+  base_config:
+    scene: VisualRoller
+
+    no_graphics: false
+
+    build_path:
+      win32: C:\Users\Fisher\Nextcloud\Documents\Unity\win-RL-Envs\UnityEnvironment.exe
+      linux: /data/linux-RL-Envs/RL-Envs.x86_64
+
+    update_policy_variables_per_step: 20
+    noise_increasing_rate: 0.01
+
+    n_agents: 10
+    reset_on_iteration: false
+
+    evolver_enabled: False
+
+  reset_config:
+    force_reset: true
+
+  sac_config:
+    n_step: 3
+    v_lambda: 0.99
+
+visual:
+  base_config:
+    name: "{time}"
+    nn: nn_visual
+
+  net_config:
+    evolver_host: visual-roller-ds-evolver
+    learner_host: visual-roller-ds-lr
+    replay_host: visual-roller-ds-lr
+
+visual_hard:
+  base_config: &visual_hard_base
+    name: "hard_nopre_{time}"
+    nn: nn_visual_hard
+  net_config: &visual_hard_net
+    evolver_host: visual-roller-hard-ds-evolver
+    learner_host: visual-roller-hard-ds-lr
+    replay_host: visual-roller-hard-ds-lr
+  sac_config: &visual_hard_sac
+    burn_in_step: 40
+    use_rnn: true
+
+visual_hard_pre:
+  base_config:
+    <<: *visual_hard_base
+    name: "hard_pre_{time}"
+  net_config: *visual_hard_net
+  sac_config:
+    <<: *visual_hard_sac
+    use_prediction: true
+
+visual_hard_pre_noextra:
+  base_config:
+    <<: *visual_hard_base
+    name: "hard_pre_noextra_{time}"
+  net_config: *visual_hard_net
+  sac_config:
+    <<: *visual_hard_sac
+    use_prediction: true
+    use_extra_data: false

@@ -1,4 +1,3 @@
-import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
@@ -10,7 +9,7 @@ class ModelTransition(m.ModelBaseTransition):
         super().__init__(state_dim, d_action_dim, c_action_dim, use_extra_data)
 
         self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.tanh),
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(state_dim + state_dim)
         ])
@@ -62,17 +61,15 @@ class ModelObservation(m.ModelBaseObservation):
 
 
 class ModelRep(m.ModelBaseGRURep):
-    def __init__(self, obs_dims, action_dim):
-        super().__init__(obs_dims, action_dim,
-                         rnn_units=32)
+    def __init__(self, obs_dims, d_action_dim, c_action_dim):
+        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units=32)
 
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(32, activation=tf.nn.tanh)
         ])
 
     def call(self, obs_list, pre_action, rnn_state):
-        obs = obs_list[0]
-        obs = obs[...:-2]
+        obs = obs_list[0][..., :-3]
         obs = tf.concat([obs, pre_action], axis=-1)
         outputs, next_rnn_state = self.gru(obs, initial_state=rnn_state)
 

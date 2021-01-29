@@ -1,64 +1,58 @@
 default:
   base_config:
     build_path:
-      win32: C:\Users\Fisher\Nextcloud\Documents\Unity\win-RL-Envs\RL-Envs.exe
+      win32: C:\Users\Fisher\Nextcloud\Documents\Unity\win-RL-Envs\UnityEnvironment.exe
       linux: /data/linux-RL-Envs/RL-Envs.x86_64
 
-    max_iter: -1
+    n_agents: 10
     max_step: 100000
     reset_on_iteration: false
-    n_agents: 10
 
   reset_config:
     force_reset: true
 
   sac_config:
-    seed: 42
     burn_in_step: 10
     n_step: 5
     v_lambda: 0.99
     use_rnn: true
-    use_prediction: true
 
 ray:
   base_config: &ray_base
     scene: RayPyramid
     nn: nn_ray
-    name: "ray20_pre_kn_{time}"
+    name: "ray20_nopre_{time}"
   reset_config: &ray_reset
     ray_length: 20
+
+ray_pre:
+  base_config:
+    <<: *ray_base
+    name: "ray20_pre_{time}"
+  reset_config: *ray_reset
+  sac_config:
+    prediction: true
 
 ray_noextra:
   base_config:
     <<: *ray_base
-    name: "ray20_noextra_{time}"
+    name: "ray20_pre_noextra_{time}"
   reset_config: *ray_reset
   sac_config:
+    prediction: true
     use_extra_data: false
-
-ray_nopre:
-  base_config:
-    <<: *ray_base
-    name: "ray20_nopre_{time}"
-  reset_config: *ray_reset
-  sac_config:
-    use_prediction: false
 
 visual:
   base_config: &visual_base
     scene: VisualPyramid
     no_graphics: false
+    name: "nopre_{time}"
     nn: nn_visual
-    name: "pre_kn_{time}"
-    max_iter: 10000
-  replay_config: &visual_replay
-    batch_size: 64
-    capacity: 131072
+    max_step: -1
 
-visual_nopre:
+visual_pre:
   base_config:
     <<: *visual_base
-    name: "nopre_{time}"
+    name: "pre_{time}"
   sac_config:
-    use_prediction: false
-  replay_config: *visual_replay
+    use_prediction: true

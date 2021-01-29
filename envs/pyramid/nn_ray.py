@@ -24,8 +24,7 @@ class ModelTransition(m.ModelBaseTransition):
             self(tf.keras.Input(shape=(self.state_dim + 2,)),
                  tf.keras.Input(shape=(self.action_dim,)))
         else:
-            self(tf.keras.Input(shape=(self.state_dim,)),
-                 tf.keras.Input(shape=(self.action_dim,)))
+            super().init()
 
     def call(self, state, action):
         next_state = self.dense(tf.concat([state, action], -1))
@@ -84,11 +83,12 @@ class ModelObservation(m.ModelBaseObservation):
 
 
 class ModelRep(m.ModelBaseGRURep):
-    def __init__(self, obs_dims, action_dim):
-        super().__init__(obs_dims, action_dim, rnn_units=8)
+    def __init__(self, obs_dims, d_action_dim, c_action_dim):
+        super().__init__(obs_dims, d_action_dim, c_action_dim,
+                         rnn_units=8)
 
         self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(64)
+            tf.keras.layers.Dense(64, activation=tf.nn.relu)
         ])
 
     def call(self, obs_list, pre_action, rnn_state):
@@ -102,14 +102,14 @@ class ModelRep(m.ModelBaseGRURep):
 class ModelQ(m.ModelQ):
     def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
         super().__init__(state_dim, d_action_dim, c_action_dim,
-                         state_n=128, state_depth=1,
-                         action_n=128, action_depth=1,
-                         dense_n=128, dense_depth=3)
+                         c_state_n=128, c_state_depth=1,
+                         c_action_n=128, c_action_depth=1,
+                         c_dense_n=128, c_dense_depth=3)
 
 
 class ModelPolicy(m.ModelPolicy):
     def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
         super().__init__(state_dim, d_action_dim, c_action_dim,
-                         dense_n=128, dense_depth=2,
+                         c_dense_n=128, c_dense_depth=2,
                          mean_n=128, mean_depth=1,
                          logstd_n=128, logstd_depth=1)
