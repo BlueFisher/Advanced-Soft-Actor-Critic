@@ -19,7 +19,6 @@ if __name__ == '__main__':
                                                  'evolver', 'e'])
     parser.add_argument('--config', '-c', help='config file')
     parser.add_argument('--run', action='store_true', help='inference mode')
-    parser.add_argument('--standalone', action='store_true', help='standalone mode (no evolver)')
 
     parser.add_argument('--evolver_host', help='evolver host')
     parser.add_argument('--evolver_port', type=int, help='evolver port')

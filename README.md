@@ -259,7 +259,7 @@ python main.py roller -c vanilla -n nowall_202003251644192jWy --run --agents=1
 ## Start Distributed Training
 
 ```
-usage: main_ds.py [-h] [--config CONFIG] [--run] [--standalone]
+usage: main_ds.py [-h] [--config CONFIG] [--run]
                   [--evolver_host EVOLVER_HOST]
                   [--evolver_port EVOLVER_PORT]
                   [--learner_host LEARNER_HOST]
@@ -281,7 +281,6 @@ optional arguments:
   --config CONFIG, -c CONFIG
                         config file
   --run                 inference mode
-  --standalone          standalone mode (no evolver)
   --evolver_host EVOLVER_HOST
                         evolver host
   --evolver_port EVOLVER_PORT

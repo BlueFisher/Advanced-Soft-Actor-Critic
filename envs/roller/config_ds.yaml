@@ -14,8 +14,6 @@ default:
     n_agents: 10
     reset_on_iteration: false
 
-    evolver_enabled: False
-
   reset_config:
     force_reset: true
 
@@ -37,7 +35,7 @@ visual_hard:
   base_config: &visual_hard_base
     name: "hard_nopre_{time}"
     nn: nn_visual_hard
-  net_config: &visual_hard_net
+  net_config:
     evolver_host: visual-roller-hard-ds-evolver
     learner_host: visual-roller-hard-ds-lr
     replay_host: visual-roller-hard-ds-lr
@@ -49,7 +47,10 @@ visual_hard_pre:
   base_config:
     <<: *visual_hard_base
     name: "hard_pre_{time}"
-  net_config: *visual_hard_net
+  net_config:
+    evolver_host: visual-roller-hard-pre-ds-evolver
+    learner_host: visual-roller-hard-pre-ds-lr
+    replay_host: visual-roller-hard-pre-ds-lr
   sac_config:
     <<: *visual_hard_sac
     use_prediction: true
@@ -58,7 +59,10 @@ visual_hard_pre_noextra:
   base_config:
     <<: *visual_hard_base
     name: "hard_pre_noextra_{time}"
-  net_config: *visual_hard_net
+  net_config:
+    evolver_host: visual-roller-hard-pre-noextra-ds-evolver
+    learner_host: visual-roller-hard-pre-noextra-ds-lr
+    replay_host: visual-roller-hard-pre-noextra-ds-lr
   sac_config:
     <<: *visual_hard_sac
     use_prediction: true

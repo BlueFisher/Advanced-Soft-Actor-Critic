@@ -1,0 +1,28 @@
+default:
+  base_config:
+    scene: VisualPyramid
+
+    no_graphics: false
+
+    build_path:
+      win32: C:\Users\Fisher\Nextcloud\Documents\Unity\win-RL-Envs\UnityEnvironment.exe
+      linux: /data/linux-RL-Envs/RL-Envs.x86_64
+
+    name: "evolver_nopre_{time}"
+    nn: nn_visual
+    n_agents: 10
+    reset_on_iteration: false
+
+  net_config:
+    evolver_host: visual-pyramid-nopre-ds-evolver
+    learner_host: visual-pyramid-nopre-ds-lr
+    replay_host: visual-pyramid-nopre-ds-lr
+
+  reset_config:
+    force_reset: true
+
+  sac_config:
+    burn_in_step: 10
+    n_step: 5
+    v_lambda: 0.99
+    use_rnn: true
