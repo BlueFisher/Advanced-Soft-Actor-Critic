@@ -29,7 +29,7 @@ base_config:
 
   max_actors_each_learner: 10 # The max number of actors of each learner
 
-  evolver_enabled: True
+  evolver_enabled: true
   evolver_cem_length: 50 # Start CEM if all learners have eavluated evolver_cem_length times
   evolver_cem_best: 0.3 # The ratio of best learners
   evolver_cem_min_length:

@@ -34,7 +34,6 @@ class SampledDataBuffer:
         self._data_feeded = False
         self._closed = False
         self._buffer = Queue(maxsize=C.SAMPLED_DATA_BUFFER_MAXSIZE)
-        self._timeout_count = 0
         self.logger = logging.getLogger('ds.learner.sampled_data_buffer')
 
         t = threading.Thread(target=self.run, daemon=True)
@@ -60,17 +59,7 @@ class SampledDataBuffer:
         _t = time.time()
         data = self._buffer.get()
         if time.time() - _t > 0.01:
-            self._timeout_count += 1
             self.logger.warning(f'Getting data spent {time.time() - _t}s')
-
-            if self._timeout_count >= 10:
-                with self._buffer.mutex:
-                    self._buffer.queue.clear()
-                    self._buffer = Queue(maxsize=self._buffer.maxsize + 1)
-                self._timeout_count = 0
-                self.logger.info(f'Increased SampledDataBuffer size to {self._buffer.maxsize}')
-        else:
-            self._timeout_count = 0
 
         return data
 
@@ -154,7 +143,6 @@ class Learner:
                                                            args.config)
 
         # Initialize config from command line arguments
-        self.standalone = args.standalone
         self.last_ckpt = args.ckpt
         self.render = args.render
         self.run_in_editor = args.editor
@@ -495,7 +483,7 @@ class Learner:
                     self._log_episode_summaries(iteration, agents)
                     self._log_episode_info(iteration, start_time, agents)
 
-                if not self.standalone:
+                if self.base_config['evolver_enabled']:
                     if is_useless_episode:
                         self._stub.post_reward(float('-inf'))
                     else:
@@ -503,7 +491,7 @@ class Learner:
 
                 iteration += 1
 
-                if self.standalone:
+                if not self.base_config['evolver_enabled']:
                     time.sleep(C.EVALUATION_INTERVAL)
 
             self.logger.warning('Evaluation exits')

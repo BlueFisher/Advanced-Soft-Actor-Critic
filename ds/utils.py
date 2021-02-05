@@ -1,20 +1,27 @@
 import functools
-import logging
 import threading
 
 import grpc
+
+from .constants import RPC_ERR_RETRY
 
 
 def rpc_error_inspector(func):
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
-        try:
-            return func(self, *args, **kwargs)
-        except grpc.RpcError:
-            self._logger.error(f'connection lost in {func.__name__}')
-        except Exception as e:
-            self._logger.error(f'error in {func.__name__}')
-            self._logger.error(e)
+        retry = RPC_ERR_RETRY
+        while retry > 0:
+            try:
+                return func(self, *args, **kwargs)
+            except grpc.RpcError:
+                self._logger.error(f'Connection lost in {func.__name__}')
+            except Exception as e:
+                self._logger.error(f'Error in {func.__name__}')
+                self._logger.error(e)
+
+            retry -= 1
+            if retry > 0:
+                self._logger.error('Retrying ...')
     return wrapper
 
 
@@ -55,7 +62,6 @@ class PeerSet(object):
         with self._peers_lock:
             if key in self._peers:
                 return self._peers[key]
-
 
     def peers(self):
         with self._peers_lock:

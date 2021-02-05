@@ -31,7 +31,7 @@ ray_pre:
     name: "ray20_pre_{time}"
   reset_config: *ray_reset
   sac_config:
-    prediction: true
+    use_prediction: true
 
 ray_noextra:
   base_config:
@@ -39,7 +39,7 @@ ray_noextra:
     name: "ray20_pre_noextra_{time}"
   reset_config: *ray_reset
   sac_config:
-    prediction: true
+    use_prediction: true
     use_extra_data: false
 
 visual:

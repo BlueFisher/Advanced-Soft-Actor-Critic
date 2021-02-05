@@ -77,14 +77,10 @@ class ModelRep(m.ModelBaseGRURep):
         super().__init__(obs_dims, d_action_dim, c_action_dim,
                          rnn_units=8)
 
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu)
-        ])
-
     def call(self, obs_list, pre_action, rnn_state):
         obs = tf.concat([obs_list[1], pre_action], axis=-1)
         outputs, next_rnn_state = self.gru(obs, initial_state=rnn_state)
-        state = self.dense(tf.concat([obs_list[0], outputs], axis=-1))
+        state = tf.concat([obs_list[0], outputs], axis=-1)
 
         return state, next_rnn_state
 
