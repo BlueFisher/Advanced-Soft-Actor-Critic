@@ -23,9 +23,10 @@ from .utils import PeerSet, rpc_error_inspector
 class Replay(object):
     _replay_buffer_lock = threading.Lock()
 
-    def __init__(self, root_dir, config_dir, args):
+    def __init__(self, root_dir, config_dir, args, block=True):
         self.root_dir = root_dir
         self.cmd_args = args
+        self.block = block
 
         self.logger = logging.getLogger('ds.replay')
 
@@ -166,7 +167,7 @@ class Replay(object):
                 self.logger.info(f'Buffer size: {percent}%')
                 self._curr_percent = percent
 
-    def _sample(self):
+    def sample(self):
         with self._replay_buffer_lock:
             sampled = self._replay_buffer.sample()
 
@@ -213,21 +214,21 @@ class Replay(object):
                           n_mu_probs,
                           rnn_state), priority_is
 
-    def _update_td_error(self, pointers, td_error):
+    def update_td_error(self, pointers, td_error):
         with self._replay_buffer_lock:
             mask = pointers == self._replay_buffer.get_storage_data_ids(pointers)
             self._replay_buffer.update(pointers[mask], td_error[mask])
 
-    def _update_transitions(self, pointers, key, data):
+    def update_transitions(self, pointers, key, data):
         with self._replay_buffer_lock:
             mask = pointers == self._replay_buffer.get_storage_data_ids(pointers)
             self._replay_buffer.update_transitions(pointers[mask], key, data[mask])
 
     def _run_replay_server(self, replay_port):
         servicer = ReplayService(self._add,
-                                 self._sample,
-                                 self._update_td_error,
-                                 self._update_transitions)
+                                 self.sample,
+                                 self.update_td_error,
+                                 self.update_transitions)
         self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS),
                                   options=[
             ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
@@ -237,7 +238,8 @@ class Replay(object):
         self.server.add_insecure_port(f'[::]:{replay_port}')
         self.server.start()
         self.logger.info(f'Replay server is running on [{replay_port}]...')
-        self.server.wait_for_termination()
+        if self.block:
+            self.server.wait_for_termination()
 
     def close(self):
         self.server.stop(None)
