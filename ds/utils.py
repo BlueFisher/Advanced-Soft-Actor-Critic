@@ -21,7 +21,9 @@ def rpc_error_inspector(func):
 
             retry -= 1
             if retry > 0:
-                self._logger.error('Retrying ...')
+                self._logger.warning(f'Retrying {func.__name__}...')
+            else:
+                self._logger.error(f'{func.__name__} failed')
     return wrapper
 
 

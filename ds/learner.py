@@ -117,7 +117,10 @@ class Learner:
                                     self.net_config['learner_host'],
                                     self.net_config['learner_port'],
                                     self.net_config['replay_host'],
-                                    self.net_config['replay_port'])
+                                    self.net_config['replay_port'],
+
+                                    constant_config['base_config']['attach_replay'],
+                                    (root_dir, config_dir, args))
 
         self._is_training = False
         self._closed = False
@@ -522,13 +525,13 @@ class Learner:
 
         while self._stub.connected:
             (pointers,
-             n_obses_list,
-             n_actions,
-             n_rewards,
-             next_obs_list,
-             n_dones,
-             n_mu_probs,
-             rnn_state,
+             (n_obses_list,
+              n_actions,
+              n_rewards,
+              next_obs_list,
+              n_dones,
+              n_mu_probs,
+              rnn_state),
              priority_is) = sample_data_buffer.get_data()
 
             self._is_training = True
@@ -628,7 +631,7 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
         self._force_close = force_close
 
-        self._logger = logging.getLogger('ds.evolver.service')
+        self._logger = logging.getLogger('ds.learner.service')
         self._peer_set = PeerSet(self._logger)
         self._replay = None
         self._actors = set()
@@ -756,11 +759,15 @@ class StubController:
 
     def __init__(self, evolver_host, evolver_port,
                  learner_host, learner_port,
-                 replay_host, replay_port):
+                 replay_host, replay_port,
+                 attach_replay, attached_replay_init_config):
         self.learner_host = learner_host
         self.learner_port = learner_port
         self.replay_host = replay_host
         self.replay_port = replay_port
+
+        self.attach_replay = attach_replay
+        self.attached_replay = None
 
         self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}', [
             ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS),
@@ -770,14 +777,21 @@ class StubController:
         self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
         self._evolver_connected = False
 
-        self._replay_channel = grpc.insecure_channel(f'{replay_host}:{replay_port}', [
-            ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS),
-            ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
-            ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
-        ])
-        self._replay_stub = replay_pb2_grpc.ReplayServiceStub(self._replay_channel)
-
         self._logger = logging.getLogger('ds.learner.stub')
+
+        if attach_replay:
+            assert learner_host == replay_host, 'The host of attached replay should be the same to the learner'
+            t_replay = threading.Thread(target=self._start_attached_replay,
+                                        args=[attached_replay_init_config],
+                                        daemon=True)
+            t_replay.start()
+        else:
+            self._replay_channel = grpc.insecure_channel(f'{replay_host}:{replay_port}', [
+                ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS),
+                ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
+                ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
+            ])
+            self._replay_stub = replay_pb2_grpc.ReplayServiceStub(self._replay_channel)
 
         t_evolver = threading.Thread(target=self._start_evolver_persistence, daemon=True)
         t_evolver.start()
@@ -786,31 +800,56 @@ class StubController:
     def connected(self):
         return not self._closed and self._evolver_connected
 
+    def _start_attached_replay(self, attached_replay_init_config):
+        from .replay import Replay
+        self.attached_replay = Replay(*attached_replay_init_config, block=False)
+
+    def get_sampled_data(self):
+        if self.attach_replay:
+            while not self.attached_replay:
+                time.sleep(0.01)
+            a = self.attached_replay.sample()
+            return a
+        else:
+            return self._get_sampled_data()
+
+    def update_td_error(self, pointers, td_error):
+        if self.attach_replay:
+            self.attached_replay.update_td_error(pointers, td_error)
+        else:
+            self._update_td_error(pointers, td_error)
+
+    def update_transitions(self, pointers, key, data):
+        if self.attach_replay:
+            self.attached_replay.update_transitions(pointers, key, data)
+        else:
+            self._update_transitions(pointers, key, data)
+
     # To replay
     @rpc_error_inspector
-    def get_sampled_data(self):
+    def _get_sampled_data(self):
         response = self._replay_stub.Sample(Empty())
         if response and response.has_data:
             return (proto_to_ndarray(response.pointers),
-                    [proto_to_ndarray(n_obses) for n_obses in response.n_obses_list],
-                    proto_to_ndarray(response.n_actions),
-                    proto_to_ndarray(response.n_rewards),
-                    [proto_to_ndarray(next_obs) for next_obs in response.next_obs_list],
-                    proto_to_ndarray(response.n_dones),
-                    proto_to_ndarray(response.n_mu_probs),
-                    proto_to_ndarray(response.rnn_state),
+                    ([proto_to_ndarray(n_obses) for n_obses in response.n_obses_list],
+                     proto_to_ndarray(response.n_actions),
+                     proto_to_ndarray(response.n_rewards),
+                     [proto_to_ndarray(next_obs) for next_obs in response.next_obs_list],
+                     proto_to_ndarray(response.n_dones),
+                     proto_to_ndarray(response.n_mu_probs),
+                     proto_to_ndarray(response.rnn_state)),
                     proto_to_ndarray(response.priority_is))
 
     # To replay
     @rpc_error_inspector
-    def update_td_error(self, pointers, td_error):
+    def _update_td_error(self, pointers, td_error):
         self._replay_stub.UpdateTDError(
             replay_pb2.UpdateTDErrorRequest(pointers=ndarray_to_proto(pointers),
                                             td_error=ndarray_to_proto(td_error)))
 
     # To replay
     @rpc_error_inspector
-    def update_transitions(self, pointers, key, data):
+    def _update_transitions(self, pointers, key, data):
         self._replay_stub.UpdateTransitions(
             replay_pb2.UpdateTransitionsRequest(pointers=ndarray_to_proto(pointers),
                                                 key=key,
@@ -869,5 +908,6 @@ class StubController:
 
     def close(self):
         self._evolver_channel.close()
-        self._replay_channel.close()
+        if not self.attach_replay:
+            self._replay_channel.close()
         self._closed = True
