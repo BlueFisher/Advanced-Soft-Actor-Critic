@@ -7,55 +7,10 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 
 from .replay_buffer import PrioritizedReplayBuffer
+from .utils import *
+from .cpu2gpu_buffer import CPU2GPUBuffer
 
 logger = logging.getLogger('sac.base')
-
-
-def squash_correction_log_prob(dist, x):
-    return dist.log_prob(x) - tf.math.log(tf.maximum(1 - tf.square(tf.tanh(x)), 1e-2))
-
-
-def squash_correction_prob(dist, x):
-    return dist.prob(x) / (tf.maximum(1 - tf.square(tf.tanh(x)), 1e-2))
-
-
-def debug(name, x):
-    tf.print(name, tf.reduce_min(x), tf.reduce_mean(x), tf.reduce_max(x))
-
-
-def debug_grad(grads):
-    for grad in grads:
-        if grad is not None:
-            debug(grad.name, grad)
-
-
-def debug_grad_com(grads, grads1):
-    for i, grad in enumerate(grads):
-        debug(grad.name, grad - grads1[i])
-
-
-def gen_pre_n_actions(n_actions, keep_last_action=False):
-    return tf.concat([
-        tf.zeros_like(n_actions[:, 0:1, ...]),
-        n_actions if keep_last_action else n_actions[:, :-1, ...]
-    ], axis=1)
-
-
-def _np_to_tensor(fn):
-    def c(*args, **kwargs):
-        return fn(*[k if k is not None else tf.zeros((0,)) for k in args],
-                  **{k: v if v is not None else tf.zeros((0,)) for k, v in kwargs.items()})
-
-    return c
-
-
-def scale_h(x, epsilon=0.001):
-    return tf.sign(x) * (tf.sqrt(tf.abs(x) + 1) - 1) + epsilon * x
-
-
-def scale_inverse_h(x, epsilon=0.001):
-    t = 1 + 4 * epsilon * (tf.abs(x) + 1 + epsilon)
-    return tf.sign(x) * ((tf.sqrt(t) - 1) / (2 * epsilon) - 1)
 
 
 class SAC_Base(object):
@@ -394,7 +349,7 @@ class SAC_Base(object):
         """ _udpate_normalizer
         obses_list """
         if self.use_normalization:
-            self._udpate_normalizer = _np_to_tensor(
+            self._udpate_normalizer = np_to_tensor(
                 tf.function(self._udpate_normalizer.python_function, input_signature=[
                     [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims]
                 ]))
@@ -406,7 +361,7 @@ class SAC_Base(object):
             tf.TensorSpec(shape=(None, None, self.action_dim)),
             tf.TensorSpec(shape=(None, self.rnn_state_dim)) if self.use_rnn else None_tensor,
         ])
-        self.get_n_probs = _np_to_tensor(tmp_get_n_probs)
+        self.get_n_probs = np_to_tensor(tmp_get_n_probs)
 
         step_size = self.burn_in_step + self.n_step
 
@@ -423,8 +378,8 @@ class SAC_Base(object):
             tf.TensorSpec(shape=(None, step_size)) if self.use_n_step_is else None_tensor,
             tf.TensorSpec(shape=(None, self.rnn_state_dim)) if self.use_rnn else None_tensor,
         ]
-        self.get_td_error = _np_to_tensor(tf.function(self.get_td_error.python_function,
-                                                      input_signature=signature))
+        self.get_td_error = np_to_tensor(tf.function(self.get_td_error.python_function,
+                                                     input_signature=signature))
 
         if self.train_mode:
             """ _train
@@ -441,8 +396,12 @@ class SAC_Base(object):
                 tf.TensorSpec(shape=(None, 1)) if self.use_priority else None_tensor,
                 tf.TensorSpec(shape=(None, self.rnn_state_dim)) if self.use_rnn else None_tensor,
             ]
-            self._train = _np_to_tensor(tf.function(self._train.python_function,
-                                                    input_signature=signature))
+            self._train = np_to_tensor(tf.function(self._train.python_function,
+                                                   input_signature=signature))
+
+            self._train_data_buffer = CPU2GPUBuffer(self._sample,
+                                                    input_signature=signature,
+                                                    can_return_None=True)
 
     def get_initial_rnn_state(self, batch_size):
         assert self.use_rnn
@@ -1319,11 +1278,11 @@ class SAC_Base(object):
             self.replay_buffer.add(storage_data,
                                    ignore_size=self.burn_in_step + self.n_step)
 
-    def train(self):
+    def _sample(self):
         # Sample from replay buffer
         sampled = self.replay_buffer.sample()
         if sampled is None:
-            return 0
+            return None
 
         """
         trans:
@@ -1373,6 +1332,25 @@ class SAC_Base(object):
         if self.use_rnn:
             m_rnn_states = trans['rnn_state']
             rnn_state = m_rnn_states[:, 0, ...]
+
+        return pointers, (n_obses_list,
+                          n_actions,
+                          n_rewards,
+                          next_obs_list,
+                          n_dones,
+                          n_mu_probs if self.use_n_step_is else None,
+                          priority_is if self.use_priority else None,
+                          rnn_state if self.use_rnn else None)
+
+    def train(self):
+        train_data = self._train_data_buffer.get_data()
+        if train_data is None:
+            return 0
+
+        pointers, (n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
+                   n_mu_probs,
+                   priority_is,
+                   rnn_state) = train_data
 
         self._train(n_obses_list=n_obses_list,
                     n_actions=n_actions,

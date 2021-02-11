@@ -1,5 +1,6 @@
 import logging
 import math
+import threading
 
 import numpy as np
 
@@ -182,79 +183,88 @@ class PrioritizedReplayBuffer:
         self._sum_tree = SumTree(self.capacity)
         self._trans_storage = DataStorage(self.capacity)
 
+        self._lock = threading.RLock()
+
     def add(self, transitions: dict, ignore_size=0):
-        if self._trans_storage.size == 0:
-            max_p = self.td_error_max
-        else:
-            max_p = self._sum_tree.max
+        with self._lock:
+            if self._trans_storage.size == 0:
+                max_p = self.td_error_max
+            else:
+                max_p = self._sum_tree.max
 
-        data_pointers = self._trans_storage.add(transitions)
-        probs = np.full(len(data_pointers), max_p, dtype=np.float32)
+            data_pointers = self._trans_storage.add(transitions)
+            probs = np.full(len(data_pointers), max_p, dtype=np.float32)
 
-        if ignore_size > 0:
-            # Don't sample last ignore_size transitions
-            probs[np.isin(data_pointers, np.arange(self.capacity - ignore_size, self.capacity))] = 0
-            probs[-ignore_size:] = 0
-        self._sum_tree.add(data_pointers, probs)
+            if ignore_size > 0:
+                # Don't sample last ignore_size transitions
+                probs[np.isin(data_pointers, np.arange(self.capacity - ignore_size, self.capacity))] = 0
+                probs[-ignore_size:] = 0
+            self._sum_tree.add(data_pointers, probs)
 
     def add_with_td_error(self, td_error, transitions: dict, ignore_size=0):
         td_error = np.asarray(td_error)
         td_error = td_error.flatten()
 
-        data_pointers = self._trans_storage.add(transitions)
-        clipped_errors = np.clip(td_error, self.td_error_min, self.td_error_max)
-        if np.isnan(np.min(clipped_errors)):
-            logger.error('td_error has nan')
-            raise Exception('td_error has nan')
+        with self._lock:
+            data_pointers = self._trans_storage.add(transitions)
+            clipped_errors = np.clip(td_error, self.td_error_min, self.td_error_max)
+            if np.isnan(np.min(clipped_errors)):
+                logger.error('td_error has nan')
+                raise Exception('td_error has nan')
 
-        probs = np.power(clipped_errors, self.alpha)
+            probs = np.power(clipped_errors, self.alpha)
 
-        if ignore_size > 0:
-            # Don't sample last ignore_size transitions
-            probs[np.isin(data_pointers, np.arange(self.capacity - ignore_size, self.capacity))] = 0
-            probs[-ignore_size:] = 0
-        self._sum_tree.add(data_pointers, probs)
+            if ignore_size > 0:
+                # Don't sample last ignore_size transitions
+                probs[np.isin(data_pointers, np.arange(self.capacity - ignore_size, self.capacity))] = 0
+                probs[-ignore_size:] = 0
+            self._sum_tree.add(data_pointers, probs)
 
     def sample(self):
-        if not self.is_lg_batch_size:
-            return None
+        with self._lock:
+            if self._trans_storage.size < self.batch_size:
+                return None
 
-        leaf_pointers, p = self._sum_tree.sample(self.batch_size)
+            leaf_pointers, p = self._sum_tree.sample(self.batch_size)
 
-        data_pointers = self._sum_tree.leaf_idx_to_data_idx(leaf_pointers)
-        transitions = self._trans_storage.get(data_pointers)
-        data_ids = self._trans_storage.get_ids(data_pointers)
+            data_pointers = self._sum_tree.leaf_idx_to_data_idx(leaf_pointers)
+            transitions = self._trans_storage.get(data_pointers)
+            data_ids = self._trans_storage.get_ids(data_pointers)
 
-        is_weights = p / self._sum_tree.total_p
-        self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
-        is_weights = np.power(is_weights / np.min(is_weights), -self.beta).astype(np.float32)
+            is_weights = p / self._sum_tree.total_p
+            self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
+            is_weights = np.power(is_weights / np.min(is_weights), -self.beta).astype(np.float32)
 
-        return data_ids, transitions, np.expand_dims(is_weights, axis=1)
+            return data_ids, transitions, np.expand_dims(is_weights, axis=1)
 
     def get_storage_data(self, data_ids):
         """
         Get data without verifying whether data_ids exist
         """
-        return self._trans_storage.get(data_ids)
+        with self._lock:
+            return self._trans_storage.get(data_ids)
 
     def get_storage_data_ids(self, data_ids):
-        return self._trans_storage.get_ids(data_ids)
+        with self._lock:
+            return self._trans_storage.get_ids(data_ids)
 
     def update(self, data_ids, td_error):
-        td_error = np.asarray(td_error)
-        td_error = td_error.flatten()
+        with self._lock:
+            td_error = np.asarray(td_error)
+            td_error = td_error.flatten()
 
-        clipped_errors = np.clip(td_error, self.td_error_min, self.td_error_max)
-        if np.isnan(np.min(clipped_errors)):
-            logger.error('td_error has nan')
-            raise Exception('td_error has nan')
+            clipped_errors = np.clip(td_error, self.td_error_min, self.td_error_max)
+            if np.isnan(np.min(clipped_errors)):
+                logger.error('td_error has nan')
+                raise Exception('td_error has nan')
 
-        probs = np.power(clipped_errors, self.alpha)
+            probs = np.power(clipped_errors, self.alpha)
 
-        self._sum_tree.update(data_ids % self.capacity, probs)
+            self._sum_tree.update(data_ids % self.capacity, probs)
 
     def update_transitions(self, data_ids, key, data):
-        self._trans_storage.update(data_ids, key, data)
+        with self._lock:
+            self._trans_storage.update(data_ids, key, data)
 
     def clear(self):
         self._trans_storage.clear()
@@ -262,15 +272,18 @@ class PrioritizedReplayBuffer:
 
     @property
     def is_full(self):
-        return self._trans_storage.is_full
+        with self._lock:
+            return self._trans_storage.is_full
 
     @property
     def size(self):
-        return self._trans_storage.size
+        with self._lock:
+            return self._trans_storage.size
 
     @property
     def is_lg_batch_size(self):
-        return self._trans_storage.size > self.batch_size
+        with self._lock:
+            return self._trans_storage.size > self.batch_size
 
 
 if __name__ == "__main__":
