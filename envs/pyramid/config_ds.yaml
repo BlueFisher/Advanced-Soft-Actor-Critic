@@ -15,7 +15,7 @@ default:
 
     attach_replay: true
 
-    evolver_enabled: false
+    evolver_enabled: true
 
   net_config:
     evolver_host: visual-pyramid-nopre-ds-evolver
@@ -26,7 +26,16 @@ default:
     force_reset: true
 
   sac_config:
-    burn_in_step: 10
-    n_step: 5
-    v_lambda: 0.99
+    burn_in_step: 30
+    n_step: 3
     use_rnn: true
+
+pre:
+  base_config:
+    name: "evolver_pre_{time}"
+  net_config:
+    evolver_host: visual-pyramid-pre-ds-evolver
+    learner_host: visual-pyramid-pre-ds-lr
+    replay_host: visual-pyramid-pre-ds-lr
+  sac_config:
+    use_prediction: true
