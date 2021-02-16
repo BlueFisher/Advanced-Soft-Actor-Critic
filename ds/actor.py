@@ -242,7 +242,8 @@ class Actor(object):
             action = np.zeros([len(agents), self.action_dim], dtype=np.float32)
             step = 0
 
-            if self.base_config['update_policy_mode'] and self.base_config['update_policy_variables_per_step'] == -1:
+            if self.base_config['update_policy_mode'] \
+                    and self.base_config['update_policy_variables_per_step'] == -1:
                 self._update_policy_variables()
 
             while False in [a.done for a in agents] and self._stub.connected:
@@ -258,7 +259,8 @@ class Actor(object):
 
                 if self.base_config['update_policy_mode']:
                     # Update policy variables each "update_policy_variables_per_step"
-                    if self.base_config['update_policy_variables_per_step'] != -1 and step % self.base_config['update_policy_variables_per_step'] == 0:
+                    if self.base_config['update_policy_variables_per_step'] != -1 \
+                            and step % self.base_config['update_policy_variables_per_step'] == 0:
                         self._update_policy_variables()
 
                     if use_rnn:
@@ -314,6 +316,10 @@ class Actor(object):
 
             self._log_episode_info(iteration, agents)
             iteration += 1
+
+            if iteration == 3:
+                while True:
+                    time.sleep(100)
 
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]

@@ -15,7 +15,7 @@ default:
 
     attach_replay: true
 
-    evolver_enabled: true
+    evolver_enabled: false
 
   net_config:
     evolver_host: visual-pyramid-nopre-ds-evolver

@@ -97,7 +97,7 @@ class Replay(object):
 
         if self.cmd_args.logger_in_file:
             logger_file = Path(model_abs_dir).joinpath('replay.log')
-            config_helper.set_logger(logger_file)
+            config_helper.set_logger(logger_file, self.logger)
             self.logger.info(f'Set to logger {logger_file}')
 
         config_helper.display_config(config, self.logger)

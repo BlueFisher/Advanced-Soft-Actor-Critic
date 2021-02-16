@@ -8,7 +8,5 @@ RPC_ERR_RETRY = 5  # Max retry times when rpc error encountered
 EVALUATION_INTERVAL = 10  # If learner is standalone, the interval time between evaluations
 EVALUATION_WAITING_TIME = 1  # If learner is not training, the waiting time for the next evaluation
 
-SAMPLED_DATA_BUFFER_MAXSIZE = 2
-
 UPDATE_DATA_BUFFER_MAXSIZE = 20
 UPDATE_DATA_BUFFER_THREADS = 3

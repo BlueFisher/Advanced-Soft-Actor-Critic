@@ -18,15 +18,16 @@ class CPU2GPUBuffer:
         self._cpu2gpu = np_to_tensor(tf.function(self._cpu2gpu, input_signature=input_signature))
 
         self._lock = threading.Condition()
+        self._closed = False
         t = threading.Thread(target=self._run, daemon=True)
         t.start()
 
     def _run(self):
-        while True:
+        while not self._closed:
             with self._lock:
                 self._lock.wait_for(lambda: self._gpu_data_buffer is None
                                     and not (self._can_return_None and self._None_buffer))
-            
+
             data = self._get_cpu_data()
             if data is None:
                 if self._can_return_None:
@@ -65,3 +66,12 @@ class CPU2GPUBuffer:
             self._lock.notify()
 
         return result
+
+    def close(self):
+        self._closed = True
+
+        self._cpu_data_buffer = None
+        self._gpu_data_buffer = None
+        self._None_buffer = False
+        with self._lock:
+            self._lock.notify()
