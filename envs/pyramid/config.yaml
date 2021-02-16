@@ -12,8 +12,8 @@ default:
     force_reset: true
 
   sac_config:
-    burn_in_step: 10
-    n_step: 5
+    burn_in_step: 30
+    n_step: 3
     v_lambda: 0.99
     use_rnn: true
 

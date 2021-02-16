@@ -6,9 +6,9 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+from .cpu2gpu_buffer import CPU2GPUBuffer
 from .replay_buffer import PrioritizedReplayBuffer
 from .utils import *
-from .cpu2gpu_buffer import CPU2GPUBuffer
 
 logger = logging.getLogger('sac.base')
 
@@ -162,6 +162,9 @@ class SAC_Base(object):
         self._init_or_restore(model_abs_dir, last_ckpt)
 
         self._init_tf_function()
+        self._train_data_buffer = CPU2GPUBuffer(self._sample,
+                                                self.get_train_input_signature(self.replay_buffer.batch_size),
+                                                can_return_None=True)
 
     def _build_model(self, model, init_log_alpha, learning_rate):
         """
@@ -339,6 +342,27 @@ class SAC_Base(object):
                 self.init_iteration = 0
                 self._update_target_variables()
 
+    def get_train_input_signature(self, batch_size=None):
+        None_tensor = tf.TensorSpec((0, ))
+
+        step_size = self.burn_in_step + self.n_step
+        """ _train
+        n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
+        n_mu_probs=None, priority_is=None,
+        initial_rnn_state=None """
+        signature = [
+            [tf.TensorSpec(shape=(batch_size, step_size, *t)) for t in self.obs_dims],
+            tf.TensorSpec(shape=(batch_size, step_size, self.action_dim)),
+            tf.TensorSpec(shape=(batch_size, step_size)),
+            [tf.TensorSpec(shape=(batch_size, *t)) for t in self.obs_dims],
+            tf.TensorSpec(shape=(batch_size, step_size)),
+            tf.TensorSpec(shape=(batch_size, step_size)) if self.use_n_step_is else None_tensor,
+            tf.TensorSpec(shape=(batch_size, 1)) if self.use_priority else None_tensor,
+            tf.TensorSpec(shape=(batch_size, self.rnn_state_dim)) if self.use_rnn else None_tensor,
+        ]
+
+        return signature
+
     def _init_tf_function(self):
         """
         Initialize some @tf.function and specify tf.TensorSpec
@@ -382,26 +406,9 @@ class SAC_Base(object):
                                                      input_signature=signature))
 
         if self.train_mode:
-            """ _train
-            n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
-            n_mu_probs=None, priority_is=None,
-            initial_rnn_state=None """
-            signature = [
-                [tf.TensorSpec(shape=(None, step_size, *t)) for t in self.obs_dims],
-                tf.TensorSpec(shape=(None, step_size, self.action_dim)),
-                tf.TensorSpec(shape=(None, step_size)),
-                [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims],
-                tf.TensorSpec(shape=(None, step_size)),
-                tf.TensorSpec(shape=(None, step_size)) if self.use_n_step_is else None_tensor,
-                tf.TensorSpec(shape=(None, 1)) if self.use_priority else None_tensor,
-                tf.TensorSpec(shape=(None, self.rnn_state_dim)) if self.use_rnn else None_tensor,
-            ]
+            signature = self.get_train_input_signature(None)
             self._train = np_to_tensor(tf.function(self._train.python_function,
                                                    input_signature=signature))
-
-            self._train_data_buffer = CPU2GPUBuffer(self._sample,
-                                                    input_signature=signature,
-                                                    can_return_None=True)
 
     def get_initial_rnn_state(self, batch_size):
         assert self.use_rnn

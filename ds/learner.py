@@ -16,6 +16,7 @@ import numpy as np
 
 import algorithm.config_helper as config_helper
 from algorithm.agent import Agent
+from algorithm.cpu2gpu_buffer import CPU2GPUBuffer
 
 from . import constants as C
 from .proto import (evolver_pb2, evolver_pb2_grpc, learner_pb2,
@@ -25,46 +26,6 @@ from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
 from .sac_ds_base import SAC_DS_Base
 from .utils import PeerSet, rpc_error_inspector
-
-
-class SampledDataBuffer:
-    def __init__(self, get_sampled_data):
-        self._get_sampled_data = get_sampled_data
-
-        self._data_feeded = False
-        self._closed = False
-        self._buffer = Queue(maxsize=C.SAMPLED_DATA_BUFFER_MAXSIZE)
-        self.logger = logging.getLogger('ds.learner.sampled_data_buffer')
-
-        t = threading.Thread(target=self.run, daemon=True)
-        t.start()
-
-    def run(self):
-        while not self._closed:
-            sampled = self._get_sampled_data()
-
-            if sampled is not None:
-                self._buffer.put(sampled)
-                self._data_feeded = True
-            else:
-                self.logger.warning('No data sampled')
-                if self._data_feeded:
-                    self.logger.warning('Replay is offline')
-                    self.close()
-                    break
-
-                time.sleep(C.RECONNECTION_TIME)
-
-    def get_data(self):
-        _t = time.time()
-        data = self._buffer.get()
-        if time.time() - _t > 0.01:
-            self.logger.warning(f'Getting data spent {time.time() - _t}s')
-
-        return data
-
-    def close(self):
-        self._closed = True
 
 
 class UpdateDataBuffer:
@@ -81,6 +42,7 @@ class UpdateDataBuffer:
             t.start()
 
     def run(self):
+        # TODO .numpy() threading
         while not self._closed:
             is_td_error, *data = self._buffer.get()
             if is_td_error:
@@ -125,7 +87,10 @@ class Learner:
         self._is_training = False
         self._closed = False
         self._sac_lock = threading.Lock()
-        self._sac_bak_lock = threading.Lock()
+        self._sac_bak_get_policy_variables_lock = threading.Lock()
+        self._sac_bak_get_action_lock = threading.Lock()
+        self._sac_bak_get_td_error_lock = threading.Lock()
+        self._sac_bak_evaluation_lock = threading.Lock()
         self.registered = False
 
         try:
@@ -218,7 +183,7 @@ class Learner:
         os.makedirs(model_abs_dir)
 
         if self.cmd_args.logger_in_file:
-            config_helper.set_logger(Path(model_abs_dir).joinpath(f'learner.log'))
+            config_helper.set_logger(Path(model_abs_dir).joinpath(f'learner.log'), self.logger)
 
         config_helper.display_config(config, self.logger)
 
@@ -323,7 +288,7 @@ class Learner:
                 return result
 
     def _get_policy_variables(self):
-        with self._sac_bak_lock:
+        with self._sac_bak_get_policy_variables_lock:
             variables = self.sac_bak.get_policy_variables()
 
         return [v.numpy() for v in variables]
@@ -339,7 +304,8 @@ class Learner:
             self.sac.update_nn_variables(variables)
             all_variables = self.sac.get_all_variables()
 
-            with self._sac_bak_lock:
+            with self._sac_bak_get_policy_variables_lock, self._sac_bak_get_action_lock, \
+                    self._sac_bak_get_td_error_lock, self._sac_bak_evaluation_lock:
                 self.sac_bak.update_all_variables(all_variables)
 
         self.logger.info('Updated all nn variables')
@@ -348,7 +314,8 @@ class Learner:
         with self._sac_lock:
             variables = self.sac.get_all_variables()
 
-            with self._sac_bak_lock:
+            with self._sac_bak_get_policy_variables_lock, self._sac_bak_get_action_lock, \
+                    self._sac_bak_get_td_error_lock, self._sac_bak_evaluation_lock:
                 res = self.sac_bak.update_all_variables(variables).numpy()
 
                 if not res:
@@ -362,7 +329,7 @@ class Learner:
         if self.sac_bak.use_rnn:
             assert rnn_state is not None
 
-        with self._sac_bak_lock:
+        with self._sac_bak_get_action_lock:
             if self.sac_bak.use_rnn:
                 action, next_rnn_state = self.sac_bak.choose_rnn_action(obs_list, rnn_state)
                 next_rnn_state = next_rnn_state
@@ -387,7 +354,7 @@ class Learner:
         n_dones: [1, episode_len]
         n_rnn_states: [1, episode_len, rnn_state_dim]
         """
-        with self._sac_bak_lock:
+        with self._sac_bak_get_td_error_lock:
             td_error = self.sac_bak.get_episode_td_error(n_obses_list=n_obses_list,
                                                          n_actions=n_actions,
                                                          n_rewards=n_rewards,
@@ -439,7 +406,8 @@ class Learner:
 
                 while False in [a.done for a in agents] and \
                         not self._closed and self._is_training:
-                    with self._sac_bak_lock:
+
+                    with self._sac_bak_evaluation_lock:
                         if use_rnn:
                             action, next_rnn_state = self.sac_bak.choose_rnn_action([o.astype(np.float32) for o in obs_list],
                                                                                     action,
@@ -519,7 +487,9 @@ class Learner:
         self.logger.info(f'{iteration}, S {max(steps)}, {time_elapse:.2f}, R {rewards}')
 
     def _run_training_client(self):
-        sample_data_buffer = SampledDataBuffer(self._stub.get_sampled_data)
+        sample_data_buffer = CPU2GPUBuffer(self._stub.get_sampled_data,
+                                           self.sac.get_train_input_signature(
+                                               self.replay_config['batch_size']))
         update_data_buffer = UpdateDataBuffer(self._stub.update_td_error,
                                               self._stub.update_transitions)
 
@@ -531,9 +501,8 @@ class Learner:
               next_obs_list,
               n_dones,
               n_mu_probs,
-              rnn_state),
-             priority_is) = sample_data_buffer.get_data()
-
+              priority_is, 
+              rnn_state)) = sample_data_buffer.get_data()
             self._is_training = True
 
             with self._sac_lock:
@@ -546,7 +515,7 @@ class Learner:
                                                              n_mu_probs=n_mu_probs,
                                                              priority_is=priority_is,
                                                              rnn_state=rnn_state)
-
+                                                             
             if step % self.base_config['update_sac_bak_per_step'] == 0:
                 self._update_sac_bak()
 
@@ -808,8 +777,23 @@ class StubController:
         if self.attach_replay:
             while not self.attached_replay:
                 time.sleep(0.01)
-            a = self.attached_replay.sample()
-            return a
+            sampled = self.attached_replay.sample()
+            if sampled is not None:
+                pointers, (n_obses_list,
+                           n_actions,
+                           n_rewards,
+                           next_obs_list,
+                           n_dones,
+                           n_mu_probs,
+                           rnn_state), priority_is = sampled
+                return pointers, (n_obses_list,
+                                  n_actions,
+                                  n_rewards,
+                                  next_obs_list,
+                                  n_dones,
+                                  n_mu_probs,
+                                  priority_is,
+                                  rnn_state)
         else:
             return self._get_sampled_data()
 
@@ -830,15 +814,15 @@ class StubController:
     def _get_sampled_data(self):
         response = self._replay_stub.Sample(Empty())
         if response and response.has_data:
-            return (proto_to_ndarray(response.pointers),
-                    ([proto_to_ndarray(n_obses) for n_obses in response.n_obses_list],
-                     proto_to_ndarray(response.n_actions),
-                     proto_to_ndarray(response.n_rewards),
-                     [proto_to_ndarray(next_obs) for next_obs in response.next_obs_list],
-                     proto_to_ndarray(response.n_dones),
-                     proto_to_ndarray(response.n_mu_probs),
-                     proto_to_ndarray(response.rnn_state)),
-                    proto_to_ndarray(response.priority_is))
+            return proto_to_ndarray(response.pointers), (
+                [proto_to_ndarray(n_obses) for n_obses in response.n_obses_list],
+                proto_to_ndarray(response.n_actions),
+                proto_to_ndarray(response.n_rewards),
+                [proto_to_ndarray(next_obs) for next_obs in response.next_obs_list],
+                proto_to_ndarray(response.n_dones),
+                proto_to_ndarray(response.n_mu_probs),
+                proto_to_ndarray(response.priority_is),
+                proto_to_ndarray(response.rnn_state))
 
     # To replay
     @rpc_error_inspector
