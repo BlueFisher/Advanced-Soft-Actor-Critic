@@ -317,10 +317,6 @@ class Actor(object):
             self._log_episode_info(iteration, agents)
             iteration += 1
 
-            if iteration == 3:
-                while True:
-                    time.sleep(100)
-
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
