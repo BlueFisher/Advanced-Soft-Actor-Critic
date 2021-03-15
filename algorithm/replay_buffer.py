@@ -1,8 +1,9 @@
 import logging
 import math
-import threading
 
 import numpy as np
+
+from .utils import ReadWriteLock
 
 logger = logging.getLogger('replay')
 
@@ -183,10 +184,10 @@ class PrioritizedReplayBuffer:
         self._sum_tree = SumTree(self.capacity)
         self._trans_storage = DataStorage(self.capacity)
 
-        self._lock = threading.RLock()
+        self._lock = ReadWriteLock(None, 1, 1, logger)
 
     def add(self, transitions: dict, ignore_size=0):
-        with self._lock:
+        with self._lock.write():
             if self._trans_storage.size == 0:
                 max_p = self.td_error_max
             else:
@@ -205,7 +206,7 @@ class PrioritizedReplayBuffer:
         td_error = np.asarray(td_error)
         td_error = td_error.flatten()
 
-        with self._lock:
+        with self._lock.write():
             data_pointers = self._trans_storage.add(transitions)
             clipped_errors = np.clip(td_error, self.td_error_min, self.td_error_max)
             if np.isnan(np.min(clipped_errors)):
@@ -221,7 +222,7 @@ class PrioritizedReplayBuffer:
             self._sum_tree.add(data_pointers, probs)
 
     def sample(self):
-        with self._lock:
+        with self._lock.read():
             if self._trans_storage.size < self.batch_size:
                 return None
 
@@ -241,15 +242,15 @@ class PrioritizedReplayBuffer:
         """
         Get data without verifying whether data_ids exist
         """
-        with self._lock:
+        with self._lock.read():
             return self._trans_storage.get(data_ids)
 
     def get_storage_data_ids(self, data_ids):
-        with self._lock:
+        with self._lock.read():
             return self._trans_storage.get_ids(data_ids)
 
     def update(self, data_ids, td_error):
-        with self._lock:
+        with self._lock.write():
             td_error = np.asarray(td_error)
             td_error = td_error.flatten()
 
@@ -263,7 +264,7 @@ class PrioritizedReplayBuffer:
             self._sum_tree.update(data_ids % self.capacity, probs)
 
     def update_transitions(self, data_ids, key, data):
-        with self._lock:
+        with self._lock.write():
             self._trans_storage.update(data_ids, key, data)
 
     def clear(self):
@@ -272,17 +273,17 @@ class PrioritizedReplayBuffer:
 
     @property
     def is_full(self):
-        with self._lock:
+        with self._lock.read():
             return self._trans_storage.is_full
 
     @property
     def size(self):
-        with self._lock:
+        with self._lock.read():
             return self._trans_storage.size
 
     @property
     def is_lg_batch_size(self):
-        with self._lock:
+        with self._lock.read():
             return self._trans_storage.size > self.batch_size
 
 

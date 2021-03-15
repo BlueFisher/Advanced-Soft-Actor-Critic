@@ -15,5 +15,4 @@ default:
     force_reset: true
 
   sac_config:
-    seed: 42
     n_step: 3

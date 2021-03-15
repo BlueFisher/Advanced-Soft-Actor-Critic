@@ -243,7 +243,7 @@ class Main(object):
             {'tag': 'reward/mean', 'simple_value': rewards.mean()},
             {'tag': 'reward/max', 'simple_value': rewards.max()},
             {'tag': 'reward/min', 'simple_value': rewards.min()}
-        ], iteration)
+        ], None)
 
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]
