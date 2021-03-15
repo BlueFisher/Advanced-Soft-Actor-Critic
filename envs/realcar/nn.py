@@ -10,8 +10,6 @@ class ModelRep(m.ModelBaseSimpleRep):
         super().__init__(obs_dims)
 
         self.conv_bbox = tf.keras.Sequential([
-            # tf.keras.layers.Conv2D(filters=32, kernel_size=8, strides=4, activation=tf.nn.relu),
-            # tf.keras.layers.Conv2D(filters=64, kernel_size=4, strides=2, activation=tf.nn.relu),
             tf.keras.layers.Conv2D(filters=16, kernel_size=8, strides=4, activation=tf.nn.relu),
             tf.keras.layers.Conv2D(filters=32, kernel_size=4, strides=2, activation=tf.nn.relu),
             tf.keras.layers.Flatten(),
@@ -20,8 +18,6 @@ class ModelRep(m.ModelBaseSimpleRep):
         ])
 
         self.conv_ray = tf.keras.Sequential([
-            # tf.keras.layers.Conv2D(filters=32, kernel_size=8, strides=4, activation=tf.nn.relu),
-            # tf.keras.layers.Conv2D(filters=64, kernel_size=4, strides=2, activation=tf.nn.relu),
             tf.keras.layers.Conv2D(filters=16, kernel_size=8, strides=4, activation=tf.nn.relu),
             tf.keras.layers.Conv2D(filters=32, kernel_size=4, strides=2, activation=tf.nn.relu),
             tf.keras.layers.Flatten(),

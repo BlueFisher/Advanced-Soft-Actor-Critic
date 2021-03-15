@@ -60,5 +60,6 @@ message GetTDErrorRequest {
   NDarray n_rnn_states = 7;
 }
 message TDError {
-  NDarray td_error = 1;
+  bool succeeded = 1;
+  NDarray td_error = 2;
 }

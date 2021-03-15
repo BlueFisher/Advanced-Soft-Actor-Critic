@@ -1,9 +1,12 @@
+import logging
 import threading
 import time
 
 import tensorflow as tf
 
 from .utils import np_to_tensor
+
+logger = logging.getLogger('CPU2GPUBuffer')
 
 
 class CPU2GPUBuffer:
@@ -25,8 +28,18 @@ class CPU2GPUBuffer:
     def _run(self):
         while not self._closed:
             with self._lock:
-                self._lock.wait_for(lambda: self._gpu_data_buffer is None
-                                    and not (self._can_return_None and self._None_buffer))
+                start_time = time.time()
+                timeout_occur = False
+
+                while not self._lock.wait_for(lambda: self._gpu_data_buffer is None
+                                              and not (self._can_return_None and self._None_buffer),
+                                              timeout=10):
+                    if not timeout_occur:
+                        timeout_occur = True
+                        logger.warning('Timeout! waiting for train finish')
+
+                if timeout_occur:
+                    logger.warning(f'Acquired in {time.time()-start_time:.1f}s. waiting for train finish')
 
             data = self._get_cpu_data()
             if data is None:
@@ -52,8 +65,17 @@ class CPU2GPUBuffer:
 
     def get_data(self):
         with self._lock:
-            self._lock.wait_for(lambda: self._gpu_data_buffer is not None
-                                or (self._can_return_None and self._None_buffer))
+            start_time = time.time()
+            timeout_occur = False
+            while not self._lock.wait_for(lambda: self._gpu_data_buffer is not None
+                                          or (self._can_return_None and self._None_buffer),
+                                          timeout=1):
+                if not timeout_occur:
+                    timeout_occur = True
+                    logger.warning('Timeout! waiting for data')
+
+            if timeout_occur:
+                logger.warning(f'Acquired in {time.time()-start_time:.1f}s. waiting for data')
 
         result = None
         if self._gpu_data_buffer is not None:

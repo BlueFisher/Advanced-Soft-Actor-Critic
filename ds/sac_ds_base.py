@@ -107,11 +107,19 @@ class SAC_DS_Base(SAC_Base):
         self._build_model(model, init_log_alpha, learning_rate)
         self._init_or_restore(model_abs_dir, last_ckpt)
 
-        if train_mode:
+        if model_abs_dir:
             summary_path = Path(model_abs_dir).joinpath('log')
             self.summary_writer = tf.summary.create_file_writer(str(summary_path))
 
         self._init_tf_function()
+
+    def _init_tf_function(self):
+        super()._init_tf_function()
+
+        self.update_all_variables = tf.function(self.update_all_variables.python_function,
+                                                input_signature=[[tf.TensorSpec(v.shape,
+                                                                                v.dtype)
+                                                                  for v in self.get_all_variables()]])
 
     @tf.function
     def choose_action(self, obs_list):

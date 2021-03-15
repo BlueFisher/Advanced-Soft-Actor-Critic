@@ -12,6 +12,7 @@ class ModelTransition(m.ModelBaseTransition):
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(state_dim + state_dim)
         ])
 
@@ -23,8 +24,7 @@ class ModelTransition(m.ModelBaseTransition):
             self(tf.keras.Input(shape=(self.state_dim + 2,)),
                  tf.keras.Input(shape=(self.action_dim,)))
         else:
-            self(tf.keras.Input(shape=(self.state_dim,)),
-                 tf.keras.Input(shape=(self.action_dim,)))
+            super().init()
 
     def call(self, state, action):
         next_state = self.dense(tf.concat([state, action], -1))
@@ -34,7 +34,7 @@ class ModelTransition(m.ModelBaseTransition):
         return next_state_dist
 
     def extra_obs(self, obs_list):
-        return obs_list[0][..., -2:]
+        return obs_list[1][..., -2:]
 
 
 class ModelReward(m.ModelBaseReward):
@@ -55,52 +55,85 @@ class ModelReward(m.ModelBaseReward):
 
 class ModelObservation(m.ModelBaseObservation):
     def __init__(self, state_dim, obs_dims, use_extra_data):
+        assert obs_dims[0] == (30, 30, 3)
+        assert obs_dims[1] == (6, )  # Only first 4
+
         super().__init__(state_dim, obs_dims, use_extra_data)
 
-        self.dense = tf.keras.Sequential([
+        self.vis_seq = tf.keras.Sequential([
+            tf.keras.layers.Dense(64, activation=tf.nn.relu),
+            tf.keras.layers.Dense(2 * 2 * 32, activation=tf.nn.relu),
+            tf.keras.layers.Reshape(target_shape=(2, 2, 32)),
+            tf.keras.layers.Conv2DTranspose(filters=32, kernel_size=4, strides=2, activation=tf.nn.relu),
+            tf.keras.layers.Conv2DTranspose(filters=16, kernel_size=8, strides=4, activation=tf.nn.relu),
+            tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=3, strides=1, activation=tf.nn.relu),
+        ])
+
+        self.vec_seq = tf.keras.Sequential([
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
             tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(obs_dims)
+            tf.keras.layers.Dense(6 if self.use_extra_data else 4)
         ])
 
     def call(self, state):
-        obs = self.dense(state)
+        batch = tf.shape(state)[0]
+        t_state = tf.reshape(state, [-1, state.shape[-1]])
+        vis_obs = self.vis_seq(t_state)
+        vis_obs = tf.reshape(vis_obs, [batch, -1, *vis_obs.shape[1:]])
 
-        return obs
+        vec_obs = self.vec_seq(state)
+
+        return vis_obs, vec_obs
 
     def get_loss(self, state, obs_list):
-        approx_obs = self(state)
+        vis_obs, vec_obs = obs_list
+        vec_obs = vec_obs if self.use_extra_data else vec_obs[..., :-2]
+        approx_vis_obs, approx_vec_obs = self(state)
 
-        obs = obs_list[0]
-        if not self.use_extra_data:
-            obs = obs[..., :-1]
+        mse = tf.keras.losses.MeanSquaredError()
 
-        return tf.reduce_mean(tf.square(approx_obs - obs))
+        return 0.5 * mse(approx_vis_obs, vis_obs) + 0.5 * mse(approx_vec_obs, vec_obs)
 
 
 class ModelRep(m.ModelBaseGRURep):
     def __init__(self, obs_dims, d_action_dim, c_action_dim):
-        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units=64)
+        super().__init__(obs_dims, d_action_dim, c_action_dim,
+                         rnn_units=64)
+
+        assert obs_dims[0] == (30, 30, 3)
+        assert obs_dims[1] == (6, )  # Only first 4
+        self.conv = tf.keras.Sequential([
+            tf.keras.layers.Conv2D(filters=16, kernel_size=8, strides=4, activation=tf.nn.relu),
+            tf.keras.layers.Conv2D(filters=32, kernel_size=4, strides=2, activation=tf.nn.relu),
+            tf.keras.layers.Flatten(),
+            tf.keras.layers.Dense(128, activation=tf.nn.relu),
+            tf.keras.layers.Dense(64, activation=tf.nn.relu)
+        ])
 
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu)
         ])
 
     def call(self, obs_list, pre_action, rnn_state):
-        obs = obs_list[0]
-        obs = tf.concat([obs, pre_action], axis=-1)
+        vis_obs, vec_obs = obs_list
+        vec_obs = vec_obs[..., :-2]
 
+        obs = tf.concat([vec_obs, pre_action], axis=-1)
         outputs, next_rnn_state = self.gru(obs, initial_state=rnn_state)
 
-        # state = tf.concat([outputs, buoy_obs], axis=-1)
-        state = self.dense(outputs)
+        batch = tf.shape(vis_obs)[0]
+        vis_obs = tf.reshape(vis_obs, [-1, *vis_obs.shape[2:]])
+        vis_obs = self.conv(vis_obs)
+        vis_obs = tf.reshape(vis_obs, [batch, -1, vis_obs.shape[-1]])
+
+        state = self.dense(tf.concat([vis_obs, outputs], axis=-1))
 
         return state, next_rnn_state
 
 
 class ModelQ(m.ModelQ):
     def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
-        super().__init__(state_dim, d_action_dim, c_action_dim, name,
+        super().__init__(state_dim, d_action_dim, c_action_dim,
                          c_state_n=128, c_state_depth=1,
                          c_action_n=128, c_action_depth=1,
                          c_dense_n=128, c_dense_depth=3)
@@ -108,7 +141,7 @@ class ModelQ(m.ModelQ):
 
 class ModelPolicy(m.ModelPolicy):
     def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
-        super().__init__(state_dim, d_action_dim, c_action_dim, name,
-                         c_dense_n=128, c_dense_depth=3,
+        super().__init__(state_dim, d_action_dim, c_action_dim,
+                         c_dense_n=128, c_dense_depth=2,
                          mean_n=128, mean_depth=1,
                          logstd_n=128, logstd_depth=1)

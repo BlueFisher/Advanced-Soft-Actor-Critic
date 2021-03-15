@@ -20,11 +20,12 @@ from .proto.pingpong_pb2 import Ping, Pong
 from .utils import PeerSet, rpc_error_inspector
 
 
-class Replay(object):
-    def __init__(self, root_dir, config_dir, args, block=True):
+class Replay:
+    def __init__(self, root_dir, config_dir, args,
+                 attached=False):
         self.root_dir = root_dir
         self.cmd_args = args
-        self.block = block
+        self.attached = attached
 
         self.logger = logging.getLogger('ds.replay')
 
@@ -95,9 +96,9 @@ class Replay(object):
         self._replay_buffer = PrioritizedReplayBuffer(**replay_config)
         self._curr_percent = -1
 
-        if self.cmd_args.logger_in_file:
+        if self.cmd_args.logger_in_file and not self.attached:
             logger_file = Path(model_abs_dir).joinpath('replay.log')
-            config_helper.set_logger(logger_file, self.logger)
+            config_helper.set_logger(logger_file)
             self.logger.info(f'Set to logger {logger_file}')
 
         config_helper.display_config(config, self.logger)
@@ -232,7 +233,7 @@ class Replay(object):
         self.server.add_insecure_port(f'[::]:{replay_port}')
         self.server.start()
         self.logger.info(f'Replay server is running on [{replay_port}]...')
-        if self.block:
+        if not self.attached:
             self.server.wait_for_termination()
 
     def close(self):
@@ -354,7 +355,10 @@ class StubController:
 
         response = self._learner_stub.GetTDError(request)
 
-        return proto_to_ndarray(response.td_error)
+        if response.succeeded:
+            return proto_to_ndarray(response.td_error)
+        else:
+            return None
 
     def _start_learner_persistence(self):
         def request_messages():

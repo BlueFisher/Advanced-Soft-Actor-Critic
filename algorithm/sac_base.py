@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 from pathlib import Path
 
@@ -151,10 +152,11 @@ class SAC_Base(object):
         if seed is not None:
             tf.random.set_seed(seed)
 
-        if self.train_mode:
+        if model_abs_dir:
             summary_path = Path(model_abs_dir).joinpath('log')
             self.summary_writer = tf.summary.create_file_writer(str(summary_path))
 
+        if self.train_mode:
             replay_config = {} if replay_config is None else replay_config
             self.replay_buffer = PrioritizedReplayBuffer(**replay_config)
 
@@ -767,10 +769,10 @@ class SAC_Base(object):
                 loss_transition = tf.reduce_mean(loss_transition)
 
                 approx_n_rewards = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])
-                loss_reward = 0.5 * loss_mse(approx_n_rewards, tf.expand_dims(n_rewards[:, self.burn_in_step:], 2))
+                loss_reward = loss_mse(approx_n_rewards, tf.expand_dims(n_rewards[:, self.burn_in_step:], 2))
 
-                loss_obs = 0.5 * self.model_observation.get_loss(m_states[:, self.burn_in_step:, ...],
-                                                                 [m_obses[:, self.burn_in_step:, ...] for m_obses in m_obses_list])
+                loss_obs = self.model_observation.get_loss(m_states[:, self.burn_in_step:, ...],
+                                                           [m_obses[:, self.burn_in_step:, ...] for m_obses in m_obses_list])
 
                 loss_prediction = loss_transition + loss_reward + loss_obs
 
@@ -1180,25 +1182,31 @@ class SAC_Base(object):
             rnn_state = np.concatenate([n_rnn_states[:, i]
                                         for i in range(n_rnn_states.shape[1] - ignore_size + 1)], axis=0)
 
-        td_error = self.get_td_error(n_obses_list=tmp_n_obses_list,
-                                     n_actions=n_actions,
-                                     n_rewards=n_rewards,
-                                     next_obs_list=tmp_next_obs_list,
-                                     n_dones=n_dones,
-                                     n_mu_probs=n_mu_probs if self.use_n_step_is else None,
-                                     rnn_state=rnn_state if self.use_rnn else None).numpy()
-        td_error = td_error.flatten()
-        td_error = np.concatenate([td_error,
+        td_error_list = []
+        all_batch = tmp_n_obses_list[0].shape[0]
+        for i in range(math.ceil(all_batch / 256)):
+            b_i, b_j = i * 256, (i + 1) * 256
+            td_error = self.get_td_error(n_obses_list=[o[b_i:b_j, :] for o in tmp_n_obses_list],
+                                         n_actions=n_actions[b_i:b_j, :],
+                                         n_rewards=n_rewards[b_i:b_j, :],
+                                         next_obs_list=[o[b_i:b_j, :] for o in tmp_next_obs_list],
+                                         n_dones=n_dones[b_i:b_j, :],
+                                         n_mu_probs=n_mu_probs[b_i:b_j, :] if self.use_n_step_is else None,
+                                         rnn_state=rnn_state[b_i:b_j, :] if self.use_rnn else None).numpy()
+            td_error_list.append(td_error.flatten())
+
+        td_error = np.concatenate([*td_error_list,
                                    np.zeros(ignore_size, dtype=np.float32)])
         return td_error
 
-    def write_constant_summaries(self, constant_summaries, iteration):
+    def write_constant_summaries(self, constant_summaries, iteration=None):
         """
         Write constant information like reward, iteration from sac_main.py
         """
         with self.summary_writer.as_default():
             for s in constant_summaries:
-                tf.summary.scalar(s['tag'], s['simple_value'], step=self.global_step)
+                tf.summary.scalar(s['tag'], s['simple_value'],
+                                  step=self.global_step if iteration is None else iteration)
 
         self.summary_writer.flush()
 

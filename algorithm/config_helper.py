@@ -69,7 +69,7 @@ def initialize_config_from_yaml(default_config_path, config_file_path, config_ca
     return config
 
 
-def set_logger(logger_file=None, exist_logger=None):
+def set_logger(logger_file=None):
     # logger config
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
@@ -92,10 +92,7 @@ def set_logger(logger_file=None, exist_logger=None):
         # Add handler and formatter to logger
         fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
 
-        if exist_logger is None:
-            logger.addHandler(fh)
-        else:
-            exist_logger.addHandler(fh)
+        logger.addHandler(fh)
 
 
 def save_config(config, model_root_path, config_name):
