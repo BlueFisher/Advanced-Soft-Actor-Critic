@@ -41,11 +41,11 @@ base_config:
   evolver_remove_worst: 4
 
 net_config:
-  evolver_host: 127.0.0.1
+  evolver_host: null
   evolver_port: 61000
-  learner_host: 127.0.0.1
+  learner_host: null
   learner_port: 61001
-  replay_host: 127.0.0.1
+  replay_host: null
   replay_port: 61002
 
 reset_config: null # Reset parameters sent to Unity

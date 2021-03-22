@@ -38,43 +38,40 @@ class Learner:
         self.cmd_args = args
 
         self._closed = False
-        self.registered = False
+        self._registered = False
 
         self.logger = logging.getLogger('ds.learner')
 
         constant_config, config_abs_dir = self._init_constant_config(root_dir, config_dir, args)
-        self.net_config = constant_config['net_config']
+        learner_host = constant_config['net_config']['learner_host']
+        learner_port = constant_config['net_config']['learner_port']
 
-        self.get_sampled_data_queue = mp.Queue(C.GET_SAMPLED_DATA_QUEUE_SIZE)
-        self.update_td_error_queue = mp.Queue(C.UPDATE_TD_ERROR_QUEUE_SIZE)
-        self.update_transition_queue = mp.Queue(C.UPDATE_TRANSITION_QUEUE_SIZE)
-        self.update_sac_bak_queue = mp.Queue(1)
+        self._evolver_stub = EvolverStubController(
+            constant_config['net_config']['evolver_host'],
+            constant_config['net_config']['evolver_port']
+        )
 
-        self._stub = StubController(self.net_config['evolver_host'],
-                                    self.net_config['evolver_port'],
-                                    self.net_config['learner_host'],
-                                    self.net_config['learner_port'],
-                                    self.net_config['replay_host'],
-                                    self.net_config['replay_port'],
+        name = self._register_evolver(learner_host,
+                                      learner_port)
+        constant_config['base_config']['name'] = name
 
-                                    constant_config['base_config']['attach_replay'],
-                                    self.get_sampled_data_queue,
-                                    self.update_td_error_queue,
-                                    self.update_transition_queue,
-                                    (root_dir, config_dir, args))
+        self._init_env(constant_config, config_abs_dir)
 
-        self._sac_bak_lock = ReadWriteLock(None, 2, 2, logger=self.logger)
-        self._check_td_error = MaxMutexCheck(5)
+        # If attach_replay, run ReplayStubController directly.
+        # Otherwise, run ReplayStubController in _get_replay_register_result
+        if self.base_config['attach_replay']:
+            self._replay_stub = ReplayStubController(True,
+                                                     self.get_sampled_data_queue,
+                                                     self.update_td_error_queue,
+                                                     self.update_transition_queue,
 
-        try:
-            self._init_env(constant_config, config_abs_dir)
-            self._run()
+                                                     attached_replay_init_config=(root_dir, config_dir, args))
 
-        except KeyboardInterrupt:
-            self.logger.warning('KeyboardInterrupt in _run')
+        threading.Thread(target=self._policy_evaluation).start()
 
-        finally:
-            self.close()
+        self._run_learner_server(learner_port)
+
+        self.close()
 
     def _init_constant_config(self, root_dir, config_dir, args):
         config_abs_dir = Path(root_dir).joinpath(config_dir)
@@ -96,20 +93,37 @@ class Learner:
             config['net_config']['learner_host'] = args.learner_host
         if args.learner_port is not None:
             config['net_config']['learner_port'] = args.learner_port
-        if args.replay_host is not None:
-            config['net_config']['replay_host'] = args.replay_host
-        if args.replay_port is not None:
-            config['net_config']['replay_port'] = args.replay_port
 
-        if args.in_k8s:
-            hostname = socket.gethostname()
-            host_id = hostname.split('-')[-1]
-            learner_host = config['net_config']['learner_host']
-            replay_host = config['net_config']['replay_host']
-            config['net_config']['learner_host'] = f'{learner_host}-{host_id}.{learner_host}'
-            config['net_config']['replay_host'] = f'{replay_host}-{host_id}.{replay_host}'
+        hostname = socket.gethostname()
+        ip = socket.gethostbyname(hostname)
+
+        if config['net_config']['evolver_host'] is None:
+            config['net_config']['evolver_host'] = ip
+        if config['net_config']['learner_host'] is None:
+            config['net_config']['learner_host'] = ip
 
         return config, config_abs_dir
+
+    def _register_evolver(self, learner_host, learner_port):
+        # Get name from evolver registry
+        register_response = self._evolver_stub.register_to_evolver(learner_host,
+                                                                   learner_port)
+
+        (_id, name,
+         reset_config,
+         replay_config,
+         sac_config) = register_response
+
+        self.id = _id
+        self.reset_config = reset_config
+        self.replay_config = replay_config
+        self.sac_config = sac_config
+
+        self._registered = True
+
+        self.logger.info(f'Registered id: {_id}, name: {name}')
+
+        return name
 
     def _init_env(self, config, config_abs_dir):
         if self.cmd_args.name is not None:
@@ -123,35 +137,10 @@ class Learner:
 
         self.base_config = config['base_config']
 
-        # Get name from evolver registry
-        evolver_register_response = None
-        self.logger.info('Registering...')
-        while evolver_register_response is None:
-            if not self._stub.connected:
-                time.sleep(C.RECONNECTION_TIME)
-                continue
-            evolver_register_response = self._stub.register_to_evolver()
-            if evolver_register_response is None:
-                time.sleep(C.RECONNECTION_TIME)
-
-        (_id, name,
-         reset_config,
-         replay_config,
-         sac_config) = evolver_register_response
-
-        self.id = _id
-        self.base_config['name'] = name
-        self.reset_config = reset_config
-        self.replay_config = replay_config
-        self.sac_config = sac_config
-
-        self.registered = True
-        self.logger.info(f'Registered id: {_id}, name: {name}')
-
         model_abs_dir = Path(self.root_dir).joinpath('models',
                                                      self.base_config['scene'],
                                                      self.base_config['name'],
-                                                     f'learner{_id}')
+                                                     f'learner{self.id}')
         self.model_abs_dir = model_abs_dir
         os.makedirs(model_abs_dir)
 
@@ -197,6 +186,10 @@ class Learner:
         custom_nn_model = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(custom_nn_model)
 
+        self.get_sampled_data_queue = mp.Queue(C.GET_SAMPLED_DATA_QUEUE_SIZE)
+        self.update_td_error_queue = mp.Queue(C.UPDATE_TD_ERROR_QUEUE_SIZE)
+        self.update_transition_queue = mp.Queue(C.UPDATE_TRANSITION_QUEUE_SIZE)
+        self.update_sac_bak_queue = mp.Queue(1)
         self.process_nn_variables_conn, process_nn_variables_sac_conn = mp.Pipe()
 
         self.learner_trainer_process = mp.Process(target=Trainer, kwargs={
@@ -218,6 +211,9 @@ class Learner:
         })
         self.learner_trainer_process.start()
 
+        self._sac_bak_lock = ReadWriteLock(None, 2, 2, logger=self.logger)
+        self._check_td_error = MaxMutexCheck(5)
+
         self.sac_bak = SAC_DS_Base(train_mode=False,
                                    obs_dims=self.obs_dims,
                                    d_action_dim=self.d_action_dim,
@@ -230,15 +226,14 @@ class Learner:
 
         self.logger.info('SAC_BAK started')
 
-        nn_variables = self._stub.get_nn_variables()
+        nn_variables = self._evolver_stub.get_nn_variables()
         if nn_variables:
             self._udpate_nn_variables(nn_variables)
             self.logger.info(f'Initialized from evolver')
 
         self._update_sac_bak()
 
-        threading.Thread(target=self._forever_update_sac_bak,
-                         daemon=True).start()
+        threading.Thread(target=self._forever_update_sac_bak).start()
 
     def _update_sac_bak(self):
         all_variables = self.update_sac_bak_queue.get()
@@ -251,14 +246,23 @@ class Learner:
                 self._force_close()
                 return
 
-        self.logger.info('Updated sac_bak')
+        self.logger.info('Updateded sac_bak')
 
     def _forever_update_sac_bak(self):
         while True:
             self._update_sac_bak()
 
-    def _get_replay_register_result(self):
-        if self.registered:
+    def _get_replay_register_result(self, replay_host, replay_port):
+        if not self.base_config['attach_replay']:
+            self._replay_stub = ReplayStubController(False,
+                                                     self.get_sampled_data_queue,
+                                                     self.update_td_error_queue,
+                                                     self.update_transition_queue,
+
+                                                     replay_host=replay_host,
+                                                     replay_port=replay_port)
+
+        if self._registered:
             return (str(self.model_abs_dir),
                     self.reset_config,
                     self.replay_config,
@@ -267,7 +271,7 @@ class Learner:
     _unique_id = -1
 
     def _get_actor_register_result(self, actors_num):
-        if self.registered:
+        if self._registered:
             self._unique_id += 1
 
             noise = self.base_config['noise_increasing_rate'] * (actors_num - 1)
@@ -430,9 +434,9 @@ class Learner:
 
                 if self.base_config['evolver_enabled']:
                     if is_useless_episode:
-                        self._stub.post_reward(float('-inf'))
+                        self._evolver_stub.post_reward(float('-inf'))
                     else:
-                        self._stub.post_reward(np.mean([a.reward for a in agents]))
+                        self._evolver_stub.post_reward(np.mean([a.reward for a in agents]))
 
                 iteration += 1
 
@@ -455,10 +459,7 @@ class Learner:
         steps = [a.steps for a in agents]
         self.logger.info(f'{iteration}, S {max(steps)}, {time_elapse:.2f}, R {rewards}')
 
-    def _run(self):
-        t_evaluation = threading.Thread(target=self._policy_evaluation, daemon=True)
-        t_evaluation.start()
-
+    def _run_learner_server(self, learner_port):
         servicer = LearnerService(self._get_replay_register_result,
                                   self._get_actor_register_result,
 
@@ -475,9 +476,9 @@ class Learner:
             ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
         ])
         learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, self.server)
-        self.server.add_insecure_port(f'[::]:{self.net_config["learner_port"]}')
+        self.server.add_insecure_port(f'[::]:{learner_port}')
         self.server.start()
-        self.logger.info(f'Learner server is running on [{self.net_config["learner_port"]}]...')
+        self.logger.info(f'Learner server is running on [{learner_port}]...')
 
         self.server.wait_for_termination()
 
@@ -495,7 +496,7 @@ class Learner:
         if hasattr(self, 'server'):
             self.server.stop(None)
 
-        self._stub.close()
+        self._evolver_stub.close()
         self.learner_trainer_process.close()
 
         self.logger.warning('Closed')
@@ -558,7 +559,8 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
         self._replay = peer
 
-        res = self._get_replay_register_result()
+        res = self._get_replay_register_result(request.replay_host,
+                                               request.replay_port)
         if res is not None:
             self._logger.info(f'Replay {peer} registered')
             (model_abs_dir,
@@ -651,25 +653,10 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
         return Empty()
 
 
-class StubController:
+class EvolverStubController:
     _closed = False
 
-    def __init__(self, evolver_host, evolver_port,
-                 learner_host, learner_port,
-                 replay_host, replay_port,
-
-                 attach_replay: bool,
-                 get_sampled_data_queue: mp.Queue,
-                 update_td_error_queue: mp.Queue,
-                 update_transition_queue: mp.Queue,
-                 attached_replay_init_config):
-        self.learner_host = learner_host
-        self.learner_port = learner_port
-        self.replay_host = replay_host
-        self.replay_port = replay_port
-
-        self.attach_replay = attach_replay
-
+    def __init__(self, evolver_host, evolver_port):
         self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}', [
             ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS),
             ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
@@ -678,113 +665,40 @@ class StubController:
         self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
         self._evolver_connected = False
 
-        self._logger = logging.getLogger('ds.learner.stub')
+        self._logger = logging.getLogger('ds.learner.evolver_stub')
 
-        if attach_replay:
-            assert learner_host == replay_host, 'The host of attached replay should be the same as the learner'
-
-            self.get_sampled_data_queue = get_sampled_data_queue
-            self.update_td_error_queue = update_td_error_queue
-            self.update_transition_queue = update_transition_queue
-
-            self.attached_replay_process = mp.Process(target=AttachedReplay, kwargs={
-                'get_sampled_data_queue': get_sampled_data_queue,
-                'update_td_error_queue': update_td_error_queue,
-                'update_transition_queue': update_transition_queue,
-                'init_config': attached_replay_init_config
-            })
-
-            self.attached_replay_process.start()
-
-        else:
-            self._replay_channel = grpc.insecure_channel(f'{replay_host}:{replay_port}', [
-                ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS),
-                ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
-                ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
-            ])
-            self._replay_stub = replay_pb2_grpc.ReplayServiceStub(self._replay_channel)
-
-            for _ in range(C.GET_SAMPLED_DATA_THREAD_SIZE):
-                threading.Thread(target=self._forever_sample_data,
-                                 daemon=True).start()
-
-            for _ in range(C.GET_SAMPLED_DATA_THREAD_SIZE):
-                threading.Thread(target=self._forever_update_td_error,
-                                 daemon=True).start()
-
-            for _ in range(C.UPDATE_TD_ERROR_THREAD_SIZE):
-                threading.Thread(target=self._forever_update_transition,
-                                 daemon=True).start()
-
-        t_evolver = threading.Thread(target=self._start_evolver_persistence, daemon=True)
+        t_evolver = threading.Thread(target=self._start_evolver_persistence)
         t_evolver.start()
 
     @property
     def connected(self):
         return not self._closed and self._evolver_connected
 
-    def _forever_sample_data(self):
-        while True:
-            sampled = self._get_sampled_data()
-            if sampled:
-                self.get_sampled_data_queue.put(sampled)
-
-    def _forever_update_td_error(self):
-        while True:
-            pointers, td_error = self.update_td_error_queue.get()
-            self._update_td_error(pointers, td_error)
-
-    def _forever_update_transition(self):
-        while True:
-            pointers, key, data = self.update_transition_queue.get()
-            self._update_transitions(pointers, key, data)
-
-    # To replay
-
     @rpc_error_inspector
-    def _get_sampled_data(self):
-        response = self._replay_stub.Sample(Empty())
-        if response and response.has_data:
-            return proto_to_ndarray(response.pointers), (
-                [proto_to_ndarray(n_obses) for n_obses in response.n_obses_list],
-                proto_to_ndarray(response.n_actions),
-                proto_to_ndarray(response.n_rewards),
-                [proto_to_ndarray(next_obs) for next_obs in response.next_obs_list],
-                proto_to_ndarray(response.n_dones),
-                proto_to_ndarray(response.n_mu_probs),
-                proto_to_ndarray(response.priority_is),
-                proto_to_ndarray(response.rnn_state))
+    def register_to_evolver(self, learner_host, learner_port):
+        self._logger.warning('Waiting for evolver connection')
+        while not self.connected:
+            time.sleep(C.RECONNECTION_TIME)
+            continue
 
-    # To replay
-    @rpc_error_inspector
-    def _update_td_error(self, pointers, td_error):
-        self._replay_stub.UpdateTDError(
-            replay_pb2.UpdateTDErrorRequest(pointers=ndarray_to_proto(pointers),
-                                            td_error=ndarray_to_proto(td_error)))
+        response = None
+        self._logger.info('Registering to evolver...')
+        while response is None:
+            response = self._evolver_stub.RegisterLearner(
+                evolver_pb2.RegisterLearnerRequest(learner_host=learner_host,
+                                                   learner_port=learner_port))
 
-    # To replay
-    @rpc_error_inspector
-    def _update_transitions(self, pointers, key, data):
-        self._replay_stub.UpdateTransitions(
-            replay_pb2.UpdateTransitionsRequest(pointers=ndarray_to_proto(pointers),
-                                                key=key,
-                                                data=ndarray_to_proto(data)))
+            if response:
+                self._logger.info('Registered to evolver')
 
-    @rpc_error_inspector
-    def register_to_evolver(self):
-        response = self._evolver_stub.RegisterLearner(
-            evolver_pb2.RegisterLearnerRequest(learner_host=self.learner_host,
-                                               learner_port=self.learner_port,
-                                               replay_host=self.replay_host,
-                                               replay_port=self.replay_port))
+                return (response.id, response.name,
+                        json.loads(response.reset_config_json),
+                        json.loads(response.replay_config_json),
+                        json.loads(response.sac_config_json))
+            else:
+                response = None
+                time.sleep(C.RECONNECTION_TIME)
 
-        if response:
-            return (response.id, response.name,
-                    json.loads(response.reset_config_json),
-                    json.loads(response.replay_config_json),
-                    json.loads(response.sac_config_json))
-
-    # To evolver
     @rpc_error_inspector
     def post_reward(self, reward):
         self._evolver_stub.PostReward(
@@ -823,8 +737,100 @@ class StubController:
 
     def close(self):
         self._evolver_channel.close()
-        if not self.attach_replay:
+        self._closed = True
+
+
+class ReplayStubController:
+    _closed = False
+
+    def __init__(self, attach_replay: bool,
+                 get_sampled_data_queue: mp.Queue,
+                 update_td_error_queue: mp.Queue,
+                 update_transition_queue: mp.Queue,
+
+                 replay_host=None, replay_port=None,
+                 attached_replay_init_config=None):
+
+        self.attach_replay = attach_replay
+        self.get_sampled_data_queue = get_sampled_data_queue
+        self.update_td_error_queue = update_td_error_queue
+        self.update_transition_queue = update_transition_queue
+
+        self._logger = logging.getLogger('ds.learner.replay_stub')
+
+        if attach_replay:
+            self.attached_replay_process = mp.Process(target=AttachedReplay, kwargs={
+                'get_sampled_data_queue': get_sampled_data_queue,
+                'update_td_error_queue': update_td_error_queue,
+                'update_transition_queue': update_transition_queue,
+                'init_config': attached_replay_init_config
+            })
+
+            self.attached_replay_process.start()
+        else:
+            self._replay_channel = grpc.insecure_channel(f'{replay_host}:{replay_port}', [
+                ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS),
+                ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
+                ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
+            ])
+            self._replay_stub = replay_pb2_grpc.ReplayServiceStub(self._replay_channel)
+
+            for _ in range(C.GET_SAMPLED_DATA_THREAD_SIZE):
+                threading.Thread(target=self._forever_sample_data).start()
+
+            for _ in range(C.GET_SAMPLED_DATA_THREAD_SIZE):
+                threading.Thread(target=self._forever_update_td_error).start()
+
+            for _ in range(C.UPDATE_TD_ERROR_THREAD_SIZE):
+                threading.Thread(target=self._forever_update_transition).start()
+
+    def _forever_sample_data(self):
+        while True:
+            sampled = self._get_sampled_data()
+            if sampled:
+                self.get_sampled_data_queue.put(sampled)
+
+    def _forever_update_td_error(self):
+        while True:
+            pointers, td_error = self.update_td_error_queue.get()
+            self._update_td_error(pointers, td_error)
+
+    def _forever_update_transition(self):
+        while True:
+            pointers, key, data = self.update_transition_queue.get()
+            self._update_transitions(pointers, key, data)
+
+    @rpc_error_inspector
+    def _get_sampled_data(self):
+        response = self._replay_stub.Sample(Empty())
+        if response and response.has_data:
+            return proto_to_ndarray(response.pointers), (
+                [proto_to_ndarray(n_obses) for n_obses in response.n_obses_list],
+                proto_to_ndarray(response.n_actions),
+                proto_to_ndarray(response.n_rewards),
+                [proto_to_ndarray(next_obs) for next_obs in response.next_obs_list],
+                proto_to_ndarray(response.n_dones),
+                proto_to_ndarray(response.n_mu_probs),
+                proto_to_ndarray(response.priority_is),
+                proto_to_ndarray(response.rnn_state))
+
+    @rpc_error_inspector
+    def _update_td_error(self, pointers, td_error):
+        self._replay_stub.UpdateTDError(
+            replay_pb2.UpdateTDErrorRequest(pointers=ndarray_to_proto(pointers),
+                                            td_error=ndarray_to_proto(td_error)))
+
+    @rpc_error_inspector
+    def _update_transitions(self, pointers, key, data):
+        self._replay_stub.UpdateTransitions(
+            replay_pb2.UpdateTransitionsRequest(pointers=ndarray_to_proto(pointers),
+                                                key=key,
+                                                data=ndarray_to_proto(data)))
+
+    def close(self):
+        if self.attach_replay:
+            self.attached_replay_process.close()
+        else:
             self._replay_channel.close()
 
-        self.attached_replay_process.close()
         self._closed = True

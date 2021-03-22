@@ -8,6 +8,7 @@ service EvolverService {
   rpc Persistence(stream Ping) returns (stream Pong);
 
   rpc RegisterLearner(RegisterLearnerRequest) returns (RegisterLearnerResponse);
+  rpc RegisterReplay(RegisterReplayRequest) returns (RegisterReplayResponse);
   rpc RegisterActor(Empty) returns (RegisterActorResponse);
   rpc PostReward(PostRewardToEvolverRequest) returns (Empty);
   rpc GetNNVariables(Empty) returns (GetNNVariablesResponse);
@@ -16,8 +17,6 @@ service EvolverService {
 message RegisterLearnerRequest {
   string learner_host = 2;
   int32 learner_port = 3;
-  string replay_host = 4;
-  int32 replay_port = 5;
 }
 message RegisterLearnerResponse {
   string name = 1;
@@ -26,6 +25,20 @@ message RegisterLearnerResponse {
   string reset_config_json = 3;
   string replay_config_json = 4;
   string sac_config_json = 5;
+}
+
+message RegisterReplayRequest {
+  string replay_host = 1;
+  int32 replay_port = 2;
+
+  bool attached_replay = 3;
+  string attached_to_learner_host = 4;
+  int32 attached_to_learner_port = 5;
+}
+message RegisterReplayResponse {
+  bool succeeded = 1;
+  string learner_host = 2;
+  int32 learner_port = 3;
 }
 
 message RegisterActorResponse {

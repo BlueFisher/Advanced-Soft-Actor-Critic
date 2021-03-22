@@ -7,7 +7,7 @@ import "pingpong.proto";
 service LearnerService {
   rpc Persistence(stream Ping) returns (stream Pong);
 
-  rpc RegisterReplay(Empty) returns (RegisterReplayResponse);
+  rpc RegisterReplay(RegisterReplayRequest) returns (RegisterReplayResponse);
   rpc RegisterActor(Empty) returns (RegisterActorResponse);
 
   rpc GetAction(GetActionRequest) returns (Action);
@@ -20,6 +20,10 @@ service LearnerService {
   rpc ForceClose(Empty) returns (Empty);
 }
 
+message RegisterReplayRequest{
+  string replay_host = 1;
+  int32 replay_port = 2;
+}
 message RegisterReplayResponse{
   string model_abs_dir = 1;
 
