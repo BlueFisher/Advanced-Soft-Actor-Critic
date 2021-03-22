@@ -60,11 +60,11 @@ class PeerSet(object):
             for k, v in info.items():
                 self._peers[peer][k] = v
 
-    def get_info(self, key):
+    def get_info(self, peer):
         with self._peers_lock:
-            if key in self._peers:
-                return self._peers[key]
+            if peer in self._peers:
+                return self._peers[peer]
 
     def peers(self):
         with self._peers_lock:
-            return list(self._peers.keys()), self._peers
+            return self._peers

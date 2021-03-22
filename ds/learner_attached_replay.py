@@ -18,19 +18,15 @@ class AttachedReplay:
         self.replay = Replay(*init_config, attached=True)
 
         for _ in range(C.GET_SAMPLED_DATA_THREAD_SIZE):
-            t = threading.Thread(target=self._forever_sample_data,
-                                 daemon=True)
+            threading.Thread(target=self._forever_sample_data).start()
 
         for _ in range(C.UPDATE_TD_ERROR_THREAD_SIZE):
-            threading.Thread(target=self._forever_update_td_error,
-                             daemon=True).start()
+            threading.Thread(target=self._forever_update_td_error).start()
 
         for _ in range(C.UPDATE_TRANSITION_THREAD_SIZE):
-            threading.Thread(target=self._forever_update_transition,
-                             daemon=True).start()
+            threading.Thread(target=self._forever_update_transition).start()
 
-        t.start()
-        t.join()
+        self.replay.wait_for_termination()
 
     def _forever_sample_data(self):
         while True:

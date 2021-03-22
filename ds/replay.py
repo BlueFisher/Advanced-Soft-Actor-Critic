@@ -13,7 +13,7 @@ import algorithm.config_helper as config_helper
 from algorithm.replay_buffer import PrioritizedReplayBuffer
 
 from . import constants as C
-from .proto import learner_pb2, learner_pb2_grpc, replay_pb2, replay_pb2_grpc
+from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc, replay_pb2, replay_pb2_grpc
 from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
@@ -32,17 +32,32 @@ class Replay:
         constant_config = self._init_constant_config(root_dir, config_dir, args)
         net_config = constant_config['net_config']
 
-        self._stub = StubController(net_config['learner_host'],
-                                    net_config['learner_port'],
-                                    self.close)
+        config_helper.set_logger()
+
+        self._evolver_stub = EvolverStubController(net_config['evolver_host'],
+                                                   net_config['evolver_port'])
+
+        register_response = self._evolver_stub.register_to_evolver(
+            net_config['replay_host'], net_config['replay_port'],
+            attached,
+            net_config['learner_host'] if attached else None,
+            net_config['learner_port'] if attached else None)
+
+        learner_host, learner_port = register_response
+
+        if attached:
+            assert learner_host == net_config['learner_host'], 'In attach replay mode, learner_host should be identical'
+            assert learner_port == net_config['learner_port'], 'In attach replay mode, learner_port should be identical'
+
+        self.logger.info(f'Assigned to learner {learner_host}:{learner_port}')
+
+        self._learner_stub = LearnerStubController(learner_host,
+                                                   learner_port,
+                                                   self.close)
 
         self._init(constant_config)
 
-        try:
-            self._run_replay_server(net_config['replay_port'])
-        except KeyboardInterrupt:
-            self.logger.warning('KeyboardInterrupt in _run_replay_server')
-            self.close()
+        self._run_replay_server(net_config['replay_port'])
 
     def _init_constant_config(self, root_dir, config_dir, args):
         config_abs_dir = Path(root_dir).joinpath(config_dir)
@@ -52,33 +67,34 @@ class Replay:
                                                            config_abs_path,
                                                            args.config)
 
+        if args.evolver_host is not None:
+            config['net_config']['evolver_host'] = args.evolver_host
+        if args.evolver_port is not None:
+            config['net_config']['evolver_port'] = args.evolver_port
         if args.learner_host is not None:
             config['net_config']['learner_host'] = args.learner_host
         if args.learner_port is not None:
             config['net_config']['learner_port'] = args.learner_port
+        if args.replay_host is not None:
+            config['net_config']['replay_host'] = args.replay_host
         if args.replay_port is not None:
             config['net_config']['replay_port'] = args.replay_port
 
-        if args.in_k8s:
-            hostname = socket.gethostname()
-            host_id = hostname.split('-')[-1]
-            learner_host = config['net_config']['learner_host']
-            replay_host = config['net_config']['replay_host']
-            config['net_config']['learner_host'] = f'{learner_host}-{host_id}.{learner_host}'
-            config['net_config']['replay_host'] = f'{replay_host}-{host_id}.{replay_host}'
+        hostname = socket.gethostname()
+        ip = socket.gethostbyname(hostname)
+
+        if config['net_config']['evolver_host'] is None:
+            config['net_config']['evolver_host'] = ip
+        if config['net_config']['learner_host'] is None:
+            config['net_config']['learner_host'] = ip
+        if config['net_config']['replay_host'] is None:
+            config['net_config']['replay_host'] = ip
 
         return config
 
     def _init(self, config):
-        register_response = None
-        self.logger.info('Registering...')
-        while register_response is None:
-            register_response = self._stub.register_to_learner()
-            if register_response:
-                self.logger.info('Registered')
-                break
-
-            time.sleep(C.RECONNECTION_TIME)
+        register_response = self._learner_stub.register_to_learner(config['net_config']['replay_host'],
+                                                                   config['net_config']['replay_port'])
 
         (model_abs_dir,
          reset_config,
@@ -147,13 +163,13 @@ class Replay:
             storage_data['rnn_state'] = rnn_state
 
         # Get td_error
-        td_error = self._stub.get_td_error(n_obses_list,
-                                           n_actions,
-                                           n_rewards,
-                                           next_obs_list,
-                                           n_dones,
-                                           n_mu_probs,
-                                           n_rnn_states=n_rnn_states if self.use_rnn else None)
+        td_error = self._learner_stub.get_td_error(n_obses_list,
+                                                   n_actions,
+                                                   n_rewards,
+                                                   next_obs_list,
+                                                   n_dones,
+                                                   n_mu_probs,
+                                                   n_rnn_states=n_rnn_states if self.use_rnn else None)
 
         if td_error is not None:
             td_error = td_error.flatten()
@@ -234,10 +250,17 @@ class Replay:
         self.server.start()
         self.logger.info(f'Replay server is running on [{replay_port}]...')
         if not self.attached:
-            self.server.wait_for_termination()
+            self.wait_for_termination()
 
     def close(self):
         self.server.stop(None)
+        self.logger.warning('Replay server closed')
+
+    def wait_for_termination(self):
+        self.server.wait_for_termination()
+
+
+
 
 
 class ReplayService(replay_pb2_grpc.ReplayServiceServicer):
@@ -311,7 +334,82 @@ class ReplayService(replay_pb2_grpc.ReplayServiceServicer):
         return Empty()
 
 
-class StubController:
+class EvolverStubController:
+    _closed = False
+
+    def __init__(self, evolver_host, evolver_port):
+        self._logger = logging.getLogger('ds.replay.evolver_stub')
+
+        self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}',
+                                                      [('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)])
+        self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
+
+        self._evolver_connected = False
+
+        t_evolver = threading.Thread(target=self._start_evolver_persistence)
+        t_evolver.start()
+
+    @property
+    def connected(self):
+        return self._evolver_connected
+
+    @ rpc_error_inspector
+    def register_to_evolver(self, replay_host, replay_port,
+                            attached_replay,
+                            attached_to_learner_host=None, attached_to_learner_port=None):
+
+        self._logger.warning('Waiting for evolver connection')
+        while not self.connected:
+            time.sleep(C.RECONNECTION_TIME)
+            continue
+
+        response = None
+        self._logger.info('Registering to evolver...')
+        while response is None:
+            response = self._evolver_stub.RegisterReplay(
+                evolver_pb2.RegisterReplayRequest(
+                    replay_host=replay_host,
+                    replay_port=replay_port,
+                    attached_replay=attached_replay,
+                    attached_to_learner_host=attached_to_learner_host,
+                    attached_to_learner_port=attached_to_learner_port
+                ))
+            if response.succeeded:
+                self._logger.info('Registered to evolver')
+                return response.learner_host, response.learner_port
+            else:
+                response = None
+                time.sleep(C.RECONNECTION_TIME)
+
+    def _start_evolver_persistence(self):
+        def request_messages():
+            while not self._closed:
+                yield Ping(time=int(time.time() * 1000))
+                time.sleep(C.PING_INTERVAL)
+                if not self._evolver_connected:
+                    break
+
+        while not self._closed:
+            try:
+                reponse_iterator = self._evolver_stub.Persistence(request_messages())
+                for response in reponse_iterator:
+                    if not self._evolver_connected:
+                        self._evolver_connected = True
+                        self._logger.info('Evolver connected')
+            except grpc.RpcError:
+                if self._evolver_connected:
+                    self._evolver_connected = False
+                    self._logger.error('Evolver disconnected')
+                    self.close()
+                    break
+            finally:
+                time.sleep(C.RECONNECTION_TIME)
+
+    def close(self):
+        self._closed = True
+
+
+class LearnerStubController:
     _closed = False
 
     def __init__(self, learner_host, learner_port, close_replay):
@@ -320,23 +418,44 @@ class StubController:
         self._learner_stub = learner_pb2_grpc.LearnerServiceStub(self._learner_channel)
 
         self._learner_connected = False
-        self._logger = logging.getLogger('ds.replay.stub')
+
+        self._logger = logging.getLogger('ds.replay.learner_stub')
 
         self._close_replay = close_replay
 
-        t_learner = threading.Thread(target=self._start_learner_persistence, daemon=True)
+        t_learner = threading.Thread(target=self._start_learner_persistence)
         t_learner.start()
 
-    @rpc_error_inspector
-    def register_to_learner(self):
-        response = self._learner_stub.RegisterReplay(Empty())
-        if response.model_abs_dir:
-            return (response.model_abs_dir,
-                    json.loads(response.reset_config_json),
-                    json.loads(response.replay_config_json),
-                    json.loads(response.sac_config_json))
+    @property
+    def connected(self):
+        return self._learner_connected
 
-    @rpc_error_inspector
+    @ rpc_error_inspector
+    def register_to_learner(self, replay_host, replay_port):
+        self._logger.info('Waiting for learner connection')
+        while not self.connected:
+            time.sleep(C.RECONNECTION_TIME)
+            continue
+
+        response = None
+        self._logger.info('Registering to learner...')
+        while response is None:
+            response = self._learner_stub.RegisterReplay(learner_pb2.RegisterReplayRequest(
+                replay_host=replay_host,
+                replay_port=replay_port
+            ))
+            if response.model_abs_dir:
+                self._logger.info('Registered to learner')
+
+                return (response.model_abs_dir,
+                        json.loads(response.reset_config_json),
+                        json.loads(response.replay_config_json),
+                        json.loads(response.sac_config_json))
+            else:
+                response = None
+                time.sleep(C.RECONNECTION_TIME)
+
+    @ rpc_error_inspector
     def get_td_error(self,
                      n_obses_list,
                      n_actions,

@@ -23,7 +23,7 @@ class LearnerServiceStub(object):
                 )
         self.RegisterReplay = channel.unary_unary(
                 '/learner.LearnerService/RegisterReplay',
-                request_serializer=ndarray__pb2.Empty.SerializeToString,
+                request_serializer=learner__pb2.RegisterReplayRequest.SerializeToString,
                 response_deserializer=learner__pb2.RegisterReplayResponse.FromString,
                 )
         self.RegisterActor = channel.unary_unary(
@@ -131,7 +131,7 @@ def add_LearnerServiceServicer_to_server(servicer, server):
             ),
             'RegisterReplay': grpc.unary_unary_rpc_method_handler(
                     servicer.RegisterReplay,
-                    request_deserializer=ndarray__pb2.Empty.FromString,
+                    request_deserializer=learner__pb2.RegisterReplayRequest.FromString,
                     response_serializer=learner__pb2.RegisterReplayResponse.SerializeToString,
             ),
             'RegisterActor': grpc.unary_unary_rpc_method_handler(
@@ -208,7 +208,7 @@ class LearnerService(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/RegisterReplay',
-            ndarray__pb2.Empty.SerializeToString,
+            learner__pb2.RegisterReplayRequest.SerializeToString,
             learner__pb2.RegisterReplayResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

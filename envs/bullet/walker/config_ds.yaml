@@ -17,8 +17,6 @@ default:
 
   net_config:
     evolver_host: walker-ds-evolver
-    learner_host: walker-ds-lr
-    replay_host: walker-ds-lr
 
   sac_config:
     write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
@@ -35,11 +33,6 @@ hard:
   base_config: &hard_base
     scene: Walker2DHard
     nn: nn_hard
-
-  net_config:
-    evolver_host: walker-hard-ds-evolver
-    learner_host: walker-hard-ds-lr
-    replay_host: walker-hard-ds-lr
 
   sac_config: &hard_sac
     burn_in_step: 10

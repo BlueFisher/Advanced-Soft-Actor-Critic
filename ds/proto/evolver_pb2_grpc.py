@@ -26,6 +26,11 @@ class EvolverServiceStub(object):
                 request_serializer=evolver__pb2.RegisterLearnerRequest.SerializeToString,
                 response_deserializer=evolver__pb2.RegisterLearnerResponse.FromString,
                 )
+        self.RegisterReplay = channel.unary_unary(
+                '/evolver.EvolverService/RegisterReplay',
+                request_serializer=evolver__pb2.RegisterReplayRequest.SerializeToString,
+                response_deserializer=evolver__pb2.RegisterReplayResponse.FromString,
+                )
         self.RegisterActor = channel.unary_unary(
                 '/evolver.EvolverService/RegisterActor',
                 request_serializer=ndarray__pb2.Empty.SerializeToString,
@@ -53,6 +58,12 @@ class EvolverServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def RegisterLearner(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RegisterReplay(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -88,6 +99,11 @@ def add_EvolverServiceServicer_to_server(servicer, server):
                     servicer.RegisterLearner,
                     request_deserializer=evolver__pb2.RegisterLearnerRequest.FromString,
                     response_serializer=evolver__pb2.RegisterLearnerResponse.SerializeToString,
+            ),
+            'RegisterReplay': grpc.unary_unary_rpc_method_handler(
+                    servicer.RegisterReplay,
+                    request_deserializer=evolver__pb2.RegisterReplayRequest.FromString,
+                    response_serializer=evolver__pb2.RegisterReplayResponse.SerializeToString,
             ),
             'RegisterActor': grpc.unary_unary_rpc_method_handler(
                     servicer.RegisterActor,
@@ -145,6 +161,23 @@ class EvolverService(object):
         return grpc.experimental.unary_unary(request, target, '/evolver.EvolverService/RegisterLearner',
             evolver__pb2.RegisterLearnerRequest.SerializeToString,
             evolver__pb2.RegisterLearnerResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def RegisterReplay(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/evolver.EvolverService/RegisterReplay',
+            evolver__pb2.RegisterReplayRequest.SerializeToString,
+            evolver__pb2.RegisterReplayResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 

@@ -2,6 +2,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+import multiprocessing as mp
 
 from algorithm.config_helper import set_logger
 
@@ -10,6 +11,7 @@ sys.path.append(str(Path(__file__).resolve().parent.joinpath('ds/proto')))
 
 if __name__ == '__main__':
     set_logger()
+    mp.set_start_method('spawn')
 
     parser = argparse.ArgumentParser()
     parser.add_argument('env')

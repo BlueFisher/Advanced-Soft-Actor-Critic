@@ -19,8 +19,6 @@ default:
 
   net_config:
     evolver_host: visual-pyramid-nopre-ds-evolver
-    learner_host: visual-pyramid-nopre-ds-lr
-    replay_host: visual-pyramid-nopre-ds-lr
 
   reset_config:
     force_reset: true
@@ -35,7 +33,5 @@ pre:
     name: "evolver_pre_{time}"
   net_config:
     evolver_host: visual-pyramid-pre-ds-evolver
-    learner_host: visual-pyramid-pre-ds-lr
-    replay_host: visual-pyramid-pre-ds-lr
   sac_config:
     use_prediction: true

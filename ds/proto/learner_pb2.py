@@ -21,11 +21,50 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\rlearner.proto\x12\x07learner\x1a\rndarray.proto\x1a\x0epingpong.proto\"\x7f\n\x16RegisterReplayResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x19\n\x11reset_config_json\x18\x02 \x01(\t\x12\x1a\n\x12replay_config_json\x18\x03 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x04 \x01(\t\"\x91\x01\n\x15RegisterActorResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x11\n\tunique_id\x18\x02 \x01(\x05\x12\x19\n\x11reset_config_json\x18\x03 \x01(\t\x12\x1a\n\x12replay_config_json\x18\x04 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x05 \x01(\t\"K\n\x10GetActionRequest\x12\x1a\n\x08obs_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"?\n\x06\x41\x63tion\x12\x18\n\x06\x61\x63tion\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"*\n\x0bNNVariables\x12\x1b\n\tvariables\x18\x01 \x03(\x0b\x32\x08.NDarray\"\xe7\x01\n\x11GetTDErrorRequest\x12\x1e\n\x0cn_obses_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x1f\n\rnext_obs_list\x18\x04 \x03(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cn_rnn_states\x18\x07 \x01(\x0b\x32\x08.NDarray\"8\n\x07TDError\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x1a\n\x08td_error\x18\x02 \x01(\x0b\x32\x08.NDarray2\xcf\x03\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\x39\n\x0eRegisterReplay\x12\x06.Empty\x1a\x1f.learner.RegisterReplayResponse\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.learner.RegisterActorResponse\x12\x37\n\tGetAction\x12\x19.learner.GetActionRequest\x1a\x0f.learner.Action\x12\x32\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12:\n\nGetTDError\x12\x1a.learner.GetTDErrorRequest\x1a\x10.learner.TDError\x12.\n\x0eGetNNVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12\x31\n\x11UpdateNNVariables\x12\x14.learner.NNVariables\x1a\x06.Empty\x12\x1c\n\nForceClose\x12\x06.Empty\x1a\x06.Emptyb\x06proto3'
+  serialized_pb=b'\n\rlearner.proto\x12\x07learner\x1a\rndarray.proto\x1a\x0epingpong.proto\"A\n\x15RegisterReplayRequest\x12\x13\n\x0breplay_host\x18\x01 \x01(\t\x12\x13\n\x0breplay_port\x18\x02 \x01(\x05\"\x7f\n\x16RegisterReplayResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x19\n\x11reset_config_json\x18\x02 \x01(\t\x12\x1a\n\x12replay_config_json\x18\x03 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x04 \x01(\t\"\x91\x01\n\x15RegisterActorResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x11\n\tunique_id\x18\x02 \x01(\x05\x12\x19\n\x11reset_config_json\x18\x03 \x01(\t\x12\x1a\n\x12replay_config_json\x18\x04 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x05 \x01(\t\"K\n\x10GetActionRequest\x12\x1a\n\x08obs_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"?\n\x06\x41\x63tion\x12\x18\n\x06\x61\x63tion\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"*\n\x0bNNVariables\x12\x1b\n\tvariables\x18\x01 \x03(\x0b\x32\x08.NDarray\"\xe7\x01\n\x11GetTDErrorRequest\x12\x1e\n\x0cn_obses_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x1f\n\rnext_obs_list\x18\x04 \x03(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cn_rnn_states\x18\x07 \x01(\x0b\x32\x08.NDarray\"8\n\x07TDError\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x1a\n\x08td_error\x18\x02 \x01(\x0b\x32\x08.NDarray2\xe7\x03\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12Q\n\x0eRegisterReplay\x12\x1e.learner.RegisterReplayRequest\x1a\x1f.learner.RegisterReplayResponse\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.learner.RegisterActorResponse\x12\x37\n\tGetAction\x12\x19.learner.GetActionRequest\x1a\x0f.learner.Action\x12\x32\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12:\n\nGetTDError\x12\x1a.learner.GetTDErrorRequest\x1a\x10.learner.TDError\x12.\n\x0eGetNNVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12\x31\n\x11UpdateNNVariables\x12\x14.learner.NNVariables\x1a\x06.Empty\x12\x1c\n\nForceClose\x12\x06.Empty\x1a\x06.Emptyb\x06proto3'
   ,
   dependencies=[ndarray__pb2.DESCRIPTOR,pingpong__pb2.DESCRIPTOR,])
 
 
+
+
+_REGISTERREPLAYREQUEST = _descriptor.Descriptor(
+  name='RegisterReplayRequest',
+  full_name='learner.RegisterReplayRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='replay_host', full_name='learner.RegisterReplayRequest.replay_host', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='replay_port', full_name='learner.RegisterReplayRequest.replay_port', index=1,
+      number=2, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=57,
+  serialized_end=122,
+)
 
 
 _REGISTERREPLAYRESPONSE = _descriptor.Descriptor(
@@ -76,8 +115,8 @@ _REGISTERREPLAYRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=57,
-  serialized_end=184,
+  serialized_start=124,
+  serialized_end=251,
 )
 
 
@@ -136,8 +175,8 @@ _REGISTERACTORRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=187,
-  serialized_end=332,
+  serialized_start=254,
+  serialized_end=399,
 )
 
 
@@ -175,8 +214,8 @@ _GETACTIONREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=334,
-  serialized_end=409,
+  serialized_start=401,
+  serialized_end=476,
 )
 
 
@@ -214,8 +253,8 @@ _ACTION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=411,
-  serialized_end=474,
+  serialized_start=478,
+  serialized_end=541,
 )
 
 
@@ -246,8 +285,8 @@ _NNVARIABLES = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=476,
-  serialized_end=518,
+  serialized_start=543,
+  serialized_end=585,
 )
 
 
@@ -320,8 +359,8 @@ _GETTDERRORREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=521,
-  serialized_end=752,
+  serialized_start=588,
+  serialized_end=819,
 )
 
 
@@ -359,8 +398,8 @@ _TDERROR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=754,
-  serialized_end=810,
+  serialized_start=821,
+  serialized_end=877,
 )
 
 _GETACTIONREQUEST.fields_by_name['obs_list'].message_type = ndarray__pb2._NDARRAY
@@ -376,6 +415,7 @@ _GETTDERRORREQUEST.fields_by_name['n_dones'].message_type = ndarray__pb2._NDARRA
 _GETTDERRORREQUEST.fields_by_name['n_mu_probs'].message_type = ndarray__pb2._NDARRAY
 _GETTDERRORREQUEST.fields_by_name['n_rnn_states'].message_type = ndarray__pb2._NDARRAY
 _TDERROR.fields_by_name['td_error'].message_type = ndarray__pb2._NDARRAY
+DESCRIPTOR.message_types_by_name['RegisterReplayRequest'] = _REGISTERREPLAYREQUEST
 DESCRIPTOR.message_types_by_name['RegisterReplayResponse'] = _REGISTERREPLAYRESPONSE
 DESCRIPTOR.message_types_by_name['RegisterActorResponse'] = _REGISTERACTORRESPONSE
 DESCRIPTOR.message_types_by_name['GetActionRequest'] = _GETACTIONREQUEST
@@ -384,6 +424,13 @@ DESCRIPTOR.message_types_by_name['NNVariables'] = _NNVARIABLES
 DESCRIPTOR.message_types_by_name['GetTDErrorRequest'] = _GETTDERRORREQUEST
 DESCRIPTOR.message_types_by_name['TDError'] = _TDERROR
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
+
+RegisterReplayRequest = _reflection.GeneratedProtocolMessageType('RegisterReplayRequest', (_message.Message,), {
+  'DESCRIPTOR' : _REGISTERREPLAYREQUEST,
+  '__module__' : 'learner_pb2'
+  # @@protoc_insertion_point(class_scope:learner.RegisterReplayRequest)
+  })
+_sym_db.RegisterMessage(RegisterReplayRequest)
 
 RegisterReplayResponse = _reflection.GeneratedProtocolMessageType('RegisterReplayResponse', (_message.Message,), {
   'DESCRIPTOR' : _REGISTERREPLAYRESPONSE,
@@ -443,8 +490,8 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=813,
-  serialized_end=1276,
+  serialized_start=880,
+  serialized_end=1367,
   methods=[
   _descriptor.MethodDescriptor(
     name='Persistence',
@@ -461,7 +508,7 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
     full_name='learner.LearnerService.RegisterReplay',
     index=1,
     containing_service=None,
-    input_type=ndarray__pb2._EMPTY,
+    input_type=_REGISTERREPLAYREQUEST,
     output_type=_REGISTERREPLAYRESPONSE,
     serialized_options=None,
     create_key=_descriptor._internal_create_key,

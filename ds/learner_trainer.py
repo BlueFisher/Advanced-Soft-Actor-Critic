@@ -26,7 +26,7 @@ class UpdateDataBuffer:
         self._buffer = Queue(maxsize=C.UPDATE_DATA_BUFFER_MAXSIZE)
         self.logger = logging.getLogger('ds.learner.trainer.update_data_buffer')
 
-        ts = [threading.Thread(target=self._run, daemon=True) for _ in range(C.UPDATE_DATA_BUFFER_THREADS)]
+        ts = [threading.Thread(target=self._run) for _ in range(C.UPDATE_DATA_BUFFER_THREADS)]
         for t in ts:
             t.start()
 
@@ -105,6 +105,7 @@ class Trainer:
 
     def _update_sac_bak(self):
         with self.sac_lock:
+            self.logger.info('Updated sac_bak')
             all_variables = self.sac.get_all_variables()
             self._update_sac_bak_queue.put(all_variables)
 

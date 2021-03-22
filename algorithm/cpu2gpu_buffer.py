@@ -22,7 +22,7 @@ class CPU2GPUBuffer:
 
         self._lock = threading.Condition()
         self._closed = False
-        t = threading.Thread(target=self._run, daemon=True)
+        t = threading.Thread(target=self._run)
         t.start()
 
     def _run(self):

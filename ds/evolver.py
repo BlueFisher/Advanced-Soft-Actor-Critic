@@ -13,6 +13,7 @@ import grpc
 import numpy as np
 
 import algorithm.config_helper as config_helper
+from algorithm.utils import RLock
 
 from . import constants as C
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
@@ -94,7 +95,7 @@ class Evolver:
         self.net_config = self.config['net_config']
 
         self._learners = dict()
-        self._learner_lock = threading.Lock()
+        self._lock = threading.Lock()
 
         self._last_update_nn_variable = time.time()
         self._selected_times = 0
@@ -147,7 +148,7 @@ class Evolver:
                 config['sac_config'])
 
     def _learner_connected(self, peer, connected):
-        with self._learner_lock:
+        with self._lock:
             if connected:
                 self._learners[peer] = {
                     'rewards': deque(maxlen=self.base_config['evolver_cem_length']),
@@ -161,7 +162,7 @@ class Evolver:
         if not self.base_config['evolver_enabled']:
             return
 
-        with self._learner_lock:
+        with self._lock:
             self._learners[peer]['rewards'].append(reward)
 
             # If there is only one learner, return
@@ -328,26 +329,51 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
         self._logger = logging.getLogger('ds.evolver.service')
         self._peer_set = PeerSet(self._logger)
 
-        self._learner_lock = threading.Lock()
+        self._lock = RLock(timeout=1, logger=self._logger)
         self._learner_id = 0
-        self._learner_actors = dict()
+        self._learner_replay_actors = dict()
+        """
+        {
+            learner_peer: {
+                'replay': replay_peer,
+                'actors': {actor_peer, ...}
+            }
+        }
+        """
+        self._replay_learner = dict()
+        """
+        {
+            replay_peer: learner_peer
+        }
+        """
         self._actor_learner = dict()
+        """
+        {
+            actor_peer: learner_peer
+        }
+        """
 
     def _record_peer(self, context):
         peer = context.peer()
 
         def _unregister_peer():
-            with self._learner_lock:
-                if peer in self._learner_actors:
+            with self._lock:
+                if peer in self._learner_replay_actors:
                     info = self._peer_set.get_info(peer)
                     _id = info['id']
-                    del self._learner_actors[peer]
+                    del self._learner_replay_actors[peer]
                     self._learner_connected(peer, connected=False)
                     self._logger.warning(f'Learner {peer} (id={_id}) disconnected')
+                elif peer in self._replay_learner:
+                    learner_peer = self._replay_learner[peer]
+                    if learner_peer in self._learner_replay_actors:
+                        self._learner_replay_actors[learner_peer]['replay'] = None
+                    del self._replay_learner[peer]
+                    self._logger.warning(f'Replay {peer} disconnected')
                 elif peer in self._actor_learner:
                     learner_peer = self._actor_learner[peer]
-                    if learner_peer in self._learner_actors:
-                        self._learner_actors[learner_peer].remove(peer)
+                    if learner_peer in self._learner_replay_actors:
+                        self._learner_replay_actors[learner_peer]['actors'].remove(peer)
                     del self._actor_learner[peer]
                     self._logger.warning(f'Actor {peer} disconnected')
             self._peer_set.disconnect(peer)
@@ -357,8 +383,8 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
 
     @property
     def learners(self):
-        with self._learner_lock:
-            return list(self._learner_actors.keys())
+        with self._lock:
+            return list(self._learner_replay_actors.keys())
 
     def get_learner_stub(self, peer):
         info = self._peer_set.get_info(peer)
@@ -370,19 +396,22 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
         if info:
             return info['id']
 
-    def display_learner_actors(self):
-        with self._learner_lock:
+    def display_learner_replay_actors(self):
+        with self._lock:
             info = 'Learner-actors:'
-            for learner in self._learner_actors:
+            for learner in self._learner_replay_actors:
                 learner_info = self._peer_set.get_info(learner)
                 learner_id = learner_info['id']
                 learner_host = learner_info['learner_host']
                 learner_port = learner_info['learner_port']
-                info += f'\n{learner} ({learner_host}:{learner_port} id={learner_id}): {len(self._learner_actors[learner])}'
+                info += f'\n{learner} ({learner_host}:{learner_port} id={learner_id}): '
+                info += f'[Replay]: {"Exists" if self._learner_replay_actors[learner]["replay"] else "None"} '
+                info += f'[Actors count]: {len(self._learner_replay_actors[learner]["actors"])}'
 
         self._logger.info(info)
 
-    # From learner and actor
+    # From learner, replay and actor
+
     def Persistence(self, request_iterator, context):
         self._record_peer(context)
         for request in request_iterator:
@@ -390,25 +419,30 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
 
     def RegisterLearner(self, request: evolver_pb2.RegisterLearnerRequest, context):
         peer = context.peer()
-        learner_id = self._learner_id
+        self._logger.info(f'{peer} is registering learner...')
 
-        self._peer_set.add_info(peer, {
-            'id': learner_id,
-            'learner_host': request.learner_host,
-            'learner_port': request.learner_port,
-            'replay_host': request.replay_host,
-            'replay_port': request.replay_port,
-            'stub': LearnerStubController(request.learner_host, request.learner_port)
-        })
-        with self._learner_lock:
-            self._learner_actors[peer] = set()
-        self._learner_connected(peer, connected=True)
+        with self._lock:
+            learner_id = self._learner_id
 
-        self._logger.info(f'Learner {peer} (id={learner_id}) registered')
+            self._peer_set.add_info(peer, {
+                'id': learner_id,
+                'learner_host': request.learner_host,
+                'learner_port': request.learner_port,
+                'stub': LearnerStubController(request.learner_host, request.learner_port)
+            })
 
-        self.display_learner_actors()
+            self._learner_replay_actors[peer] = {
+                'replay': None,
+                'actors': set()
+            }
 
-        self._learner_id += 1
+            self._learner_connected(peer, connected=True)
+
+            self._logger.info(f'Learner {peer} (id={learner_id}, {request.learner_host}:{request.learner_port}) registered')
+
+            self.display_learner_replay_actors()
+
+            self._learner_id += 1
 
         (reset_config,
          replay_config,
@@ -418,36 +452,92 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
                                                    replay_config_json=json.dumps(replay_config),
                                                    sac_config_json=json.dumps(sac_config))
 
+    def RegisterReplay(self, request, context):
+        peer = context.peer()
+        self._logger.info(f'{peer} is registering replay...')
+
+        with self._lock:
+            learner = None
+
+            if request.attached_replay:
+                for learner_peer, info in self._peer_set.peers().items():
+                    if 'learner_host' in info and \
+                            info['learner_host'] == request.attached_to_learner_host and \
+                            info['learner_port'] == request.attached_to_learner_port:
+                        learner = learner_peer
+
+                if learner is None:
+                    self._logger.info(f'Attached Replay {peer} register failed, no such learner ({request.attached_to_learner_host}:{request.attached_to_learner_port})')
+                    return evolver_pb2.RegisterReplayResponse(succeeded=False)
+            else:
+                if len(self._learner_replay_actors) == 0:
+                    self._logger.info(f'Replay {peer} register failed, no learner exists')
+                    return evolver_pb2.RegisterReplayResponse(succeeded=False)
+
+                for learner_peer in self._learner_replay_actors:
+                    if self._learner_replay_actors[learner_peer]['replay'] is None:
+                        learner = learner_peer
+
+                if learner is None:
+                    self._logger.info(f'Replay {peer} register failed, no learner has empty replay')
+                    return evolver_pb2.RegisterReplayResponse(succeeded=False)
+
+            self._peer_set.add_info(peer, {
+                'replay_host': request.replay_host,
+                'replay_port': request.replay_port,
+            })
+
+            self._learner_replay_actors[learner]['replay'] = peer
+
+            info = self._peer_set.get_info(learner)
+            learner_id = info['id']
+            learner_host, learner_port = info['learner_host'], info['learner_port']
+            log = f'Attached Replay {peer} ({request.replay_host}:{request.replay_port}) registered to ' +\
+                f'learner (id={learner_id} {learner_host}:{learner_port})'
+            self._logger.info(log)
+
+            self.display_learner_replay_actors()
+
+            return evolver_pb2.RegisterReplayResponse(succeeded=True,
+                                                      learner_host=learner_host,
+                                                      learner_port=learner_port)
+
     def RegisterActor(self, request, context):
         peer = context.peer()
+        self._logger.info(f'{peer} starts registering actor')
 
-        with self._learner_lock:
-            if len(self._learner_actors) == 0:
+        with self._lock:
+            if len(self._learner_replay_actors) == 0:
                 self._logger.info(f'Actor {peer} register failed, no learner exists')
                 return evolver_pb2.RegisterActorResponse(succeeded=False)
 
-            assigned_learner = sorted(self._learner_actors.items(),
-                                      key=lambda t: len(t[1]))[0][0]
+            assigned_learner = sorted(self._learner_replay_actors.items(),
+                                      key=lambda t: len(t[1]['actors']))[0][0]
+            assigned_replay = self._learner_replay_actors[assigned_learner]['replay']
 
-            if len(self._learner_actors[assigned_learner]) == self.max_actors_each_learner:
+            if self._learner_replay_actors[assigned_learner]['replay'] is None:
+                self._logger.info(f'Actor {peer} register failed, learner has no replay registered')
+                return evolver_pb2.RegisterActorResponse(succeeded=False)
+
+            if len(self._learner_replay_actors[assigned_learner]['actors']) == self.max_actors_each_learner:
                 self._logger.info(f'Actor {peer} register failed, all learners have max actors')
                 return evolver_pb2.RegisterActorResponse(succeeded=False)
 
-            self._learner_actors[assigned_learner].add(peer)
+            self._learner_replay_actors[assigned_learner]['actors'].add(peer)
             self._actor_learner[peer] = assigned_learner
 
-        info = self._peer_set.get_info(assigned_learner)
+        learner_info = self._peer_set.get_info(assigned_learner)
+        learner_id = learner_info['id']
+        learner_host, learner_port = learner_info['learner_host'], learner_info['learner_port']
 
-        learner_id = info['id']
-        learner_host, learner_port = info['learner_host'], info['learner_port']
-        replay_host, replay_port = info['replay_host'], info['replay_port']
+        replay_info = self._peer_set.get_info(assigned_replay)
+        replay_host, replay_port = replay_info['replay_host'], replay_info['replay_port']
 
         log = f'Actor {peer} registered to ' +\
-            f'learner (id={learner_id}) {learner_host}:{learner_port}, ' +\
-            f'replay {replay_host}:{replay_port}'
+            f'learner (id={learner_id} {learner_host}:{learner_port}), ' +\
+            f'replay ({replay_host}:{replay_port})'
         self._logger.info(log)
-
-        self.display_learner_actors()
+        self.display_learner_replay_actors()
 
         return evolver_pb2.RegisterActorResponse(succeeded=True,
                                                  learner_host=learner_host,
