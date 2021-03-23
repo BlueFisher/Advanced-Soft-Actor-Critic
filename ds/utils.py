@@ -3,7 +3,7 @@ import threading
 
 import grpc
 
-from .constants import RPC_ERR_RETRY
+from algorithm.constants import RPC_ERR_RETRY
 
 
 def rpc_error_inspector(func):

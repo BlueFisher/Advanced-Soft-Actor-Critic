@@ -1,7 +1,8 @@
 import multiprocessing as mp
 import threading
 
-from . import constants as C
+import algorithm.constants as C
+
 from .replay import Replay
 
 

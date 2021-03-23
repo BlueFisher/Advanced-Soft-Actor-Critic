@@ -19,6 +19,7 @@ class SAC_DS_Base(SAC_Base):
                  c_action_dim,
                  model_abs_dir,  # None in actor
                  model,
+                 summary_path='log',
                  train_mode=True,
                  last_ckpt=None,
 
@@ -108,7 +109,7 @@ class SAC_DS_Base(SAC_Base):
         self._init_or_restore(model_abs_dir, last_ckpt)
 
         if model_abs_dir:
-            summary_path = Path(model_abs_dir).joinpath('log')
+            summary_path = Path(model_abs_dir).joinpath(summary_path)
             self.summary_writer = tf.summary.create_file_writer(str(summary_path))
 
         self._init_tf_function()

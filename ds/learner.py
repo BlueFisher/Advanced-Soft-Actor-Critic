@@ -15,10 +15,10 @@ import grpc
 import numpy as np
 
 import algorithm.config_helper as config_helper
+import algorithm.constants as C
 from algorithm.agent import Agent
 from algorithm.utils import MaxMutexCheck, ReadWriteLock
 
-from . import constants as C
 from .learner_attached_replay import AttachedReplay
 from .learner_trainer import Trainer
 from .proto import (evolver_pb2, evolver_pb2_grpc, learner_pb2,
@@ -220,6 +220,7 @@ class Learner:
                                    c_action_dim=self.c_action_dim,
                                    model_abs_dir=model_abs_dir,
                                    model=custom_nn_model,
+                                   summary_path='log/bak',
                                    last_ckpt=self.last_ckpt,
 
                                    **self.sac_config)
