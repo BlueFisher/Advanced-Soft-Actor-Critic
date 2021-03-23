@@ -7,6 +7,8 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+import algorithm.constants as C
+
 from .cpu2gpu_buffer import CPU2GPUBuffer
 from .replay_buffer import PrioritizedReplayBuffer
 from .utils import *
@@ -23,6 +25,7 @@ class SAC_Base(object):
                  c_action_dim,
                  model_abs_dir,
                  model,
+                 summary_path='log',
                  train_mode=True,
                  last_ckpt=None,
 
@@ -153,7 +156,7 @@ class SAC_Base(object):
             tf.random.set_seed(seed)
 
         if model_abs_dir:
-            summary_path = Path(model_abs_dir).joinpath('log')
+            summary_path = Path(model_abs_dir).joinpath(summary_path)
             self.summary_writer = tf.summary.create_file_writer(str(summary_path))
 
         if self.train_mode:
@@ -1184,8 +1187,8 @@ class SAC_Base(object):
 
         td_error_list = []
         all_batch = tmp_n_obses_list[0].shape[0]
-        for i in range(math.ceil(all_batch / 256)):
-            b_i, b_j = i * 256, (i + 1) * 256
+        for i in range(math.ceil(all_batch / C.GET_EPISODE_TD_ERROR_SEG)):
+            b_i, b_j = i * C.GET_EPISODE_TD_ERROR_SEG, (i + 1) * C.GET_EPISODE_TD_ERROR_SEG
             td_error = self.get_td_error(n_obses_list=[o[b_i:b_j, :] for o in tmp_n_obses_list],
                                          n_actions=n_actions[b_i:b_j, :],
                                          n_rewards=n_rewards[b_i:b_j, :],

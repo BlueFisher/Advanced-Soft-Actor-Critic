@@ -10,10 +10,10 @@ from queue import Full, Queue
 import numpy as np
 
 import algorithm.config_helper as config_helper
+import algorithm.constants as C
 from algorithm.cpu2gpu_buffer import CPU2GPUBuffer
 from algorithm.utils import RLock
 
-from . import constants as C
 from .sac_ds_base import SAC_DS_Base
 
 

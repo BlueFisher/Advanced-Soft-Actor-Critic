@@ -13,9 +13,9 @@ import grpc
 import numpy as np
 
 import algorithm.config_helper as config_helper
+import algorithm.constants as C
 from algorithm.utils import RLock
 
-from . import constants as C
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
 from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray

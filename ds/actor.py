@@ -12,10 +12,10 @@ import grpc
 import numpy as np
 
 import algorithm.config_helper as config_helper
+import algorithm.constants as C
 from algorithm.agent import Agent
 from algorithm.utils import ReadWriteLock
 
-from . import constants as C
 from .proto import (evolver_pb2, evolver_pb2_grpc, learner_pb2,
                     learner_pb2_grpc, replay_pb2, replay_pb2_grpc)
 from .proto.ndarray_pb2 import Empty
