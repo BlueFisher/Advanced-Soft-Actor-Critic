@@ -169,8 +169,8 @@ class Learner:
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
-        self.obs_dims, self.d_action_dim, self.c_action_dim = self.env.init()
-        self.action_dim = self.d_action_dim + self.c_action_dim
+        self.obs_shapes, self.d_action_size, self.c_action_size = self.env.init()
+        self.action_size = self.d_action_size + self.c_action_size
 
         self.logger.info(f'{self.base_config["build_path"]} initialized')
 
@@ -201,9 +201,9 @@ class Learner:
             'process_nn_variables_conn': process_nn_variables_sac_conn,
 
             'logger_in_file': self.cmd_args.logger_in_file,
-            'obs_dims': self.obs_dims,
-            'd_action_dim': self.d_action_dim,
-            'c_action_dim': self.c_action_dim,
+            'obs_shapes': self.obs_shapes,
+            'd_action_size': self.d_action_size,
+            'c_action_size': self.c_action_size,
             'model_abs_dir': model_abs_dir,
             'model_spec': spec,
             'last_ckpt': self.last_ckpt,
@@ -215,9 +215,9 @@ class Learner:
         self._check_td_error = MaxMutexCheck(5)
 
         self.sac_bak = SAC_DS_Base(train_mode=False,
-                                   obs_dims=self.obs_dims,
-                                   d_action_dim=self.d_action_dim,
-                                   c_action_dim=self.c_action_dim,
+                                   obs_shapes=self.obs_shapes,
+                                   d_action_size=self.d_action_size,
+                                   c_action_size=self.c_action_size,
                                    model_abs_dir=model_abs_dir,
                                    model=custom_nn_model,
                                    summary_path='log/bak',
@@ -326,7 +326,7 @@ class Learner:
                       n_rnn_states=None):
         """
         n_obses_list: list([1, episode_len, obs_dim_i], ...)
-        n_actions: [1, episode_len, action_dim]
+        n_actions: [1, episode_len, action_size]
         n_rewards: [1, episode_len]
         next_obs_list: list([1, obs_dim_i], ...)
         n_dones: [1, episode_len]
@@ -381,7 +381,7 @@ class Learner:
                         agent.reset()
 
                 is_useless_episode = False
-                action = np.zeros([len(agents), self.action_dim], dtype=np.float32)
+                action = np.zeros([len(agents), self.action_size], dtype=np.float32)
                 step = 0
 
                 while False in [a.done for a in agents] and not self._closed:
@@ -402,8 +402,8 @@ class Learner:
 
                         action = action.numpy()
 
-                    next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_dim],
-                                                                                   action[..., self.d_action_dim:])
+                    next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
+                                                                                   action[..., self.d_action_size:])
 
                     if step == self.base_config['max_step_each_iter']:
                         local_done = [True] * len(agents)
@@ -419,7 +419,7 @@ class Learner:
                                              rnn_state[i] if use_rnn else None)
 
                     obs_list = next_obs_list
-                    action[local_done] = np.zeros(self.action_dim)
+                    action[local_done] = np.zeros(self.action_size)
                     if use_rnn:
                         rnn_state = next_rnn_state
                         rnn_state[local_done] = initial_rnn_state[local_done]

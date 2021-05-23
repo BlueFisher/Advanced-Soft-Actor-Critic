@@ -8,14 +8,14 @@ ModelRep = m.ModelSimpleRep
 
 
 class ModelForward(m.ModelForward):
-    def __init__(self, state_dim, action_dim):
-        super().__init__(state_dim, action_dim,
-                         dense_n=state_dim + action_dim, dense_depth=1)
+    def __init__(self, state_size, action_size):
+        super().__init__(state_size, action_size,
+                         dense_n=state_size + action_size, dense_depth=1)
 
 
 class ModelRND(m.ModelBaseRND):
-    def __init__(self, state_dim, action_dim):
-        super().__init__(state_dim, action_dim)
+    def __init__(self, state_size, action_size):
+        super().__init__(state_size, action_size)
 
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(32, activation=tf.nn.relu),
@@ -27,12 +27,12 @@ class ModelRND(m.ModelBaseRND):
 
 
 class ModelQ(m.ModelQ):
-    def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
-        super().__init__(state_dim, d_action_dim, c_action_dim,
+    def __init__(self, state_size, d_action_size, c_action_size):
+        super().__init__(state_size, d_action_size, c_action_size,
                          dense_n=64, dense_depth=2)
 
 
 class ModelPolicy(m.ModelPolicy):
-    def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
-        super().__init__(state_dim, d_action_dim, c_action_dim,
+    def __init__(self, state_size, d_action_size, c_action_size):
+        super().__init__(state_size, d_action_size, c_action_size,
                          dense_n=64, dense_depth=2)

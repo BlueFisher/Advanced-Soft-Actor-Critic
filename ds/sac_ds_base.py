@@ -14,9 +14,9 @@ logger = logging.getLogger('sac.base.ds')
 
 class SAC_DS_Base(SAC_Base):
     def __init__(self,
-                 obs_dims,
-                 d_action_dim,
-                 c_action_dim,
+                 obs_shapes,
+                 d_action_size,
+                 c_action_size,
                  model_abs_dir,  # None in actor
                  model,
                  summary_path='log',
@@ -62,9 +62,9 @@ class SAC_DS_Base(SAC_Base):
         if len(physical_devices) > 0:
             tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
-        self.obs_dims = obs_dims
-        self.d_action_dim = d_action_dim
-        self.c_action_dim = c_action_dim
+        self.obs_shapes = obs_shapes
+        self.d_action_size = d_action_size
+        self.c_action_size = c_action_size
         self.train_mode = train_mode
 
         self.ensemble_q_num = ensemble_q_num
@@ -100,7 +100,7 @@ class SAC_DS_Base(SAC_Base):
 
         self.noise = noise
 
-        self.action_dim = self.d_action_dim + self.c_action_dim
+        self.action_size = self.d_action_size + self.c_action_size
 
         if seed is not None:
             tf.random.set_seed(seed)
@@ -125,15 +125,15 @@ class SAC_DS_Base(SAC_Base):
     @tf.function
     def choose_action(self, obs_list):
         action = super().choose_action(obs_list)
-        d_action = action[..., :self.d_action_dim]
-        c_action = action[..., self.d_action_dim:]
+        d_action = action[..., :self.d_action_size]
+        c_action = action[..., self.d_action_size:]
 
-        if self.d_action_dim:
-            action_random = tf.one_hot(tf.squeeze(tf.random.categorical(tf.ones_like(d_action), 1)), self.d_action_dim)
-            cond = tf.tile(tf.reshape(tf.random.uniform((tf.shape(d_action)[0],)) < self.noise, [-1, 1]), [1, self.d_action_dim])
+        if self.d_action_size:
+            action_random = tf.one_hot(tf.squeeze(tf.random.categorical(tf.ones_like(d_action), 1)), self.d_action_size)
+            cond = tf.tile(tf.reshape(tf.random.uniform((tf.shape(d_action)[0],)) < self.noise, [-1, 1]), [1, self.d_action_size])
             d_action = tf.where(cond, d_action, action_random)
 
-        if self.c_action_dim:
+        if self.c_action_size:
             c_action = tf.tanh(tf.atanh(c_action) + tf.random.normal(tf.shape(c_action), stddev=self.noise))
 
         return tf.concat([d_action, c_action], axis=-1)
@@ -142,15 +142,15 @@ class SAC_DS_Base(SAC_Base):
     def choose_rnn_action(self, obs_list, pre_action, rnn_state):
         action, next_rnn_state = super().choose_rnn_action(obs_list, pre_action, rnn_state)
 
-        d_action = action[..., :self.d_action_dim]
-        c_action = action[..., self.d_action_dim:]
+        d_action = action[..., :self.d_action_size]
+        c_action = action[..., self.d_action_size:]
 
-        if self.d_action_dim:
-            action_random = tf.one_hot(tf.squeeze(tf.random.categorical(tf.ones_like(d_action), 1)), self.d_action_dim)
-            cond = tf.tile(tf.reshape(tf.random.uniform((tf.shape(d_action)[0],)) < self.noise, [-1, 1]), [1, self.d_action_dim])
+        if self.d_action_size:
+            action_random = tf.one_hot(tf.squeeze(tf.random.categorical(tf.ones_like(d_action), 1)), self.d_action_size)
+            cond = tf.tile(tf.reshape(tf.random.uniform((tf.shape(d_action)[0],)) < self.noise, [-1, 1]), [1, self.d_action_size])
             d_action = tf.where(cond, d_action, action_random)
 
-        if self.c_action_dim:
+        if self.c_action_size:
             c_action = tf.tanh(tf.atanh(c_action) + tf.random.normal(tf.shape(c_action), stddev=self.noise))
 
         return tf.concat([d_action, c_action], axis=-1), next_rnn_state

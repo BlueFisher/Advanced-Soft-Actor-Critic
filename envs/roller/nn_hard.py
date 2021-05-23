@@ -5,13 +5,13 @@ import algorithm.nn_models as m
 
 
 class ModelTransition(m.ModelBaseTransition):
-    def __init__(self, state_dim, d_action_dim, c_action_dim, use_extra_data):
-        super().__init__(state_dim, d_action_dim, c_action_dim, use_extra_data)
+    def __init__(self, state_size, d_action_size, c_action_size, use_extra_data):
+        super().__init__(state_size, d_action_size, c_action_size, use_extra_data)
 
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
             tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(state_dim + state_dim)
+            tf.keras.layers.Dense(state_size + state_size)
         ])
 
         self.next_state_tfpd = tfp.layers.DistributionLambda(
@@ -19,8 +19,8 @@ class ModelTransition(m.ModelBaseTransition):
 
     def init(self):
         if self.use_extra_data:
-            self(tf.keras.Input(shape=(self.state_dim + 2,)),
-                 tf.keras.Input(shape=(self.action_dim,)))
+            self(tf.keras.Input(shape=(self.state_size + 2,)),
+                 tf.keras.Input(shape=(self.action_size,)))
         else:
             super().init()
 
@@ -36,8 +36,8 @@ class ModelTransition(m.ModelBaseTransition):
 
 
 class ModelReward(m.ModelBaseReward):
-    def __init__(self, state_dim, use_extra_data):
-        super().__init__(state_dim, use_extra_data)
+    def __init__(self, state_size, use_extra_data):
+        super().__init__(state_size, use_extra_data)
 
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(64, tf.nn.relu),
@@ -51,10 +51,10 @@ class ModelReward(m.ModelBaseReward):
 
 
 class ModelObservation(m.ModelBaseObservation):
-    def __init__(self, state_dim, obs_dims, use_extra_data):
-        super().__init__(state_dim, obs_dims, use_extra_data)
+    def __init__(self, state_size, obs_shapes, use_extra_data):
+        super().__init__(state_size, obs_shapes, use_extra_data)
 
-        assert obs_dims[0] == (6, )
+        assert obs_shapes[0] == (6, )
 
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(64, tf.nn.relu),
@@ -78,10 +78,10 @@ class ModelObservation(m.ModelBaseObservation):
 
 
 class ModelRep(m.ModelBaseGRURep):
-    def __init__(self, obs_dims, d_action_dim, c_action_dim):
-        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units=64)
+    def __init__(self, obs_shapes, d_action_size, c_action_size):
+        super().__init__(obs_shapes, d_action_size, c_action_size, rnn_units=64)
 
-        assert obs_dims[0] == (6, )
+        assert obs_shapes[0] == (6, )
 
         self.dense = tf.keras.Sequential([
             tf.keras.layers.Dense(64, activation=tf.nn.tanh)
@@ -98,12 +98,12 @@ class ModelRep(m.ModelBaseGRURep):
 
 
 class ModelQ(m.ModelQ):
-    def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
-        super().__init__(state_dim, d_action_dim, c_action_dim,
+    def __init__(self, state_size, d_action_size, c_action_size):
+        super().__init__(state_size, d_action_size, c_action_size,
                          dense_n=64, dense_depth=2)
 
 
 class ModelPolicy(m.ModelPolicy):
-    def __init__(self, state_dim, d_action_dim, c_action_dim, name=None):
-        super().__init__(state_dim, d_action_dim, c_action_dim,
+    def __init__(self, state_size, d_action_size, c_action_size):
+        super().__init__(state_size, d_action_size, c_action_size,
                          dense_n=64, dense_depth=2)
