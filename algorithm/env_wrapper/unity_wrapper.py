@@ -85,8 +85,8 @@ class UnityWrapper:
 
         logger.info(f'Continuous action size: {continuous_action_size}')
 
-        self.d_action_dim = discrete_action_size
-        self.c_action_dim = continuous_action_size
+        self.d_action_size = discrete_action_size
+        self.c_action_size = continuous_action_size
 
         for o in behavior_spec.observation_shapes:
             if len(o) >= 3:
@@ -120,7 +120,7 @@ class UnityWrapper:
             done: (NAgents, ), np.bool
             max_step: (NAgents, ), np.bool
         """
-        if self.d_action_dim:
+        if self.d_action_size:
             d_action = np.argmax(d_action, axis=1)
             d_action = self.action_product[d_action]
 
@@ -165,18 +165,18 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
     env = UnityWrapper(train_mode=True, base_port=5004)
-    obs_shape_list, d_action_dim, c_action_dim = env.init()
+    obs_shape_list, d_action_size, c_action_size = env.init()
 
     for i in range(100):
         obs_list = env.reset()
         n_agents = obs_list[0].shape[0]
         for j in range(100):
             d_action, c_action = None, None
-            if d_action_dim:
-                d_action = np.random.randint(0, d_action_dim, size=n_agents)
-                d_action = np.eye(d_action_dim, dtype=np.int32)[d_action]
-            if c_action_dim:
-                c_action = np.random.randn(n_agents, c_action_dim)
+            if d_action_size:
+                d_action = np.random.randint(0, d_action_size, size=n_agents)
+                d_action = np.eye(d_action_size, dtype=np.int32)[d_action]
+            if c_action_size:
+                c_action = np.random.randn(n_agents, c_action_size)
 
             print(i, j)
             obs_list, reward, done, max_step = env.step(d_action, c_action)

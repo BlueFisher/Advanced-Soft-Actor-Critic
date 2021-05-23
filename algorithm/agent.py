@@ -75,7 +75,7 @@ class Agent(object):
         # list([1, ep_len, obs_dim_i], ...)
 
         action = np.stack([t['action'] for t in self._tmp_episode_trans], axis=0)
-        action = np.expand_dims(action, 0).astype(np.float32)  # [1, ep_len, action_dim]
+        action = np.expand_dims(action, 0).astype(np.float32)  # [1, ep_len, action_size]
 
         reward = np.stack([t['reward'] for t in self._tmp_episode_trans], axis=0)
         reward = np.expand_dims(reward, 0).astype(np.float32)  # [1, ep_len]

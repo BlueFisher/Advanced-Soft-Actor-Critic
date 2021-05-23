@@ -61,9 +61,9 @@ class Trainer:
                  process_nn_variables_conn: Connection,
 
                  logger_in_file,
-                 obs_dims,
-                 d_action_dim,
-                 c_action_dim,
+                 obs_shapes,
+                 d_action_size,
+                 c_action_size,
                  model_abs_dir,
                  model_spec,
                  last_ckpt,
@@ -85,9 +85,9 @@ class Trainer:
 
         self.sac_lock = RLock(1)
 
-        self.sac = SAC_DS_Base(obs_dims=obs_dims,
-                               d_action_dim=d_action_dim,
-                               c_action_dim=c_action_dim,
+        self.sac = SAC_DS_Base(obs_shapes=obs_shapes,
+                               d_action_size=d_action_size,
+                               c_action_size=c_action_size,
                                model_abs_dir=model_abs_dir,
                                model=custom_nn_model,
                                last_ckpt=last_ckpt,
