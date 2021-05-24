@@ -1,6 +1,6 @@
 import logging
 import math
-import os
+from typing import List, Tuple
 import time
 from pathlib import Path
 from itertools import chain
@@ -202,14 +202,14 @@ class SAC_Base(object):
 
         if self.use_rnn:
             # Get represented state dimension
-            self.model_rep = ModelRep(self.obs_shapes, self.d_action_size, self.c_action_size).to(DEVICE)
-            self.model_target_rep = ModelRep(self.obs_shapes, self.d_action_size, self.c_action_size).to(DEVICE)
+            self.model_rep: nn.Module = ModelRep(self.obs_shapes, self.d_action_size, self.c_action_size).to(DEVICE)
+            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes, self.d_action_size, self.c_action_size).to(DEVICE)
             # Get state and rnn_state dimension
             state_size, self.rnn_state_shape = self.model_rep.get_output_shape(DEVICE)
         else:
             # Get represented state dimension
-            self.model_rep = ModelRep(self.obs_shapes).to(DEVICE)
-            self.model_target_rep = ModelRep(self.obs_shapes).to(DEVICE)
+            self.model_rep: nn.Module = ModelRep(self.obs_shapes).to(DEVICE)
+            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes).to(DEVICE)
             state_size = self.model_rep.get_output_shape(DEVICE)
 
         for param in self.model_target_rep.parameters():
@@ -223,11 +223,15 @@ class SAC_Base(object):
             self.optimizer_rep = None
 
         """ Q """
-        self.model_q_list = [model.ModelQ(state_size, self.d_action_size, self.c_action_size).to(DEVICE)
-                             for _ in range(self.ensemble_q_num)]
+        self.model_q_list: List[nn.Module] = [model.ModelQ(state_size,
+                                                           self.d_action_size,
+                                                           self.c_action_size).to(DEVICE)
+                                              for _ in range(self.ensemble_q_num)]
 
-        self.model_target_q_list = [model.ModelQ(state_size, self.d_action_size, self.c_action_size).to(DEVICE)
-                                    for _ in range(self.ensemble_q_num)]
+        self.model_target_q_list: List[nn.Module] = [model.ModelQ(state_size,
+                                                                  self.d_action_size,
+                                                                  self.c_action_size).to(DEVICE)
+                                                     for _ in range(self.ensemble_q_num)]
         for model_target_q in self.model_target_q_list:
             for param in model_target_q.parameters():
                 param.requires_grad = False
@@ -235,19 +239,19 @@ class SAC_Base(object):
         self.optimizer_q_list = [adam_optimizer(self.model_q_list[i].parameters()) for i in range(self.ensemble_q_num)]
 
         """ POLICY """
-        self.model_policy = model.ModelPolicy(state_size, self.d_action_size, self.c_action_size).to(DEVICE)
+        self.model_policy: nn.Module = model.ModelPolicy(state_size, self.d_action_size, self.c_action_size).to(DEVICE)
         self.optimizer_policy = adam_optimizer(self.model_policy.parameters())
 
         """ RECURRENT PREDICTION MODELS """
         if self.use_prediction:
-            self.model_transition = model.ModelTransition(state_size,
-                                                          self.d_action_size,
-                                                          self.c_action_size,
-                                                          self.use_extra_data).to(DEVICE)
-            self.model_reward = model.ModelReward(state_size,
-                                                  self.use_extra_data).to(DEVICE)
-            self.model_observation = model.ModelObservation(state_size, self.obs_shapes,
-                                                            self.use_extra_data).to(DEVICE)
+            self.model_transition: nn.Module = model.ModelTransition(state_size,
+                                                                     self.d_action_size,
+                                                                     self.c_action_size,
+                                                                     self.use_extra_data).to(DEVICE)
+            self.model_reward: nn.Module = model.ModelReward(state_size,
+                                                             self.use_extra_data).to(DEVICE)
+            self.model_observation: nn.Module = model.ModelObservation(state_size, self.obs_shapes,
+                                                                       self.use_extra_data).to(DEVICE)
 
             self.optimizer_prediction = adam_optimizer(chain(self.model_transition.parameters(),
                                                              self.model_reward.parameters(),
@@ -262,13 +266,13 @@ class SAC_Base(object):
 
         """ CURIOSITY """
         if self.use_curiosity:
-            self.model_forward = model.ModelForward(state_size, self.action_size)
-            self.optimizer_forward = adam_optimizer(self.model_forward.parameters())
+            self.model_forward: nn.Module = model.ModelForward(state_size, self.action_size)
+            self.optimizer_forward: nn.Module = adam_optimizer(self.model_forward.parameters())
 
         """ RANDOM NETWORK DISTILLATION """
         if self.use_rnd:
-            self.model_rnd = model.ModelRND(state_size, self.d_action_size + self.c_action_size)
-            self.model_target_rnd = model.ModelRND(state_size, self.d_action_size + self.c_action_size)
+            self.model_rnd: nn.Module = model.ModelRND(state_size, self.d_action_size + self.c_action_size)
+            self.model_target_rnd: nn.Module = model.ModelRND(state_size, self.d_action_size + self.c_action_size)
             for param in self.model_target_rnd.parameters():
                 param.requires_grad = False
             self.optimizer_rnd = adam_optimizer(self.model_rnd.parameters())
@@ -739,7 +743,7 @@ class SAC_Base(object):
         """ PREDICTION LOSS """
 
         if self.use_prediction:
-            approx_next_state_dist = self.model_transition(
+            approx_next_state_dist: torch.distributions.Normal = self.model_transition(
                 [n_obses[:, self.burn_in_step:, ...] for n_obses in n_obses_list],  # May for extra observations
                 n_states[:, self.burn_in_step:, ...],
                 n_actions[:, self.burn_in_step:, ...]
@@ -853,9 +857,35 @@ class SAC_Base(object):
         if self.use_rnd:
             self.optimizer_rnd.zero_grad()
 
-        loss.backward()
+        loss.backward(retain_graph=True)
 
         if self.optimizer_rep:
+            if self.use_prediction:
+                grads_rep = [m.grad for m in self.model_rep.parameters()]
+                grads_rep_preds = [torch.autograd.grad(loss_transition, self.model_rep.parameters(), retain_graph=True),
+                                   torch.autograd.grad(loss_reward, self.model_rep.parameters(), retain_graph=True),
+                                   torch.autograd.grad(loss_obs, self.model_rep.parameters(), retain_graph=True)]
+
+                # for i in range(len(grads_rep)):
+                #     grad_rep = grads_rep[i]
+                #     grad_rep_norm = torch.norm(grad_rep)
+                #     for grads_rep_pred in grads_rep_preds:
+                #         grad_rep_pred = grads_rep_pred[i]
+                #         cos = torch.sum(grad_rep * grad_rep_pred) / (grad_rep_norm * torch.norm(grad_rep_pred))
+                #         grads_rep[i] += torch.maximum(cos, 0) * grad_rep_pred
+
+                _grads_rep_main = torch.cat([g.view(-1) for g in grads_rep], dim=0)
+                _grads_rep_preds = [torch.cat([g.view(-1) for g in grads_rep_pred], dim=0)
+                                    for grads_rep_pred in grads_rep_preds]
+
+                coses = [torch.sum(_grads_rep_main * grads_rep_pred) / (torch.norm(_grads_rep_main) * torch.norm(grads_rep_pred))
+                         for grads_rep_pred in _grads_rep_preds]
+                coses = [torch.maximum(torch.zeros(1), torch.sign(cos)) for cos in coses]
+
+                for grads_rep_pred, cos in zip(grads_rep_preds, coses):
+                    for param_rep, grad_rep_pred in zip(self.model_rep.parameters(), grads_rep_pred):
+                        param_rep.grad += cos * grad_rep_pred
+
             self.optimizer_rep.step()
 
         for i in range(self.ensemble_q_num):
@@ -863,33 +893,6 @@ class SAC_Base(object):
 
         if (self.d_action_size and not self.discrete_dqn_like) or self.c_action_size:
             self.optimizer_policy.step()
-
-        # if self.use_prediction:
-        #     grads_rep_preds = [tape.gradient(loss_transition, rep_variables),
-        #                        tape.gradient(loss_reward, rep_variables),
-        #                        tape.gradient(loss_obs, rep_variables)]
-
-        #     # for i in range(len(grads_rep)):
-        #     #     grad_rep = grads_rep[i]
-        #     #     grad_rep_norm = tf.norm(grad_rep)
-        #     #     for grads_rep_pred in grads_rep_preds:
-        #     #         grad_rep_pred = grads_rep_pred[i]
-        #     #         cos = tf.reduce_sum(grad_rep * grad_rep_pred) / (grad_rep_norm * tf.norm(grad_rep_pred))
-        #     #         grads_rep[i] += tf.maximum(cos, 0) * grad_rep_pred
-
-        #     _grads_rep_main = tf.concat([tf.reshape(g, [-1]) for g in grads_rep], axis=0)
-        #     _grads_rep_preds = [tf.concat([tf.reshape(g, [-1]) for g in grads_rep_pred], axis=0)
-        #                         for grads_rep_pred in grads_rep_preds]
-
-        #     coses = [tf.reduce_sum(_grads_rep_main * grads_rep_pred) / (tf.norm(_grads_rep_main) * tf.norm(grads_rep_pred))
-        #              for grads_rep_pred in _grads_rep_preds]
-        #     coses = [tf.maximum(0., tf.sign(cos)) for cos in coses]
-
-        #     for grads_rep_pred, cos in zip(grads_rep_preds, coses):
-        #         for i in range(len(grads_rep_pred)):
-        #             grads_rep[i] += cos * grads_rep_pred[i]
-
-        # self.optimizer_rep.apply_gradients(zip(grads_rep, rep_variables))
 
         if self.use_prediction:
             self.optimizer_prediction.step()
@@ -910,27 +913,27 @@ class SAC_Base(object):
                     self.summary_writer.add_scalar('loss/c_entropy', torch.mean(c_policy.entropy()), self.global_step)
                     self.summary_writer.add_scalar('loss/alpha_c', alpha_c, self.global_step)
 
-            if self.use_curiosity:
-                self.summary_writer.add_scalar('loss/forward', loss_forward, self.global_step)
+                if self.use_curiosity:
+                    self.summary_writer.add_scalar('loss/forward', loss_forward, self.global_step)
 
-            if self.use_rnd:
-                self.summary_writer.add_scalar('loss/rnd', loss_rnd, self.global_step)
+                if self.use_rnd:
+                    self.summary_writer.add_scalar('loss/rnd', loss_rnd, self.global_step)
 
-            # if self.use_prediction:
-            #     self.summary_writer.add_scalar('loss/transition',
-            #                         tf.reduce_mean(approx_next_state_dist.entropy()),
-            #                         step=self.global_step)
-            #     self.summary_writer.add_scalar('loss/reward', loss_reward, step=self.global_step)
-            #     self.summary_writer.add_scalar('loss/observation', loss_obs, step=self.global_step)
+                if self.use_prediction:
+                    self.summary_writer.add_scalar('loss/transition',
+                                                   torch.mean(approx_next_state_dist.entropy()),
+                                                   self.global_step)
+                    self.summary_writer.add_scalar('loss/reward', loss_reward, self.global_step)
+                    self.summary_writer.add_scalar('loss/observation', loss_obs, self.global_step)
 
-            #     approx_obs_list = self.model_observation(m_states[0:1, self.burn_in_step:, ...])
-            #     if not isinstance(approx_obs_list, (list, tuple)):
-            #         approx_obs_list = [approx_obs_list]
-            #     for approx_obs in approx_obs_list:
-            #         if len(approx_obs.shape) > 3:
-            #             tf.summary.image('observation',
-            #                                 tf.reshape(approx_obs, [-1, *approx_obs.shape[2:]]),
-            #                                 max_outputs=self.n_step, step=self.global_step)
+                    approx_obs_list = self.model_observation(m_states[0:1, self.burn_in_step:, ...])
+                    if not isinstance(approx_obs_list, (list, tuple)):
+                        approx_obs_list = [approx_obs_list]
+                    for approx_obs in approx_obs_list:
+                        if len(approx_obs.shape) > 3:
+                            self.summary_writer.add_images('observation',
+                                                           approx_obs.view(-1, *approx_obs.shape[2:]),
+                                                           self.global_step)
 
             self.summary_writer.flush()
 
