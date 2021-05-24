@@ -32,7 +32,10 @@ class ModelBaseTransition(nn.Module):
 
 class ModelTransition(ModelBaseTransition):
     def _build_model(self, dense_n=64, dense_depth=0, extra_size=0):
-        self.dense, _ = dense_layers(self.state_size + extra_size + self.action_size,
+        input_size = self.state_size + self.action_size
+        if self.use_extra_data:
+            input_size += extra_size
+        self.dense, _ = dense_layers(input_size,
                                      dense_n, dense_depth,
                                      self.state_size * 2)
 
@@ -46,10 +49,9 @@ class ModelTransition(ModelBaseTransition):
 
 
 class ModelBaseReward(nn.Module):
-    def __init__(self, state_size, use_extra_data,):
+    def __init__(self, state_size):
         super().__init__()
         self.state_size = state_size
-        self.use_extra_data = use_extra_data
 
         self._build_model()
 

@@ -1,38 +1,23 @@
-import numpy as np
-import tensorflow as tf
-import tensorflow_probability as tfp
-
 import algorithm.nn_models as m
 
 ModelRep = m.ModelSimpleRep
 
 
-class ModelForward(m.ModelForward):
-    def __init__(self, state_size, action_size):
-        super().__init__(state_size, action_size,
-                         dense_n=state_size + action_size, dense_depth=1)
-
-
-class ModelRND(m.ModelBaseRND):
-    def __init__(self, state_size, action_size):
-        super().__init__(state_size, action_size)
-
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(32, activation=tf.nn.relu),
-            tf.keras.layers.Dense(32),
-        ])
-
-    def call(self, state, action):
-        return self.dense(tf.concat([state, action], axis=-1))
-
-
 class ModelQ(m.ModelQ):
-    def __init__(self, state_size, d_action_size, c_action_size):
-        super().__init__(state_size, d_action_size, c_action_size,
-                         dense_n=64, dense_depth=2)
+    def _build_model(self):
+        super()._build_model(c_dense_n=64, c_dense_depth=2)
 
 
 class ModelPolicy(m.ModelPolicy):
-    def __init__(self, state_size, d_action_size, c_action_size):
-        super().__init__(state_size, d_action_size, c_action_size,
-                         dense_n=64, dense_depth=2)
+    def _build_model(self):
+        super()._build_model(c_dense_n=64, c_dense_depth=2)
+
+
+class ModelForward(m.ModelForward):
+    def _build_model(self):
+        return super()._build_model(dense_n=self.state_size + self.action_size, dense_depth=1)
+
+
+class ModelRND(m.ModelRND):
+    def _build_model(self):
+        return super()._build_model(dense_n=32, dense_depth=2)

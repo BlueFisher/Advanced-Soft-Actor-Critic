@@ -17,7 +17,7 @@ def dense_layers(input_size, dense_n=64, dense_depth=0, output_size=None):
 
 class GRU(nn.GRU):
     def forward(self, x: torch.Tensor, h0: torch.Tensor = None):
-        output, hn = super().forward(x.transpose(0, 1),
-                                     h0.transpose(0, 1) if h0 is not None else None)
+        output, hn = super().forward(x.transpose(0, 1).contiguous(),
+                                     h0.transpose(0, 1).contiguous() if h0 is not None else None)
 
         return output.transpose(0, 1), hn.transpose(0, 1)
