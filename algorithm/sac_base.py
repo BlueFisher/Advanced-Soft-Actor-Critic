@@ -18,8 +18,7 @@ from .replay_buffer import PrioritizedReplayBuffer
 from .utils import *
 
 logger = logging.getLogger('sac.base')
-# DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-DEVICE = 'cpu'
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 class SAC_Base(object):
@@ -31,6 +30,7 @@ class SAC_Base(object):
                  c_action_size,
                  model_abs_dir,
                  model,
+                 device=None,
                  summary_path='log',
                  train_mode=True,
                  last_ckpt=None,
@@ -155,6 +155,10 @@ class SAC_Base(object):
 
         self.use_add_with_td = False
 
+        if device is not None:
+            global DEVICE
+            DEVICE = device
+
         if seed is not None:
             torch.manual_seed(seed)
             torch.cuda.manual_seed_all(seed)
@@ -248,8 +252,7 @@ class SAC_Base(object):
                                                                      self.d_action_size,
                                                                      self.c_action_size,
                                                                      self.use_extra_data).to(DEVICE)
-            self.model_reward: nn.Module = model.ModelReward(state_size,
-                                                             self.use_extra_data).to(DEVICE)
+            self.model_reward: nn.Module = model.ModelReward(state_size).to(DEVICE)
             self.model_observation: nn.Module = model.ModelObservation(state_size, self.obs_shapes,
                                                                        self.use_extra_data).to(DEVICE)
 
@@ -266,13 +269,13 @@ class SAC_Base(object):
 
         """ CURIOSITY """
         if self.use_curiosity:
-            self.model_forward: nn.Module = model.ModelForward(state_size, self.action_size)
+            self.model_forward: nn.Module = model.ModelForward(state_size, self.action_size).to(DEVICE)
             self.optimizer_forward: nn.Module = adam_optimizer(self.model_forward.parameters())
 
         """ RANDOM NETWORK DISTILLATION """
         if self.use_rnd:
-            self.model_rnd: nn.Module = model.ModelRND(state_size, self.d_action_size + self.c_action_size)
-            self.model_target_rnd: nn.Module = model.ModelRND(state_size, self.d_action_size + self.c_action_size)
+            self.model_rnd: nn.Module = model.ModelRND(state_size, self.d_action_size + self.c_action_size).to(DEVICE)
+            self.model_target_rnd: nn.Module = model.ModelRND(state_size, self.d_action_size + self.c_action_size).to(DEVICE)
             for param in self.model_target_rnd.parameters():
                 param.requires_grad = False
             self.optimizer_rnd = adam_optimizer(self.model_rnd.parameters())
@@ -880,7 +883,7 @@ class SAC_Base(object):
 
                 coses = [torch.sum(_grads_rep_main * grads_rep_pred) / (torch.norm(_grads_rep_main) * torch.norm(grads_rep_pred))
                          for grads_rep_pred in _grads_rep_preds]
-                coses = [torch.maximum(torch.zeros(1), torch.sign(cos)) for cos in coses]
+                coses = [torch.maximum(torch.zeros(1, device=DEVICE), torch.sign(cos)) for cos in coses]
 
                 for grads_rep_pred, cos in zip(grads_rep_preds, coses):
                     for param_rep, grad_rep_pred in zip(self.model_rep.parameters(), grads_rep_pred):
