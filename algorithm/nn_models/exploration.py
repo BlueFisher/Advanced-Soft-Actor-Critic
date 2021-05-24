@@ -34,6 +34,8 @@ class ModelBaseForward(nn.Module):
         self.state_size = state_size
         self.action_size = action_size
 
+        self._build_model()
+
     def _build_model(self):
         pass
 
