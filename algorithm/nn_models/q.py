@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from .layers import dense_layers
+from .layers import LinearLayers
 
 
 class ModelBaseQ(nn.Module):
@@ -27,17 +27,17 @@ class ModelQ(ModelBaseQ):
                      c_action_n=64, c_action_depth=0,
                      c_dense_n=64, c_dense_depth=3):
 
-        self.dense, _output_dim = dense_layers(self.state_size, dense_n, dense_depth)
+        self.dense = LinearLayers(self.state_size, dense_n, dense_depth)
 
         if self.d_action_size:
-            self.d_dense, _ = dense_layers(_output_dim, d_dense_n, d_dense_depth, self.d_action_size)
+            self.d_dense = LinearLayers(self.dense.output_size, d_dense_n, d_dense_depth, self.d_action_size)
 
         if self.c_action_size:
-            self.c_state_dense, _c_state_output_dim = dense_layers(_output_dim, c_state_n, c_state_depth)
-            self.c_action_dense, _c_action_ouput_dim = dense_layers(self.c_action_size, c_action_n, c_action_depth)
+            self.c_state_dense = LinearLayers(self.dense.output_size, c_state_n, c_state_depth)
+            self.c_action_dense = LinearLayers(self.c_action_size, c_action_n, c_action_depth)
 
-            self.c_dense, _ = dense_layers(_c_state_output_dim + _c_action_ouput_dim,
-                                           c_dense_n, c_dense_depth, 1)
+            self.c_dense = LinearLayers(self.c_state_dense.output_size + self.c_action_dense.output_size,
+                                        c_dense_n, c_dense_depth, 1)
 
     def forward(self, state, c_action):
         state = self.dense(state)

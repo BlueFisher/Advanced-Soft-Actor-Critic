@@ -877,8 +877,8 @@ class SAC_Base(object):
                 #         cos = torch.sum(grad_rep * grad_rep_pred) / (grad_rep_norm * torch.norm(grad_rep_pred))
                 #         grads_rep[i] += torch.maximum(cos, 0) * grad_rep_pred
 
-                _grads_rep_main = torch.cat([g.view(-1) for g in grads_rep], dim=0)
-                _grads_rep_preds = [torch.cat([g.view(-1) for g in grads_rep_pred], dim=0)
+                _grads_rep_main = torch.cat([g.reshape(-1) for g in grads_rep], dim=0)
+                _grads_rep_preds = [torch.cat([g.reshape(-1) for g in grads_rep_pred], dim=0)
                                     for grads_rep_pred in grads_rep_preds]
 
                 coses = [torch.sum(_grads_rep_main * grads_rep_pred) / (torch.norm(_grads_rep_main) * torch.norm(grads_rep_pred))

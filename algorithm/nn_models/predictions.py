@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from .layers import dense_layers
+from .layers import LinearLayers
 
 
 class ModelBaseTransition(nn.Module):
@@ -35,9 +35,9 @@ class ModelTransition(ModelBaseTransition):
         input_size = self.state_size + self.action_size
         if self.use_extra_data:
             input_size += extra_size
-        self.dense, _ = dense_layers(input_size,
-                                     dense_n, dense_depth,
-                                     self.state_size * 2)
+        self.dense = LinearLayers(input_size,
+                                  dense_n, dense_depth,
+                                  self.state_size * 2)
 
     def forward(self, obs_list, state, action):
         if self.use_extra_data:
@@ -65,7 +65,7 @@ class ModelBaseReward(nn.Module):
 
 class ModelReward(ModelBaseReward):
     def _build_model(self, dense_n=64, dense_depth=0):
-        self.dense, _ = dense_layers(self.state_size, dense_n, dense_depth, 1)
+        self.dense = LinearLayers(self.state_size, dense_n, dense_depth, 1)
 
     def forward(self, state):
         return self.dense(state)

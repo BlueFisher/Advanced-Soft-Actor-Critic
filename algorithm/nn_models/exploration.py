@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from .layers import dense_layers
+from .layers import LinearLayers
 
 
 class ModelBaseRND(nn.Module):
@@ -21,8 +21,8 @@ class ModelBaseRND(nn.Module):
 
 class ModelRND(ModelBaseRND):
     def _build_model(self, dense_n=64, dense_depth=2):
-        self.dense, _ = dense_layers(self.state_size + self.action_size,
-                                     dense_n, dense_depth)
+        self.dense = LinearLayers(self.state_size + self.action_size,
+                                  dense_n, dense_depth)
 
     def forward(self, state, action):
         return self.dense(torch.cat([state, action], dim=-1))
@@ -45,8 +45,8 @@ class ModelBaseForward(nn.Module):
 
 class ModelForward(ModelBaseForward):
     def _build_model(self, dense_n=64, dense_depth=2):
-        self.dense, _ = dense_layers(self.state_size + self.action_size,
-                                     dense_n, dense_depth, self.state_size)
+        self.dense = LinearLayers(self.state_size + self.action_size,
+                                  dense_n, dense_depth, self.state_size)
 
     def forward(self, state, action):
         return self.dense(torch.cat([state, action], dim=-1))

@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from .layers import dense_layers
+from .layers import LinearLayers
 
 
 class ModelBasePolicy(nn.Module):
@@ -27,16 +27,16 @@ class ModelPolicy(ModelBasePolicy):
                      mean_n=64, mean_depth=0,
                      logstd_n=64, logstd_depth=0):
 
-        self.dense, _output_dim = dense_layers(self.state_size, dense_n, dense_depth)
+        self.dense = LinearLayers(self.state_size, dense_n, dense_depth)
 
         if self.d_action_size:
-            self.d_dense, _ = dense_layers(_output_dim, d_dense_n, d_dense_depth, self.d_action_size)
+            self.d_dense = LinearLayers(self.dense.output_size, d_dense_n, d_dense_depth, self.d_action_size)
 
         if self.c_action_size:
-            self.c_dense, _c_ouput_dim = dense_layers(_output_dim, c_dense_n, c_dense_depth)
+            self.c_dense = LinearLayers(self.dense.output_size, c_dense_n, c_dense_depth)
 
-            self.mean_dense, _ = dense_layers(_c_ouput_dim, mean_n, mean_depth, self.c_action_size)
-            self.logstd_dense, _ = dense_layers(_c_ouput_dim, logstd_n, logstd_depth, self.c_action_size)
+            self.mean_dense = LinearLayers(self.c_dense.output_size, mean_n, mean_depth, self.c_action_size)
+            self.logstd_dense = LinearLayers(self.c_dense.output_size, logstd_n, logstd_depth, self.c_action_size)
 
     def forward(self, state):
         state = self.dense(state)

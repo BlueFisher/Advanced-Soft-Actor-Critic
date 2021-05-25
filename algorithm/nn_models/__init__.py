@@ -79,28 +79,3 @@ from .layers import *
 
 #         if self.activation is not None:
 #             return self.activation(y)
-
-
-# def swish(x):
-#     """Swish activation function. For more info: https://arxiv.org/abs/1710.05941"""
-#     return tf.multiply(x, tf.nn.sigmoid(x))
-
-
-# def mish(x):
-#     """
-#     Swish activation function. For more info: https://arxiv.org/abs/1908.08681
-#     The original repository for Mish: https://github.com/digantamisra98/Mish
-#     """
-#     return tf.multiply(x, tf.nn.tanh(tf.nn.softplus(x)))
-
-
-# def through_conv(x, conv):
-#     if len(x.shape) > 4:
-#         batch = tf.shape(x)[0]
-#         x = tf.reshape(x, [-1, *x.shape[2:]])
-#         x = conv(x)
-#         x = tf.reshape(x, [batch, -1, x.shape[-1]])
-#     else:
-#         x = conv(x)
-
-#     return x
