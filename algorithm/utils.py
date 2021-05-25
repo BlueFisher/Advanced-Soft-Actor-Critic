@@ -13,21 +13,6 @@ def squash_correction_prob(dist, x):
     return torch.exp(dist.log_prob(x)) / (torch.maximum(1 - torch.square(torch.tanh(x)), torch.tensor(1e-2)))
 
 
-# def debug(name, x):
-#     tf.print(name, tf.reduce_min(x), tf.reduce_mean(x), tf.reduce_max(x))
-
-
-# def debug_grad(grads):
-#     for grad in grads:
-#         if grad is not None:
-#             debug(grad.name, grad)
-
-
-# def debug_grad_com(grads, grads1):
-#     for i, grad in enumerate(grads):
-#         debug(grad.name, grad - grads1[i])
-
-
 def gen_pre_n_actions(n_actions, keep_last_action=False):
     return torch.cat([
         torch.zeros_like(n_actions[:, 0:1, ...]),

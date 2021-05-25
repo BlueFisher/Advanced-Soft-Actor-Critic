@@ -9,16 +9,15 @@ from .get_synthesis_data import *
 
 class TestNNModel(unittest.TestCase):
     def _test_model(self, param_dict, is_q_model):
-        import algorithm.nn_models as m
         from . import nn_vanilla
 
         if is_q_model:
-            class ModelQ(m.ModelQ):
+            class ModelQ(nn_vanilla.ModelQ):
                 def _build_model(self):
                     super()._build_model(**param_dict)
             nn_vanilla.ModelQ = ModelQ
         else:
-            class ModelPolicy(m.ModelPolicy):
+            class ModelPolicy(nn_vanilla.ModelPolicy):
                 def _build_model(self):
                     super()._build_model(**param_dict)
             nn_vanilla.ModelPolicy = ModelPolicy
@@ -30,7 +29,8 @@ class TestNNModel(unittest.TestCase):
             d_action_size=4,
             c_action_size=4,
             model_abs_dir=None,
-            model=nn_vanilla
+            model=nn_vanilla,
+            device='cpu',
         )
 
         step = 0

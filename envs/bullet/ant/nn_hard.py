@@ -54,9 +54,9 @@ class ModelReward(m.ModelReward):
 class ModelObservation(m.ModelBaseObservation):
     def _build_model(self):
 
-        self.dense, _ = m.dense_layers(self.state_size,
-                                       256, 3,
-                                       self.obs_shapes[0][0] if self.use_extra_data else self.obs_shapes[0][0] - 3)
+        self.dense = m.LinearLayers(self.state_size,
+                                    256, 3,
+                                    self.obs_shapes[0][0] if self.use_extra_data else self.obs_shapes[0][0] - 3)
 
     def forward(self, state):
         obs = self.dense(state)
