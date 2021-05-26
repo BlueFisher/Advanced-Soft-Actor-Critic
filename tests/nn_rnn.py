@@ -3,7 +3,6 @@ from torch import nn
 
 import algorithm.nn_models as m
 
-
 EXTRA_SIZE = 3
 
 
@@ -28,7 +27,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
 class ModelTransition(m.ModelTransition):
     def _build_model(self):
-        return super()._build_model(extra_size=EXTRA_SIZE if self.use_extra_data else 0)
+        return super()._build_model(extra_size=EXTRA_SIZE)
 
     def extra_obs(self, obs_list):
         return obs_list[0][..., :EXTRA_SIZE]

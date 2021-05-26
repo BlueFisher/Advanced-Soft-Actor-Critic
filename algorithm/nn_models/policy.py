@@ -26,7 +26,23 @@ class ModelPolicy(ModelBasePolicy):
                      c_dense_n=64, c_dense_depth=3,
                      mean_n=64, mean_depth=0,
                      logstd_n=64, logstd_depth=0):
-
+        """
+                      state
+                        │
+                     ┌──▼──┐
+               ┌─────┤dense├────────┐
+               │     └─────┘        │
+               │                ┌───▼───┐
+               │            ┌───┤c_dense├────┐
+               │            │   └───────┘    │
+               │            │                │
+           ┌───▼───┐   ┌────▼─────┐   ┌──────▼─────┐
+           │d_dense│   │mean_dense│   │logstd_dense│
+           └───┬───┘   └────┬─────┘   └──────┬─────┘
+               │            │                │
+               ▼            │                │
+        OneHotCategorical   └──► Normal ◄────┘
+        """
         self.dense = LinearLayers(self.state_size, dense_n, dense_depth)
 
         if self.d_action_size:

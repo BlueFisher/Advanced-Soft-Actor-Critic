@@ -1,15 +1,16 @@
-import unittest
 import sys
+import unittest
 
 sys.path.append('..')
 
 from algorithm.sac_base import SAC_Base
+
 from .get_synthesis_data import *
 
 
 class TestConvModel(unittest.TestCase):
     def _test_conv(self, param_dict):
-        from algorithm.nn_models import ConvLayers
+        import algorithm.nn_models as m
         from . import nn_conv
 
         conv_name = param_dict['conv']
@@ -19,7 +20,7 @@ class TestConvModel(unittest.TestCase):
             def _build_model(self):
                 super()._build_model()
 
-                self.conv = ConvLayers(84, 84, 3, conv_name, dense_depth=2, output_size=32)
+                self.conv = m.ConvLayers(84, 84, 3, conv_name, dense_depth=2, output_size=32)
         nn_conv.ModelRep = ModelRep
 
         obs_shapes = [(10,), (84, 84, 3)]

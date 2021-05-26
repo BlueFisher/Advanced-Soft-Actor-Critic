@@ -1,15 +1,13 @@
 import logging
 import math
-from typing import List, Tuple
 import time
-from pathlib import Path
 from itertools import chain
+from pathlib import Path
+from typing import List, Tuple
 
 import numpy as np
 import torch
-from torch import nn
-from torch import optim
-from torch import distributions
+from torch import autograd, distributions, nn, optim
 from torch.utils.tensorboard import SummaryWriter
 
 import algorithm.constants as C
@@ -261,11 +259,11 @@ class SAC_Base(object):
                                                              self.model_observation.parameters()))
 
         """ ALPHA """
-        self.log_alpha_d = torch.tensor(init_log_alpha, dtype=torch.float32, requires_grad=True, device=DEVICE)
-        self.log_alpha_c = torch.tensor(init_log_alpha, dtype=torch.float32, requires_grad=True, device=DEVICE)
+        self.log_d_alpha = torch.tensor(init_log_alpha, dtype=torch.float32, requires_grad=True, device=DEVICE)
+        self.log_c_alpha = torch.tensor(init_log_alpha, dtype=torch.float32, requires_grad=True, device=DEVICE)
 
         if self.use_auto_alpha:
-            self.optimizer_alpha = adam_optimizer([self.log_alpha_d, self.log_alpha_c])
+            self.optimizer_alpha = adam_optimizer([self.log_d_alpha, self.log_c_alpha])
 
         """ CURIOSITY """
         if self.use_curiosity:
@@ -327,8 +325,8 @@ class SAC_Base(object):
             ckpt_dict['optimizer_prediction'] = self.optimizer_prediction
 
         """ ALPHA """
-        ckpt_dict['log_alpha_d'] = self.log_alpha_d
-        ckpt_dict['log_alpha_c'] = self.log_alpha_c
+        ckpt_dict['log_d_alpha'] = self.log_d_alpha
+        ckpt_dict['log_c_alpha'] = self.log_c_alpha
         if self.use_auto_alpha:
             ckpt_dict['optimizer_alpha'] = self.optimizer_alpha
 
@@ -491,7 +489,7 @@ class SAC_Base(object):
         """
         gamma = torch.tensor(self.gamma, device=DEVICE)
         n_step = torch.tensor(self.n_step, device=DEVICE)
-        gamma_ratio = torch.tensor([[torch.pow(gamma, i) for i in range(self.n_step)]], device=DEVICE)
+        gamma_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.gamma, device=DEVICE)
 
         stacked_next_q = stacked_next_q[..., -1, :]  # [ensemble_q_sample, Batch, d_action_size]
         stacked_next_target_q = stacked_next_target_q[..., -1, :]  # [ensemble_q_sample, Batch, d_action_size]
@@ -527,10 +525,8 @@ class SAC_Base(object):
         v: [Batch, n]
         next_v: [Batch, n],
         """
-        gamma = torch.tensor(self.gamma, device=DEVICE)
-        v_lambda = torch.tensor(self.v_lambda, device=DEVICE)
-        gamma_ratio = torch.tensor([[torch.pow(gamma, i) for i in range(self.n_step)]], device=DEVICE)
-        lambda_ratio = torch.tensor([[torch.pow(v_lambda, i) for i in range(self.n_step)]], device=DEVICE)
+        gamma_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.gamma, device=DEVICE)
+        lambda_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.v_lambda, device=DEVICE)
 
         td_error = n_rewards + self.gamma * (1 - n_dones) * next_v - v  # [Batch, n]
         td_error = gamma_ratio * td_error
@@ -538,7 +534,7 @@ class SAC_Base(object):
         if self.use_n_step_is:
             td_error = lambda_ratio * td_error
 
-            n_step_is = n_pi_probs / torch.maximum(n_mu_probs, torch.tensor(1e-8, device=DEVICE))
+            n_step_is = n_pi_probs / n_mu_probs.clamp(min=1e-8)
 
             # ρ_t, t \in [s, s+n-1]
             rho = torch.minimum(n_step_is, torch.tensor(self.v_rho, device=DEVICE))  # [Batch, n]
@@ -562,8 +558,8 @@ class SAC_Base(object):
     @torch.no_grad()
     def _get_y(self, n_states, n_actions, n_rewards, state_, n_dones,
                n_mu_probs=None):
-        alpha_d = torch.exp(self.log_alpha_d)
-        alpha_c = torch.exp(self.log_alpha_c)
+        d_alpha = torch.exp(self.log_d_alpha)
+        c_alpha = torch.exp(self.log_c_alpha)
 
         next_n_states = torch.cat([n_states[:, 1:, ...], state_.view((-1, 1, state_.shape[-1]))], dim=1)
 
@@ -616,10 +612,10 @@ class SAC_Base(object):
 
                 probs = d_policy.probs  # [Batch, n, action_size]
                 next_probs = next_d_policy.probs  # [Batch, n, action_size]
-                clipped_probs = torch.maximum(probs, torch.tensor(1e-8, device=DEVICE))
-                clipped_next_probs = torch.maximum(next_probs, torch.tensor(1e-8, device=DEVICE))
-                tmp_v = min_q - alpha_d * torch.log(clipped_probs)  # [Batch, n, action_size]
-                tmp_next_v = min_next_q - alpha_d * torch.log(clipped_next_probs)  # [Batch, n, action_size]
+                clipped_probs = probs.clamp(min=1e-8)
+                clipped_next_probs = next_probs.clamp(min=1e-8)
+                tmp_v = min_q - d_alpha * torch.log(clipped_probs)  # [Batch, n, action_size]
+                tmp_next_v = min_next_q - d_alpha * torch.log(clipped_next_probs)  # [Batch, n, action_size]
 
                 v = torch.sum(probs * tmp_v, dim=-1)  # [Batch, n]
                 next_v = torch.sum(next_probs * tmp_next_v, dim=-1)  # [Batch, n]
@@ -647,8 +643,8 @@ class SAC_Base(object):
             min_next_q, _ = stacked_next_c_q.min(dim=0)
             min_next_q = min_next_q.squeeze(dim=-1)  # [Batch, n]
 
-            v = min_q - alpha_c * n_actions_log_prob  # [Batch, n]
-            next_v = min_next_q - alpha_c * next_n_actions_log_prob  # [Batch, n]
+            v = min_q - c_alpha * n_actions_log_prob  # [Batch, n]
+            next_v = min_next_q - c_alpha * next_n_actions_log_prob  # [Batch, n]
 
             # v = scale_inverse_h(v)
             # next_v = scale_inverse_h(next_v)
@@ -666,14 +662,18 @@ class SAC_Base(object):
 
         return d_y, c_y  # [None, 1]
 
-    def _train(self, n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
-               n_mu_probs=None, priority_is=None,
-               initial_rnn_state=None):
-        if self.global_step % self.update_target_per_step == 0:
-            self._update_target_variables(tau=self.tau)
+    def _train_rep_q(self, n_obses_list: List[torch.Tensor],
+                     n_actions: torch.Tensor,
+                     n_rewards: torch.Tensor,
+                     next_obs_list: List[torch.Tensor],
+                     n_dones: torch.Tensor,
+                     n_mu_probs: torch.Tensor = None,
+                     priority_is: torch.Tensor = None,
+                     initial_rnn_state: torch.Tensor = None):
 
         m_obses_list = [torch.cat([n_obses, next_obs.view(-1, 1, *next_obs.shape[1:])], dim=1)
                         for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
+
         if self.use_rnn:
             m_states, _ = self.model_rep(m_obses_list,
                                          gen_pre_n_actions(n_actions, keep_last_action=True),
@@ -687,6 +687,8 @@ class SAC_Base(object):
 
         n_states = m_states[:, :-1, ...]
         state = m_states[:, self.burn_in_step, ...]
+
+        batch = state.shape[0]
 
         action = n_actions[:, self.burn_in_step, ...]
         d_action = action[..., :self.d_action_size]
@@ -705,12 +707,8 @@ class SAC_Base(object):
                                n_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
         #  [Batch, 1], [Batch, 1]
 
-        batch = state.shape[0]
-
-        """ Q LOSS """
-        loss_none_mse = nn.MSELoss(reduction='none')
-
         loss_q_list = [torch.zeros((batch, 1), device=DEVICE) for _ in range(self.ensemble_q_num)]
+        loss_none_mse = nn.MSELoss(reduction='none')
 
         if self.d_action_size:
             for i in range(self.ensemble_q_num):
@@ -741,66 +739,112 @@ class SAC_Base(object):
 
         loss_q_list = [torch.mean(loss) for loss in loss_q_list]
 
-        loss_mse = torch.nn.MSELoss()
+        if self.optimizer_rep:
+            self.optimizer_rep.zero_grad()
 
-        """ PREDICTION LOSS """
+        for i in range(self.ensemble_q_num):
+            self.optimizer_q_list[i].zero_grad()
+            loss_q_list[i].backward(retain_graph=True)
+            self.optimizer_q_list[i].step()
+
+        """ Recurrent Prediction Model """
 
         if self.use_prediction:
+            loss_mse = torch.nn.MSELoss()
+
+            n_obses_list = [m_obs[:, :-1, ...] for m_obs in m_obses_list]
+
             approx_next_state_dist: torch.distributions.Normal = self.model_transition(
                 [n_obses[:, self.burn_in_step:, ...] for n_obses in n_obses_list],  # May for extra observations
                 n_states[:, self.burn_in_step:, ...],
                 n_actions[:, self.burn_in_step:, ...]
-            )
-            gaussian_nll_loss = nn.GaussianNLLLoss()
-            loss_transition = gaussian_nll_loss(approx_next_state_dist.loc.contiguous(),
-                                                m_target_states[:, self.burn_in_step + 1:, ...],
-                                                approx_next_state_dist.scale)
+            )  # [Batch, n_step, action_size]
+
+            loss_transition = -torch.mean(approx_next_state_dist.log_prob(m_target_states[:, self.burn_in_step + 1:, ...]))
 
             std_normal = distributions.Normal(torch.zeros_like(approx_next_state_dist.loc),
                                               torch.ones_like(approx_next_state_dist.scale))
             kl = distributions.kl.kl_divergence(approx_next_state_dist, std_normal)
             loss_transition += self.transition_kl * torch.mean(kl)
 
-            approx_n_rewards = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])
+            approx_n_rewards = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])  # [Batch, n_step, 1]
             loss_reward = loss_mse(approx_n_rewards, torch.unsqueeze(n_rewards[:, self.burn_in_step:], 2))
+            loss_reward /= self.n_step
 
             loss_obs = self.model_observation.get_loss(m_states[:, self.burn_in_step:, ...],
                                                        [m_obses[:, self.burn_in_step:, ...] for m_obses in m_obses_list])
+            loss_obs /= self.n_step
 
+            """ Adaptive Weights for Representation Model """
+            grads_rep = [m.grad for m in self.model_rep.parameters()]
+            grads_rep_preds = [autograd.grad(loss_transition, self.model_rep.parameters(), retain_graph=True),
+                               autograd.grad(loss_reward, self.model_rep.parameters(), retain_graph=True),
+                               autograd.grad(loss_obs, self.model_rep.parameters(), retain_graph=True)]
+
+            # for i in range(len(grads_rep)):
+            #     grad_rep = grads_rep[i]
+            #     grad_rep_norm = torch.norm(grad_rep)
+            #     for grads_rep_pred in grads_rep_preds:
+            #         grad_rep_pred = grads_rep_pred[i]
+            #         cos = torch.sum(grad_rep * grad_rep_pred) / (grad_rep_norm * torch.norm(grad_rep_pred))
+            #         grads_rep[i] += cos.clamp(min=0) * grad_rep_pred
+
+            _grads_rep_main = torch.cat([g.reshape(-1) for g in grads_rep], dim=0)
+            _grads_rep_preds = [torch.cat([g.reshape(-1) for g in grads_rep_pred], dim=0)
+                                for grads_rep_pred in grads_rep_preds]
+
+            coses = [torch.sum(_grads_rep_main * grads_rep_pred) / (torch.norm(_grads_rep_main) * torch.norm(grads_rep_pred))
+                     for grads_rep_pred in _grads_rep_preds]
+            coses = [torch.sign(cos).clamp(min=0) for cos in coses]
+
+            for grads_rep_pred, cos in zip(grads_rep_preds, coses):
+                for param_rep, grad_rep_pred in zip(self.model_rep.parameters(), grads_rep_pred):
+                    param_rep.grad += cos * grad_rep_pred
+
+        if self.optimizer_rep:
+            self.optimizer_rep.step()
+
+        if self.use_prediction:
             loss_prediction = loss_transition + loss_reward + loss_obs
+            self.optimizer_prediction.zero_grad()
+            loss_prediction.backward(inputs=list(chain(self.model_transition.parameters(),
+                                                       self.model_reward.parameters(),
+                                                       self.model_observation.parameters())))
+            self.optimizer_prediction.step()
 
-        """ ALPHA LOSS & POLICY LOSS """
+        if self.use_prediction:
+            return loss_q_list[0], torch.mean(approx_next_state_dist.entropy()), loss_reward, loss_obs
+        else:
+            return loss_q_list[0], None
 
-        m_states = m_states.detach()
-        n_states = n_states.detach()
-        state = state.detach()
-        # Only Q loss affect the gradients of representation
+    def _train_policy(self, state: torch.Tensor, action: torch.Tensor):
+        batch = state.shape[0]
 
         d_policy, c_policy = self.model_policy(state)
 
         loss_d_policy = torch.zeros((batch, 1), device=DEVICE)
         loss_c_policy = torch.zeros((batch, 1), device=DEVICE)
 
-        loss_d_alpha = torch.zeros((batch, 1), device=DEVICE)
-        loss_c_alpha = torch.zeros((batch, 1), device=DEVICE)
-
-        alpha_d = torch.exp(self.log_alpha_d)
-        alpha_c = torch.exp(self.log_alpha_c)
+        d_alpha = torch.exp(self.log_d_alpha)
+        c_alpha = torch.exp(self.log_c_alpha)
 
         if self.d_action_size and not self.discrete_dqn_like:
             probs = d_policy.probs   # [Batch, action_size]
             clipped_probs = torch.maximum(probs, torch.tensor(1e-8, device=DEVICE))
+
+            c_action = action[..., self.d_action_size:]
+
+            q_list = [q(state, c_action) for q in self.model_q_list]
+            # ([Batch, action_size], [Batch, 1])
+            d_q_list = [q[0] for q in q_list]  # [Batch, action_size]
 
             stacked_d_q = torch.stack(d_q_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
             # [ensemble_q_num, Batch, d_action_size] -> [ensemble_q_sample, Batch, d_action_size]
             min_d_q, _ = torch.min(stacked_d_q, dim=0)
             # [ensemble_q_sample, Batch, d_action_size] -> [Batch, d_action_size]
 
-            _loss_policy = alpha_d * torch.log(clipped_probs) - min_d_q  # [Batch, d_action_size]
+            _loss_policy = d_alpha.detach() * torch.log(clipped_probs) - min_d_q.detach()  # [Batch, d_action_size]
             loss_d_policy = torch.sum(probs * _loss_policy, dim=1, keepdim=True)  # [Batch, 1]
-
-            _loss_alpha = -alpha_d * (torch.log(clipped_probs) - self.d_action_size)  # [Batch, action_size]
-            loss_d_alpha = torch.sum(probs * _loss_alpha, dim=1, keepdim=True)  # [Batch, 1]
 
         if self.c_action_size:
             action_sampled = c_policy.rsample()
@@ -816,115 +860,141 @@ class SAC_Base(object):
             min_c_q_for_gradient, _ = torch.min(stacked_c_q_for_gradient, dim=0)
             # [ensemble_q_sample, Batch, 1] -> [Batch, 1]
 
-            loss_c_policy = alpha_c * log_prob - min_c_q_for_gradient
+            loss_c_policy = c_alpha.detach() * log_prob - min_c_q_for_gradient
             # [Batch, 1]
 
-            loss_c_alpha = -alpha_c * (log_prob - self.c_action_size)  # [Batch, 1]
-
         loss_policy = torch.mean(loss_d_policy + loss_c_policy)
-        loss_alpha = torch.mean(loss_d_alpha + loss_c_alpha)
-
-        """ CURIOSITY & RND LOSS """
-
-        if self.use_curiosity:
-            approx_next_n_states = self.model_forward(n_states[:, self.burn_in_step:, ...],
-                                                      n_actions[:, self.burn_in_step:, ...])
-            next_n_states = m_states[:, self.burn_in_step + 1:, ...]
-            loss_forward = loss_mse(approx_next_n_states, next_n_states)
-
-        if self.use_rnd:
-            approx_f = self.model_rnd(n_states[:, self.burn_in_step:, ...],
-                                      n_actions[:, self.burn_in_step:, ...])
-            f = self.model_target_rnd(n_states[:, self.burn_in_step:, ...],
-                                      n_actions[:, self.burn_in_step:, ...])
-            loss_rnd = loss_mse(f, approx_f)
-
-        """ GRADIENT DESCENT """
-
-        loss = loss_policy + loss_alpha
-        for i in range(self.ensemble_q_num):
-            loss += loss_q_list[i]
-        if self.use_prediction:
-            loss += loss_prediction
-
-        if self.optimizer_rep:
-            self.optimizer_rep.zero_grad()
-        for i in range(self.ensemble_q_num):
-            self.optimizer_q_list[i].zero_grad()
-        self.optimizer_policy.zero_grad()
-        if self.use_prediction:
-            self.optimizer_prediction.zero_grad()
-        self.optimizer_alpha.zero_grad()
-        if self.use_curiosity:
-            self.optimizer_forward.zero_grad()
-        if self.use_rnd:
-            self.optimizer_rnd.zero_grad()
-
-        loss.backward(retain_graph=True)
-
-        if self.optimizer_rep:
-            if self.use_prediction:
-                grads_rep = [m.grad for m in self.model_rep.parameters()]
-                grads_rep_preds = [torch.autograd.grad(loss_transition, self.model_rep.parameters(), retain_graph=True),
-                                   torch.autograd.grad(loss_reward, self.model_rep.parameters(), retain_graph=True),
-                                   torch.autograd.grad(loss_obs, self.model_rep.parameters(), retain_graph=True)]
-
-                # for i in range(len(grads_rep)):
-                #     grad_rep = grads_rep[i]
-                #     grad_rep_norm = torch.norm(grad_rep)
-                #     for grads_rep_pred in grads_rep_preds:
-                #         grad_rep_pred = grads_rep_pred[i]
-                #         cos = torch.sum(grad_rep * grad_rep_pred) / (grad_rep_norm * torch.norm(grad_rep_pred))
-                #         grads_rep[i] += torch.maximum(cos, 0) * grad_rep_pred
-
-                _grads_rep_main = torch.cat([g.reshape(-1) for g in grads_rep], dim=0)
-                _grads_rep_preds = [torch.cat([g.reshape(-1) for g in grads_rep_pred], dim=0)
-                                    for grads_rep_pred in grads_rep_preds]
-
-                coses = [torch.sum(_grads_rep_main * grads_rep_pred) / (torch.norm(_grads_rep_main) * torch.norm(grads_rep_pred))
-                         for grads_rep_pred in _grads_rep_preds]
-                coses = [torch.maximum(torch.zeros(1, device=DEVICE), torch.sign(cos)) for cos in coses]
-
-                for grads_rep_pred, cos in zip(grads_rep_preds, coses):
-                    for param_rep, grad_rep_pred in zip(self.model_rep.parameters(), grads_rep_pred):
-                        param_rep.grad += cos * grad_rep_pred
-
-            self.optimizer_rep.step()
-
-        for i in range(self.ensemble_q_num):
-            self.optimizer_q_list[i].step()
 
         if (self.d_action_size and not self.discrete_dqn_like) or self.c_action_size:
+            self.optimizer_policy.zero_grad()
+            loss_policy.backward(inputs=list(self.model_policy.parameters()))
             self.optimizer_policy.step()
 
-        if self.use_prediction:
-            self.optimizer_prediction.step()
+        return (torch.mean(d_policy.entropy()) if self.d_action_size else None,
+                torch.mean(c_policy.entropy()) if self.c_action_size else None)
+
+    def _train_alpha(self, state: torch.Tensor):
+        batch = state.shape[0]
+
+        d_policy, c_policy = self.model_policy(state)
+
+        d_alpha = torch.exp(self.log_d_alpha)
+        c_alpha = torch.exp(self.log_c_alpha)
+
+        loss_d_alpha = torch.zeros((batch, 1), device=DEVICE)
+        loss_c_alpha = torch.zeros((batch, 1), device=DEVICE)
+
+        if self.d_action_size and not self.discrete_dqn_like:
+            probs = d_policy.probs   # [Batch, action_size]
+            clipped_probs = probs.clamp(min=1e-8)
+
+            _loss_alpha = -d_alpha * (torch.log(clipped_probs) - self.d_action_size)  # [Batch, action_size]
+            loss_d_alpha = torch.sum(probs * _loss_alpha, dim=1, keepdim=True)  # [Batch, 1]
+
+        if self.c_action_size:
+            action_sampled = c_policy.rsample()
+            log_prob = torch.sum(squash_correction_log_prob(c_policy, action_sampled), dim=1, keepdim=True)
+            # [Batch, 1]
+
+            loss_c_alpha = -c_alpha * (log_prob - self.c_action_size)  # [Batch, 1]
+
+        loss_alpha = torch.mean(loss_d_alpha + loss_c_alpha)
+
+        self.optimizer_alpha.zero_grad()
+        loss_alpha.backward(inputs=[self.log_d_alpha, self.log_c_alpha])
+        self.optimizer_alpha.step()
+
+        return d_alpha, c_alpha
+
+    def _train_curiosity(self, m_states: torch.Tensor, n_actions: torch.Tensor):
+        loss_mse = torch.nn.MSELoss()
+
+        n_states = m_states[:, :-1, ...]
+        approx_next_n_states = self.model_forward(n_states[:, self.burn_in_step:, ...],
+                                                  n_actions[:, self.burn_in_step:, ...])
+        next_n_states = m_states[:, self.burn_in_step + 1:, ...]
+        loss_forward = loss_mse(approx_next_n_states, next_n_states)
+
+        self.optimizer_forward.zero_grad()
+        loss_forward.backward(inputs=list(self.model_forward.parameters()))
+        self.optimizer_forward.step()
+
+        return loss_forward
+
+    def _train_rnd(self, n_states: torch.Tensor, n_actions: torch.Tensor):
+        loss_mse = torch.nn.MSELoss()
+
+        approx_f = self.model_rnd(n_states[:, self.burn_in_step:, ...],
+                                  n_actions[:, self.burn_in_step:, ...])
+        f = self.model_target_rnd(n_states[:, self.burn_in_step:, ...],
+                                  n_actions[:, self.burn_in_step:, ...])
+        loss_rnd = loss_mse(f, approx_f)
+
+        self.optimizer_rnd.zero_grad()
+        loss_rnd.backward(inputs=list(self.model_rnd.parameters()))
+        self.optimizer_rnd.step()
+
+        return loss_rnd
+
+    def _train(self, n_obses_list: List[torch.Tensor],
+               n_actions: torch.Tensor,
+               n_rewards: torch.Tensor,
+               next_obs_list: List[torch.Tensor],
+               n_dones: torch.Tensor,
+               n_mu_probs: torch.Tensor = None,
+               priority_is: torch.Tensor = None,
+               initial_rnn_state: torch.Tensor = None):
+        if self.global_step % self.update_target_per_step == 0:
+            self._update_target_variables(tau=self.tau)
+
+        loss_q, *loss_predictions = self._train_rep_q(n_obses_list,
+                                                      n_actions,
+                                                      n_rewards,
+                                                      next_obs_list,
+                                                      n_dones,
+                                                      n_mu_probs, priority_is,
+                                                      initial_rnn_state)
+
+        with torch.no_grad():
+            m_obses_list = [torch.cat([n_obses, next_obs.view(-1, 1, *next_obs.shape[1:])], dim=1)
+                            for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
+
+            if self.use_rnn:
+                m_states, _ = self.model_rep(m_obses_list,
+                                             gen_pre_n_actions(n_actions, keep_last_action=True),
+                                             initial_rnn_state) 
+            else:
+                m_states = self.model_rep(m_obses_list)
+
+        state = m_states[:, self.burn_in_step, ...]
+        action = n_actions[:, self.burn_in_step, ...]
+
+        d_policy_entropy, c_policy_entropy = self._train_policy(state, action)
+
         if self.use_auto_alpha and ((self.d_action_size and not self.discrete_dqn_like) or self.c_action_size):
-            self.optimizer_alpha.step()
+            d_alpha, c_alpha = self._train_alpha(state)
+
         if self.use_curiosity:
-            self.optimizer_forward.step()
+            loss_forward = self._train_curiosity(m_states, n_actions)
+
         if self.use_rnd:
-            self.optimizer_rnd.step()
+            n_states = m_states[:, :-1, ...]
+            loss_rnd = self._train_rnd(n_states, n_actions)
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             with torch.no_grad():
-                self.summary_writer.add_scalar('loss/q', loss_q_list[0], self.global_step)
+                self.summary_writer.add_scalar('loss/q', loss_q, self.global_step)
                 if self.d_action_size:
-                    self.summary_writer.add_scalar('loss/d_entropy', torch.mean(d_policy.entropy()), self.global_step)
-                    self.summary_writer.add_scalar('loss/alpha_d', alpha_d, self.global_step)
+                    self.summary_writer.add_scalar('loss/d_entropy', d_policy_entropy, self.global_step)
+                    self.summary_writer.add_scalar('loss/d_alpha', d_alpha, self.global_step)
                 if self.c_action_size:
-                    self.summary_writer.add_scalar('loss/c_entropy', torch.mean(c_policy.entropy()), self.global_step)
-                    self.summary_writer.add_scalar('loss/alpha_c', alpha_c, self.global_step)
-
-                if self.use_curiosity:
-                    self.summary_writer.add_scalar('loss/forward', loss_forward, self.global_step)
-
-                if self.use_rnd:
-                    self.summary_writer.add_scalar('loss/rnd', loss_rnd, self.global_step)
+                    self.summary_writer.add_scalar('loss/c_entropy', c_policy_entropy, self.global_step)
+                    self.summary_writer.add_scalar('loss/c_alpha', c_alpha, self.global_step)
 
                 if self.use_prediction:
+                    approx_next_state_dist_entropy, loss_reward, loss_obs = loss_predictions
                     self.summary_writer.add_scalar('loss/transition',
-                                                   torch.mean(approx_next_state_dist.entropy()),
+                                                   approx_next_state_dist_entropy,
                                                    self.global_step)
                     self.summary_writer.add_scalar('loss/reward', loss_reward, self.global_step)
                     self.summary_writer.add_scalar('loss/observation', loss_obs, self.global_step)
@@ -937,6 +1007,12 @@ class SAC_Base(object):
                             self.summary_writer.add_images('observation',
                                                            approx_obs.view(-1, *approx_obs.shape[2:]),
                                                            self.global_step)
+
+                if self.use_curiosity:
+                    self.summary_writer.add_scalar('loss/forward', loss_forward, self.global_step)
+
+                if self.use_rnd:
+                    self.summary_writer.add_scalar('loss/rnd', loss_rnd, self.global_step)
 
             self.summary_writer.flush()
 

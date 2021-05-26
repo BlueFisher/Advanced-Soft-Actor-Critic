@@ -66,7 +66,7 @@ class UnityWrapper:
             continuous action size: int
         """
         behavior_spec = self._env.behavior_specs[self.bahavior_name]
-        logger.info(f'Observation shapes: {behavior_spec.observation_shapes}')
+        logger.info(f'Observation shapes: {[o.shape for o in behavior_spec.observation_specs]}')
 
         self._empty_action = behavior_spec.action_spec.empty_action
 
@@ -88,12 +88,12 @@ class UnityWrapper:
         self.d_action_size = discrete_action_size
         self.c_action_size = continuous_action_size
 
-        for o in behavior_spec.observation_shapes:
-            if len(o) >= 3:
+        for o in behavior_spec.observation_specs:
+            if len(o.shape) >= 3:
                 self.engine_configuration_channel.set_configuration_parameters(quality_level=5)
                 break
 
-        return behavior_spec.observation_shapes, discrete_action_size, continuous_action_size
+        return [o.shape for o in behavior_spec.observation_specs], discrete_action_size, continuous_action_size
 
     def reset(self, reset_config=None):
         """

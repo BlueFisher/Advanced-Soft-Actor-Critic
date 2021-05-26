@@ -155,7 +155,6 @@ class Main(object):
         iteration = 0
         trained_steps = 0
 
-        ts = []
         while iteration != self.config['max_iter']:
             if self.config['max_step'] != -1 and trained_steps >= self.config['max_step']:
                 break
@@ -216,13 +215,7 @@ class Main(object):
                         # n_rnn_states
                         for episode_trans in episode_trans_list:
                             self.sac.fill_replay_buffer(*episode_trans)
-                    t = time.time()
                     trained_steps = self.sac.train()
-                    if trained_steps > 10:
-                        ts.append(time.time() - t)
-                        if trained_steps == 60:
-                            print(sum(ts) / len(ts))
-                            input()
 
                 obs_list = next_obs_list
                 action[local_done] = np.zeros(self.action_size)
