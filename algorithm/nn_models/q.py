@@ -26,7 +26,24 @@ class ModelQ(ModelBaseQ):
                      c_state_n=64, c_state_depth=0,
                      c_action_n=64, c_action_depth=0,
                      c_dense_n=64, c_dense_depth=3):
-
+        """
+                         state
+                           │
+                        ┌──▼──┐
+              ┌─────────┤dense├────┐
+              │         └─────┘    │
+              │                    │
+              │             ┌──────▼──────┐ ┌──────────────┐
+              │             │c_state_dense│ │c_action_dense│
+              │             └──────┬──────┘ └───────┬──────┘
+              │                    │                │
+          ┌───▼───┐         ┌──────▼────────────────▼──────┐
+          │d_dense│         │           c_dense            │
+          └───┬───┘         └──────────────┬───────────────┘
+              │                            │
+              ▼                            ▼
+        d_action_size                      1
+        """
         self.dense = LinearLayers(self.state_size, dense_n, dense_depth)
 
         if self.d_action_size:

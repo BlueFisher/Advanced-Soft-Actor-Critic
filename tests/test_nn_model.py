@@ -1,23 +1,25 @@
-import unittest
 import sys
+import unittest
 
 sys.path.append('..')
 
 from algorithm.sac_base import SAC_Base
+
 from .get_synthesis_data import *
 
 
 class TestNNModel(unittest.TestCase):
     def _test_model(self, param_dict, is_q_model):
+        import algorithm.nn_models as m
         from . import nn_vanilla
 
         if is_q_model:
-            class ModelQ(nn_vanilla.ModelQ):
+            class ModelQ(m.ModelQ):
                 def _build_model(self):
                     super()._build_model(**param_dict)
             nn_vanilla.ModelQ = ModelQ
         else:
-            class ModelPolicy(nn_vanilla.ModelPolicy):
+            class ModelPolicy(m.ModelPolicy):
                 def _build_model(self):
                     super()._build_model(**param_dict)
             nn_vanilla.ModelPolicy = ModelPolicy

@@ -1,9 +1,10 @@
-import unittest
 import sys
+import unittest
 
 sys.path.append('..')
 
 from algorithm.sac_base import SAC_Base
+
 from .get_synthesis_data import *
 
 

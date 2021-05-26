@@ -1,28 +1,29 @@
-import unittest
 import sys
+import unittest
 
 sys.path.append('..')
 
 from algorithm.sac_base import SAC_Base
+
 from .get_synthesis_data import *
 
 
 class TestVanilla(unittest.TestCase):
-    def _test_vanilla(self, i, param_dict):
+    def _test_vanilla(self, param_dict):
         from . import nn_vanilla
 
         obs_shapes = [(10,)]
 
         sac = SAC_Base(
             obs_shapes=obs_shapes,
-            model_abs_dir=f'tests/model/test_vanilla_{i}',
+            model_abs_dir=None,
             model=nn_vanilla,
             device='cpu',
             **param_dict
         )
 
         step = 0
-        while step < 10:
+        while step < 3:
             sac.choose_action(gen_batch_obs(obs_shapes))
             sac.fill_replay_buffer(*gen_episode_trans(obs_shapes,
                                                       param_dict['d_action_size'],
@@ -30,9 +31,9 @@ class TestVanilla(unittest.TestCase):
             step = sac.train()
 
     @staticmethod
-    def gen_test_vanilla(i, param_dict):
+    def gen_test_vanilla(param_dict):
         def func(self):
-            self._test_vanilla(i, param_dict)
+            self._test_vanilla(param_dict)
         return func
 
 
@@ -57,7 +58,7 @@ def __gen():
         for k, v in param_dict.items():
             func_name += f', {k}={v}'
         setattr(TestVanilla, func_name,
-                TestVanilla.gen_test_vanilla(i, param_dict))
+                TestVanilla.gen_test_vanilla(param_dict))
 
 
 __gen()
