@@ -3,7 +3,7 @@ import math
 import time
 from itertools import chain
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import numpy as np
 import torch
@@ -23,15 +23,15 @@ class SAC_Base(object):
     _last_save_time = 0
 
     def __init__(self,
-                 obs_shapes,
-                 d_action_size,
-                 c_action_size,
-                 model_abs_dir,
+                 obs_shapes: Tuple,
+                 d_action_size: int,
+                 c_action_size: int,
+                 model_abs_dir: Union[str, None],
                  model,
-                 device=None,
-                 summary_path='log',
-                 train_mode=True,
-                 last_ckpt=None,
+                 device: Union[str, None] = None,
+                 summary_path: str = 'log',
+                 train_mode: bool = True,
+                 last_ckpt: Union[str, None] = None,
 
                  seed=None,
                  write_summary_per_step=1e3,
@@ -183,7 +183,12 @@ class SAC_Base(object):
         """ NORMALIZATION & REPRESENTATION """
 
         if self.use_normalization:
-            self._create_normalizer()
+            self.normalizer_step = torch.tensor(0, dtype=torch.int32, device=DEVICE, requires_grad=False)
+            self.running_means = []
+            self.running_variances = []
+            for shape in self.obs_shapes:
+                self.running_means.append(torch.zeros(shape, device=DEVICE))
+                self.running_variances.append(torch.ones(shape, device=DEVICE))
 
             p_self = self
 
@@ -277,14 +282,6 @@ class SAC_Base(object):
             for param in self.model_target_rnd.parameters():
                 param.requires_grad = False
             self.optimizer_rnd = adam_optimizer(self.model_rnd.parameters())
-
-    def _create_normalizer(self):
-        self.normalizer_step = torch.tensor(0, dtype=torch.int32, device=DEVICE, requires_grad=False)
-        self.running_means = []
-        self.running_variances = []
-        for shape in self.obs_shapes:
-            self.running_means.append(torch.zeros(shape, device=DEVICE))
-            self.running_variances.append(torch.ones(shape, device=DEVICE))
 
     def _init_or_restore(self, model_abs_dir, last_ckpt: int):
         """
@@ -962,7 +959,7 @@ class SAC_Base(object):
             if self.use_rnn:
                 m_states, _ = self.model_rep(m_obses_list,
                                              gen_pre_n_actions(n_actions, keep_last_action=True),
-                                             initial_rnn_state) 
+                                             initial_rnn_state)
             else:
                 m_states = self.model_rep(m_obses_list)
 
@@ -999,13 +996,13 @@ class SAC_Base(object):
                     self.summary_writer.add_scalar('loss/reward', loss_reward, self.global_step)
                     self.summary_writer.add_scalar('loss/observation', loss_obs, self.global_step)
 
-                    approx_obs_list = self.model_observation(m_states[0:1, self.burn_in_step:, ...])
+                    approx_obs_list = self.model_observation(m_states[0:1, 0, ...])
                     if not isinstance(approx_obs_list, (list, tuple)):
                         approx_obs_list = [approx_obs_list]
                     for approx_obs in approx_obs_list:
                         if len(approx_obs.shape) > 3:
                             self.summary_writer.add_images('observation',
-                                                           approx_obs.view(-1, *approx_obs.shape[2:]),
+                                                           approx_obs.permute([0, 3, 1, 2]),
                                                            self.global_step)
 
                 if self.use_curiosity:

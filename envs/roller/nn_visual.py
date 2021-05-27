@@ -1,42 +1,34 @@
-import tensorflow as tf
-import tensorflow_probability as tfp
+import torch
+from torch import nn
 
 import algorithm.nn_models as m
 
 
 class ModelRep(m.ModelBaseSimpleRep):
-    def __init__(self, obs_shapes):
-        super().__init__(obs_shapes)
+    def _bulid_model(self):
+        assert self.obs_shapes == ((30, 30, 3), (2,)), self.obs_shapes
 
-        self.conv = tf.keras.Sequential([
-            tf.keras.layers.Conv2D(filters=16, kernel_size=8, strides=4, activation=tf.nn.relu),
-            tf.keras.layers.Conv2D(filters=32, kernel_size=4, strides=2, activation=tf.nn.relu),
-            tf.keras.layers.Flatten(),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu)
-        ])
+        self.conv = m.ConvLayers(30, 30, 3, 'simple',
+                                 out_dense_n=64, out_dense_depth=2)
 
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-        ])
+        self.dense = m.LinearLayers(self.conv.output_size + 2,
+                                    dense_n=64, dense_depth=1)
 
-    def call(self, obs_list):
+    def forward(self, obs_list):
         vis_obs, vec_obs = obs_list
 
-        vis_obs = m.through_conv(vis_obs, self.conv)
+        vis_obs = self.conv(vis_obs)
 
-        state = self.dense(tf.concat([vis_obs, vec_obs], -1))
+        state = self.dense(torch.cat([vis_obs, vec_obs], dim=-1))
 
         return state
 
 
 class ModelQ(m.ModelQ):
-    def __init__(self, state_size, d_action_size, c_action_size):
-        super().__init__(state_size, d_action_size, c_action_size,
-                         dense_n=128, dense_depth=2)
+    def _build_model(self):
+        return super()._build_model(c_dense_n=128, c_dense_depth=2)
 
 
 class ModelPolicy(m.ModelPolicy):
-    def __init__(self, state_size, d_action_size, c_action_size):
-        super().__init__(state_size, d_action_size, c_action_size,
-                         dense_n=128, dense_depth=2)
+    def _build_model(self):
+        return super()._build_model(c_dense_n=128, c_dense_depth=2)

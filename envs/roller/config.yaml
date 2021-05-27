@@ -3,7 +3,7 @@ default:
     scene: Roller
 
     build_path:
-      win32: C:\Users\Fisher\Nextcloud\Documents\Unity\win-RL-Envs\UnityEnvironment.exe
+      win32: C:\Users\fisher\Nextcloud\Documents\Unity\win-RL-Envs\RLEnvironments.exe
       linux: /data/linux-RL-Envs/RL-Envs.x86_64
 
     n_agents: 10
