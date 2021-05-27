@@ -3,7 +3,7 @@ default:
     scene: 3DBall
     
     build_path:
-      win32: C:\Users\Fisher\Nextcloud\Documents\Unity\win-RL-Envs\UnityEnvironment.exe
+      win32: C:\Users\fisher\Nextcloud\Documents\Unity\win-RL-Envs\RLEnvironments.exe
       linux: /data/linux-RL-Envs/RL-Envs.x86_64
 
     max_iter: 200

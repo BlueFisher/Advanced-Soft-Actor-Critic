@@ -113,7 +113,7 @@ class GymWrapper:
                                             daemon=True)
                 p.start()
 
-        return [(self._state_dim, )], d_action_size, c_action_size
+        return ((self._state_dim, )), d_action_size, c_action_size
 
     def reset(self, reset_config=None):
         if self._seq_envs:

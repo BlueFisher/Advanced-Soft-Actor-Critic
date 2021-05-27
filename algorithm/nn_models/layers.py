@@ -6,6 +6,22 @@ from torch import nn
 
 class LinearLayers(nn.Module):
     def __init__(self, input_size, dense_n=64, dense_depth=0, output_size=None):
+        """
+                 ┌────────┐
+             ┌───► dense_n│
+             │   └───┬────┘
+        dense_depth  │
+             │   ┌───▼────┐
+             └───┤  relu  ├─────┐
+                 └───┬────┘     │
+                     │          │
+               ┌─────▼──────┐   │
+               │output_size │   │
+               └─────┬──────┘   │
+                     │          │
+                     ▼          ▼
+
+        """
         super().__init__()
 
         self.output_size = input_size
@@ -29,7 +45,7 @@ def conv_output_shape(
     kernel_size: Union[int, Tuple[int, int]] = 1,
     stride: int = 1,
     padding: int = 0,
-    dilation: int = 1,
+    dilation: int = 1
 ) -> Tuple[int, int]:
     """
     Calculates the output shape (height and width) of the output of a convolution layer.
@@ -65,6 +81,27 @@ def pool_out_shape(h_w: Tuple[int, int], kernel_size: int) -> Tuple[int, int]:
     height = (h_w[0] - kernel_size) // 2 + 1
     width = (h_w[1] - kernel_size) // 2 + 1
     return height, width
+
+
+def convtranspose_output_shape(
+    h_w: Tuple[int, int],
+    kernel_size: Union[int, Tuple[int, int]] = 1,
+    stride: int = 1,
+    padding: int = 0,
+    output_padding: int = 0,
+    dilation: int = 1
+):
+    """
+    https://pytorch.org/docs/stable/generated/torch.nn.ConvTranspose2d.html#torch.nn.ConvTranspose2d
+    """
+
+    if not isinstance(kernel_size, tuple):
+        kernel_size = (int(kernel_size), int(kernel_size))
+
+    h = (h_w[0] - 1) * stride - 2 * padding + dilation * (kernel_size[0] - 1) + output_padding + 1
+    w = (h_w[1] - 1) * stride - 2 * padding + dilation * (kernel_size[1] - 1) + output_padding + 1
+
+    return h, w
 
 
 def small_visual(height, width, channels):
@@ -107,31 +144,29 @@ def nature_visual(height, width, channels):
 
 
 class ConvLayers(nn.Module):
-    def __init__(self, height, width, channels,
-                 conv,
-                 dense_n=64,
-                 dense_depth=0,
-                 output_size=None):
+    def __init__(self, in_height: int, in_width: int, in_channels: int,
+                 conv: Union[str, Tuple],
+                 out_dense_n: int=64, out_dense_depth: int=0, output_size: int=None):
         super().__init__()
 
         if isinstance(conv, str):
             if conv == 'small':
-                self.conv_layers, (h, w), out_c = small_visual(height, width, channels)
+                self.conv_layers, (h, w), out_c = small_visual(in_height, in_width, in_channels)
             elif conv == 'simple':
-                self.conv_layers, (h, w), out_c = simple_visual(height, width, channels)
+                self.conv_layers, (h, w), out_c = simple_visual(in_height, in_width, in_channels)
             elif conv == 'nature':
-                self.conv_layers, (h, w), out_c = nature_visual(height, width, channels)
+                self.conv_layers, (h, w), out_c = nature_visual(in_height, in_width, in_channels)
         elif isinstance(conv, tuple):
             self.conv_layers, (h, w), out_c = conv
         else:
             raise RuntimeError('Argument conv should a Tuple[nn.Module, Tuple[int, int], int]')
 
-        self.final_flat = h * w * out_c
+        self.conv_output_size = h * w * out_c
 
         self.dense = LinearLayers(
-            self.final_flat,
-            dense_n,
-            dense_depth,
+            self.conv_output_size,
+            out_dense_n,
+            out_dense_depth,
             output_size
         )
         self.output_size = self.dense.output_size
@@ -140,17 +175,49 @@ class ConvLayers(nn.Module):
         if len(x.shape) == 4:
             x = x.permute([0, 3, 1, 2])
             hidden = self.conv_layers(x)
-            hidden = hidden.reshape(-1, self.final_flat)
+            hidden = hidden.reshape(-1, self.conv_output_size)
             return self.dense(hidden)
-        elif len(x.shape) == 5:
+        elif len(x.shape) >= 5:
             batch = x.shape[:-3]
             x = x.reshape(-1, *x.shape[-3:])
             x = x.permute([0, 3, 1, 2])
             hidden = self.conv_layers(x)
-            hidden = hidden.reshape(*batch, self.final_flat)
+            hidden = hidden.reshape(*batch, self.conv_output_size)
             return self.dense(hidden)
         else:
-            raise Exception('The dimension of input should be larger than 4')
+            raise Exception('The dimension of input should be greater than or equal to 4')
+
+
+class ConvTransposeLayers(nn.Module):
+    def __init__(self, input_size: int, in_dense_n: int, in_dense_depth: int,
+                 height: int, width: int, channels: int,
+                 conv_transpose: nn.Module):
+        super().__init__()
+
+        self._height = height
+        self._width = width
+        self._channels = channels
+
+        self.dense = LinearLayers(input_size, in_dense_n, in_dense_depth,
+                                  height * width * channels)
+
+        self.conv_transpose = conv_transpose
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.dense(x)
+
+        if len(x.shape) == 2:
+            x = x.reshape(-1, self._channels, self._height, self._width)
+            vis = self.conv_transpose(x)
+            return vis.permute([0, 2, 3, 1])
+        elif len(x.shape) >= 3:
+            batch = x.shape[:-1]
+            x = x.reshape(-1, self._channels, self._height, self._width)
+            vis = self.conv_transpose(x)
+            vis = vis.permute([0, 2, 3, 1])
+            return vis.reshape(*batch, *vis.shape[1:])
+        else:
+            raise Exception('The dimension of input should be greater than or equal to 2')
 
 
 class GRU(nn.GRU):
