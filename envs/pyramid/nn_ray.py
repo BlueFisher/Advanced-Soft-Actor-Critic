@@ -8,7 +8,8 @@ EXTRA_SIZE = 2
 
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):
-        assert self.obs_shapes == ((44,), (6,))
+        assert self.obs_shapes[0] == (44,)
+        assert self.obs_shapes[1] == (6,)
 
         self.rnn = m.GRU(self.obs_shapes[0][0] + self.c_action_size, 8, 1)
 
@@ -28,7 +29,7 @@ class ModelTransition(m.ModelTransition):
         return super()._build_model(dense_n=128, dense_depth=3)
 
     def extra_obs(self, obs_list):
-        return obs_list[1][..., -2:]
+        return obs_list[1][..., -EXTRA_SIZE:]
 
 
 class ModelReward(m.ModelReward):

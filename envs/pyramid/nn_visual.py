@@ -8,7 +8,8 @@ EXTRA_SIZE = 2
 
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):
-        assert self.obs_shapes == ((30, 30, 3), (6,))
+        assert self.obs_shapes[0] == (30, 30, 3)
+        assert self.obs_shapes[1] == (6,)
 
         self.conv = m.ConvLayers(30, 30, 3, 'simple',
                                  out_dense_n=64, out_dense_depth=2)

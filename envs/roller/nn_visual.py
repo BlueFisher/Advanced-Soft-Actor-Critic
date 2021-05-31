@@ -5,7 +5,8 @@ import algorithm.nn_models as m
 
 class ModelRep(m.ModelBaseSimpleRep):
     def _bulid_model(self):
-        assert self.obs_shapes == ((30, 30, 3), (2,)), self.obs_shapes
+        assert self.obs_shapes[0] == (30, 30, 3)
+        assert self.obs_shapes[1] == (2,)
 
         self.conv = m.ConvLayers(30, 30, 3, 'simple',
                                  out_dense_n=64, out_dense_depth=2)
