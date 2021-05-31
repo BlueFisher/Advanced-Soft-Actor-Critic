@@ -72,7 +72,7 @@ class Agent(object):
         obs_list = [t['obs_list'] for t in self._tmp_episode_trans]
         obs_list = [np.stack(t, axis=0) for t in zip(*obs_list)]
         obs_list = [np.expand_dims(t, 0).astype(np.float32) for t in obs_list]
-        # list([1, ep_len, obs_dim_i], ...)
+        # list([1, ep_len, obs_shape_i], ...)
 
         action = np.stack([t['action'] for t in self._tmp_episode_trans], axis=0)
         action = np.expand_dims(action, 0).astype(np.float32)  # [1, ep_len, action_size]
@@ -82,7 +82,7 @@ class Agent(object):
 
         next_obs_list = [np.expand_dims(t, 0).astype(np.float32)
                          for t in self._tmp_episode_trans[-1]['next_obs_list']]
-        # list([1, obs_dim_i], ...)
+        # list([1, obs_shape_i], ...)
 
         done = np.stack([t['local_done'] and not t['max_reached'] for t in self._tmp_episode_trans],
                         axis=0)

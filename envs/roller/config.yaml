@@ -29,16 +29,6 @@ default:
     v_lambda: 0.99
     clip_epsilon: 1.
 
-hard_nornn:
-  base_config:
-    name: "hard_nornn_{time}"
-    nn: nn_hard_nornn
-    max_iter: 500
-  sac_config:
-    n_step: 5
-
-    tau: 0.005
-
 hard:
   base_config: &hard_base
     name: "hard_nopre_{time}"
@@ -73,7 +63,7 @@ visual:
     scene: VisualRoller
 
     no_graphics: false
-    
+
     name: "{time}"
     nn: nn_visual
   replay_config:

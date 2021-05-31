@@ -13,7 +13,7 @@ class ModelBaseSimpleRep(nn.Module):
         pass
 
     def get_output_shape(self, device):
-        output = self([torch.empty(1, *obs_dim, device=device) for obs_dim in self.obs_shapes])
+        output = self([torch.empty(1, *obs_shape, device=device) for obs_shape in self.obs_shapes])
 
         return output.shape[-1]
 
@@ -39,7 +39,7 @@ class ModelBaseRNNRep(nn.Module):
         pass
 
     def get_output_shape(self, device):
-        obs_list = [torch.empty(1, 1, *obs_dim, device=device) for obs_dim in self.obs_shapes]
+        obs_list = [torch.empty(1, 1, *obs_shape, device=device) for obs_shape in self.obs_shapes]
         pre_action = torch.empty(1, 1, self.d_action_size + self.c_action_size, device=device)
         output, next_rnn_state = self(obs_list, pre_action)
 

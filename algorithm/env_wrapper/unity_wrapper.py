@@ -1,6 +1,6 @@
 import itertools
 import logging
-from typing import Tuple
+from typing import List, Tuple
 
 import numpy as np
 from mlagents_envs.environment import ActionTuple, UnityEnvironment
@@ -59,7 +59,7 @@ class UnityWrapper:
         self._env.reset()
         self.bahavior_name = list(self._env.behavior_specs)[0]
 
-    def init(self) -> Tuple[Tuple[Tuple[int, ...], ...], int, int]:
+    def init(self):
         """
         return:
             observation shapes: tuple[(o1, ), (o2, ), (o3_1, o3_2, o3_3), ...]
@@ -67,7 +67,7 @@ class UnityWrapper:
             continuous action size: int
         """
         behavior_spec = self._env.behavior_specs[self.bahavior_name]
-        obs_shapes = tuple(o.shape for o in behavior_spec.observation_specs)
+        obs_shapes = [o.shape for o in behavior_spec.observation_specs]
         logger.info(f'Observation shapes: {obs_shapes}')
 
         self._empty_action = behavior_spec.action_spec.empty_action

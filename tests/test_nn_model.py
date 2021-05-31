@@ -11,6 +11,7 @@ from .get_synthesis_data import *
 class TestNNModel(unittest.TestCase):
     def _test_model(self, param_dict, is_q_model):
         import algorithm.nn_models as m
+
         from . import nn_vanilla
 
         if is_q_model:

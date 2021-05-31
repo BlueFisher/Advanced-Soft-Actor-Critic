@@ -1,111 +1,73 @@
-import numpy as np
-import tensorflow as tf
-import tensorflow_probability as tfp
+import torch
+from torch import nn
 
 import algorithm.nn_models as m
 
 
-class ModelForward(m.ModelForward):
-    def __init__(self, state_size, action_size):
-        super().__init__(state_size, action_size,
-                         dense_n=256, dense_depth=3)
+EXTRA_SIZE = 3
 
 
-class ModelTransition(m.ModelBaseTransition):
-    def __init__(self, state_size, d_action_size, c_action_size, use_extra_data):
-        super().__init__(state_size, d_action_size, c_action_size, use_extra_data)
+class ModelRep(m.ModelBaseRNNRep):
+    def _build_model(self):
 
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(256, activation=tf.nn.relu),
-            tf.keras.layers.Dense(256, activation=tf.nn.relu),
-            tf.keras.layers.Dense(256, activation=tf.nn.relu),
-            tf.keras.layers.Dense(state_size + state_size)
-        ])
+        self.rnn = m.GRU(self.obs_shapes[0][0] - EXTRA_SIZE + self.c_action_size, 64, 1)
 
-        self.next_state_tfpd = tfp.layers.DistributionLambda(
-            make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
+        self.dense = nn.Sequential(
+            nn.Linear(self.obs_shapes[0][0] - EXTRA_SIZE + 64, 32),
+            nn.Tanh()
+        )
 
-    def call(self, state, action):
-        next_state = self.dense(tf.concat([state, action], -1))
-        mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
-        next_state_dist = self.next_state_tfpd([mean, tf.maximum(tf.exp(logstd), 1.0)])
+    def forward(self, obs_list, pre_action, rnn_state=None):
+        obs = obs_list[0]
+        obs = torch.cat([obs[..., :3], obs[..., 6:]], dim=-1)
 
-        return next_state_dist
+        output, hn = self.rnn(torch.cat([obs, pre_action], dim=-1), rnn_state)
+
+        state = self.dense(torch.cat([obs, output], dim=-1))
+
+        return state, hn
 
 
-class ModelReward(m.ModelBaseReward):
-    def __init__(self, state_size, use_extra_data):
-        super().__init__(state_size, use_extra_data)
+class ModelTransition(m.ModelTransition):
+    def _build_model(self):
+        super()._build_model(dense_n=256, dense_depth=3, extra_size=3)
 
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(256, activation=tf.nn.relu),
-            tf.keras.layers.Dense(256, activation=tf.nn.relu),
-            tf.keras.layers.Dense(256, activation=tf.nn.relu),
-            tf.keras.layers.Dense(1)
-        ])
+    def extra_obs(self, obs_list):
+        return obs_list[0][..., 3:6]
 
-    def call(self, state):
-        reward = self.dense(state)
 
-        return reward
+class ModelReward(m.ModelReward):
+    def _build_model(self):
+        super()._build_model(dense_n=256, dense_depth=3)
 
 
 class ModelObservation(m.ModelBaseObservation):
-    def __init__(self, state_size, obs_shapes, use_extra_data):
-        super().__init__(state_size, obs_shapes, use_extra_data)
+    def _build_model(self):
+        self.dense = m.LinearLayers(self.state_size,
+                                    256, 3,
+                                    self.obs_shapes[0][0] if self.use_extra_data else self.obs_shapes[0][0] - EXTRA_SIZE)
 
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(256, activation=tf.nn.relu),
-            tf.keras.layers.Dense(256, activation=tf.nn.relu),
-            tf.keras.layers.Dense(256, activation=tf.nn.relu),
-            tf.keras.layers.Dense(obs_shapes[0][0] if use_extra_data else obs_shapes[0][0] - 3)
-        ])
-
-    def call(self, state):
+    def forward(self, state):
         obs = self.dense(state)
 
         return obs
 
     def get_loss(self, state, obs_list):
-        approx_obs = self(state)
-
         obs = obs_list[0]
         if not self.use_extra_data:
-            obs = tf.concat([obs[..., :3], obs[..., 6:]], axis=-1)
+            obs = torch.cat([obs[..., :3], obs[..., 6:]], dim=-1)
 
-        return tf.reduce_mean(tf.square(approx_obs - obs))
-
-
-class ModelRep(m.ModelBaseLSTMRep):
-    def __init__(self, obs_shapes, d_action_size, c_action_size):
-        super().__init__(obs_shapes, d_action_size, c_action_size, rnn_units=8)
-
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(32, activation=tf.nn.tanh)
-        ])
-
-    def call(self, obs_list, pre_action, rnn_state):
-        obs = obs_list[0]
-        obs = tf.concat([obs[..., :3], obs[..., 6:]], axis=-1)
-
-        rnn_state = tf.split(rnn_state, num_or_size_splits=2, axis=-1)
-        outputs, *next_lstm_rnn_state = self.lstm(tf.concat([obs, pre_action], axis=-1),
-                                                  initial_state=rnn_state)
-
-        state = self.dense(tf.concat([obs, outputs], axis=-1))
-
-        return state, tf.concat(next_lstm_rnn_state, axis=-1)  # tf.concat(next_rnn_state, axis=-1)
+        mse = nn.MSELoss()
+        return mse(self(state), obs)
 
 
 class ModelQ(m.ModelQ):
-    def __init__(self, state_size, d_action_size, c_action_size):
-        super().__init__(state_size, d_action_size, c_action_size,
-                         c_dense_n=256, c_dense_depth=3)
+    def _build_model(self):
+        super()._build_model(c_dense_n=256, c_dense_depth=3)
 
 
 class ModelPolicy(m.ModelPolicy):
-    def __init__(self, state_size, d_action_size, c_action_size):
-        super().__init__(state_size, d_action_size, c_action_size,
-                         c_dense_n=256, c_dense_depth=3,
-                         mean_n=256, mean_depth=1,
-                         logstd_n=256, logstd_depth=1)
+    def _build_model(self):
+        super()._build_model(c_dense_n=256, c_dense_depth=3,
+                             mean_n=256, mean_depth=1,
+                             logstd_n=256, logstd_depth=1)

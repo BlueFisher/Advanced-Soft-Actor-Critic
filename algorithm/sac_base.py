@@ -8,6 +8,7 @@ from typing import List, Tuple, Union
 import numpy as np
 import torch
 from torch import autograd, distributions, nn, optim
+from torch.nn import functional
 from torch.utils.tensorboard import SummaryWriter
 
 import algorithm.constants as C
@@ -112,7 +113,6 @@ class SAC_Base(object):
         rnd_n_sample: RND sample times
         use_normalization: If use observation normalization
         """
-
         self.obs_shapes = obs_shapes
         self.d_action_size = d_action_size
         self.c_action_size = c_action_size
@@ -179,9 +179,13 @@ class SAC_Base(object):
         """
         self.global_step = torch.tensor(0, dtype=torch.int64, requires_grad=False, device='cpu')
 
-        def adam_optimizer(params): return optim.Adam(params, lr=learning_rate)
-        """ NORMALIZATION & REPRESENTATION """
+        self._gamma_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.gamma, device=DEVICE)
+        self._lambda_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.v_lambda, device=DEVICE)
 
+        def adam_optimizer(params):
+            return optim.Adam(params, lr=learning_rate)
+
+        """ NORMALIZATION & REPRESENTATION """
         if self.use_normalization:
             self.normalizer_step = torch.tensor(0, dtype=torch.int32, device=DEVICE, requires_grad=False)
             self.running_means = []
@@ -484,17 +488,14 @@ class SAC_Base(object):
         stacked_next_q: [ensemble_q_sample, Batch, n, d_action_size]
         stacked_next_target_q: [ensemble_q_sample, Batch, n, d_action_size]
         """
-        gamma = torch.tensor(self.gamma, device=DEVICE)
-        n_step = torch.tensor(self.n_step, device=DEVICE)
-        gamma_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.gamma, device=DEVICE)
 
         stacked_next_q = stacked_next_q[..., -1, :]  # [ensemble_q_sample, Batch, d_action_size]
         stacked_next_target_q = stacked_next_target_q[..., -1, :]  # [ensemble_q_sample, Batch, d_action_size]
 
         done = n_dones[:, -1:]  # [Batch, 1]
 
-        mask_stacked_q = nn.functional.one_hot(torch.argmax(stacked_next_q, dim=-1),
-                                               self.d_action_size)
+        mask_stacked_q = functional.one_hot(torch.argmax(stacked_next_q, dim=-1),
+                                            self.d_action_size)
         # [ensemble_q_sample, Batch, d_action_size]
 
         stacked_max_next_target_q = torch.sum(stacked_next_target_q * mask_stacked_q,
@@ -505,8 +506,8 @@ class SAC_Base(object):
         next_q, _ = torch.min(stacked_max_next_target_q, dim=0)
         # [Batch, 1]
 
-        g = torch.sum(gamma_ratio * n_rewards, dim=-1, keepdim=True)  # [Batch, 1]
-        y = g + torch.pow(gamma, n_step) * next_q * (1 - done)  # [Batch, 1]
+        g = torch.sum(self._gamma_ratio * n_rewards, dim=-1, keepdim=True)  # [Batch, 1]
+        y = g + self.gamma**self.n_step * next_q * (1 - done)  # [Batch, 1]
 
         return y
 
@@ -522,14 +523,11 @@ class SAC_Base(object):
         v: [Batch, n]
         next_v: [Batch, n],
         """
-        gamma_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.gamma, device=DEVICE)
-        lambda_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.v_lambda, device=DEVICE)
-
         td_error = n_rewards + self.gamma * (1 - n_dones) * next_v - v  # [Batch, n]
-        td_error = gamma_ratio * td_error
+        td_error = self._gamma_ratio * td_error
 
         if self.use_n_step_is:
-            td_error = lambda_ratio * td_error
+            td_error = self._lambda_ratio * td_error
 
             n_step_is = n_pi_probs / n_mu_probs.clamp(min=1e-8)
 
@@ -573,8 +571,8 @@ class SAC_Base(object):
             n_c_actions_sampled = c_policy.rsample()  # [Batch, n, action_size]
             next_n_c_actions_sampled = next_c_policy.rsample()
         else:
-            n_c_actions_sampled = torch.zeros((0,))
-            next_n_c_actions_sampled = torch.zeros((0,))
+            n_c_actions_sampled = torch.empty(0, device=DEVICE)
+            next_n_c_actions_sampled = torch.empty(0, device=DEVICE)
 
         # ([Batch, n, action_size], [Batch, n, 1])
         q_list = [q(n_states, torch.tanh(n_c_actions_sampled)) for q in self.model_target_q_list]
@@ -773,30 +771,31 @@ class SAC_Base(object):
             loss_obs /= self.n_step
 
             """ Adaptive Weights for Representation Model """
-            grads_rep = [m.grad for m in self.model_rep.parameters()]
-            grads_rep_preds = [autograd.grad(loss_transition, self.model_rep.parameters(), retain_graph=True),
-                               autograd.grad(loss_reward, self.model_rep.parameters(), retain_graph=True),
-                               autograd.grad(loss_obs, self.model_rep.parameters(), retain_graph=True)]
+            with torch.no_grad():
+                grads_rep = [m.grad for m in self.model_rep.parameters()]
+                grads_rep_preds = [autograd.grad(loss_transition, self.model_rep.parameters(), retain_graph=True),
+                                   autograd.grad(loss_reward, self.model_rep.parameters(), retain_graph=True),
+                                   autograd.grad(loss_obs, self.model_rep.parameters(), retain_graph=True)]
 
-            # for i in range(len(grads_rep)):
-            #     grad_rep = grads_rep[i]
-            #     grad_rep_norm = torch.norm(grad_rep)
-            #     for grads_rep_pred in grads_rep_preds:
-            #         grad_rep_pred = grads_rep_pred[i]
-            #         cos = torch.sum(grad_rep * grad_rep_pred) / (grad_rep_norm * torch.norm(grad_rep_pred))
-            #         grads_rep[i] += cos.clamp(min=0) * grad_rep_pred
+                # for i in range(len(grads_rep)):
+                #     grad_rep = grads_rep[i]
+                #     grad_rep_norm = torch.norm(grad_rep)
+                #     for grads_rep_pred in grads_rep_preds:
+                #         grad_rep_pred = grads_rep_pred[i]
+                #         cos = torch.sum(grad_rep * grad_rep_pred) / (grad_rep_norm * torch.norm(grad_rep_pred))
+                #         grads_rep[i] += cos.clamp(min=0) * grad_rep_pred
 
-            _grads_rep_main = torch.cat([g.reshape(-1) for g in grads_rep], dim=0)
-            _grads_rep_preds = [torch.cat([g.reshape(-1) for g in grads_rep_pred], dim=0)
-                                for grads_rep_pred in grads_rep_preds]
+                _grads_rep_main = torch.cat([g.reshape(1, -1) for g in grads_rep], dim=1)
+                _grads_rep_preds = [torch.cat([g.reshape(1, -1) for g in grads_rep_pred], dim=1)
+                                    for grads_rep_pred in grads_rep_preds]
 
-            coses = [torch.sum(_grads_rep_main * grads_rep_pred) / (torch.norm(_grads_rep_main) * torch.norm(grads_rep_pred))
-                     for grads_rep_pred in _grads_rep_preds]
-            coses = [torch.sign(cos).clamp(min=0) for cos in coses]
+                coses = [functional.cosine_similarity(_grads_rep_main, grads_rep_pred)
+                         for grads_rep_pred in _grads_rep_preds]
+                coses = [torch.sign(cos).clamp(min=0) for cos in coses]
 
-            for grads_rep_pred, cos in zip(grads_rep_preds, coses):
-                for param_rep, grad_rep_pred in zip(self.model_rep.parameters(), grads_rep_pred):
-                    param_rep.grad += cos * grad_rep_pred
+                for grads_rep_pred, cos in zip(grads_rep_preds, coses):
+                    for param_rep, grad_rep_pred in zip(self.model_rep.parameters(), grads_rep_pred):
+                        param_rep.grad += cos * grad_rep_pred
 
         if self.optimizer_rep:
             self.optimizer_rep.step()
@@ -1019,9 +1018,9 @@ class SAC_Base(object):
         n_sample = self.rnd_n_sample
 
         d_action = d_policy.sample((n_sample,)) if self.d_action_size \
-            else torch.zeros((n_sample, batch, self.d_action_size), device=DEVICE)
+            else torch.empty(0, device=DEVICE)
         c_action = torch.tanh(c_policy.sample((n_sample,))) if self.c_action_size \
-            else torch.zeros((n_sample, batch, self.c_action_size), device=DEVICE)
+            else torch.empty(0, device=DEVICE)
 
         actions = torch.cat([d_action, c_action], dim=-1)  # [n_sample, batch, action_size]
 
@@ -1052,13 +1051,13 @@ class SAC_Base(object):
                     else:
                         d_q, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None)
                         d_action = torch.argmax(d_q, axis=-1)
-                        d_action = nn.functional.one_hot(d_action, self.d_action_size)
+                        d_action = functional.one_hot(d_action, self.d_action_size)
                 else:
                     d_action = d_policy.sample()
             else:
-                d_action = torch.zeros((batch, 0), device=DEVICE)
+                d_action = torch.empty(0, device=DEVICE)
 
-            c_action = torch.tanh(c_policy.sample()) if self.c_action_size else torch.zeros((batch, 0), device=DEVICE)
+            c_action = torch.tanh(c_policy.sample()) if self.c_action_size else torch.empty(0, device=DEVICE)
 
             return torch.cat([d_action, c_action], dim=-1)
 

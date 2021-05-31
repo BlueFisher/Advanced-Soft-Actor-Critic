@@ -1,5 +1,4 @@
 import torch
-from torch import nn
 
 import algorithm.nn_models as m
 

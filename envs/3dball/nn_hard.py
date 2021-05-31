@@ -1,90 +1,65 @@
-import tensorflow as tf
-import tensorflow_probability as tfp
+import torch
+from torch import nn
 
 import algorithm.nn_models as m
 
-
-class ModelTransition(m.ModelBaseTransition):
-    def __init__(self, state_size, d_action_size, c_action_size, use_extra_data):
-        super().__init__(state_size, d_action_size, c_action_size, use_extra_data)
-
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(state_size + state_size)
-        ])
-
-        self.next_state_tfpd = tfp.layers.DistributionLambda(
-            make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
-
-    def call(self, state, action):
-        next_state = self.dense(tf.concat([state, action], -1))
-        mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
-        next_state_dist = self.next_state_tfpd([mean, tf.clip_by_value(tf.exp(logstd), 0.1, 1.0)])
-
-        return next_state_dist
+EXTRA_SIZE = 3
 
 
-class ModelReward(m.ModelBaseReward):
-    def __init__(self, state_size, use_extra_data):
-        super().__init__(state_size, use_extra_data)
+class ModelRep(m.ModelBaseRNNRep):
+    def _build_model(self):
+        assert self.obs_shapes[0] == (6, )
 
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, tf.nn.relu),
-            tf.keras.layers.Dense(1)
-        ])
+        self.rnn = m.GRU(self.obs_shapes[0][0] - EXTRA_SIZE + self.c_action_size, 64, 1)
 
-    def call(self, state):
-        reward = self.dense(state)
+        self.dense = nn.Sequential(
+            nn.Linear(self.obs_shapes[0][0] - EXTRA_SIZE + 64, 64),
+            nn.Tanh()
+        )
 
-        return reward
+    def forward(self, obs_list, pre_action, rnn_state=None):
+        obs = obs_list[0][..., :-EXTRA_SIZE]
+
+        output, hn = self.rnn(torch.cat([obs, pre_action], dim=-1), rnn_state)
+
+        state = self.dense(torch.cat([obs, output], dim=-1))
+
+        return state, hn
+
+
+class ModelTransition(m.ModelTransition):
+    def _build_model(self):
+        return super()._build_model(dense_depth=2, extra_size=EXTRA_SIZE)
+
+    def extra_obs(self, obs_list):
+        return obs_list[0][..., -EXTRA_SIZE:]
+
+
+class ModelReward(m.ModelReward):
+    def _build_model(self):
+        return super()._build_model(dense_depth=1)
 
 
 class ModelObservation(m.ModelBaseObservation):
-    def __init__(self, state_size, obs_shapes, use_extra_data):
-        super().__init__(state_size, obs_shapes, use_extra_data)
+    def _build_model(self):
+        self.dense = m.LinearLayers(self.state_size,
+                                    64, 1,
+                                    self.obs_shapes[0][0] if self.use_extra_data else self.obs_shapes[0][0] - EXTRA_SIZE)
 
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, tf.nn.relu),
-            tf.keras.layers.Dense(obs_shapes[0][0])
-        ])
-
-    def call(self, state):
-        obs = self.dense(state)
-
-        return obs
+    def forward(self, state):
+        return self.dense(state)
 
     def get_loss(self, state, obs_list):
-        approx_obs = self(state)
+        mse = nn.MSELoss()
 
-        return tf.reduce_mean(tf.square(approx_obs - obs_list[0]))
-
-
-class ModelRep(m.ModelBaseGRURep):
-    def __init__(self, obs_shapes, d_action_size, c_action_size):
-        super().__init__(obs_shapes, d_action_size, c_action_size, rnn_units=32)
-
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(32, activation=tf.nn.tanh)
-        ])
-
-    def call(self, obs_list, pre_action, rnn_state):
-        obs = obs_list[0][..., :-3]
-        obs = tf.concat([obs, pre_action], axis=-1)
-        outputs, next_rnn_state = self.gru(obs, initial_state=rnn_state)
-
-        state = self.dense(outputs)
-
-        return state, next_rnn_state
+        return mse(self(state), obs_list[0] if self.use_extra_data else obs_list[0][..., :-EXTRA_SIZE])
 
 
 class ModelQ(m.ModelQ):
-    def __init__(self, state_size, d_action_size, c_action_size):
-        super().__init__(state_size, d_action_size, c_action_size,
-                         dense_n=64, dense_depth=2)
+    def _build_model(self):
+        return super()._build_model(c_dense_n=64, c_dense_depth=2)
 
 
 class ModelPolicy(m.ModelPolicy):
-    def __init__(self, state_size, d_action_size, c_action_size):
-        super().__init__(state_size, d_action_size, c_action_size,
-                         dense_n=64, dense_depth=2)
+    def _build_model(self):
+        return super()._build_model(c_dense_n=64, c_dense_depth=2)
