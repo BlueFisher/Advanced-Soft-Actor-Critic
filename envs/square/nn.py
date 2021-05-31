@@ -1,101 +1,65 @@
-import numpy as np
-import tensorflow as tf
-import tensorflow_probability as tfp
+import torch
+from torch import nn
 
 import algorithm.nn_models as m
 
 
-class ModelTransition(m.ModelBaseTransition):
-    def __init__(self, state_size, d_action_size, c_action_size, use_extra_data):
-        super().__init__(state_size, d_action_size, c_action_size, use_extra_data)
+class ModelRep(m.ModelBaseRNNRep):
+    def _build_model(self):
+        assert self.obs_shapes == ((44,), (6,))
 
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.tanh),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(state_size + state_size)
-        ])
+        self.rnn = m.GRU(self.obs_shapes[0][0] + self.c_action_size, 8, 1)
 
-        self.next_state_tfpd = tfp.layers.DistributionLambda(
-            make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
+    def forward(self, obs_list, pre_action, rnn_state=None):
+        ray_obs, vec_obs = obs_list
 
-    def call(self, state, action):
-        next_state = self.dense(tf.concat([state, action], -1))
-        mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
-        next_state_dist = self.next_state_tfpd([mean, tf.clip_by_value(tf.exp(logstd), 0.1, 1.0)])
+        output, hn = self.rnn(torch.cat([ray_obs, pre_action], dim=-1), rnn_state)
 
-        return next_state_dist
+        state = torch.cat([vec_obs, output], dim=-1)
+
+        return state, hn
 
 
-class ModelReward(m.ModelBaseReward):
-    def __init__(self, state_size, use_extra_data):
-        super().__init__(state_size, use_extra_data)
+class ModelTransition(m.ModelTransition):
+    def _build_model(self):
+        return super()._build_model(dense_n=128, dense_depth=3)
 
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(1)
-        ])
 
-    def call(self, state):
-        reward = self.dense(state)
-
-        return reward
+class ModelReward(m.ModelReward):
+    def _build_model(self):
+        return super()._build_model(dense_n=128, dense_depth=2)
 
 
 class ModelObservation(m.ModelBaseObservation):
-    def __init__(self, state_size, obs_shapes, use_extra_data):
-        super().__init__(state_size, obs_shapes, use_extra_data)
+    def _build_model(self):
+        self.dense = m.LinearLayers(self.state_size,
+                                    dense_n=64, dense_depth=2,
+                                    output_size=self.obs_shapes[0][0] + self.obs_shapes[1][0])
 
-        assert obs_shapes[0] == (44, )
-        assert obs_shapes[1] == (6, )
-
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(32, activation=tf.nn.relu),
-            tf.keras.layers.Dense(50, activation=tf.nn.relu),
-            tf.keras.layers.Dense(48)  # 44 + 6 - 2
-        ])
-
-    def call(self, state):
+    def forward(self, state):
         obs = self.dense(state)
 
-        return obs[..., :44], obs[..., 44:]
+        return obs[..., :self.obs_shapes[0][0]], obs[..., self.obs_shapes[0][0]:]
 
     def get_loss(self, state, obs_list):
+        mse = nn.MSELoss()
+
         approx_ray_obs, approx_vec_obs = self(state)
 
         ray_obs, vec_obs = obs_list
-        vec_obs = vec_obs[..., :-2]
 
-        mse = tf.losses.MeanSquaredError()
-
-        return 0.5 * mse(approx_ray_obs, ray_obs) + 0.5 * mse(approx_vec_obs, vec_obs)
-
-
-class ModelRep(m.ModelBaseGRURep):
-    def __init__(self, obs_shapes, d_action_size, c_action_size):
-        super().__init__(obs_shapes, d_action_size, c_action_size,
-                         rnn_units=8)
-
-    def call(self, obs_list, pre_action, rnn_state):
-        obs = tf.concat([obs_list[1], pre_action], axis=-1)
-        outputs, next_rnn_state = self.gru(obs, initial_state=rnn_state)
-        state = tf.concat([obs_list[0], outputs], axis=-1)
-
-        return state, next_rnn_state
+        return mse(approx_ray_obs, ray_obs) + mse(approx_vec_obs, vec_obs)
 
 
 class ModelQ(m.ModelQ):
-    def __init__(self, state_size, d_action_size, c_action_size):
-        super().__init__(state_size, d_action_size, c_action_size,
-                         c_state_n=128, c_state_depth=1,
-                         c_action_n=128, c_action_depth=1,
-                         c_dense_n=128, c_dense_depth=3)
+    def _build_model(self):
+        return super()._build_model(c_state_n=128, c_state_depth=1,
+                                    c_action_n=128, c_action_depth=1,
+                                    c_dense_n=128, c_dense_depth=3)
 
 
 class ModelPolicy(m.ModelPolicy):
-    def __init__(self, state_size, d_action_size, c_action_size):
-        super().__init__(state_size, d_action_size, c_action_size,
-                         c_dense_n=128, c_dense_depth=2,
-                         mean_n=128, mean_depth=1,
-                         logstd_n=128, logstd_depth=1)
+    def _build_model(self):
+        return super()._build_model(c_dense_n=128, c_dense_depth=2,
+                                    mean_n=128, mean_depth=1,
+                                    logstd_n=128, logstd_depth=1)

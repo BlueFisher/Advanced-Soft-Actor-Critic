@@ -11,6 +11,7 @@ from .get_synthesis_data import *
 class TestConvModel(unittest.TestCase):
     def _test_conv(self, param_dict):
         import algorithm.nn_models as m
+
         from . import nn_conv
 
         conv_name = param_dict['conv']

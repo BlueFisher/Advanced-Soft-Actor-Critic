@@ -50,7 +50,7 @@ class ModelObservation(m.ModelBaseObservation):
         return self.dense(state)
 
     def get_loss(self, state, obs_list):
-        mse = torch.nn.MSELoss()
+        mse = nn.MSELoss()
 
         return mse(self(state), obs_list[0] if self.use_extra_data else obs_list[0][..., :-EXTRA_SIZE])
 

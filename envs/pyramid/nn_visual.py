@@ -1,147 +1,88 @@
-import numpy as np
-import tensorflow as tf
-import tensorflow_probability as tfp
+import torch
+from torch import nn
 
 import algorithm.nn_models as m
 
+EXTRA_SIZE = 2
 
-class ModelTransition(m.ModelBaseTransition):
-    def __init__(self, state_size, d_action_size, c_action_size, use_extra_data):
-        super().__init__(state_size, d_action_size, c_action_size, use_extra_data)
 
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(state_size + state_size)
-        ])
+class ModelRep(m.ModelBaseRNNRep):
+    def _build_model(self):
+        assert self.obs_shapes == ((30, 30, 3), (6,))
 
-        self.next_state_tfpd = tfp.layers.DistributionLambda(
-            make_distribution_fn=lambda t: tfp.distributions.Normal(t[0], t[1]))
+        self.conv = m.ConvLayers(30, 30, 3, 'simple',
+                                 out_dense_n=64, out_dense_depth=2)
 
-    def init(self):
-        if self.use_extra_data:
-            self(tf.keras.Input(shape=(self.state_size + 2,)),
-                 tf.keras.Input(shape=(self.action_size,)))
-        else:
-            super().init()
+        self.rnn = m.GRU(self.conv.output_size + self.c_action_size, 64, 1)
 
-    def call(self, state, action):
-        next_state = self.dense(tf.concat([state, action], -1))
-        mean, logstd = tf.split(next_state, num_or_size_splits=2, axis=-1)
-        next_state_dist = self.next_state_tfpd([mean, tf.clip_by_value(tf.exp(logstd), 0.1, 1.0)])
+        self.dense = m.LinearLayers(input_size=64 + self.obs_shapes[1][0] - EXTRA_SIZE,
+                                    dense_n=128, dense_depth=2, output_size=64)
 
-        return next_state_dist
+    def forward(self, obs_list, pre_action, rnn_state=None):
+        vis_obs, vec_obs = obs_list
+        vec_obs = vec_obs[..., :-EXTRA_SIZE]
+
+        vis_obs = self.conv(vis_obs)
+
+        output, hn = self.rnn(torch.cat([vis_obs, pre_action], dim=-1), rnn_state)
+
+        state = self.dense(torch.cat([vec_obs, output], dim=-1))
+
+        return state, hn
+
+
+class ModelTransition(m.ModelTransition):
+    def _build_model(self):
+        return super()._build_model(dense_n=128, dense_depth=2, extra_size=EXTRA_SIZE)
 
     def extra_obs(self, obs_list):
-        return obs_list[1][..., -2:]
+        return obs_list[1][..., :-EXTRA_SIZE]
 
 
-class ModelReward(m.ModelBaseReward):
-    def __init__(self, state_size, use_extra_data):
-        super().__init__(state_size, use_extra_data)
-
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(1)
-        ])
-
-    def call(self, state):
-        reward = self.dense(state)
-
-        return reward
+class ModelReward(m.ModelReward):
+    def _build_model(self):
+        return super()._build_model(dense_n=128, dense_depth=2)
 
 
 class ModelObservation(m.ModelBaseObservation):
-    def __init__(self, state_size, obs_shapes, use_extra_data):
-        assert obs_shapes[0] == (30, 30, 3)
-        assert obs_shapes[1] == (6, )  # Only first 4
+    def _build_model(self):
+        self.conv_transpose = m.ConvTransposeLayers(
+            self.state_size, 64, 1,
+            2, 2, 32,
+            conv_transpose=nn.Sequential(
+                nn.ConvTranspose2d(32, 32, 4, 2),
+                nn.LeakyReLU(),
+                nn.ConvTranspose2d(32, 16, 8, 4),
+                nn.LeakyReLU(),
+                nn.ConvTranspose2d(16, 3, 3, 1),
+                nn.LeakyReLU(),
+            ))
 
-        super().__init__(state_size, obs_shapes, use_extra_data)
+        self.vec_dense = m.LinearLayers(self.state_size, dense_depth=2,
+                                        output_size=self.obs_shapes[1][0] if self.use_extra_data else self.obs_shapes[1][0] - EXTRA_SIZE)
 
-        self.vis_seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu),
-            tf.keras.layers.Dense(2 * 2 * 32, activation=tf.nn.relu),
-            tf.keras.layers.Reshape(target_shape=(2, 2, 32)),
-            tf.keras.layers.Conv2DTranspose(filters=32, kernel_size=4, strides=2, activation=tf.nn.relu),
-            tf.keras.layers.Conv2DTranspose(filters=16, kernel_size=8, strides=4, activation=tf.nn.relu),
-            tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=3, strides=1, activation=tf.nn.relu),
-        ])
-
-        self.vec_seq = tf.keras.Sequential([
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(6 if self.use_extra_data else 4)
-        ])
-
-    def call(self, state):
-        batch = tf.shape(state)[0]
-        t_state = tf.reshape(state, [-1, state.shape[-1]])
-        vis_obs = self.vis_seq(t_state)
-        vis_obs = tf.reshape(vis_obs, [batch, -1, *vis_obs.shape[1:]])
-
-        vec_obs = self.vec_seq(state)
+    def forward(self, state):
+        vis_obs = self.conv_transpose(state)
+        vec_obs = self.vec_dense(state)
 
         return vis_obs, vec_obs
 
     def get_loss(self, state, obs_list):
-        vis_obs, vec_obs = obs_list
-        vec_obs = vec_obs if self.use_extra_data else vec_obs[..., :-2]
         approx_vis_obs, approx_vec_obs = self(state)
-
-        mse = tf.keras.losses.MeanSquaredError()
-
-        return 0.5 * mse(approx_vis_obs, vis_obs) + 0.5 * mse(approx_vec_obs, vec_obs)
-
-
-class ModelRep(m.ModelBaseGRURep):
-    def __init__(self, obs_shapes, d_action_size, c_action_size):
-        super().__init__(obs_shapes, d_action_size, c_action_size,
-                         rnn_units=64)
-
-        assert obs_shapes[0] == (30, 30, 3)
-        assert obs_shapes[1] == (6, )  # Only first 4
-        self.conv = tf.keras.Sequential([
-            tf.keras.layers.Conv2D(filters=16, kernel_size=8, strides=4, activation=tf.nn.relu),
-            tf.keras.layers.Conv2D(filters=32, kernel_size=4, strides=2, activation=tf.nn.relu),
-            tf.keras.layers.Flatten(),
-            tf.keras.layers.Dense(128, activation=tf.nn.relu),
-            tf.keras.layers.Dense(64, activation=tf.nn.relu)
-        ])
-
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(64, activation=tf.nn.relu)
-        ])
-
-    def call(self, obs_list, pre_action, rnn_state):
         vis_obs, vec_obs = obs_list
-        vec_obs = vec_obs[..., :-2]
+        if not self.use_extra_data:
+            vec_obs = vec_obs[..., :-EXTRA_SIZE]
 
-        obs = tf.concat([vec_obs, pre_action], axis=-1)
-        outputs, next_rnn_state = self.gru(obs, initial_state=rnn_state)
+        mse = nn.MSELoss()
 
-        batch = tf.shape(vis_obs)[0]
-        vis_obs = tf.reshape(vis_obs, [-1, *vis_obs.shape[2:]])
-        vis_obs = self.conv(vis_obs)
-        vis_obs = tf.reshape(vis_obs, [batch, -1, vis_obs.shape[-1]])
-
-        state = self.dense(tf.concat([vis_obs, outputs], axis=-1))
-
-        return state, next_rnn_state
+        return mse(approx_vis_obs, vis_obs) + mse(approx_vec_obs, vec_obs)
 
 
 class ModelQ(m.ModelQ):
-    def __init__(self, state_size, d_action_size, c_action_size):
-        super().__init__(state_size, d_action_size, c_action_size,
-                         c_state_n=128, c_state_depth=1,
-                         c_action_n=128, c_action_depth=1,
-                         c_dense_n=128, c_dense_depth=3)
+    def _build_model(self):
+        return super()._build_model(c_dense_n=128, c_dense_depth=2)
 
 
 class ModelPolicy(m.ModelPolicy):
-    def __init__(self, state_size, d_action_size, c_action_size):
-        super().__init__(state_size, d_action_size, c_action_size,
-                         c_dense_n=128, c_dense_depth=2,
-                         mean_n=128, mean_depth=1,
-                         logstd_n=128, logstd_depth=1)
+    def _build_model(self):
+        return super()._build_model(c_dense_n=128, c_dense_depth=2)

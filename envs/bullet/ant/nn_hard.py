@@ -4,14 +4,16 @@ from torch import nn
 import algorithm.nn_models as m
 
 
-class ModelRep(m.ModelBaseRNNRep):
-    def __init__(self, obs_shapes, d_action_size, c_action_size):
-        super().__init__(obs_shapes, d_action_size, c_action_size)
+EXTRA_SIZE = 3
 
-        self.rnn = m.GRU(obs_shapes[0][0] - 3 + d_action_size + c_action_size, 64, 1)
+
+class ModelRep(m.ModelBaseRNNRep):
+    def _build_model(self):
+
+        self.rnn = m.GRU(self.obs_shapes[0][0] - EXTRA_SIZE + self.c_action_size, 64, 1)
 
         self.dense = nn.Sequential(
-            nn.Linear(obs_shapes[0][0] - 3 + 64, 32),
+            nn.Linear(self.obs_shapes[0][0] - EXTRA_SIZE + 64, 32),
             nn.Tanh()
         )
 
@@ -24,18 +26,6 @@ class ModelRep(m.ModelBaseRNNRep):
         state = self.dense(torch.cat([obs, output], dim=-1))
 
         return state, hn
-
-
-class ModelQ(m.ModelQ):
-    def _build_model(self):
-        super()._build_model(c_dense_n=256, c_dense_depth=3)
-
-
-class ModelPolicy(m.ModelPolicy):
-    def _build_model(self):
-        super()._build_model(c_dense_n=256, c_dense_depth=3,
-                             mean_n=256, mean_depth=1,
-                             logstd_n=256, logstd_depth=1)
 
 
 class ModelTransition(m.ModelTransition):
@@ -53,10 +43,9 @@ class ModelReward(m.ModelReward):
 
 class ModelObservation(m.ModelBaseObservation):
     def _build_model(self):
-
         self.dense = m.LinearLayers(self.state_size,
                                     256, 3,
-                                    self.obs_shapes[0][0] if self.use_extra_data else self.obs_shapes[0][0] - 3)
+                                    self.obs_shapes[0][0] if self.use_extra_data else self.obs_shapes[0][0] - EXTRA_SIZE)
 
     def forward(self, state):
         obs = self.dense(state)
@@ -70,3 +59,15 @@ class ModelObservation(m.ModelBaseObservation):
 
         mse = nn.MSELoss()
         return mse(self(state), obs)
+
+
+class ModelQ(m.ModelQ):
+    def _build_model(self):
+        super()._build_model(c_dense_n=256, c_dense_depth=3)
+
+
+class ModelPolicy(m.ModelPolicy):
+    def _build_model(self):
+        super()._build_model(c_dense_n=256, c_dense_depth=3,
+                             mean_n=256, mean_depth=1,
+                             logstd_n=256, logstd_depth=1)

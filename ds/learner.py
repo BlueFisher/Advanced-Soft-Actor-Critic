@@ -325,10 +325,10 @@ class Learner:
                       n_mu_probs,
                       n_rnn_states=None):
         """
-        n_obses_list: list([1, episode_len, obs_dim_i], ...)
+        n_obses_list: list([1, episode_len, obs_shape_i], ...)
         n_actions: [1, episode_len, action_size]
         n_rewards: [1, episode_len]
-        next_obs_list: list([1, obs_dim_i], ...)
+        next_obs_list: list([1, obs_shape_i], ...)
         n_dones: [1, episode_len]
         n_rnn_states: [1, episode_len, rnn_state_dim]
         """
