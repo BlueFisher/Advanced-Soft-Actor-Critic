@@ -6,7 +6,8 @@ import algorithm.nn_models as m
 
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):
-        assert self.obs_shapes == ((44,), (6,))
+        assert self.obs_shapes[0] == (44,)
+        assert self.obs_shapes[1] == (6,)
 
         self.rnn = m.GRU(self.obs_shapes[0][0] + self.c_action_size, 8, 1)
 
