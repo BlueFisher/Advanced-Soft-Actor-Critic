@@ -36,6 +36,42 @@ def gen_batch_obs(obs_shapes, rnn_shape=None, d_action_size=None, c_action_size=
         return obs_list
 
 
+def gen_batch_trans(obs_shapes, d_action_size, c_action_size, n, rnn_shape=None, batch=10):
+    if d_action_size:
+        d_actoin = np.eye(d_action_size)[np.random.rand(n * batch, d_action_size).argmax(axis=-1)]
+        d_actoin = d_actoin.reshape(batch, n, d_action_size)
+    else:
+        d_actoin = np.empty((batch, n, 0))
+
+    if c_action_size:
+        c_action = np.random.rand(batch, n, c_action_size)
+        c_action = np.clip(c_action, -.99, 99.)
+    else:
+        c_action = np.empty((batch, n, 0))
+    n_actions = np.concatenate([d_actoin, c_action], axis=-1).astype(np.float32)
+
+    # pointers
+    # n_obses_list, n_actions, n_rewards, next_obs_list, n_dones, n_mu_probs,
+    # priority_is
+    vanilla_batch_trans = [
+        np.random.randint(0, 100, batch),
+        [np.random.randn(batch, n, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
+        n_actions,
+        np.random.randn(batch, n).astype(np.float32),
+        [np.random.randn(batch, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
+        np.random.randn(batch, n).astype(np.float32),
+        np.random.randn(batch, n).astype(np.float32),
+        np.random.randn(batch, n).astype(np.float32)
+    ]
+
+    if rnn_shape:
+        return vanilla_batch_trans + [
+            np.random.randn(batch, *rnn_shape).astype(np.float32)
+        ]
+    else:
+        return vanilla_batch_trans
+
+
 def gen_episode_trans(obs_shapes, d_action_size, c_action_size, rnn_shape=None, episode_len=None):
     if episode_len is None:
         episode_len = random.randint(1, 100)

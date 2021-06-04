@@ -17,7 +17,6 @@ from .replay_buffer import PrioritizedReplayBuffer
 from .utils import *
 
 logger = logging.getLogger('sac.base')
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 class SAC_Base(object):
@@ -149,13 +148,11 @@ class SAC_Base(object):
         self.rnd_n_sample = rnd_n_sample
         self.use_normalization = use_normalization
 
-        self.action_size = self.d_action_size + self.c_action_size
-
         self.use_add_with_td = False
 
-        if device is not None:
-            global DEVICE
-            DEVICE = device
+        self.device = device
+        if device is None:
+            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         if seed is not None:
             torch.manual_seed(seed)
@@ -179,20 +176,20 @@ class SAC_Base(object):
         """
         self.global_step = torch.tensor(0, dtype=torch.int64, requires_grad=False, device='cpu')
 
-        self._gamma_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.gamma, device=DEVICE)
-        self._lambda_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.v_lambda, device=DEVICE)
+        self._gamma_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.gamma, device=self.device)
+        self._lambda_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.v_lambda, device=self.device)
 
         def adam_optimizer(params):
             return optim.Adam(params, lr=learning_rate)
 
         """ NORMALIZATION & REPRESENTATION """
         if self.use_normalization:
-            self.normalizer_step = torch.tensor(0, dtype=torch.int32, device=DEVICE, requires_grad=False)
+            self.normalizer_step = torch.tensor(0, dtype=torch.int32, device=self.device, requires_grad=False)
             self.running_means = []
             self.running_variances = []
             for shape in self.obs_shapes:
-                self.running_means.append(torch.zeros(shape, device=DEVICE))
-                self.running_variances.append(torch.ones(shape, device=DEVICE))
+                self.running_means.append(torch.zeros(shape, device=self.device))
+                self.running_variances.append(torch.ones(shape, device=self.device))
 
             p_self = self
 
@@ -213,15 +210,15 @@ class SAC_Base(object):
 
         if self.use_rnn:
             # Get represented state dimension
-            self.model_rep: nn.Module = ModelRep(self.obs_shapes, self.d_action_size, self.c_action_size).to(DEVICE)
-            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes, self.d_action_size, self.c_action_size).to(DEVICE)
+            self.model_rep: nn.Module = ModelRep(self.obs_shapes, self.d_action_size, self.c_action_size).to(self.device)
+            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes, self.d_action_size, self.c_action_size).to(self.device)
             # Get state and rnn_state dimension
-            state_size, self.rnn_state_shape = self.model_rep.get_output_shape(DEVICE)
+            state_size, self.rnn_state_shape = self.model_rep.get_output_shape(self.device)
         else:
             # Get represented state dimension
-            self.model_rep: nn.Module = ModelRep(self.obs_shapes).to(DEVICE)
-            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes).to(DEVICE)
-            state_size = self.model_rep.get_output_shape(DEVICE)
+            self.model_rep: nn.Module = ModelRep(self.obs_shapes).to(self.device)
+            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes).to(self.device)
+            state_size = self.model_rep.get_output_shape(self.device)
 
         for param in self.model_target_rep.parameters():
             param.requires_grad = False
@@ -236,12 +233,12 @@ class SAC_Base(object):
         """ Q """
         self.model_q_list: List[nn.Module] = [model.ModelQ(state_size,
                                                            self.d_action_size,
-                                                           self.c_action_size).to(DEVICE)
+                                                           self.c_action_size).to(self.device)
                                               for _ in range(self.ensemble_q_num)]
 
         self.model_target_q_list: List[nn.Module] = [model.ModelQ(state_size,
                                                                   self.d_action_size,
-                                                                  self.c_action_size).to(DEVICE)
+                                                                  self.c_action_size).to(self.device)
                                                      for _ in range(self.ensemble_q_num)]
         for model_target_q in self.model_target_q_list:
             for param in model_target_q.parameters():
@@ -250,7 +247,7 @@ class SAC_Base(object):
         self.optimizer_q_list = [adam_optimizer(self.model_q_list[i].parameters()) for i in range(self.ensemble_q_num)]
 
         """ POLICY """
-        self.model_policy: nn.Module = model.ModelPolicy(state_size, self.d_action_size, self.c_action_size).to(DEVICE)
+        self.model_policy: nn.Module = model.ModelPolicy(state_size, self.d_action_size, self.c_action_size).to(self.device)
         self.optimizer_policy = adam_optimizer(self.model_policy.parameters())
 
         """ RECURRENT PREDICTION MODELS """
@@ -258,31 +255,32 @@ class SAC_Base(object):
             self.model_transition: nn.Module = model.ModelTransition(state_size,
                                                                      self.d_action_size,
                                                                      self.c_action_size,
-                                                                     self.use_extra_data).to(DEVICE)
-            self.model_reward: nn.Module = model.ModelReward(state_size).to(DEVICE)
+                                                                     self.use_extra_data).to(self.device)
+            self.model_reward: nn.Module = model.ModelReward(state_size).to(self.device)
             self.model_observation: nn.Module = model.ModelObservation(state_size, self.obs_shapes,
-                                                                       self.use_extra_data).to(DEVICE)
+                                                                       self.use_extra_data).to(self.device)
 
             self.optimizer_prediction = adam_optimizer(chain(self.model_transition.parameters(),
                                                              self.model_reward.parameters(),
                                                              self.model_observation.parameters()))
 
         """ ALPHA """
-        self.log_d_alpha = torch.tensor(init_log_alpha, dtype=torch.float32, requires_grad=True, device=DEVICE)
-        self.log_c_alpha = torch.tensor(init_log_alpha, dtype=torch.float32, requires_grad=True, device=DEVICE)
+        self.log_d_alpha = torch.tensor(init_log_alpha, dtype=torch.float32, requires_grad=True, device=self.device)
+        self.log_c_alpha = torch.tensor(init_log_alpha, dtype=torch.float32, requires_grad=True, device=self.device)
 
         if self.use_auto_alpha:
             self.optimizer_alpha = adam_optimizer([self.log_d_alpha, self.log_c_alpha])
 
         """ CURIOSITY """
         if self.use_curiosity:
-            self.model_forward: nn.Module = model.ModelForward(state_size, self.action_size).to(DEVICE)
+            self.model_forward: nn.Module = model.ModelForward(state_size,
+                                                               self.d_action_size + self.c_action_size).to(self.device)
             self.optimizer_forward: nn.Module = adam_optimizer(self.model_forward.parameters())
 
         """ RANDOM NETWORK DISTILLATION """
         if self.use_rnd:
-            self.model_rnd: nn.Module = model.ModelRND(state_size, self.d_action_size + self.c_action_size).to(DEVICE)
-            self.model_target_rnd: nn.Module = model.ModelRND(state_size, self.d_action_size + self.c_action_size).to(DEVICE)
+            self.model_rnd: nn.Module = model.ModelRND(state_size, self.d_action_size + self.c_action_size).to(self.device)
+            self.model_target_rnd: nn.Module = model.ModelRND(state_size, self.d_action_size + self.c_action_size).to(self.device)
             for param in self.model_target_rnd.parameters():
                 param.requires_grad = False
             self.optimizer_rnd = adam_optimizer(self.model_rnd.parameters())
@@ -453,7 +451,7 @@ class SAC_Base(object):
 
         d_policy, c_policy = self.model_policy(n_states)
 
-        policy_prob = torch.ones((n_states.shape[:2]), device=DEVICE)  # [Batch, n]
+        policy_prob = torch.ones((n_states.shape[:2]), device=self.device)  # [Batch, n]
 
         if self.d_action_size:
             n_selected_d_actions = n_selected_actions[..., :self.d_action_size]
@@ -532,11 +530,11 @@ class SAC_Base(object):
             n_step_is = n_pi_probs / n_mu_probs.clamp(min=1e-8)
 
             # ρ_t, t \in [s, s+n-1]
-            rho = torch.minimum(n_step_is, torch.tensor(self.v_rho, device=DEVICE))  # [Batch, n]
+            rho = torch.minimum(n_step_is, torch.tensor(self.v_rho, device=self.device))  # [Batch, n]
 
             # \prod{c_i}, i \in [s, t-1]
-            c = torch.minimum(n_step_is, torch.tensor(self.v_c, device=DEVICE))
-            c = torch.cat([torch.ones((n_step_is.shape[0], 1), device=DEVICE), c[..., :-1]], dim=-1)
+            c = torch.minimum(n_step_is, torch.tensor(self.v_c, device=self.device))
+            c = torch.cat([torch.ones((n_step_is.shape[0], 1), device=self.device), c[..., :-1]], dim=-1)
             c = torch.cumprod(c, dim=1)
 
             # \prod{c_i} * ρ_t * td_error
@@ -571,8 +569,8 @@ class SAC_Base(object):
             n_c_actions_sampled = c_policy.rsample()  # [Batch, n, action_size]
             next_n_c_actions_sampled = next_c_policy.rsample()
         else:
-            n_c_actions_sampled = torch.empty(0, device=DEVICE)
-            next_n_c_actions_sampled = torch.empty(0, device=DEVICE)
+            n_c_actions_sampled = torch.empty(0, device=self.device)
+            next_n_c_actions_sampled = torch.empty(0, device=self.device)
 
         # ([Batch, n, action_size], [Batch, n, 1])
         q_list = [q(n_states, torch.tanh(n_c_actions_sampled)) for q in self.model_target_q_list]
@@ -702,7 +700,7 @@ class SAC_Base(object):
                                n_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
         #  [Batch, 1], [Batch, 1]
 
-        loss_q_list = [torch.zeros((batch, 1), device=DEVICE) for _ in range(self.ensemble_q_num)]
+        loss_q_list = [torch.zeros((batch, 1), device=self.device) for _ in range(self.ensemble_q_num)]
         loss_none_mse = nn.MSELoss(reduction='none')
 
         if self.d_action_size:
@@ -818,15 +816,15 @@ class SAC_Base(object):
 
         d_policy, c_policy = self.model_policy(state)
 
-        loss_d_policy = torch.zeros((batch, 1), device=DEVICE)
-        loss_c_policy = torch.zeros((batch, 1), device=DEVICE)
+        loss_d_policy = torch.zeros((batch, 1), device=self.device)
+        loss_c_policy = torch.zeros((batch, 1), device=self.device)
 
         d_alpha = torch.exp(self.log_d_alpha)
         c_alpha = torch.exp(self.log_c_alpha)
 
         if self.d_action_size and not self.discrete_dqn_like:
             probs = d_policy.probs   # [Batch, action_size]
-            clipped_probs = torch.maximum(probs, torch.tensor(1e-8, device=DEVICE))
+            clipped_probs = torch.maximum(probs, torch.tensor(1e-8, device=self.device))
 
             c_action = action[..., self.d_action_size:]
 
@@ -877,8 +875,8 @@ class SAC_Base(object):
         d_alpha = torch.exp(self.log_d_alpha)
         c_alpha = torch.exp(self.log_c_alpha)
 
-        loss_d_alpha = torch.zeros((batch, 1), device=DEVICE)
-        loss_c_alpha = torch.zeros((batch, 1), device=DEVICE)
+        loss_d_alpha = torch.zeros((batch, 1), device=self.device)
+        loss_c_alpha = torch.zeros((batch, 1), device=self.device)
 
         if self.d_action_size and not self.discrete_dqn_like:
             probs = d_policy.probs   # [Batch, action_size]
@@ -1018,9 +1016,9 @@ class SAC_Base(object):
         n_sample = self.rnd_n_sample
 
         d_action = d_policy.sample((n_sample,)) if self.d_action_size \
-            else torch.empty(0, device=DEVICE)
+            else torch.empty(0, device=self.device)
         c_action = torch.tanh(c_policy.sample((n_sample,))) if self.c_action_size \
-            else torch.empty(0, device=DEVICE)
+            else torch.empty(0, device=self.device)
 
         actions = torch.cat([d_action, c_action], dim=-1)  # [n_sample, batch, action_size]
 
@@ -1047,7 +1045,7 @@ class SAC_Base(object):
                 if self.discrete_dqn_like:
                     if torch.rand(1) < 0.2:
                         d_action = distributions.OneHotCategorical(
-                            logits=torch.ones(batch, self.d_action_size)).sample().to(DEVICE)
+                            logits=torch.ones(batch, self.d_action_size)).sample().to(self.device)
                     else:
                         d_q, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None)
                         d_action = torch.argmax(d_q, axis=-1)
@@ -1055,31 +1053,40 @@ class SAC_Base(object):
                 else:
                     d_action = d_policy.sample()
             else:
-                d_action = torch.empty(0, device=DEVICE)
+                d_action = torch.empty(0, device=self.device)
 
-            c_action = torch.tanh(c_policy.sample()) if self.c_action_size else torch.empty(0, device=DEVICE)
+            c_action = torch.tanh(c_policy.sample()) if self.c_action_size else torch.empty(0, device=self.device)
 
             return torch.cat([d_action, c_action], dim=-1)
 
     @torch.no_grad()
     def choose_action(self, obs_list):
         """
-        obs_list: list([None, *obs_shapes_i], ...)
+        Args:
+            obs_list: list([Batch, *obs_shapes_i], ...)
+        
+        Returns:
+            action: [Batch, d_action_size + c_action_size] (numpy)
         """
-        obs_list = [torch.from_numpy(obs).to(DEVICE) for obs in obs_list]
+        obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         state = self.model_rep(obs_list)
         return self._choose_action(state).detach().cpu().numpy()
 
     @torch.no_grad()
     def choose_rnn_action(self, obs_list, pre_action, rnn_state):
         """
-        obs_list: list([None, *obs_shapes_i], ...)
-        pre_action: [None, d_action_size + c_action_size]
-        rnn_state: [None, rnn_state]
+        Args:
+            obs_list: list([None, *obs_shapes_i], ...)
+            pre_action: [None, d_action_size + c_action_size]
+            rnn_state: [None, *rnn_state_shape]
+
+        Returns:
+            action: [Batch, d_action_size + c_action_size] (numpy)
+            rnn_state: [Batch, *rnn_state_shape] (numpy)
         """
-        obs_list = [torch.from_numpy(obs).to(DEVICE) for obs in obs_list]
-        pre_action = torch.from_numpy(pre_action).to(DEVICE)
-        rnn_state = torch.from_numpy(rnn_state).to(DEVICE)
+        obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
+        pre_action = torch.from_numpy(pre_action).to(self.device)
+        rnn_state = torch.from_numpy(rnn_state).to(self.device)
 
         obs_list = [obs.view(-1, 1, *obs.shape[1:]) for obs in obs_list]
         pre_action = pre_action.view(-1, 1, *pre_action.shape[1:])
@@ -1153,8 +1160,9 @@ class SAC_Base(object):
                      n_mu_probs=None,
                      rnn_state=None):
         """
-        tf.function
-        Return the td-error of (burn-in + n-step) observations (sampled from replay buffer)
+        Returns:
+            The td-error of (burn-in + n-step) observations (sampled from replay buffer)
+            [Batch, 1]
         """
         m_obses_list = [torch.cat([n_obses, next_obs.view(-1, 1, *next_obs.shape[1:])], dim=1)
                         for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
@@ -1192,7 +1200,7 @@ class SAC_Base(object):
                                n_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
 
         # [Batch, 1]
-        q_td_error_list = [torch.zeros((state.shape[0], 1), device=DEVICE) for _ in range(self.ensemble_q_num)]
+        q_td_error_list = [torch.zeros((state.shape[0], 1), device=self.device) for _ in range(self.ensemble_q_num)]
         if self.d_action_size:
             for i in range(self.ensemble_q_num):
                 q_td_error_list[i] += torch.abs(d_q_list[i] - d_y)
@@ -1214,14 +1222,17 @@ class SAC_Base(object):
                              n_mu_probs=None,
                              n_rnn_states=None):
         """
-        n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-        n_actions: [1, episode_len, action_size]
-        n_rewards: [1, episode_len]
-        next_obs_list: list([1, *obs_shapes_i], ...)
-        n_dones: [1, episode_len]
-        n_rnn_states: [1, episode_len, *rnn_state_shape]
+        Args:
+            n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
+            n_actions: [1, episode_len, action_size]
+            n_rewards: [1, episode_len]
+            next_obs_list: list([1, *obs_shapes_i], ...)
+            n_dones: [1, episode_len]
+            n_rnn_states: [1, episode_len, *rnn_state_shape]
 
-        Return the td-error of raw episode observations
+        Returns:
+            The td-error of raw episode observations
+            [episode_len, ]
         """
         ignore_size = self.burn_in_step + self.n_step
 
@@ -1274,12 +1285,15 @@ class SAC_Base(object):
                            n_dones,
                            n_rnn_states=None):
         """
-        n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-        n_actions: [1, episode_len, action_size]
-        n_rewards: [1, episode_len]
-        next_obs_list: list([1, *obs_shapes_i], ...)
-        n_dones: [1, episode_len]
-        n_rnn_states: [1, episode_len, *rnn_state_shape]
+        Args:
+            n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
+            n_actions: [1, episode_len, action_size]
+            n_rewards: [1, episode_len]
+            next_obs_list: list([1, *obs_shapes_i], ...)
+            n_dones: [1, episode_len]
+            n_rnn_states: [1, episode_len, *rnn_state_shape]
+        
+        Returns:
         """
 
         # Ignore episodes whose length is too short
@@ -1289,7 +1303,7 @@ class SAC_Base(object):
         # Reshape [1, episode_len, ...] to [episode_len, ...]
         obs_list = [n_obses.reshape([-1, *n_obses.shape[2:]]) for n_obses in n_obses_list]
         if self.use_normalization:
-            self._udpate_normalizer([torch.from_numpy(obs).to(DEVICE) for obs in obs_list])
+            self._udpate_normalizer([torch.from_numpy(obs).to(self.device) for obs in obs_list])
         action = n_actions.reshape([-1, n_actions.shape[-1]])
         reward = n_rewards.reshape([-1])
         done = n_dones.reshape([-1])
@@ -1312,9 +1326,9 @@ class SAC_Base(object):
         }
 
         if self.use_n_step_is:
-            n_mu_probs = self.get_n_probs([torch.from_numpy(n_obses).to(DEVICE) for n_obses in n_obses_list],
-                                          torch.from_numpy(n_actions).to(DEVICE),
-                                          torch.from_numpy(n_rnn_states[:, 0, ...]).to(DEVICE) if self.use_rnn else None).detach().cpu().numpy()
+            n_mu_probs = self.get_n_probs([torch.from_numpy(n_obses).to(self.device) for n_obses in n_obses_list],
+                                          torch.from_numpy(n_actions).to(self.device),
+                                          torch.from_numpy(n_rnn_states[:, 0, ...]).to(self.device) if self.use_rnn else None).detach().cpu().numpy()
 
             mu_prob = n_mu_probs.reshape([-1])
             mu_prob = np.concatenate([mu_prob,
@@ -1416,17 +1430,17 @@ class SAC_Base(object):
                    priority_is,
                    rnn_state) = train_data
 
-        n_obses_list = [torch.from_numpy(t).to(DEVICE) for t in n_obses_list]
-        n_actions = torch.from_numpy(n_actions).to(DEVICE)
-        n_rewards = torch.from_numpy(n_rewards).to(DEVICE)
-        next_obs_list = [torch.from_numpy(t).to(DEVICE) for t in next_obs_list]
-        n_dones = torch.from_numpy(n_dones).to(DEVICE)
+        n_obses_list = [torch.from_numpy(t).to(self.device) for t in n_obses_list]
+        n_actions = torch.from_numpy(n_actions).to(self.device)
+        n_rewards = torch.from_numpy(n_rewards).to(self.device)
+        next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
+        n_dones = torch.from_numpy(n_dones).to(self.device)
         if self.use_n_step_is:
-            n_mu_probs = torch.from_numpy(n_mu_probs).to(DEVICE)
+            n_mu_probs = torch.from_numpy(n_mu_probs).to(self.device)
         if self.use_priority:
-            priority_is = torch.from_numpy(priority_is).to(DEVICE)
+            priority_is = torch.from_numpy(priority_is).to(self.device)
         if self.use_rnn:
-            rnn_state = torch.from_numpy(rnn_state).to(DEVICE)
+            rnn_state = torch.from_numpy(rnn_state).to(self.device)
 
         self._train(n_obses_list=n_obses_list,
                     n_actions=n_actions,

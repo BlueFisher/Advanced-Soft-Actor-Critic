@@ -3,7 +3,6 @@ from torch import nn
 
 import algorithm.nn_models as m
 
-
 EXTRA_SIZE = 3
 
 
