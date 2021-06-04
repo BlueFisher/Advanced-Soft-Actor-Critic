@@ -240,7 +240,7 @@ class Learner:
         all_variables = self.update_sac_bak_queue.get()
 
         with self._sac_bak_lock.write():
-            res = self.sac_bak.update_all_variables(all_variables).numpy()
+            res = self.sac_bak.update_all_variables(all_variables)
 
             if not res:
                 self.logger.warning('NAN in variables, closing...')
@@ -288,7 +288,7 @@ class Learner:
     def _get_policy_variables(self):
         with self._sac_bak_lock.read('_get_policy_variables'):
             variables = self.sac_bak.get_policy_variables()
-            variables = [v.numpy() for v in variables]
+            variables = [v.detach().cpu().numpy() for v in variables]
 
         return variables
 
@@ -296,7 +296,7 @@ class Learner:
         self.process_nn_variables_conn.send(('GET', None))
         nn_variables = self.process_nn_variables_conn.recv()
 
-        nn_variables = [v.numpy() for v in nn_variables]
+        nn_variables = [v.detach().cpu().numpy() for v in nn_variables]
 
         return nn_variables
 
@@ -311,10 +311,10 @@ class Learner:
             if self.sac_bak.use_rnn:
                 action, next_rnn_state = self.sac_bak.choose_rnn_action(obs_list, rnn_state)
                 next_rnn_state = next_rnn_state
-                return action.numpy(), next_rnn_state.numpy()
+                return action, next_rnn_state
             else:
                 action = self.sac_bak.choose_action(obs_list)
-                return action.numpy()
+                return action
 
     def _get_td_error(self,
                       n_obses_list,
@@ -390,7 +390,6 @@ class Learner:
                             action, next_rnn_state = self.sac_bak.choose_rnn_action([o.astype(np.float32) for o in obs_list],
                                                                                     action,
                                                                                     rnn_state)
-                            next_rnn_state = next_rnn_state.numpy()
 
                             if np.isnan(np.min(next_rnn_state)):
                                 self.logger.warning('NAN in next_rnn_state, ending episode')
@@ -399,8 +398,6 @@ class Learner:
                                 break
                         else:
                             action = self.sac_bak.choose_action([o.astype(np.float32) for o in obs_list])
-
-                        action = action.numpy()
 
                     next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
                                                                                    action[..., self.d_action_size:])

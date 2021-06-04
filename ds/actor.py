@@ -201,7 +201,7 @@ class Actor(object):
         with self._sac_actor_lock.read():
             n_mu_probs = self.sac_actor.get_n_probs(n_obses_list,
                                                     n_actions,
-                                                    n_rnn_states[:, 0, ...] if self.sac_actor.use_rnn else None).numpy()
+                                                    n_rnn_states[:, 0, ...] if self.sac_actor.use_rnn else None)
 
         self._stub.add_transitions(n_obses_list,
                                    n_actions,
@@ -269,11 +269,9 @@ class Actor(object):
                             action, next_rnn_state = self.sac_actor.choose_rnn_action([o.astype(np.float32) for o in obs_list],
                                                                                       action,
                                                                                       rnn_state)
-                            next_rnn_state = next_rnn_state.numpy()
                         else:
                             action = self.sac_actor.choose_action([o.astype(np.float32) for o in obs_list])
 
-                        action = action.numpy()
                 else:
                     # Get action from learner each step
                     # TODO need prob
@@ -426,7 +424,7 @@ class StubController:
         t_learner.start()
         t_replay = threading.Thread(target=self._start_replay_persistence)
         t_replay.start()
- 
+
     @property
     def connected(self):
         return self._replay_connected and self._learner_connected
