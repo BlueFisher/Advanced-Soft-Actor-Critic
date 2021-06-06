@@ -186,6 +186,8 @@ class Learner:
         custom_nn_model = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(custom_nn_model)
 
+        # Initialize all queues for learner_trainer and replay
+
         self.get_sampled_data_queue = mp.Queue(C.GET_SAMPLED_DATA_QUEUE_SIZE)
         self.update_td_error_queue = mp.Queue(C.UPDATE_TD_ERROR_QUEUE_SIZE)
         self.update_transition_queue = mp.Queue(C.UPDATE_TRANSITION_QUEUE_SIZE)
@@ -288,15 +290,12 @@ class Learner:
     def _get_policy_variables(self):
         with self._sac_bak_lock.read('_get_policy_variables'):
             variables = self.sac_bak.get_policy_variables()
-            variables = [v.detach().cpu().numpy() for v in variables]
 
         return variables
 
     def _get_nn_variables(self):
         self.process_nn_variables_conn.send(('GET', None))
         nn_variables = self.process_nn_variables_conn.recv()
-
-        nn_variables = [v.detach().cpu().numpy() for v in nn_variables]
 
         return nn_variables
 
@@ -655,15 +654,17 @@ class EvolverStubController:
     _closed = False
 
     def __init__(self, evolver_host, evolver_port):
+        self._logger = logging.getLogger('ds.learner.evolver_stub')
+
         self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}', [
             ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS),
             ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
             ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
         ])
         self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
-        self._evolver_connected = False
+        self._logger.info(f'Starting evolver stub [{evolver_host}:{evolver_port}]')
 
-        self._logger = logging.getLogger('ds.learner.evolver_stub')
+        self._evolver_connected = False
 
         t_evolver = threading.Thread(target=self._start_evolver_persistence)
         t_evolver.start()
@@ -772,6 +773,7 @@ class ReplayStubController:
                 ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
             ])
             self._replay_stub = replay_pb2_grpc.ReplayServiceStub(self._replay_channel)
+            self._logger.info(f'Starting replay stub [{replay_host}:{replay_port}]')
 
             for _ in range(C.GET_SAMPLED_DATA_THREAD_SIZE):
                 threading.Thread(target=self._forever_sample_data).start()

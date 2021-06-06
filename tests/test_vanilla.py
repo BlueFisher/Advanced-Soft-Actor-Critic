@@ -19,6 +19,7 @@ class TestVanilla(unittest.TestCase):
             model_abs_dir=None,
             model=nn_vanilla,
             device='cpu',
+            use_add_with_td=True,
             **param_dict
         )
 

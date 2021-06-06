@@ -222,6 +222,12 @@ class PrioritizedReplayBuffer:
             self._sum_tree.add(data_pointers, probs)
 
     def sample(self):
+        """
+        Returns:
+            data index: [Batch, ]
+            transitions: dict
+            priority weights: [Batch, 1]
+        """
         with self._lock.read():
             if self._trans_storage.size < self.batch_size:
                 return None

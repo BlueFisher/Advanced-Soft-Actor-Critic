@@ -67,6 +67,7 @@ class SAC_Base(object):
                  use_rnd=False,
                  rnd_n_sample=10,
                  use_normalization=False,
+                 use_add_with_td=False,
 
                  replay_config=None):
         """
@@ -75,6 +76,7 @@ class SAC_Base(object):
         c_action_size: Dimension of continuous actions
         model_abs_dir: The directory that saves summary, checkpoints, config etc.
         model: Custom Model Class
+        device: Training in CPU or GPU
         train_mode: Is training or inference
         last_ckpt: The checkpoint to restore
 
@@ -111,6 +113,7 @@ class SAC_Base(object):
         use_rnd: If use RND
         rnd_n_sample: RND sample times
         use_normalization: If use observation normalization
+        use_add_with_td: If add transitions in replay buffer with td-error
         """
         self.obs_shapes = obs_shapes
         self.d_action_size = d_action_size
@@ -147,8 +150,7 @@ class SAC_Base(object):
         self.use_rnd = use_rnd
         self.rnd_n_sample = rnd_n_sample
         self.use_normalization = use_normalization
-
-        self.use_add_with_td = False
+        self.use_add_with_td = use_add_with_td
 
         self.device = device
         if device is None:
@@ -1064,7 +1066,7 @@ class SAC_Base(object):
         """
         Args:
             obs_list: list([Batch, *obs_shapes_i], ...)
-        
+
         Returns:
             action: [Batch, d_action_size + c_action_size] (numpy)
         """
@@ -1151,18 +1153,27 @@ class SAC_Base(object):
     #     action = tf.tanh(action.sample())
     #     return action, next_rnn_state
 
-    def get_td_error(self,
-                     n_obses_list,
-                     n_actions,
-                     n_rewards,
-                     next_obs_list,
-                     n_dones,
-                     n_mu_probs=None,
-                     rnn_state=None):
+    @torch.no_grad()
+    def _get_td_error(self,
+                      n_obses_list: List[torch.Tensor],
+                      n_actions: torch.Tensor,
+                      n_rewards: torch.Tensor,
+                      next_obs_list: List[torch.Tensor],
+                      n_dones: torch.Tensor,
+                      n_mu_probs: torch.Tensor = None,
+                      rnn_state: torch.Tensor = None):
         """
+        Args:
+            n_obses_list: list([Batch, N, *obs_shapes_i], ...)
+            n_actions: [Batch, N, action_size]
+            n_rewards: [Batch, N]
+            next_obs_list: list([Batch, *obs_shapes_i], ...)
+            n_dones: [Batch, N]
+            n_mu_probs: [Batch, N]
+            rnn_states: [Batch, *rnn_state_shape]
+
         Returns:
-            The td-error of (burn-in + n-step) observations (sampled from replay buffer)
-            [Batch, 1]
+            The td-error of observations, [Batch, 1]
         """
         m_obses_list = [torch.cat([n_obses, next_obs.view(-1, 1, *next_obs.shape[1:])], dim=1)
                         for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
@@ -1214,13 +1225,13 @@ class SAC_Base(object):
         return td_error
 
     def get_episode_td_error(self,
-                             n_obses_list,
-                             n_actions,
-                             n_rewards,
-                             next_obs_list,
-                             n_dones,
-                             n_mu_probs=None,
-                             n_rnn_states=None):
+                             n_obses_list: List[np.ndarray],
+                             n_actions: np.ndarray,
+                             n_rewards: np.ndarray,
+                             next_obs_list: List[np.ndarray],
+                             n_dones: np.ndarray,
+                             n_mu_probs: np.ndarray = None,
+                             n_rnn_states: np.ndarray = None):
         """
         Args:
             n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
@@ -1264,13 +1275,22 @@ class SAC_Base(object):
         all_batch = tmp_n_obses_list[0].shape[0]
         for i in range(math.ceil(all_batch / C.GET_EPISODE_TD_ERROR_SEG)):
             b_i, b_j = i * C.GET_EPISODE_TD_ERROR_SEG, (i + 1) * C.GET_EPISODE_TD_ERROR_SEG
-            td_error = self.get_td_error(n_obses_list=[o[b_i:b_j, :] for o in tmp_n_obses_list],
-                                         n_actions=n_actions[b_i:b_j, :],
-                                         n_rewards=n_rewards[b_i:b_j, :],
-                                         next_obs_list=[o[b_i:b_j, :] for o in tmp_next_obs_list],
-                                         n_dones=n_dones[b_i:b_j, :],
-                                         n_mu_probs=n_mu_probs[b_i:b_j, :] if self.use_n_step_is else None,
-                                         rnn_state=rnn_state[b_i:b_j, :] if self.use_rnn else None).numpy()
+
+            _n_obses_list = [torch.from_numpy(o[b_i:b_j, :]).to(self.device) for o in tmp_n_obses_list]
+            _n_actions = torch.from_numpy(n_actions[b_i:b_j, :]).to(self.device)
+            _n_rewards = torch.from_numpy(n_rewards[b_i:b_j, :]).to(self.device)
+            _next_obs_list = [torch.from_numpy(o[b_i:b_j, :]).to(self.device) for o in tmp_next_obs_list]
+            _n_dones = torch.from_numpy(n_dones[b_i:b_j, :]).to(self.device)
+            _n_mu_probs = torch.from_numpy(n_mu_probs[b_i:b_j, :]).to(self.device) if self.use_n_step_is else None
+            _rnn_state = torch.from_numpy(rnn_state[b_i:b_j, :]).to(self.device) if self.use_rnn else None
+
+            td_error = self._get_td_error(n_obses_list=_n_obses_list,
+                                          n_actions=_n_actions,
+                                          n_rewards=_n_rewards,
+                                          next_obs_list=_next_obs_list,
+                                          n_dones=_n_dones,
+                                          n_mu_probs=_n_mu_probs,
+                                          rnn_state=_rnn_state).detach().cpu().numpy()
             td_error_list.append(td_error.flatten())
 
         td_error = np.concatenate([*td_error_list,
@@ -1292,8 +1312,6 @@ class SAC_Base(object):
             next_obs_list: list([1, *obs_shapes_i], ...)
             n_dones: [1, episode_len]
             n_rnn_states: [1, episode_len, *rnn_state_shape]
-        
-        Returns:
         """
 
         # Ignore episodes whose length is too short
@@ -1357,7 +1375,23 @@ class SAC_Base(object):
                                    ignore_size=self.burn_in_step + self.n_step)
 
     def _sample(self):
-        # Sample from replay buffer
+        """
+        Sample from replay buffer
+
+        Returns:
+            pointers: [Batch, ]
+            (
+                n_obses_list: list([Batch, N, *obs_shapes_i], ...)
+                n_actions: [Batch, N, action_size]
+                n_rewards: [Batch, N]
+                next_obs_list: list([Batch, *obs_shapes_i], ...)
+                n_dones: [Batch, N]
+                n_mu_probs: [Batch, N]
+                priority_is: [Batch, 1]
+                rnn_states: [Batch, *rnn_state_shape]
+            )
+        """
+
         sampled = self.replay_buffer.sample()
         if sampled is None:
             return None
@@ -1465,13 +1499,13 @@ class SAC_Base(object):
 
         # Update td_error
         if self.use_priority:
-            td_error = self.get_td_error(n_obses_list=n_obses_list,
-                                         n_actions=n_actions,
-                                         n_rewards=n_rewards,
-                                         next_obs_list=next_obs_list,
-                                         n_dones=n_dones,
-                                         n_mu_probs=n_pi_probs_tensor if self.use_n_step_is else None,
-                                         rnn_state=rnn_state if self.use_rnn else None).detach().cpu().numpy()
+            td_error = self._get_td_error(n_obses_list=n_obses_list,
+                                          n_actions=n_actions,
+                                          n_rewards=n_rewards,
+                                          next_obs_list=next_obs_list,
+                                          n_dones=n_dones,
+                                          n_mu_probs=n_pi_probs_tensor if self.use_n_step_is else None,
+                                          rnn_state=rnn_state if self.use_rnn else None).detach().cpu().numpy()
             self.replay_buffer.update(pointers, td_error)
 
         # Update rnn_state
