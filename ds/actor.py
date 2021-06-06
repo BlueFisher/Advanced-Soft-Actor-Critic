@@ -339,13 +339,15 @@ class EvolverStubController:
     _closed = False
 
     def __init__(self, evolver_host, evolver_port):
+        self._logger = logging.getLogger('ds.actor.evolver_stub')
+
         self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}', [
             ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)
         ])
         self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
+        self._logger.info(f'Starting evolver stub [{evolver_host}:{evolver_port}]')
 
         self._evolver_connected = False
-        self._logger = logging.getLogger('ds.actor.evolver_stub')
 
         t_evolver = threading.Thread(target=self._start_persistence)
         t_evolver.start()
@@ -406,19 +408,22 @@ class StubController:
     def __init__(self, learner_host, learner_port,
                  replay_host, replay_port):
 
+        self._logger = logging.getLogger('ds.actor.stub')
+
         self._learner_channel = grpc.insecure_channel(f'{learner_host}:{learner_port}', [
             ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)
         ])
         self._learner_stub = learner_pb2_grpc.LearnerServiceStub(self._learner_channel)
+        self._logger.info(f'Starting learner stub [{learner_host}:{learner_port}]')
 
         self._replay_channel = grpc.insecure_channel(f'{replay_host}:{replay_port}', [
             ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)
         ])
         self._replay_stub = replay_pb2_grpc.ReplayServiceStub(self._replay_channel)
+        self._logger.info(f'Starting replay stub [{replay_host}:{replay_port}]')
 
         self._learner_connected = False
         self._replay_connected = False
-        self._logger = logging.getLogger('ds.actor.stub')
 
         t_learner = threading.Thread(target=self._start_learner_persistence)
         t_learner.start()
