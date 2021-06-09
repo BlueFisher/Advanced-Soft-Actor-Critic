@@ -7,7 +7,6 @@ from ds.sac_ds_base import SAC_DS_Base
 
 from .get_synthesis_data import *
 
-
 OBS_SHAPES = [(10, )]
 D_ACTION_SIZE = 2
 C_ACTION_SIZE = 3
@@ -18,8 +17,7 @@ class TestSAC_DS_Base(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        from . import nn_vanilla
-        from . import nn_rnn
+        from . import nn_rnn, nn_vanilla
 
         self.sac = SAC_DS_Base(
             obs_shapes=[(10, )],

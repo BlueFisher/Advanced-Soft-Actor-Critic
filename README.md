@@ -1,6 +1,6 @@
 # Advanced-Soft-Actor-Critic
 
-This project is the algorithm [Soft Actor-Critic](https://arxiv.org/pdf/1812.05905) with a series of advanced features implemented by TensorFlow 2.x. It can be used to train Gym and Unity environments with ML-Agents.
+This project is the algorithm [Soft Actor-Critic](https://arxiv.org/pdf/1812.05905) with a series of advanced features implemented by PyTorch. It can be used to train Gym, PyBullet and Unity environments with ML-Agents.
 
 ## Features
 
@@ -21,11 +21,11 @@ This project is the algorithm [Soft Actor-Critic](https://arxiv.org/pdf/1812.059
 
 ## Supported Environments
 
-Gym and Unity environments with ML-Agents. 
+Gym, PyBullet and Unity environments with ML-Agents. 
 
 Observation can be any combination of vectors and images, which means an agent can have multiple sensors and the resolution of each image can be different.
 
-Action space can be continuous or discrete, but not supporting both continuous and discrete actions outputs.
+Action space can be both continuous and discrete.
 
 Not supporting multi-agent environments.
 
@@ -82,6 +82,7 @@ sac_config:
   write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
   save_model_per_step: 100000 # Save model every N steps
   save_model_per_minute: 5 # Save model every N minutes
+  # Note that only both `save_model_per_step` and `save_model_per_minute` satisfied, model can be saved
 
   ensemble_q_num: 2 # Number of Qs
   ensemble_q_sample: 2 # Number of min Qs
@@ -102,7 +103,7 @@ sac_config:
   v_lambda: 1.0 # Discount factor for V-trace
   v_rho: 1.0 # Rho for V-trace
   v_c: 1.0 # C for V-trace
-  clip_epsilon: 0.2 # Epsilon for q and policy clip
+  clip_epsilon: 0.2 # Epsilon for q clip
 
   discrete_dqn_like: false # If use policy or only Q network if discrete is in action spaces
   use_priority: true # If use PER importance ratio
@@ -115,6 +116,7 @@ sac_config:
   use_rnd: false # If use RND
   rnd_n_sample: 10 # RND sample times
   use_normalization: false # If use observation normalization
+
 ```
 
 All default distributed training configurations are listed below. It can also be found in `ds/default_config.yaml`
@@ -150,6 +152,10 @@ base_config:
   reset_on_iteration: true # If to force reset agent if an episode terminated
 
   max_actors_each_learner: 10 # The max number of actors of each learner
+
+  attach_replay: false
+
+  evolver_enabled: true
   evolver_cem_length: 50 # Start CEM if all learners have eavluated evolver_cem_length times
   evolver_cem_best: 0.3 # The ratio of best learners
   evolver_cem_min_length:
@@ -159,11 +165,11 @@ base_config:
   evolver_remove_worst: 4
 
 net_config:
-  evolver_host: 127.0.0.1
+  evolver_host: null
   evolver_port: 61000
-  learner_host: 127.0.0.1
+  learner_host: null
   learner_port: 61001
-  replay_host: 127.0.0.1
+  replay_host: null
   replay_port: 61002
 
 reset_config: null # Reset parameters sent to Unity
@@ -202,10 +208,11 @@ sac_config:
   v_lambda: 1.0 # Discount factor for V-trace
   v_rho: 1.0 # Rho for V-trace
   v_c: 1.0 # C for V-trace
-  clip_epsilon: 0.2 # Epsilon for q and policy clip
+  clip_epsilon: 0.2 # Epsilon for q clip
 
   discrete_dqn_like: false # If use policy or only Q network if discrete is in action spaces
   use_prediction: false # If train a transition model
+  transition_kl: 0.8 # The coefficient of KL of transition and standard normal
   use_extra_data: true # If use extra data to train prediction model
   use_curiosity: false # If use curiosity
   curiosity_strength: 1 # Curiosity strength if use curiosity
@@ -218,6 +225,7 @@ sac_config:
   #     in: [n1, n2, n3]
   #     truncated: [n1 ,n2]
   #     std: n
+
 ```
 
 ## Start Training
@@ -225,8 +233,8 @@ sac_config:
 ```
 usage: main.py [-h] [--config CONFIG] [--run] [--render]
                [--editor] [--logger_in_file] [--name NAME]
-               [--port PORT] [--nn NN] [--ckpt CKPT]
-               [--agents AGENTS] [--repeat REPEAT]
+               [--port PORT] [--nn NN] [--device DEVICE]
+               [--ckpt CKPT] [--agents AGENTS] [--repeat REPEAT]
                env
 
 positional arguments:
@@ -243,6 +251,7 @@ optional arguments:
   --name NAME, -n NAME  training name
   --port PORT, -p PORT  communication port
   --nn NN               neural network model
+  --device DEVICE       cpu or gpu
   --ckpt CKPT           ckeckpoint to restore
   --agents AGENTS       number of agents
   --repeat REPEAT       number of repeated experiments
