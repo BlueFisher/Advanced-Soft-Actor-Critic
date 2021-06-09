@@ -3,8 +3,8 @@ import logging
 import os
 import shutil
 import sys
-import time
 import threading
+import time
 from pathlib import Path
 
 import numpy as np
