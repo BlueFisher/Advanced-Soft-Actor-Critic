@@ -4,6 +4,7 @@ import os
 import shutil
 import sys
 import time
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -17,6 +18,7 @@ from .sac_base import SAC_Base
 class Main(object):
     train_mode = True
     _agent_class = Agent  # For different environments
+    _should_save_model = False
 
     def __init__(self, root_dir, config_dir, args):
         """
@@ -139,6 +141,13 @@ class Main(object):
 
                             **sac_config)
 
+        def save_model():
+            while True:
+                if input() == 's':
+                    self._should_save_model = True
+
+        threading.Thread(target=save_model).start()
+
     def _run(self):
         use_rnn = self.sac.use_rnn
 
@@ -229,6 +238,10 @@ class Main(object):
                 self._log_episode_summaries(iteration, agents)
 
             self._log_episode_info(iteration, agents)
+
+            if self._should_save_model:
+                self.sac.save_model()
+                self._should_save_model = False
 
             iteration += 1
 

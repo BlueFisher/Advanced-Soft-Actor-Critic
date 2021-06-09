@@ -101,7 +101,7 @@ class SAC_Base(object):
         v_lambda: Discount factor for V-trace
         v_rho: Rho for V-trace
         v_c: C for V-trace
-        clip_epsilon: Epsilon for q and policy clip
+        clip_epsilon: Epsilon for q clip
 
         use_priority: If use PER importance ratio
         use_n_step_is: If use importance sampling
@@ -372,7 +372,7 @@ class SAC_Base(object):
                                 model.eval()
 
                 logger.info(f'Restored from {ckpt_restore_path}')
-                self.init_iteration = int(last_ckpt)
+                self.init_iteration = int(last_ckpt) + 1
             else:
                 logger.info('Initializing from scratch')
                 self.init_iteration = 0
@@ -888,7 +888,7 @@ class SAC_Base(object):
             loss_d_alpha = torch.sum(probs * _loss_alpha, dim=1, keepdim=True)  # [Batch, 1]
 
         if self.c_action_size:
-            action_sampled = c_policy.rsample()
+            action_sampled = c_policy.sample()
             log_prob = torch.sum(squash_correction_log_prob(c_policy, action_sampled), dim=1, keepdim=True)
             # [Batch, 1]
 
