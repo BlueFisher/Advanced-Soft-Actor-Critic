@@ -50,16 +50,12 @@ if __name__ == '__main__':
     elif args.process_type in ['learner', 'l']:
         if args.env in ['simple_roller', 'ray_roller', 'antisubmarine']:
             from ds.main_hitted import LearnerHitted as Learner
-        # elif args.env in ['antisubmarine']:
-        #     from ds.main_hitted import LearnerAntisubmarineHitted as Learner
         else:
             from ds.learner import Learner
         Learner(root_dir, config_dir, args)
     elif args.process_type in ['actor', 'a']:
         if args.env in ['simple_roller', 'ray_roller', 'antisubmarine']:
             from ds.main_hitted import ActorHitted as Actor
-        # elif args.env in ['antisubmarine']:
-        #     from ds.main_hitted import ActorSubmarineHitted as Actor
         else:
             from ds.actor import Actor
         Actor(root_dir, config_dir, args)
