@@ -3,12 +3,17 @@ from torch import nn
 
 import algorithm.nn_models as m
 
+# obs_shapes: [(10, ), (84, 84, 3)]
 EXTRA_SIZE = 3
 
 
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):
-        self.rnn = m.GRU(self.obs_shapes[0][0] - EXTRA_SIZE + self.d_action_size + self.c_action_size, 64, 2)
+        self.conv = m.ConvLayers(84, 84, 3, 'simple', dense_depth=2, output_size=32)
+
+        self.rnn = m.GRU(self.obs_shapes[0][0] - EXTRA_SIZE
+                         + self.conv.output_size
+                         + self.d_action_size + self.c_action_size, 64, 2)
 
         self.dense = nn.Sequential(
             nn.Linear(self.obs_shapes[0][0] - EXTRA_SIZE + 64, 32),
@@ -16,18 +21,20 @@ class ModelRep(m.ModelBaseRNNRep):
         )
 
     def forward(self, obs_list, pre_action, rnn_state=None):
-        obs = obs_list[0][..., EXTRA_SIZE:]
+        obs_vec, obs_vis = obs_list
+        obs_vec = obs_vec[..., EXTRA_SIZE:]
 
-        output, hn = self.rnn(torch.cat([obs, pre_action], dim=-1), rnn_state)
+        obs_vis_vec = self.conv(obs_vis)
+        output, hn = self.rnn(torch.cat([obs_vec, obs_vis_vec, pre_action], dim=-1), rnn_state)
 
-        state = self.dense(torch.cat([obs, output], dim=-1))
+        state = self.dense(torch.cat([obs_vec, output], dim=-1))
 
         return state, hn
 
 
 class ModelTransition(m.ModelTransition):
     def _build_model(self):
-        return super()._build_model(extra_size=EXTRA_SIZE)
+        return super()._build_model(extra_size=EXTRA_SIZE if self.use_extra_data else 0)
 
     def extra_obs(self, obs_list):
         return obs_list[0][..., :EXTRA_SIZE]

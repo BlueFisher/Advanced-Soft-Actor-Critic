@@ -1,15 +1,18 @@
 import logging
 import math
 import time
+from itertools import chain
 from pathlib import Path
+from typing import List, Tuple, Union
 
 import numpy as np
-import tensorflow as tf
-import tensorflow_probability as tfp
+import torch
+from torch import autograd, distributions, nn, optim
+from torch.nn import functional
+from torch.utils.tensorboard import SummaryWriter
 
 import algorithm.constants as C
 
-from .cpu2gpu_buffer import CPU2GPUBuffer
 from .replay_buffer import PrioritizedReplayBuffer
 from .utils import *
 
@@ -20,14 +23,15 @@ class SAC_Base(object):
     _last_save_time = 0
 
     def __init__(self,
-                 obs_dims,
-                 d_action_dim,
-                 c_action_dim,
-                 model_abs_dir,
+                 obs_shapes: Tuple,
+                 d_action_size: int,
+                 c_action_size: int,
+                 model_abs_dir: Union[str, None],
                  model,
-                 summary_path='log',
-                 train_mode=True,
-                 last_ckpt=None,
+                 device: Union[str, None] = None,
+                 summary_path: str = 'log',
+                 train_mode: bool = True,
+                 last_ckpt: Union[str, None] = None,
 
                  seed=None,
                  write_summary_per_step=1e3,
@@ -63,13 +67,16 @@ class SAC_Base(object):
                  use_rnd=False,
                  rnd_n_sample=10,
                  use_normalization=False,
+                 use_add_with_td=False,
 
                  replay_config=None):
         """
-        obs_dims: List of dimensions of observations
-        action_dim: Dimension of action
+        obs_shapes: List of dimensions of observations
+        d_action_size: Dimension of discrete actions
+        c_action_size: Dimension of continuous actions
         model_abs_dir: The directory that saves summary, checkpoints, config etc.
         model: Custom Model Class
+        device: Training in CPU or GPU
         train_mode: Is training or inference
         last_ckpt: The checkpoint to restore
 
@@ -94,7 +101,7 @@ class SAC_Base(object):
         v_lambda: Discount factor for V-trace
         v_rho: Rho for V-trace
         v_c: C for V-trace
-        clip_epsilon: Epsilon for q and policy clip
+        clip_epsilon: Epsilon for q clip
 
         use_priority: If use PER importance ratio
         use_n_step_is: If use importance sampling
@@ -106,15 +113,11 @@ class SAC_Base(object):
         use_rnd: If use RND
         rnd_n_sample: RND sample times
         use_normalization: If use observation normalization
+        use_add_with_td: If add transitions in replay buffer with td-error
         """
-
-        physical_devices = tf.config.experimental.list_physical_devices('GPU')
-        if len(physical_devices) > 0:
-            tf.config.experimental.set_memory_growth(physical_devices[0], True)
-
-        self.obs_dims = obs_dims
-        self.d_action_dim = d_action_dim
-        self.c_action_dim = c_action_dim
+        self.obs_shapes = obs_shapes
+        self.d_action_size = d_action_size
+        self.c_action_size = c_action_size
         self.train_mode = train_mode
 
         self.ensemble_q_num = ensemble_q_num
@@ -147,317 +150,300 @@ class SAC_Base(object):
         self.use_rnd = use_rnd
         self.rnd_n_sample = rnd_n_sample
         self.use_normalization = use_normalization
+        self.use_add_with_td = use_add_with_td
 
-        self.action_dim = self.d_action_dim + self.c_action_dim
-
-        self.use_add_with_td = False
+        self.device = device
+        if device is None:
+            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         if seed is not None:
-            tf.random.set_seed(seed)
+            torch.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
 
+        self.summary_writer = None
         if model_abs_dir:
             summary_path = Path(model_abs_dir).joinpath(summary_path)
-            self.summary_writer = tf.summary.create_file_writer(str(summary_path))
+            self.summary_writer = SummaryWriter(str(summary_path))
 
         if self.train_mode:
             replay_config = {} if replay_config is None else replay_config
             self.replay_buffer = PrioritizedReplayBuffer(**replay_config)
 
         self._build_model(model, init_log_alpha, learning_rate)
-        self._init_or_restore(model_abs_dir, last_ckpt)
-
-        self._init_tf_function()
-        self._train_data_buffer = CPU2GPUBuffer(self._sample,
-                                                self.get_train_input_signature(self.replay_buffer.batch_size),
-                                                can_return_None=True)
+        self._init_or_restore(model_abs_dir, int(last_ckpt) if last_ckpt is not None else None)
 
     def _build_model(self, model, init_log_alpha, learning_rate):
         """
         Initialize variables, network models and optimizers
         """
-        self.log_alpha_d = tf.Variable(init_log_alpha, dtype=tf.float32, name='log_alpha_d')
-        self.log_alpha_c = tf.Variable(init_log_alpha, dtype=tf.float32, name='log_alpha_c')
+        self.global_step = torch.tensor(0, dtype=torch.int64, requires_grad=False, device='cpu')
 
-        self.global_step = tf.Variable(0, dtype=tf.int64, trainable=False, name='global_step')
+        self._gamma_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.gamma, device=self.device)
+        self._lambda_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.v_lambda, device=self.device)
 
-        def adam_optimizer(): return tf.keras.optimizers.Adam(learning_rate)
+        def adam_optimizer(params):
+            return optim.Adam(params, lr=learning_rate)
 
-        if self.use_auto_alpha:
-            self.optimizer_alpha = adam_optimizer()
-
+        """ NORMALIZATION & REPRESENTATION """
         if self.use_normalization:
-            self._create_normalizer()
+            self.normalizer_step = torch.tensor(0, dtype=torch.int32, device=self.device, requires_grad=False)
+            self.running_means = []
+            self.running_variances = []
+            for shape in self.obs_shapes:
+                self.running_means.append(torch.zeros(shape, device=self.device))
+                self.running_variances.append(torch.ones(shape, device=self.device))
 
             p_self = self
 
-            # When tensorflow executes ModelRep.call, it will add a kwarg 'training'
-            # automatically. But if the subclass does not specify the 'training' argument,
-            # it will throw exception when calling super().call(obs_list, *args, **kwargs)
-
-            import inspect
-
-            has_training = 'training' in inspect.signature(model.ModelRep.call).parameters.keys()
-
             class ModelRep(model.ModelRep):
-                def call(self, obs_list, *args, **kwargs):
+                def forward(self, obs_list, *args, **kwargs):
                     obs_list = [
-                        tf.clip_by_value(
-                            (obs - p_self.running_means)
-                            / tf.sqrt(
-                                p_self.running_variances / (tf.cast(p_self.normalizer_step, tf.float32) + 1)
-                            ),
+                        torch.clamp(
+                            (obs - mean) / torch.sqrt(variance / (p_self.normalizer_step + 1)),
                             -5, 5
-                        ) for obs in obs_list
+                        ) for obs, mean, variance in zip(obs_list,
+                                                         p_self.running_means,
+                                                         p_self.running_variances)
                     ]
 
-                    if 'training' in kwargs and not has_training:
-                        del kwargs['training']
-
-                    return super().call(obs_list, *args, **kwargs)
+                    return super().forward(obs_list, *args, **kwargs)
         else:
             ModelRep = model.ModelRep
 
         if self.use_rnn:
             # Get represented state dimension
-            self.model_rep = ModelRep(self.obs_dims, self.d_action_dim, self.c_action_dim)
-            self.model_target_rep = ModelRep(self.obs_dims, self.d_action_dim, self.c_action_dim)
+            self.model_rep: nn.Module = ModelRep(self.obs_shapes, self.d_action_size, self.c_action_size).to(self.device)
+            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes, self.d_action_size, self.c_action_size).to(self.device)
             # Get state and rnn_state dimension
-            state, next_rnn_state = self.model_rep.init()
-            self.rnn_state_dim = next_rnn_state.shape[-1]
+            state_size, self.rnn_state_shape = self.model_rep.get_output_shape(self.device)
         else:
             # Get represented state dimension
-            self.model_rep = ModelRep(self.obs_dims)
-            self.model_target_rep = ModelRep(self.obs_dims)
-            # Get state dimension
-            state = self.model_rep.init()
-            self.rnn_state_dim = 1
-        state_dim = state.shape[-1]
-        logger.info(f'State Dimension: {state_dim}')
-        self.optimizer_rep = adam_optimizer()
+            self.model_rep: nn.Module = ModelRep(self.obs_shapes).to(self.device)
+            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes).to(self.device)
+            state_size = self.model_rep.get_output_shape(self.device)
 
-        # PRMs
+        for param in self.model_target_rep.parameters():
+            param.requires_grad = False
+
+        logger.info(f'State size: {state_size}')
+
+        if len(list(self.model_rep.parameters())) > 0:
+            self.optimizer_rep = adam_optimizer(self.model_rep.parameters())
+        else:
+            self.optimizer_rep = None
+
+        """ Q """
+        self.model_q_list: List[nn.Module] = [model.ModelQ(state_size,
+                                                           self.d_action_size,
+                                                           self.c_action_size).to(self.device)
+                                              for _ in range(self.ensemble_q_num)]
+
+        self.model_target_q_list: List[nn.Module] = [model.ModelQ(state_size,
+                                                                  self.d_action_size,
+                                                                  self.c_action_size).to(self.device)
+                                                     for _ in range(self.ensemble_q_num)]
+        for model_target_q in self.model_target_q_list:
+            for param in model_target_q.parameters():
+                param.requires_grad = False
+
+        self.optimizer_q_list = [adam_optimizer(self.model_q_list[i].parameters()) for i in range(self.ensemble_q_num)]
+
+        """ POLICY """
+        self.model_policy: nn.Module = model.ModelPolicy(state_size, self.d_action_size, self.c_action_size).to(self.device)
+        self.optimizer_policy = adam_optimizer(self.model_policy.parameters())
+
+        """ RECURRENT PREDICTION MODELS """
         if self.use_prediction:
-            self.model_transition = model.ModelTransition(state_dim,
-                                                          self.d_action_dim,
-                                                          self.c_action_dim,
-                                                          self.use_extra_data)
-            self.model_reward = model.ModelReward(state_dim,
-                                                  self.use_extra_data)
-            self.model_observation = model.ModelObservation(state_dim, self.obs_dims,
-                                                            self.use_extra_data)
+            self.model_transition: nn.Module = model.ModelTransition(state_size,
+                                                                     self.d_action_size,
+                                                                     self.c_action_size,
+                                                                     self.use_extra_data).to(self.device)
+            self.model_reward: nn.Module = model.ModelReward(state_size).to(self.device)
+            self.model_observation: nn.Module = model.ModelObservation(state_size, self.obs_shapes,
+                                                                       self.use_extra_data).to(self.device)
 
-            self.optimizer_prediction = adam_optimizer()
+            self.optimizer_prediction = adam_optimizer(chain(self.model_transition.parameters(),
+                                                             self.model_reward.parameters(),
+                                                             self.model_observation.parameters()))
 
+        """ ALPHA """
+        self.log_d_alpha = torch.tensor(init_log_alpha, dtype=torch.float32, requires_grad=True, device=self.device)
+        self.log_c_alpha = torch.tensor(init_log_alpha, dtype=torch.float32, requires_grad=True, device=self.device)
+
+        if self.use_auto_alpha:
+            self.optimizer_alpha = adam_optimizer([self.log_d_alpha, self.log_c_alpha])
+
+        """ CURIOSITY """
         if self.use_curiosity:
-            self.model_forward = model.ModelForward(state_dim, self.action_dim)
-            self.optimizer_forward = adam_optimizer()
+            self.model_forward: nn.Module = model.ModelForward(state_size,
+                                                               self.d_action_size + self.c_action_size).to(self.device)
+            self.optimizer_forward: nn.Module = adam_optimizer(self.model_forward.parameters())
 
+        """ RANDOM NETWORK DISTILLATION """
         if self.use_rnd:
-            self.model_rnd = model.ModelRND(state_dim, self.d_action_dim + self.c_action_dim)
-            self.model_target_rnd = model.ModelRND(state_dim, self.d_action_dim + self.c_action_dim)
-            self.optimizer_rnd = tf.keras.optimizers.Adam(learning_rate)
+            self.model_rnd: nn.Module = model.ModelRND(state_size, self.d_action_size + self.c_action_size).to(self.device)
+            self.model_target_rnd: nn.Module = model.ModelRND(state_size, self.d_action_size + self.c_action_size).to(self.device)
+            for param in self.model_target_rnd.parameters():
+                param.requires_grad = False
+            self.optimizer_rnd = adam_optimizer(self.model_rnd.parameters())
 
-        self.model_q_list = [model.ModelQ(state_dim, self.d_action_dim, self.c_action_dim, f'q{i}')
-                             for i in range(self.ensemble_q_num)]
-        self.model_target_q_list = [model.ModelQ(state_dim, self.d_action_dim, self.c_action_dim, f'target_q{i}')
-                                    for i in range(self.ensemble_q_num)]
-        self.optimizer_q_list = [adam_optimizer() for _ in range(self.ensemble_q_num)]
-
-        self.model_policy = model.ModelPolicy(state_dim, self.d_action_dim, self.c_action_dim, 'policy')
-        self.optimizer_policy = adam_optimizer()
-
-    def _create_normalizer(self):
-        self.normalizer_step = tf.Variable(0, dtype=tf.int32, trainable=False, name='normalizer_step')
-        self.running_means = []
-        self.running_variances = []
-        for dim in self.obs_dims:
-            self.running_means.append(
-                tf.Variable(tf.zeros(dim), trainable=False, name='running_means'))
-            self.running_variances.append(
-                tf.Variable(tf.ones(dim), trainable=False, name='running_variances'))
-
-    def _init_or_restore(self, model_abs_dir, last_ckpt):
+    def _init_or_restore(self, model_abs_dir, last_ckpt: int):
         """
         Initialize network weights from scratch or restore from model_abs_dir
         """
-        ckpt_saved = {
-            'log_alpha_d': self.log_alpha_d,
-            'log_alpha_c': self.log_alpha_c,
-            'global_step': self.global_step,
-
-            'model_rep': self.model_rep,
-            'model_target_rep': self.model_target_rep,
-            'model_policy': self.model_policy,
-
-            'optimizer_rep': self.optimizer_rep,
-            'optimizer_policy': self.optimizer_policy
+        self.ckpt_dict = ckpt_dict = {
+            'global_step': self.global_step
         }
 
-        for i in range(self.ensemble_q_num):
-            ckpt_saved[f'model_q{i}'] = self.model_q_list[i]
-            ckpt_saved[f'model_target_q{i}'] = self.model_target_q_list[i]
-            ckpt_saved[f'optimizer_q{i}'] = self.optimizer_q_list[i]
-
+        """ NORMALIZATION & REPRESENTATION """
         if self.use_normalization:
-            ckpt_saved['normalizer_step'] = self.normalizer_step
+            ckpt_dict['normalizer_step'] = self.normalizer_step
             for i, v in enumerate(self.running_means):
-                ckpt_saved[f'running_means_{i}'] = v
+                ckpt_dict[f'running_means_{i}'] = v
             for i, v in enumerate(self.running_variances):
-                ckpt_saved[f'running_variances_{i}'] = v
+                ckpt_dict[f'running_variances_{i}'] = v
 
+        if len(list(self.model_rep.parameters())) > 0:
+            ckpt_dict['model_rep'] = self.model_rep
+            ckpt_dict['model_target_rep'] = self.model_target_rep
+            ckpt_dict['optimizer_rep'] = self.optimizer_rep
+
+        """ Q """
+        for i in range(self.ensemble_q_num):
+            ckpt_dict[f'model_q{i}'] = self.model_q_list[i]
+            ckpt_dict[f'model_target_q{i}'] = self.model_target_q_list[i]
+            ckpt_dict[f'optimizer_q{i}'] = self.optimizer_q_list[i]
+
+        """ POLICY """
+        ckpt_dict['model_policy'] = self.model_policy
+        ckpt_dict['optimizer_policy'] = self.optimizer_policy
+
+        """ RECURRENT PREDICTION MODELS """
         if self.use_prediction:
-            ckpt_saved['model_transition'] = self.model_transition
-            ckpt_saved['model_reward'] = self.model_reward
-            ckpt_saved['model_observation'] = self.model_observation
-            ckpt_saved['optimizer_prediction'] = self.optimizer_prediction
+            ckpt_dict['model_transition'] = self.model_transition
+            ckpt_dict['model_reward'] = self.model_reward
+            ckpt_dict['model_observation'] = self.model_observation
+            ckpt_dict['optimizer_prediction'] = self.optimizer_prediction
 
+        """ ALPHA """
+        ckpt_dict['log_d_alpha'] = self.log_d_alpha
+        ckpt_dict['log_c_alpha'] = self.log_c_alpha
         if self.use_auto_alpha:
-            ckpt_saved['optimizer_alpha'] = self.optimizer_alpha
+            ckpt_dict['optimizer_alpha'] = self.optimizer_alpha
 
+        """ CURIOSITY """
         if self.use_curiosity:
-            ckpt_saved['model_forward'] = self.model_forward
-            ckpt_saved['optimizer_forward'] = self.optimizer_forward
+            ckpt_dict['model_forward'] = self.model_forward
+            ckpt_dict['optimizer_forward'] = self.optimizer_forward
 
         if self.use_rnd:
-            ckpt_saved['model_rnd'] = self.model_rnd
-            ckpt_saved['optimizer_rnd'] = self.optimizer_rnd
+            ckpt_dict['model_rnd'] = self.model_rnd
+            ckpt_dict['optimizer_rnd'] = self.optimizer_rnd
 
-        # Execute init() of all models from nn_models
-        for m in ckpt_saved.values():
-            if isinstance(m, tf.keras.Model):
-                m.init()
-
+        self.ckpt_dir = None
         if model_abs_dir:
-            ckpt = tf.train.Checkpoint(**ckpt_saved)
-            ckpt_dir = Path(model_abs_dir).joinpath('model')
-            self.ckpt_manager = tf.train.CheckpointManager(ckpt, ckpt_dir, max_to_keep=10)
+            self.ckpt_dir = ckpt_dir = Path(model_abs_dir).joinpath('model')
 
-            if self.ckpt_manager.latest_checkpoint:
-                if last_ckpt is None:
-                    latest_checkpoint = self.ckpt_manager.latest_checkpoint
-                else:
-                    i = str.rindex(self.ckpt_manager.latest_checkpoint, '-')
-                    latest_checkpoint = self.ckpt_manager.latest_checkpoint[:i] + f'-{last_ckpt}'
-                ckpt.restore(latest_checkpoint)
-                logger.info(f'Restored from {latest_checkpoint}')
-                self.init_iteration = int(latest_checkpoint.split('-')[-1])
+            ckpts = []
+            if ckpt_dir.exists():
+                for ckpt_path in ckpt_dir.glob('*.pth'):
+                    ckpts.append(int(ckpt_path.stem))
+                ckpts.sort()
             else:
-                ckpt.restore(None)
+                ckpt_dir.mkdir()
+
+            if ckpts:
+                if last_ckpt is None:
+                    last_ckpt = ckpts[-1]
+                else:
+                    assert last_ckpt in ckpts
+
+                ckpt_restore_path = ckpt_dir.joinpath(f'{last_ckpt}.pth')
+                ckpt_restore = torch.load(ckpt_restore_path)
+                for name, model in ckpt_dict.items():
+                    if isinstance(model, torch.Tensor):
+                        model.data = ckpt_restore[name]
+                    else:
+                        model.load_state_dict(ckpt_restore[name])
+                        if isinstance(model, nn.Module):
+                            if self.train_mode:
+                                model.train()
+                            else:
+                                model.eval()
+
+                logger.info(f'Restored from {ckpt_restore_path}')
+                self.init_iteration = int(last_ckpt) + 1
+            else:
                 logger.info('Initializing from scratch')
                 self.init_iteration = 0
                 self._update_target_variables()
 
-    def get_train_input_signature(self, batch_size=None):
-        None_tensor = tf.TensorSpec((0, ))
+    def save_model(self):
+        if self.ckpt_dir:
+            global_step = self.global_step.item()
+            ckpt_path = self.ckpt_dir.joinpath(f'{global_step}.pth')
 
-        step_size = self.burn_in_step + self.n_step
-        """ _train
-        n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
-        n_mu_probs=None, priority_is=None,
-        initial_rnn_state=None """
-        signature = [
-            [tf.TensorSpec(shape=(batch_size, step_size, *t)) for t in self.obs_dims],
-            tf.TensorSpec(shape=(batch_size, step_size, self.action_dim)),
-            tf.TensorSpec(shape=(batch_size, step_size)),
-            [tf.TensorSpec(shape=(batch_size, *t)) for t in self.obs_dims],
-            tf.TensorSpec(shape=(batch_size, step_size)),
-            tf.TensorSpec(shape=(batch_size, step_size)) if self.use_n_step_is else None_tensor,
-            tf.TensorSpec(shape=(batch_size, 1)) if self.use_priority else None_tensor,
-            tf.TensorSpec(shape=(batch_size, self.rnn_state_dim)) if self.use_rnn else None_tensor,
-        ]
+            torch.save({
+                k: v if isinstance(v, torch.Tensor) else v.state_dict()
+                for k, v in self.ckpt_dict.items()
+            }, ckpt_path)
+            logger.info(f"Model saved at {ckpt_path}")
 
-        return signature
-
-    def _init_tf_function(self):
+    def write_constant_summaries(self, constant_summaries, iteration=None):
         """
-        Initialize some @tf.function and specify tf.TensorSpec
+        Write constant information from sac_main.py, such as reward, iteration, etc.
         """
+        if self.summary_writer is not None:
+            for s in constant_summaries:
+                self.summary_writer.add_scalar(s['tag'], s['simple_value'],
+                                               self.global_step.item() if iteration is None else iteration)
 
-        None_tensor = tf.TensorSpec((0, ))
+        self.summary_writer.flush()
 
-        """ _udpate_normalizer
-        obses_list """
-        if self.use_normalization:
-            self._udpate_normalizer = np_to_tensor(
-                tf.function(self._udpate_normalizer.python_function, input_signature=[
-                    [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims]
-                ]))
-
-        """ get_n_probs
-        n_obses_list, n_selected_actions, rnn_state=None """
-        tmp_get_n_probs = tf.function(self.get_n_probs.python_function, input_signature=[
-            [tf.TensorSpec(shape=(None, None, *t)) for t in self.obs_dims],
-            tf.TensorSpec(shape=(None, None, self.action_dim)),
-            tf.TensorSpec(shape=(None, self.rnn_state_dim)) if self.use_rnn else None_tensor,
-        ])
-        self.get_n_probs = np_to_tensor(tmp_get_n_probs)
-
-        step_size = self.burn_in_step + self.n_step
-
-        """ get_td_error
-        n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
-        n_mu_probs=None,
-        rnn_state=None """
-        signature = [
-            [tf.TensorSpec(shape=(None, step_size, *t)) for t in self.obs_dims],
-            tf.TensorSpec(shape=(None, step_size, self.action_dim)),
-            tf.TensorSpec(shape=(None, step_size)),
-            [tf.TensorSpec(shape=(None, *t)) for t in self.obs_dims],
-            tf.TensorSpec(shape=(None, step_size)),
-            tf.TensorSpec(shape=(None, step_size)) if self.use_n_step_is else None_tensor,
-            tf.TensorSpec(shape=(None, self.rnn_state_dim)) if self.use_rnn else None_tensor,
-        ]
-        self.get_td_error = np_to_tensor(tf.function(self.get_td_error.python_function,
-                                                     input_signature=signature))
-
-        if self.train_mode:
-            signature = self.get_train_input_signature(None)
-            self._train = np_to_tensor(tf.function(self._train.python_function,
-                                                   input_signature=signature))
+    def _increase_global_step(self):
+        self.global_step.add_(1)
 
     def get_initial_rnn_state(self, batch_size):
         assert self.use_rnn
 
-        return np.zeros([batch_size, self.rnn_state_dim], dtype=np.float32)
+        return np.zeros([batch_size, *self.rnn_state_shape], dtype=np.float32)
 
-    @tf.function
+    @torch.no_grad()
     def _update_target_variables(self, tau=1.):
         """
         soft update target networks (default hard)
         """
-        target_variables, eval_variables = [], []
+        target = self.model_target_rep.parameters()
+        source = self.model_rep.parameters()
 
         for i in range(self.ensemble_q_num):
-            target_variables += self.model_target_q_list[i].trainable_variables
-            eval_variables += self.model_q_list[i].trainable_variables
+            target = chain(target, self.model_target_q_list[i].parameters())
+            source = chain(source, self.model_q_list[i].parameters())
 
-        target_variables += self.model_target_rep.trainable_variables
-        eval_variables += self.model_rep.trainable_variables
+        for target_param, param in zip(target, source):
+            target_param.data.copy_(
+                target_param.data * (1. - tau) + param.data * tau
+            )
 
-        [t.assign(tau * e + (1. - tau) * t) for t, e in zip(target_variables, eval_variables)]
-
-    @tf.function
+    @torch.no_grad()
     def _udpate_normalizer(self, obs_list):
-        self.normalizer_step.assign(self.normalizer_step + tf.shape(obs_list[0])[0])
+        self.normalizer_step = self.normalizer_step + obs_list[0].shape[0]
 
-        input_to_old_means = [tf.subtract(obs_list[i], self.running_means[i]) for i in range(len(obs_list))]
-        new_means = [self.running_means[i] + tf.reduce_sum(
-            input_to_old_means[i] / tf.cast(self.normalizer_step, dtype=tf.float32), axis=0
+        input_to_old_means = [obs_list[i] - self.running_means[i] for i in range(len(obs_list))]
+        new_means = [self.running_means[i] + torch.sum(
+            input_to_old_means[i] / self.normalizer_step, dim=0
         ) for i in range(len(obs_list))]
 
-        input_to_new_means = [tf.subtract(obs_list[i], new_means[i]) for i in range(len(obs_list))]
-        new_variance = [self.running_variances[i] + tf.reduce_sum(
-            input_to_new_means[i] * input_to_old_means[i], axis=0
+        input_to_new_means = [obs_list[i] - new_means[i] for i in range(len(obs_list))]
+        new_variance = [self.running_variances[i] + torch.sum(
+            input_to_new_means[i] * input_to_old_means[i], dim=0
         ) for i in range(len(obs_list))]
 
-        [self.running_means[i].assign(new_means[i]) for i in range(len(obs_list))]
-        [self.running_variances[i].assign(new_variance[i]) for i in range(len(obs_list))]
+        self.running_means = new_means
+        self.running_variances = new_variance
 
-    @tf.function
+    @torch.no_grad()
     def get_n_probs(self, n_obses_list, n_selected_actions, rnn_state=None):
-        """
-        tf.function
-        """
         if self.use_rnn:
             n_states, _ = self.model_rep(n_obses_list,
                                          gen_pre_n_actions(n_selected_actions),
@@ -467,480 +453,32 @@ class SAC_Base(object):
 
         d_policy, c_policy = self.model_policy(n_states)
 
-        policy_prob = tf.ones((tf.shape(n_states)[:2]))  # [Batch, n]
+        policy_prob = torch.ones((n_states.shape[:2]), device=self.device)  # [Batch, n]
 
-        if self.d_action_dim:
-            n_selected_d_actions = n_selected_actions[..., :self.d_action_dim]
-            policy_prob *= d_policy.prob(tf.argmax(n_selected_d_actions, axis=-1))  # [Batch, n]
+        if self.d_action_size:
+            n_selected_d_actions = n_selected_actions[..., :self.d_action_size]
+            policy_prob *= torch.exp(d_policy.log_prob(n_selected_d_actions))   # [Batch, n]
 
-        if self.c_action_dim:
-            n_selected_c_actions = n_selected_actions[..., self.d_action_dim:]
-            c_policy_prob = squash_correction_prob(c_policy, tf.atanh(n_selected_c_actions))
-            # [Batch, n, action_dim]
-            policy_prob *= tf.reduce_prod(c_policy_prob, axis=-1)  # [Batch, n]
+        if self.c_action_size:
+            n_selected_c_actions = n_selected_actions[..., self.d_action_size:]
+            c_policy_prob = squash_correction_prob(c_policy, torch.atanh(n_selected_c_actions))
+            # [Batch, n, action_size]
+            policy_prob *= torch.prod(c_policy_prob, dim=-1)  # [Batch, n]
 
         return policy_prob
 
-    @tf.function
-    def get_dqn_like_d_y(self, n_rewards, n_dones,
-                         stacked_next_q, stacked_next_target_q):
-        """
-        n_rewards: [Batch, n]
-        n_dones: [Batch, n]
-        stacked_next_q: [ensemble_q_sample, Batch, n, d_action_dim]
-        stacked_next_target_q: [ensemble_q_sample, Batch, n, d_action_dim]
-        """
-        gamma_ratio = [[tf.pow(self.gamma, i) for i in range(self.n_step)]]
-
-        stacked_next_q = stacked_next_q[..., -1, :]  # [ensemble_q_sample, Batch, d_action_dim]
-        stacked_next_target_q = stacked_next_target_q[..., -1, :]  # [ensemble_q_sample, Batch, d_action_dim]
-
-        done = n_dones[:, -1:]  # [Batch, 1]
-
-        mask_stacked_q = tf.one_hot(tf.argmax(stacked_next_q, axis=-1), self.d_action_dim)
-        # [ensemble_q_sample, Batch, d_action_dim]
-
-        stacked_max_next_target_q = tf.reduce_sum(stacked_next_target_q * mask_stacked_q,
-                                                  axis=-1,
-                                                  keepdims=True)
-        # [ensemble_q_sample, Batch, 1]
-
-        next_q = tf.reduce_min(stacked_max_next_target_q, axis=0)
-        # [Batch, 1]
-
-        g = tf.reduce_sum(gamma_ratio * n_rewards, axis=-1, keepdims=True)  # [Batch, 1]
-        y = g + tf.pow(self.gamma, self.n_step) * next_q * (1 - done)  # [Batch, 1]
-
-        return y
-
-    @tf.function
-    def _v_trace(self, n_rewards, n_dones,
-                 n_mu_probs, n_pi_probs,
-                 v, next_v):
-        """
-        n_rewards: [Batch, n]
-        n_dones: [Batch, n]
-        n_mu_probs: [Batch, n]
-        n_pi_probs: [Batch, n]
-        v: [Batch, n]
-        next_v: [Batch, n],
-        """
-
-        gamma_ratio = [[tf.pow(self.gamma, i) for i in range(self.n_step)]]
-        lambda_ratio = [[tf.pow(self.v_lambda, i) for i in range(self.n_step)]]
-
-        td_error = n_rewards + self.gamma * (1 - n_dones) * next_v - v  # [Batch, n]
-        td_error = gamma_ratio * td_error
-
-        if self.use_n_step_is:
-            td_error = lambda_ratio * td_error
-
-            n_step_is = n_pi_probs / tf.maximum(n_mu_probs, 1e-8)
-
-            # ρ_t, t \in [s, s+n-1]
-            rho = tf.minimum(n_step_is, self.v_rho)  # [Batch, n]
-
-            # \prod{c_i}, i \in [s, t-1]
-            c = tf.minimum(n_step_is, self.v_c)
-            c = tf.concat([tf.ones((tf.shape(n_step_is)[0], 1)), c[..., :-1]], axis=-1)
-            c = tf.math.cumprod(c, axis=1)
-
-            # \prod{c_i} * ρ_t * td_error
-            td_error = c * rho * td_error
-
-        # \sum{td_error}
-        r = tf.reduce_sum(td_error, axis=1, keepdims=True)  # [Batch, 1]
-
-        # V_s + \sum{td_error}
-        y = v[:, 0:1] + r  # [Batch, 1]
-
-        return y
-
-    @tf.function
-    def _get_y(self, n_states, n_actions, n_rewards, state_, n_dones,
-               n_mu_probs=None):
-        """
-        tf.function
-        Get target value
-        """
-
-        alpha_d = tf.exp(self.log_alpha_d)
-        alpha_c = tf.exp(self.log_alpha_c)
-
-        next_n_states = tf.concat([n_states[:, 1:, ...], tf.reshape(state_, (-1, 1, state_.shape[-1]))], axis=1)
-
-        d_policy, c_policy = self.model_policy(n_states)
-        next_d_policy, next_c_policy = self.model_policy(next_n_states)
-
-        if self.use_curiosity:
-            approx_next_n_states = self.model_forward(n_states, n_actions)
-            in_n_rewards = tf.reduce_sum(tf.math.squared_difference(approx_next_n_states, next_n_states), axis=2) * 0.5
-            in_n_rewards = in_n_rewards * self.curiosity_strength
-            n_rewards += in_n_rewards
-
-        if self.c_action_dim:
-            n_c_actions_sampled = c_policy.sample()  # [Batch, n, action_dim]
-            next_n_c_actions_sampled = next_c_policy.sample()
-        else:
-            n_c_actions_sampled = tf.zeros((0,))
-            next_n_c_actions_sampled = tf.zeros((0,))
-
-        # ([Batch, n, action_dim], [Batch, n, 1])
-        q_list = [q(n_states, tf.tanh(n_c_actions_sampled)) for q in self.model_target_q_list]
-        next_q_list = [q(next_n_states, tf.tanh(next_n_c_actions_sampled)) for q in self.model_target_q_list]
-
-        d_q_list = [q[0] for q in q_list]  # [Batch, n, action_dim]
-        c_q_list = [q[1] for q in q_list]  # [Batch, n, 1]
-
-        next_d_q_list = [q[0] for q in next_q_list]  # [Batch, n, action_dim]
-        next_c_q_list = [q[1] for q in next_q_list]  # [Batch, n, 1]
-
-        d_y, c_y = tf.zeros((0,)), tf.zeros((0,))
-
-        if self.d_action_dim:
-            stacked_next_d_q = tf.gather(next_d_q_list,
-                                         tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
-            # [ensemble_q_num, Batch, n, d_action_dim] -> [ensemble_q_sample, Batch, n, d_action_dim]
-
-            if self.discrete_dqn_like:
-                next_d_eval_q_list = [q(next_n_states, tf.tanh(next_n_c_actions_sampled))[0] for q in self.model_q_list]
-                stacked_next_d_eval_q = tf.gather(next_d_eval_q_list,
-                                                  tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
-                # [ensemble_q_num, Batch, n, d_action_dim] -> [ensemble_q_sample, Batch, n, d_action_dim]
-
-                d_y = self.get_dqn_like_d_y(n_rewards, n_dones,
-                                            stacked_next_d_eval_q,
-                                            stacked_next_d_q)
-            else:
-                stacked_d_q = tf.gather(d_q_list,
-                                        tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
-                # [ensemble_q_num, Batch, n, d_action_dim] -> [ensemble_q_sample, Batch, n, d_action_dim]
-
-                min_q = tf.reduce_min(stacked_d_q, axis=0)  # [Batch, n, d_action_dim]
-                min_next_q = tf.reduce_min(stacked_next_d_q, axis=0)  # [Batch, n, d_action_dim]
-
-                probs = tf.nn.softmax(d_policy.logits)  # [Batch, n, action_dim]
-                next_probs = tf.nn.softmax(next_d_policy.logits)  # [Batch, n, action_dim]
-                clipped_probs = tf.maximum(probs, 1e-8)
-                clipped_next_probs = tf.maximum(next_probs, 1e-8)
-                tmp_v = min_q - alpha_d * tf.math.log(clipped_probs)  # [Batch, n, action_dim]
-                tmp_next_v = min_next_q - alpha_d * tf.math.log(clipped_next_probs)  # [Batch, n, action_dim]
-
-                v = tf.reduce_sum(probs * tmp_v, axis=-1)  # [Batch, n]
-                next_v = tf.reduce_sum(next_probs * tmp_next_v, axis=-1)  # [Batch, n]
-
-                if self.use_n_step_is:
-                    n_d_actions = n_actions[..., :self.d_action_dim]
-                    n_pi_probs = d_policy.prob(tf.argmax(n_d_actions, axis=-1))  # [Batch, n]
-
-                d_y = self._v_trace(n_rewards, n_dones,
-                                    n_mu_probs,
-                                    n_pi_probs if self.use_n_step_is else tf.zeros((0,)),
-                                    v, next_v)
-
-        if self.c_action_dim:
-            n_actions_log_prob = tf.reduce_sum(squash_correction_log_prob(c_policy, n_c_actions_sampled), axis=-1)  # [Batch, n]
-            next_n_actions_log_prob = tf.reduce_sum(squash_correction_log_prob(next_c_policy, next_n_c_actions_sampled), axis=-1)
-
-            stacked_c_q = tf.gather(c_q_list,
-                                    tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
-            # [ensemble_q_num, Batch, n, 1] -> [ensemble_q_sample, Batch, n, 1]
-            stacked_next_c_q = tf.gather(next_c_q_list,
-                                         tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
-            # [ensemble_q_num, Batch, n, 1] -> [ensemble_q_sample, Batch, n, 1]
-
-            min_q = tf.squeeze(tf.reduce_min(stacked_c_q, axis=0), axis=-1)  # [Batch, n]
-            min_next_q = tf.squeeze(tf.reduce_min(stacked_next_c_q, axis=0), axis=-1)  # [Batch, n]
-
-            v = min_q - alpha_c * n_actions_log_prob  # [Batch, n]
-            next_v = min_next_q - alpha_c * next_n_actions_log_prob  # [Batch, n]
-
-            # v = scale_inverse_h(v)
-            # next_v = scale_inverse_h(next_v)
-
-            if self.use_n_step_is:
-                n_c_actions = n_actions[..., self.d_action_dim:]
-                n_pi_probs = squash_correction_prob(c_policy, tf.atanh(n_c_actions))
-                # [Batch, n, action_dim]
-                n_pi_probs = tf.reduce_prod(n_pi_probs, axis=-1)  # [Batch, n]
-
-            c_y = self._v_trace(n_rewards, n_dones,
-                                n_mu_probs,
-                                n_pi_probs if self.use_n_step_is else tf.zeros((0,)),
-                                v, next_v)
-
-        return d_y, c_y  # [None, 1]
-
-    @tf.function
-    def _train(self, n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
-               n_mu_probs=None, priority_is=None,
-               initial_rnn_state=None):
-        """
-        tf.function
-        """
-        if self.global_step % self.update_target_per_step == 0:
-            self._update_target_variables(tau=self.tau)
-
-        with tf.GradientTape(persistent=True) as tape:
-            m_obses_list = [tf.concat([n_obses, tf.reshape(next_obs, (-1, 1, *next_obs.shape[1:]))], axis=1)
-                            for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
-            if self.use_rnn:
-                m_states, _ = self.model_rep(m_obses_list,
-                                             gen_pre_n_actions(n_actions, keep_last_action=True),
-                                             initial_rnn_state)
-                m_target_states, _ = self.model_target_rep(m_obses_list,
-                                                           gen_pre_n_actions(n_actions, keep_last_action=True),
-                                                           initial_rnn_state)
-            else:
-                m_states = self.model_rep(m_obses_list)
-                m_target_states = self.model_target_rep(m_obses_list)
-
-            n_states = m_states[:, :-1, ...]
-            state = m_states[:, self.burn_in_step, ...]
-
-            action = n_actions[:, self.burn_in_step, ...]
-            d_action = action[..., :self.d_action_dim]
-            c_action = action[..., self.d_action_dim:]
-
-            q_list = [q(state, c_action) for q in self.model_q_list]
-            # ([Batch, action_dim], [Batch, 1])
-            d_q_list = [q[0] for q in q_list]  # [Batch, action_dim]
-            c_q_list = [q[1] for q in q_list]  # [Batch, 1]
-
-            d_y, c_y = self._get_y(m_target_states[:, self.burn_in_step:-1, ...],
-                                   n_actions[:, self.burn_in_step:, ...],
-                                   n_rewards[:, self.burn_in_step:],
-                                   m_target_states[:, -1, ...],
-                                   n_dones[:, self.burn_in_step:],
-                                   n_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
-
-            d_y, c_y = tf.stop_gradient(d_y), tf.stop_gradient(c_y)
-            #  [Batch, 1], [Batch, 1]
-
-            d_policy, c_policy = self.model_policy(state)
-
-            ##### Q LOSS #####
-
-            loss_q_list = [tf.zeros((tf.shape(state)[0], 1)) for _ in range(self.ensemble_q_num)]
-
-            if self.d_action_dim:
-                for i in range(self.ensemble_q_num):
-                    q_single = tf.reduce_sum(d_action * d_q_list[i], axis=-1, keepdims=True)  # [Batch, 1]
-                    loss_q_list[i] += tf.square(q_single - d_y)
-
-            if self.c_action_dim:
-                if self.clip_epsilon > 0:
-                    target_c_q_list = [q(state, c_action)[1] for q in self.model_target_q_list]
-
-                    clipped_q_list = [target_c_q_list[i] + tf.clip_by_value(
-                        c_q_list[i] - target_c_q_list[i],
-                        -self.clip_epsilon,
-                        self.clip_epsilon,
-                    ) for i in range(self.ensemble_q_num)]
-
-                    loss_q_a_list = [tf.square(clipped_q - c_y) for clipped_q in clipped_q_list]
-                    loss_q_b_list = [tf.square(q - c_y) for q in c_q_list]
-
-                    for i in range(self.ensemble_q_num):
-                        loss_q_list[i] += tf.maximum(loss_q_a_list[i], loss_q_b_list[i])
-                else:
-                    for i in range(self.ensemble_q_num):
-                        loss_q_list[i] += tf.square(c_q_list[i] - c_y)
-
-            if self.use_priority:
-                loss_q_list = [loss * priority_is for loss in loss_q_list]
-
-            loss_q_list = [tf.reduce_mean(loss) for loss in loss_q_list]
-
-            loss_rep_q = sum(loss_q_list)
-
-            loss_mse = tf.keras.losses.MeanSquaredError()
-            if self.use_prediction:
-                if self.use_extra_data:
-                    extra_obs = self.model_transition.extra_obs(n_obses_list)[:, self.burn_in_step:, ...]
-                    extra_state = tf.concat([n_states[:, self.burn_in_step:, ...], extra_obs], axis=-1)
-                    approx_next_state_dist = self.model_transition(extra_state,
-                                                                   n_actions[:, self.burn_in_step:, ...])
-                else:
-                    approx_next_state_dist = self.model_transition(n_states[:, self.burn_in_step:, ...],
-                                                                   n_actions[:, self.burn_in_step:, ...])
-                loss_transition = -approx_next_state_dist.log_prob(m_target_states[:, self.burn_in_step + 1:, ...])
-                # loss_transition = -tf.maximum(loss_transition, -2.)
-                std_normal = tfp.distributions.Normal(tf.zeros_like(approx_next_state_dist.loc),
-                                                      tf.ones_like(approx_next_state_dist.scale))
-                loss_transition += self.transition_kl * tfp.distributions.kl_divergence(approx_next_state_dist, std_normal)
-                loss_transition = tf.reduce_mean(loss_transition)
-
-                approx_n_rewards = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])
-                loss_reward = loss_mse(approx_n_rewards, tf.expand_dims(n_rewards[:, self.burn_in_step:], 2))
-
-                loss_obs = self.model_observation.get_loss(m_states[:, self.burn_in_step:, ...],
-                                                           [m_obses[:, self.burn_in_step:, ...] for m_obses in m_obses_list])
-
-                loss_prediction = loss_transition + loss_reward + loss_obs
-
-            if self.use_curiosity:
-                approx_next_n_states = self.model_forward(n_states[:, self.burn_in_step:, ...],
-                                                          n_actions[:, self.burn_in_step:, ...])
-                next_n_states = m_states[:, self.burn_in_step + 1:, ...]
-                loss_forward = loss_mse(approx_next_n_states, next_n_states)
-
-            if self.use_rnd:
-                approx_f = self.model_rnd(n_states[:, self.burn_in_step:, ...],
-                                          n_actions[:, self.burn_in_step:, ...])
-                f = self.model_target_rnd(n_states[:, self.burn_in_step:, ...],
-                                          n_actions[:, self.burn_in_step:, ...])
-                loss_rnd = tf.reduce_mean(tf.math.squared_difference(f, approx_f))
-
-            ##### ALPHA LOSS & POLICY LOSS #####
-
-            loss_d_policy = tf.zeros((tf.shape(state)[0], 1))
-            loss_c_policy = tf.zeros((tf.shape(state)[0], 1))
-
-            loss_d_alpha = tf.zeros((tf.shape(state)[0], 1))
-            loss_c_alpha = tf.zeros((tf.shape(state)[0], 1))
-
-            alpha_d = tf.exp(self.log_alpha_d)
-            alpha_c = tf.exp(self.log_alpha_c)
-
-            if self.d_action_dim and not self.discrete_dqn_like:
-                probs = tf.nn.softmax(d_policy.logits)   # [Batch, action_dim]
-                clipped_probs = tf.maximum(probs, 1e-8)
-
-                stacked_d_q = tf.gather(d_q_list,
-                                        tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
-                # [ensemble_q_num, Batch, d_action_dim] -> [ensemble_q_sample, Batch, d_action_dim]
-                min_d_q = tf.reduce_min(stacked_d_q, axis=0)
-                # [ensemble_q_sample, Batch, d_action_dim] -> [Batch, d_action_dim]
-
-                _loss_policy = alpha_d * tf.math.log(clipped_probs) - min_d_q  # [Batch, d_action_dim]
-                loss_d_policy = tf.reduce_sum(probs * _loss_policy, axis=1, keepdims=True)  # [Batch, 1]
-
-                _loss_alpha = -alpha_d * (tf.math.log(clipped_probs) - self.d_action_dim)  # [Batch, action_dim]
-                loss_d_alpha = tf.reduce_sum(probs * _loss_alpha, axis=1, keepdims=True)  # [Batch, 1]
-
-            if self.c_action_dim:
-                action_sampled = c_policy.sample()
-                c_q_for_gradient_list = [q(state, tf.tanh(action_sampled))[1] for q in self.model_q_list]
-                # [[Batch, 1], ...]
-
-                stacked_c_q_for_gradient = tf.gather(c_q_for_gradient_list,
-                                                     tf.random.shuffle(tf.range(self.ensemble_q_num))[:self.ensemble_q_sample])
-                # [ensemble_q_num, Batch, 1] -> [ensemble_q_sample, Batch, 1]
-
-                log_prob = tf.reduce_sum(squash_correction_log_prob(c_policy, action_sampled), axis=1, keepdims=True)
-                # [Batch, 1]
-
-                min_c_q_for_gradient = tf.reduce_min(stacked_c_q_for_gradient, axis=0)
-                # [ensemble_q_sample, Batch, 1] -> [Batch, 1]
-
-                loss_c_policy = alpha_c * log_prob - min_c_q_for_gradient
-                # [Batch, 1]
-
-                loss_c_alpha = -alpha_c * (log_prob - self.c_action_dim)  # [Batch, 1]
-
-            loss_policy = tf.reduce_mean(loss_d_policy + loss_c_policy)
-            loss_alpha = tf.reduce_mean(loss_d_alpha + loss_c_alpha)
-
-        # Compute gradients and optimize loss
-        for i in range(self.ensemble_q_num):
-            grads_q = tape.gradient(loss_q_list[i], self.model_q_list[i].trainable_variables)
-            self.optimizer_q_list[i].apply_gradients(zip(grads_q, self.model_q_list[i].trainable_variables))
-
-        rep_variables = self.model_rep.trainable_variables
-        grads_rep = tape.gradient(loss_rep_q, rep_variables)
-
-        if self.use_prediction:
-            grads_rep_preds = [tape.gradient(loss_transition, rep_variables),
-                               tape.gradient(loss_reward, rep_variables),
-                               tape.gradient(loss_obs, rep_variables)]
-
-            # for i in range(len(grads_rep)):
-            #     grad_rep = grads_rep[i]
-            #     grad_rep_norm = tf.norm(grad_rep)
-            #     for grads_rep_pred in grads_rep_preds:
-            #         grad_rep_pred = grads_rep_pred[i]
-            #         cos = tf.reduce_sum(grad_rep * grad_rep_pred) / (grad_rep_norm * tf.norm(grad_rep_pred))
-            #         grads_rep[i] += tf.maximum(cos, 0) * grad_rep_pred
-
-            _grads_rep_main = tf.concat([tf.reshape(g, [-1]) for g in grads_rep], axis=0)
-            _grads_rep_preds = [tf.concat([tf.reshape(g, [-1]) for g in grads_rep_pred], axis=0)
-                                for grads_rep_pred in grads_rep_preds]
-
-            coses = [tf.reduce_sum(_grads_rep_main * grads_rep_pred) / (tf.norm(_grads_rep_main) * tf.norm(grads_rep_pred))
-                     for grads_rep_pred in _grads_rep_preds]
-            coses = [tf.maximum(0., tf.sign(cos)) for cos in coses]
-
-            for grads_rep_pred, cos in zip(grads_rep_preds, coses):
-                for i in range(len(grads_rep_pred)):
-                    grads_rep[i] += cos * grads_rep_pred[i]
-
-        self.optimizer_rep.apply_gradients(zip(grads_rep, rep_variables))
-
-        if self.use_prediction:
-            prediction_variables = self.model_transition.trainable_variables
-            prediction_variables += self.model_reward.trainable_variables
-            prediction_variables += self.model_observation.trainable_variables
-            grads_prediction = tape.gradient(loss_prediction, prediction_variables)
-            self.optimizer_prediction.apply_gradients(zip(grads_prediction, prediction_variables))
-
-        if self.use_curiosity:
-            grads_forward = tape.gradient(loss_forward, self.model_forward.trainable_variables)
-            self.optimizer_forward.apply_gradients(zip(grads_forward, self.model_forward.trainable_variables))
-
-        if self.use_rnd:
-            grads_rnd = tape.gradient(loss_rnd, self.model_rnd.trainable_variables)
-            self.optimizer_rnd.apply_gradients(zip(grads_rnd, self.model_rnd.trainable_variables))
-
-        if (self.d_action_dim and not self.discrete_dqn_like) or self.c_action_dim:
-            grads_policy = tape.gradient(loss_policy, self.model_policy.trainable_variables)
-            self.optimizer_policy.apply_gradients(zip(grads_policy, self.model_policy.trainable_variables))
-
-        if self.use_auto_alpha and ((self.d_action_dim and not self.discrete_dqn_like) or self.c_action_dim):
-            grads_alpha = tape.gradient(loss_alpha, [self.log_alpha_d, self.log_alpha_c])
-            self.optimizer_alpha.apply_gradients(zip(grads_alpha, [self.log_alpha_d, self.log_alpha_c]))
-
-        del tape
-
-        if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
-            with self.summary_writer.as_default():
-                tf.summary.scalar('loss/q', tf.reduce_mean(loss_q_list), step=self.global_step)
-                if self.d_action_dim:
-                    tf.summary.scalar('loss/d_entropy', tf.reduce_mean(d_policy.entropy()), step=self.global_step)
-                    tf.summary.scalar('loss/alpha_d', alpha_d, step=self.global_step)
-                if self.c_action_dim:
-                    tf.summary.scalar('loss/c_entropy', tf.reduce_mean(c_policy.entropy()), step=self.global_step)
-                    tf.summary.scalar('loss/alpha_c', alpha_c, step=self.global_step)
-
-                if self.use_curiosity:
-                    tf.summary.scalar('loss/forward', loss_forward, step=self.global_step)
-
-                if self.use_rnd:
-                    tf.summary.scalar('loss/rnd', loss_rnd, step=self.global_step)
-
-                if self.use_prediction:
-                    tf.summary.scalar('loss/transition',
-                                      tf.reduce_mean(approx_next_state_dist.entropy()),
-                                      step=self.global_step)
-                    tf.summary.scalar('loss/reward', loss_reward, step=self.global_step)
-                    tf.summary.scalar('loss/observation', loss_obs, step=self.global_step)
-
-                    approx_obs_list = self.model_observation(m_states[0:1, self.burn_in_step:, ...])
-                    if not isinstance(approx_obs_list, (list, tuple)):
-                        approx_obs_list = [approx_obs_list]
-                    for approx_obs in approx_obs_list:
-                        if len(approx_obs.shape) > 3:
-                            tf.summary.image('observation',
-                                             tf.reshape(approx_obs, [-1, *approx_obs.shape[2:]]),
-                                             max_outputs=self.n_step, step=self.global_step)
-
-            self.summary_writer.flush()
-
-    @tf.function
+    @torch.no_grad()
     def get_n_rnn_states(self, n_obses_list, n_actions, rnn_state):
         """
-        tf.function
+        Args:
+            n_obses_list: list([Batch, n, *obs_shapes_i], ...)
+            n_actions: [Batch, n, action_size]
+            rnn_state: [Batch, *rnn_state_shape]
+
+        Returns:
+            n_rnn_states: [Batch, n, *rnn_state_shape]
         """
+
         n_rnn_states = list()
         n_actions = gen_pre_n_actions(n_actions)
         for i in range(n_obses_list[0].shape[1]):
@@ -949,150 +487,690 @@ class SAC_Base(object):
                                           rnn_state)
             n_rnn_states.append(rnn_state)
 
-        return tf.stack(n_rnn_states, axis=1)
+        return torch.stack(n_rnn_states, dim=1)
 
-    @tf.function
+    @torch.no_grad()
+    def get_dqn_like_d_y(self, n_rewards, n_dones,
+                         stacked_next_q, stacked_next_target_q):
+        """
+        Args:
+            n_rewards: [Batch, n]
+            n_dones: [Batch, n]
+            stacked_next_q: [ensemble_q_sample, Batch, n, d_action_size]
+            stacked_next_target_q: [ensemble_q_sample, Batch, n, d_action_size]
+
+        Returns:
+            y: [Batch, 1]
+        """
+
+        stacked_next_q = stacked_next_q[..., -1, :]  # [ensemble_q_sample, Batch, d_action_size]
+        stacked_next_target_q = stacked_next_target_q[..., -1, :]  # [ensemble_q_sample, Batch, d_action_size]
+
+        done = n_dones[:, -1:]  # [Batch, 1]
+
+        mask_stacked_q = functional.one_hot(torch.argmax(stacked_next_q, dim=-1),
+                                            self.d_action_size)
+        # [ensemble_q_sample, Batch, d_action_size]
+
+        stacked_max_next_target_q = torch.sum(stacked_next_target_q * mask_stacked_q,
+                                              dim=-1,
+                                              keepdim=True)
+        # [ensemble_q_sample, Batch, 1]
+
+        next_q, _ = torch.min(stacked_max_next_target_q, dim=0)
+        # [Batch, 1]
+
+        g = torch.sum(self._gamma_ratio * n_rewards, dim=-1, keepdim=True)  # [Batch, 1]
+        y = g + self.gamma**self.n_step * next_q * (1 - done)  # [Batch, 1]
+
+        return y
+
+    @torch.no_grad()
+    def _v_trace(self, n_rewards, n_dones,
+                 n_mu_probs, n_pi_probs,
+                 v, next_v):
+        """
+        Args:
+            n_rewards: [Batch, n]
+            n_dones: [Batch, n]
+            n_mu_probs: [Batch, n]
+            n_pi_probs: [Batch, n]
+            v: [Batch, n]
+            next_v: [Batch, n]
+
+        Returns:
+            y: [Batch, 1]
+        """
+        td_error = n_rewards + self.gamma * (1 - n_dones) * next_v - v  # [Batch, n]
+        td_error = self._gamma_ratio * td_error
+
+        if self.use_n_step_is:
+            td_error = self._lambda_ratio * td_error
+
+            n_step_is = n_pi_probs / n_mu_probs.clamp(min=1e-8)
+
+            # ρ_t, t \in [s, s+n-1]
+            rho = torch.minimum(n_step_is, torch.tensor(self.v_rho, device=self.device))  # [Batch, n]
+
+            # \prod{c_i}, i \in [s, t-1]
+            c = torch.minimum(n_step_is, torch.tensor(self.v_c, device=self.device))
+            c = torch.cat([torch.ones((n_step_is.shape[0], 1), device=self.device), c[..., :-1]], dim=-1)
+            c = torch.cumprod(c, dim=1)
+
+            # \prod{c_i} * ρ_t * td_error
+            td_error = c * rho * td_error
+
+        # \sum{td_error}
+        r = torch.sum(td_error, dim=1, keepdim=True)  # [Batch, 1]
+
+        # V_s + \sum{td_error}
+        y = v[:, 0:1] + r  # [Batch, 1]
+
+        return y
+
+    @torch.no_grad()
+    def _get_y(self, n_states, n_actions, n_rewards, state_, n_dones,
+               n_mu_probs=None):
+        d_alpha = torch.exp(self.log_d_alpha)
+        c_alpha = torch.exp(self.log_c_alpha)
+
+        next_n_states = torch.cat([n_states[:, 1:, ...], state_.view((-1, 1, state_.shape[-1]))], dim=1)
+
+        d_policy, c_policy = self.model_policy(n_states)
+        next_d_policy, next_c_policy = self.model_policy(next_n_states)
+
+        if self.use_curiosity:
+            approx_next_n_states = self.model_forward(n_states, n_actions)
+            in_n_rewards = torch.sum(torch.pow(approx_next_n_states - next_n_states, 2), dim=-1) * 0.5
+            in_n_rewards = in_n_rewards * self.curiosity_strength
+            n_rewards += in_n_rewards
+
+        if self.c_action_size:
+            n_c_actions_sampled = c_policy.rsample()  # [Batch, n, action_size]
+            next_n_c_actions_sampled = next_c_policy.rsample()
+        else:
+            n_c_actions_sampled = torch.empty(0, device=self.device)
+            next_n_c_actions_sampled = torch.empty(0, device=self.device)
+
+        # ([Batch, n, action_size], [Batch, n, 1])
+        q_list = [q(n_states, torch.tanh(n_c_actions_sampled)) for q in self.model_target_q_list]
+        next_q_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled)) for q in self.model_target_q_list]
+
+        d_q_list = [q[0] for q in q_list]  # [Batch, n, action_size]
+        c_q_list = [q[1] for q in q_list]  # [Batch, n, 1]
+
+        next_d_q_list = [q[0] for q in next_q_list]  # [Batch, n, action_size]
+        next_c_q_list = [q[1] for q in next_q_list]  # [Batch, n, 1]
+
+        d_y, c_y = None, None
+
+        if self.d_action_size:
+            stacked_next_d_q = torch.stack(next_d_q_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
+            # [ensemble_q_num, Batch, n, d_action_size] -> [ensemble_q_sample, Batch, n, d_action_size]
+
+            if self.discrete_dqn_like:
+                next_d_eval_q_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled))[0] for q in self.model_q_list]
+                stacked_next_d_eval_q = torch.stack(next_d_eval_q_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
+                # [ensemble_q_num, Batch, n, d_action_size] -> [ensemble_q_sample, Batch, n, d_action_size]
+
+                d_y = self.get_dqn_like_d_y(n_rewards, n_dones,
+                                            stacked_next_d_eval_q,
+                                            stacked_next_d_q)
+            else:
+                stacked_d_q = torch.stack(d_q_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
+                # [ensemble_q_num, Batch, n, d_action_size] -> [ensemble_q_sample, Batch, n, d_action_size]
+
+                min_q, _ = torch.min(stacked_d_q, dim=0)  # [Batch, n, d_action_size]
+                min_next_q, _ = torch.min(stacked_next_d_q, dim=0)  # [Batch, n, d_action_size]
+
+                probs = d_policy.probs  # [Batch, n, action_size]
+                next_probs = next_d_policy.probs  # [Batch, n, action_size]
+                clipped_probs = probs.clamp(min=1e-8)
+                clipped_next_probs = next_probs.clamp(min=1e-8)
+                tmp_v = min_q - d_alpha * torch.log(clipped_probs)  # [Batch, n, action_size]
+                tmp_next_v = min_next_q - d_alpha * torch.log(clipped_next_probs)  # [Batch, n, action_size]
+
+                v = torch.sum(probs * tmp_v, dim=-1)  # [Batch, n]
+                next_v = torch.sum(next_probs * tmp_next_v, dim=-1)  # [Batch, n]
+
+                if self.use_n_step_is:
+                    n_d_actions = n_actions[..., :self.d_action_size]
+                    n_pi_probs = torch.exp(d_policy.log_prob(n_d_actions))  # [Batch, n]
+
+                d_y = self._v_trace(n_rewards, n_dones,
+                                    n_mu_probs,
+                                    n_pi_probs if self.use_n_step_is else None,
+                                    v, next_v)
+
+        if self.c_action_size:
+            n_actions_log_prob = torch.sum(squash_correction_log_prob(c_policy, n_c_actions_sampled), dim=-1)  # [Batch, n]
+            next_n_actions_log_prob = torch.sum(squash_correction_log_prob(next_c_policy, next_n_c_actions_sampled), dim=-1)
+
+            stacked_c_q = torch.stack(c_q_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
+            # [ensemble_q_num, Batch, n, 1] -> [ensemble_q_sample, Batch, n, 1]
+            stacked_next_c_q = torch.stack(next_c_q_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
+            # [ensemble_q_num, Batch, n, 1] -> [ensemble_q_sample, Batch, n, 1]
+
+            min_q, _ = stacked_c_q.min(dim=0)
+            min_q = min_q.squeeze(dim=-1)  # [Batch, n]
+            min_next_q, _ = stacked_next_c_q.min(dim=0)
+            min_next_q = min_next_q.squeeze(dim=-1)  # [Batch, n]
+
+            v = min_q - c_alpha * n_actions_log_prob  # [Batch, n]
+            next_v = min_next_q - c_alpha * next_n_actions_log_prob  # [Batch, n]
+
+            # v = scale_inverse_h(v)
+            # next_v = scale_inverse_h(next_v)
+
+            if self.use_n_step_is:
+                n_c_actions = n_actions[..., self.d_action_size:]
+                n_pi_probs = squash_correction_prob(c_policy, torch.atanh(n_c_actions))
+                # [Batch, n, action_size]
+                n_pi_probs = n_pi_probs.prod(axis=-1)  # [Batch, n]
+
+            c_y = self._v_trace(n_rewards, n_dones,
+                                n_mu_probs,
+                                n_pi_probs if self.use_n_step_is else None,
+                                v, next_v)
+
+        return d_y, c_y  # [Batch, 1]
+
+    def _train_rep_q(self, n_obses_list: List[torch.Tensor],
+                     n_actions: torch.Tensor,
+                     n_rewards: torch.Tensor,
+                     next_obs_list: List[torch.Tensor],
+                     n_dones: torch.Tensor,
+                     n_mu_probs: torch.Tensor = None,
+                     priority_is: torch.Tensor = None,
+                     initial_rnn_state: torch.Tensor = None):
+
+        m_obses_list = [torch.cat([n_obses, next_obs.view(-1, 1, *next_obs.shape[1:])], dim=1)
+                        for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
+
+        if self.use_rnn:
+            m_states, _ = self.model_rep(m_obses_list,
+                                         gen_pre_n_actions(n_actions, keep_last_action=True),
+                                         initial_rnn_state)
+            m_target_states, _ = self.model_target_rep(m_obses_list,
+                                                       gen_pre_n_actions(n_actions, keep_last_action=True),
+                                                       initial_rnn_state)
+        else:
+            m_states = self.model_rep(m_obses_list)
+            m_target_states = self.model_target_rep(m_obses_list)
+
+        n_states = m_states[:, :-1, ...]
+        state = m_states[:, self.burn_in_step, ...]
+
+        batch = state.shape[0]
+
+        action = n_actions[:, self.burn_in_step, ...]
+        d_action = action[..., :self.d_action_size]
+        c_action = action[..., self.d_action_size:]
+
+        q_list = [q(state, c_action) for q in self.model_q_list]
+        # ([Batch, action_size], [Batch, 1])
+        d_q_list = [q[0] for q in q_list]  # [Batch, action_size]
+        c_q_list = [q[1] for q in q_list]  # [Batch, 1]
+
+        d_y, c_y = self._get_y(m_target_states[:, self.burn_in_step:-1, ...],
+                               n_actions[:, self.burn_in_step:, ...],
+                               n_rewards[:, self.burn_in_step:],
+                               m_target_states[:, -1, ...],
+                               n_dones[:, self.burn_in_step:],
+                               n_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
+        #  [Batch, 1], [Batch, 1]
+
+        loss_q_list = [torch.zeros((batch, 1), device=self.device) for _ in range(self.ensemble_q_num)]
+        loss_none_mse = nn.MSELoss(reduction='none')
+
+        if self.d_action_size:
+            for i in range(self.ensemble_q_num):
+                q_single = torch.sum(d_action * d_q_list[i], dim=-1, keepdim=True)  # [Batch, 1]
+                loss_q_list[i] += loss_none_mse(q_single, d_y)
+
+        if self.c_action_size:
+            if self.clip_epsilon > 0:
+                target_c_q_list = [q(state, c_action)[1] for q in self.model_target_q_list]
+
+                clipped_q_list = [target_c_q_list[i] + torch.clamp(
+                    c_q_list[i] - target_c_q_list[i],
+                    -self.clip_epsilon,
+                    self.clip_epsilon,
+                ) for i in range(self.ensemble_q_num)]
+
+                loss_q_a_list = [loss_none_mse(clipped_q, c_y) for clipped_q in clipped_q_list]  # [Batch, 1]
+                loss_q_b_list = [loss_none_mse(q, c_y) for q in c_q_list]  # [Batch, 1]
+
+                for i in range(self.ensemble_q_num):
+                    loss_q_list[i] += torch.maximum(loss_q_a_list[i], loss_q_b_list[i])  # [Batch, 1]
+            else:
+                for i in range(self.ensemble_q_num):
+                    loss_q_list[i] += loss_none_mse(c_q_list[i], c_y)  # [Batch, 1]
+
+        if self.use_priority:
+            loss_q_list = [loss_q * priority_is for loss_q in loss_q_list]
+
+        loss_q_list = [torch.mean(loss) for loss in loss_q_list]
+
+        if self.optimizer_rep:
+            self.optimizer_rep.zero_grad()
+
+        for i in range(self.ensemble_q_num):
+            self.optimizer_q_list[i].zero_grad()
+            loss_q_list[i].backward(retain_graph=True)
+            self.optimizer_q_list[i].step()
+
+        """ Recurrent Prediction Model """
+
+        if self.use_prediction:
+            loss_mse = torch.nn.MSELoss()
+
+            n_obses_list = [m_obs[:, :-1, ...] for m_obs in m_obses_list]
+
+            approx_next_state_dist: torch.distributions.Normal = self.model_transition(
+                [n_obses[:, self.burn_in_step:, ...] for n_obses in n_obses_list],  # May for extra observations
+                n_states[:, self.burn_in_step:, ...],
+                n_actions[:, self.burn_in_step:, ...]
+            )  # [Batch, n_step, action_size]
+
+            loss_transition = -torch.mean(approx_next_state_dist.log_prob(m_target_states[:, self.burn_in_step + 1:, ...]))
+
+            std_normal = distributions.Normal(torch.zeros_like(approx_next_state_dist.loc),
+                                              torch.ones_like(approx_next_state_dist.scale))
+            kl = distributions.kl.kl_divergence(approx_next_state_dist, std_normal)
+            loss_transition += self.transition_kl * torch.mean(kl)
+
+            approx_n_rewards = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])  # [Batch, n_step, 1]
+            loss_reward = loss_mse(approx_n_rewards, torch.unsqueeze(n_rewards[:, self.burn_in_step:], 2))
+            loss_reward /= self.n_step
+
+            loss_obs = self.model_observation.get_loss(m_states[:, self.burn_in_step:, ...],
+                                                       [m_obses[:, self.burn_in_step:, ...] for m_obses in m_obses_list])
+            loss_obs /= self.n_step
+
+            """ Adaptive Weights for Representation Model """
+            with torch.no_grad():
+                grads_rep = [m.grad for m in self.model_rep.parameters()]
+                grads_rep_preds = [autograd.grad(loss_transition, self.model_rep.parameters(), retain_graph=True),
+                                   autograd.grad(loss_reward, self.model_rep.parameters(), retain_graph=True),
+                                   autograd.grad(loss_obs, self.model_rep.parameters(), retain_graph=True)]
+
+                # for i in range(len(grads_rep)):
+                #     grad_rep = grads_rep[i]
+                #     grad_rep_norm = torch.norm(grad_rep)
+                #     for grads_rep_pred in grads_rep_preds:
+                #         grad_rep_pred = grads_rep_pred[i]
+                #         cos = torch.sum(grad_rep * grad_rep_pred) / (grad_rep_norm * torch.norm(grad_rep_pred))
+                #         grads_rep[i] += cos.clamp(min=0) * grad_rep_pred
+
+                _grads_rep_main = torch.cat([g.reshape(1, -1) for g in grads_rep], dim=1)
+                _grads_rep_preds = [torch.cat([g.reshape(1, -1) for g in grads_rep_pred], dim=1)
+                                    for grads_rep_pred in grads_rep_preds]
+
+                coses = [functional.cosine_similarity(_grads_rep_main, grads_rep_pred)
+                         for grads_rep_pred in _grads_rep_preds]
+                coses = [torch.sign(cos).clamp(min=0) for cos in coses]
+
+                for grads_rep_pred, cos in zip(grads_rep_preds, coses):
+                    for param_rep, grad_rep_pred in zip(self.model_rep.parameters(), grads_rep_pred):
+                        param_rep.grad += cos * grad_rep_pred
+
+        if self.optimizer_rep:
+            self.optimizer_rep.step()
+
+        if self.use_prediction:
+            loss_prediction = loss_transition + loss_reward + loss_obs
+            self.optimizer_prediction.zero_grad()
+            loss_prediction.backward(inputs=list(chain(self.model_transition.parameters(),
+                                                       self.model_reward.parameters(),
+                                                       self.model_observation.parameters())))
+            self.optimizer_prediction.step()
+
+        if self.use_prediction:
+            return loss_q_list[0], torch.mean(approx_next_state_dist.entropy()), loss_reward, loss_obs
+        else:
+            return loss_q_list[0], None
+
+    def _train_policy(self, state: torch.Tensor, action: torch.Tensor):
+        batch = state.shape[0]
+
+        d_policy, c_policy = self.model_policy(state)
+
+        loss_d_policy = torch.zeros((batch, 1), device=self.device)
+        loss_c_policy = torch.zeros((batch, 1), device=self.device)
+
+        d_alpha = torch.exp(self.log_d_alpha)
+        c_alpha = torch.exp(self.log_c_alpha)
+
+        if self.d_action_size and not self.discrete_dqn_like:
+            probs = d_policy.probs   # [Batch, action_size]
+            clipped_probs = torch.maximum(probs, torch.tensor(1e-8, device=self.device))
+
+            c_action = action[..., self.d_action_size:]
+
+            q_list = [q(state, c_action) for q in self.model_q_list]
+            # ([Batch, action_size], [Batch, 1])
+            d_q_list = [q[0] for q in q_list]  # [Batch, action_size]
+
+            stacked_d_q = torch.stack(d_q_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
+            # [ensemble_q_num, Batch, d_action_size] -> [ensemble_q_sample, Batch, d_action_size]
+            min_d_q, _ = torch.min(stacked_d_q, dim=0)
+            # [ensemble_q_sample, Batch, d_action_size] -> [Batch, d_action_size]
+
+            _loss_policy = d_alpha.detach() * torch.log(clipped_probs) - min_d_q.detach()  # [Batch, d_action_size]
+            loss_d_policy = torch.sum(probs * _loss_policy, dim=1, keepdim=True)  # [Batch, 1]
+
+        if self.c_action_size:
+            action_sampled = c_policy.rsample()
+            c_q_for_gradient_list = [q(state, torch.tanh(action_sampled))[1] for q in self.model_q_list]
+            # [[Batch, 1], ...]
+
+            stacked_c_q_for_gradient = torch.stack(c_q_for_gradient_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
+            # [ensemble_q_num, Batch, 1] -> [ensemble_q_sample, Batch, 1]
+
+            log_prob = torch.sum(squash_correction_log_prob(c_policy, action_sampled), dim=1, keepdim=True)
+            # [Batch, 1]
+
+            min_c_q_for_gradient, _ = torch.min(stacked_c_q_for_gradient, dim=0)
+            # [ensemble_q_sample, Batch, 1] -> [Batch, 1]
+
+            loss_c_policy = c_alpha.detach() * log_prob - min_c_q_for_gradient
+            # [Batch, 1]
+
+        loss_policy = torch.mean(loss_d_policy + loss_c_policy)
+
+        if (self.d_action_size and not self.discrete_dqn_like) or self.c_action_size:
+            self.optimizer_policy.zero_grad()
+            loss_policy.backward(inputs=list(self.model_policy.parameters()))
+            self.optimizer_policy.step()
+
+        return (torch.mean(d_policy.entropy()) if self.d_action_size else None,
+                torch.mean(c_policy.entropy()) if self.c_action_size else None)
+
+    def _train_alpha(self, state: torch.Tensor):
+        batch = state.shape[0]
+
+        d_policy, c_policy = self.model_policy(state)
+
+        d_alpha = torch.exp(self.log_d_alpha)
+        c_alpha = torch.exp(self.log_c_alpha)
+
+        loss_d_alpha = torch.zeros((batch, 1), device=self.device)
+        loss_c_alpha = torch.zeros((batch, 1), device=self.device)
+
+        if self.d_action_size and not self.discrete_dqn_like:
+            probs = d_policy.probs   # [Batch, action_size]
+            clipped_probs = probs.clamp(min=1e-8)
+
+            _loss_alpha = -d_alpha * (torch.log(clipped_probs) - self.d_action_size)  # [Batch, action_size]
+            loss_d_alpha = torch.sum(probs * _loss_alpha, dim=1, keepdim=True)  # [Batch, 1]
+
+        if self.c_action_size:
+            action_sampled = c_policy.sample()
+            log_prob = torch.sum(squash_correction_log_prob(c_policy, action_sampled), dim=1, keepdim=True)
+            # [Batch, 1]
+
+            loss_c_alpha = -c_alpha * (log_prob - self.c_action_size)  # [Batch, 1]
+
+        loss_alpha = torch.mean(loss_d_alpha + loss_c_alpha)
+
+        self.optimizer_alpha.zero_grad()
+        loss_alpha.backward(inputs=[self.log_d_alpha, self.log_c_alpha])
+        self.optimizer_alpha.step()
+
+        return d_alpha, c_alpha
+
+    def _train_curiosity(self, m_states: torch.Tensor, n_actions: torch.Tensor):
+        loss_mse = torch.nn.MSELoss()
+
+        n_states = m_states[:, :-1, ...]
+        approx_next_n_states = self.model_forward(n_states[:, self.burn_in_step:, ...],
+                                                  n_actions[:, self.burn_in_step:, ...])
+        next_n_states = m_states[:, self.burn_in_step + 1:, ...]
+        loss_forward = loss_mse(approx_next_n_states, next_n_states)
+
+        self.optimizer_forward.zero_grad()
+        loss_forward.backward(inputs=list(self.model_forward.parameters()))
+        self.optimizer_forward.step()
+
+        return loss_forward
+
+    def _train_rnd(self, n_states: torch.Tensor, n_actions: torch.Tensor):
+        loss_mse = torch.nn.MSELoss()
+
+        approx_f = self.model_rnd(n_states[:, self.burn_in_step:, ...],
+                                  n_actions[:, self.burn_in_step:, ...])
+        f = self.model_target_rnd(n_states[:, self.burn_in_step:, ...],
+                                  n_actions[:, self.burn_in_step:, ...])
+        loss_rnd = loss_mse(f, approx_f)
+
+        self.optimizer_rnd.zero_grad()
+        loss_rnd.backward(inputs=list(self.model_rnd.parameters()))
+        self.optimizer_rnd.step()
+
+        return loss_rnd
+
+    def _train(self, n_obses_list: List[torch.Tensor],
+               n_actions: torch.Tensor,
+               n_rewards: torch.Tensor,
+               next_obs_list: List[torch.Tensor],
+               n_dones: torch.Tensor,
+               n_mu_probs: torch.Tensor = None,
+               priority_is: torch.Tensor = None,
+               initial_rnn_state: torch.Tensor = None):
+        """
+        Args:
+            n_obses_list: list([Batch, N, *obs_shapes_i], ...)
+            n_actions: [Batch, N, action_size]
+            n_rewards: [Batch, N]
+            next_obs_list: list([Batch, *obs_shapes_i], ...)
+            n_dones: [Batch, N]
+            n_mu_probs: [Batch, N]
+            priority_is: [Batch, 1]
+            initial_rnn_state: [Batch, *rnn_state_shape]
+        """
+
+        if self.global_step % self.update_target_per_step == 0:
+            self._update_target_variables(tau=self.tau)
+
+        loss_q, *loss_predictions = self._train_rep_q(n_obses_list,
+                                                      n_actions,
+                                                      n_rewards,
+                                                      next_obs_list,
+                                                      n_dones,
+                                                      n_mu_probs, priority_is,
+                                                      initial_rnn_state)
+
+        with torch.no_grad():
+            m_obses_list = [torch.cat([n_obses, next_obs.view(-1, 1, *next_obs.shape[1:])], dim=1)
+                            for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
+
+            if self.use_rnn:
+                m_states, _ = self.model_rep(m_obses_list,
+                                             gen_pre_n_actions(n_actions, keep_last_action=True),
+                                             initial_rnn_state)
+            else:
+                m_states = self.model_rep(m_obses_list)
+
+        state = m_states[:, self.burn_in_step, ...]
+        action = n_actions[:, self.burn_in_step, ...]
+
+        d_policy_entropy, c_policy_entropy = self._train_policy(state, action)
+
+        if self.use_auto_alpha and ((self.d_action_size and not self.discrete_dqn_like) or self.c_action_size):
+            d_alpha, c_alpha = self._train_alpha(state)
+
+        if self.use_curiosity:
+            loss_forward = self._train_curiosity(m_states, n_actions)
+
+        if self.use_rnd:
+            n_states = m_states[:, :-1, ...]
+            loss_rnd = self._train_rnd(n_states, n_actions)
+
+        if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
+            with torch.no_grad():
+                self.summary_writer.add_scalar('loss/q', loss_q, self.global_step)
+                if self.d_action_size:
+                    self.summary_writer.add_scalar('loss/d_entropy', d_policy_entropy, self.global_step)
+                    self.summary_writer.add_scalar('loss/d_alpha', d_alpha, self.global_step)
+                if self.c_action_size:
+                    self.summary_writer.add_scalar('loss/c_entropy', c_policy_entropy, self.global_step)
+                    self.summary_writer.add_scalar('loss/c_alpha', c_alpha, self.global_step)
+
+                if self.use_prediction:
+                    approx_next_state_dist_entropy, loss_reward, loss_obs = loss_predictions
+                    self.summary_writer.add_scalar('loss/transition',
+                                                   approx_next_state_dist_entropy,
+                                                   self.global_step)
+                    self.summary_writer.add_scalar('loss/reward', loss_reward, self.global_step)
+                    self.summary_writer.add_scalar('loss/observation', loss_obs, self.global_step)
+
+                    approx_obs_list = self.model_observation(m_states[0:1, 0, ...])
+                    if not isinstance(approx_obs_list, (list, tuple)):
+                        approx_obs_list = [approx_obs_list]
+                    for approx_obs in approx_obs_list:
+                        if len(approx_obs.shape) > 3:
+                            self.summary_writer.add_images('observation',
+                                                           approx_obs.permute([0, 3, 1, 2]),
+                                                           self.global_step)
+
+                if self.use_curiosity:
+                    self.summary_writer.add_scalar('loss/forward', loss_forward, self.global_step)
+
+                if self.use_rnd:
+                    self.summary_writer.add_scalar('loss/rnd', loss_rnd, self.global_step)
+
+            self.summary_writer.flush()
+
+    @torch.no_grad()
     def rnd_sample(self, state, d_policy, c_policy):
+        """
+        Sample action `self.rnd_n_sample` times, 
+        choose the action that has the max (model_rnd(state, action) - model_target_rnd(state, action))**2
+
+        Args:
+            state: [Batch, state_size]
+            d_policy: [Batch, d_action_size]
+            c_policy: [Batch, c_action_size]
+
+        Returns:
+            action: [Batch, d_action_size + c_action_size]
+        """
+        batch = state.shape[0]
         n_sample = self.rnd_n_sample
 
-        d_action = tf.one_hot(d_policy.sample(n_sample), self.d_action_dim) if self.d_action_dim \
-            else tf.zeros((n_sample, tf.shape(state)[0], self.d_action_dim))
-        c_action = tf.tanh(c_policy.sample(n_sample)) if self.c_action_dim \
-            else tf.zeros((n_sample, tf.shape(state)[0], self.c_action_dim))
+        d_action = d_policy.sample((n_sample,)) if self.d_action_size \
+            else torch.empty(0, device=self.device)
+        c_action = torch.tanh(c_policy.sample((n_sample,))) if self.c_action_size \
+            else torch.empty(0, device=self.device)
 
-        actions = tf.concat([d_action, c_action], axis=-1)  # [n_sample, batch, action_dim]
+        actions = torch.cat([d_action, c_action], dim=-1)  # [n_sample, batch, action_size]
 
-        actions = tf.transpose(actions, [1, 0, 2])  # [batch, n_sample, action_dim]
-        states = tf.repeat(tf.expand_dims(state, 1), n_sample, axis=1)  # [batch, n_sample, state_dim]
-        approx_f = self.model_rnd(states, actions)
+        actions = actions.transpose(0, 1)  # [batch, n_sample, action_size]
+        states = torch.repeat_interleave(torch.unsqueeze(state, 1), n_sample, dim=1)
+        # [batch, state_size] -> [batch, 1, state_size] -> [batch, n_sample, state_size]
+        approx_f = self.model_rnd(states, actions)  # [batch, n_sample, f]
         f = self.model_target_rnd(states, actions)  # [batch, n_sample, f]
-        loss = tf.reduce_sum(tf.math.squared_difference(f, approx_f), axis=2)  # [batch, n_sample]
+        loss = torch.sum(torch.pow(f - approx_f, 2), dim=-1)  # [batch, n_sample]
 
-        idx = tf.argmax(loss, axis=1, output_type=tf.int32)  # [batch, ]
-        idx = tf.stack([tf.range(states.shape[0]), idx], axis=1)  # [batch, 2]
+        idx = torch.argmax(loss, dim=1)  # [batch, ]
 
-        return tf.gather_nd(actions, idx)
+        # return torch.index_select(actions, 1, idx)
+        return actions[torch.tensor(range(batch)), idx]
 
-    @tf.function
+    @torch.no_grad()
     def _choose_action(self, state):
+        """
+        Args:
+            state: [Batch, state_size]
+
+        Returns:
+            action: [Batch, d_action_size + c_action_size]
+        """
+        batch = state.shape[0]
         d_policy, c_policy = self.model_policy(state)
         if self.use_rnd:
             return self.rnd_sample(state, d_policy, c_policy)
         else:
-            if self.d_action_dim:
+            if self.d_action_size:
                 if self.discrete_dqn_like:
-                    if tf.random.uniform((1,)) < 0.2:
-                        d_action = tf.random.categorical(tf.ones((1, self.d_action_dim)),
-                                                         tf.shape(state)[0])[0]
-                        d_action = tf.one_hot(d_action, self.d_action_dim)
+                    if torch.rand(1) < 0.2:
+                        d_action = distributions.OneHotCategorical(
+                            logits=torch.ones(batch, self.d_action_size)).sample().to(self.device)
                     else:
-                        d_q, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_dim else tf.zeros((0,)))
-                        d_action = tf.argmax(d_q, axis=-1)
-                        d_action = tf.one_hot(d_action, self.d_action_dim)
+                        d_q, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None)
+                        d_action = torch.argmax(d_q, axis=-1)
+                        d_action = functional.one_hot(d_action, self.d_action_size)
                 else:
-                    d_action = tf.one_hot(d_policy.sample(), self.d_action_dim)
+                    d_action = d_policy.sample()
             else:
-                d_action = tf.zeros((tf.shape(state)[0], 0))
+                d_action = torch.empty(0, device=self.device)
 
-            c_action = tf.tanh(c_policy.sample()) if self.c_action_dim else tf.zeros((tf.shape(state)[0], 0))
+            c_action = torch.tanh(c_policy.sample()) if self.c_action_size else torch.empty(0, device=self.device)
 
-            return tf.concat([d_action, c_action], axis=-1)
+            return torch.cat([d_action, c_action], dim=-1)
 
-    @tf.function
+    @torch.no_grad()
     def choose_action(self, obs_list):
         """
-        tf.function
-        obs_list: list([None, obs_dim_i], ...)
-        """
-        state = self.model_rep(obs_list)
-        return self._choose_action(state)
+        Args:
+            obs_list: list([Batch, *obs_shapes_i], ...)
 
-    @tf.function
+        Returns:
+            action: [Batch, d_action_size + c_action_size] (numpy)
+        """
+        obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
+        state = self.model_rep(obs_list)
+        return self._choose_action(state).detach().cpu().numpy()
+
+    @torch.no_grad()
     def choose_rnn_action(self, obs_list, pre_action, rnn_state):
         """
-        tf.function
-        obs_list: list([None, obs_dim_i], ...)
-        rnn_state: [None, rnn_state]
+        Args:
+            obs_list: list([Batch, *obs_shapes_i], ...)
+            pre_action: [Batch, d_action_size + c_action_size]
+            rnn_state: [Batch, *rnn_state_shape]
+
+        Returns:
+            action: [Batch, d_action_size + c_action_size] (numpy)
+            rnn_state: [Batch, *rnn_state_shape] (numpy)
         """
-        obs_list = [tf.reshape(obs, (-1, 1, *obs.shape[1:])) for obs in obs_list]
-        pre_action = tf.reshape(pre_action, (-1, 1, *pre_action.shape[1:]))
+        obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
+        pre_action = torch.from_numpy(pre_action).to(self.device)
+        rnn_state = torch.from_numpy(rnn_state).to(self.device)
+
+        obs_list = [obs.view(-1, 1, *obs.shape[1:]) for obs in obs_list]
+        pre_action = pre_action.view(-1, 1, *pre_action.shape[1:])
         state, next_rnn_state = self.model_rep(obs_list, pre_action, rnn_state)
-        state = tf.reshape(state, (-1, state.shape[-1]))
+        state = state.view(-1, state.shape[-1])
 
         action = self._choose_action(state)
 
-        return action, next_rnn_state
+        return action.detach().cpu().numpy(), next_rnn_state.detach().cpu().numpy()
 
-    @tf.function
-    def _cal_cem_reward(self, state, action):
-        cem_horizon = 12
-
-        if self.cem_rewards is None:
-            self.cem_rewards = tf.Variable(tf.zeros([state.shape[0], cem_horizon]))
-
-        for j in range(cem_horizon):
-            state_ = self.model_transition(state, action).sample()
-            self.cem_rewards[:, j:j + 1].assign(self.model_reward(state_))
-            state = state_
-            action = tf.tanh(self.model_policy(state).sample())
-
-        return self.cem_rewards
-
-    @tf.function
-    def choose_action_by_cem(self, obs, rnn_state):
-        obs = tf.reshape(obs, (-1, 1, obs.shape[-1]))
-        state, next_rnn_state, _ = self.model_rnn(obs, [rnn_state])
-
-        state = tf.reshape(state, (-1, state.shape[-1]))
-
-        repeat = 1000
-        top = 100
-        iteration = 10
-
-        batch = state.shape[0]
-        dist = self.model_policy(state)
-        mean, std = dist.loc, dist.scale
-
-        for i in range(iteration):
-            state_repeated = tf.repeat(state, repeat, axis=0)
-            mean_repeated = tf.repeat(mean, repeat, axis=0)
-            std_repeated = tf.repeat(std, repeat, axis=0)
-
-            action_repeated = tfp.distributions.Normal(mean_repeated, std_repeated)
-            action_repeated = tf.tanh(action_repeated.sample())
-
-            rewards = self._cal_cem_reward(state_repeated, action_repeated)
-
-            cum_reward = tf.reshape(tf.reduce_sum(rewards, axis=1), [batch, repeat])
-            sorted_index = tf.argsort(cum_reward, axis=1)
-            sorted_index = sorted_index[..., -top:]
-            sorted_index = tf.reshape(sorted_index, [-1])
-            tmp_index = tf.repeat(tf.range(batch), top, axis=0)
-
-            action_repeated = tf.reshape(action_repeated, [batch, repeat, 2])
-            action_repeated = tf.gather_nd(action_repeated, tf.unstack([tmp_index, sorted_index], axis=1))
-            action_repeated = tf.reshape(action_repeated, [batch, top, 2])
-            mean = tf.reduce_mean(tf.atanh(action_repeated * 0.9999), axis=1)
-            std = tf.math.reduce_std(tf.atanh(action_repeated * 0.9999), axis=1)
-
-        action = tfp.distributions.Normal(mean, std)
-        action = tf.tanh(action.sample())
-        return action, next_rnn_state
-
-    @tf.function
-    def get_td_error(self,
-                     n_obses_list,
-                     n_actions,
-                     n_rewards,
-                     next_obs_list,
-                     n_dones,
-                     n_mu_probs=None,
-                     rnn_state=None):
+    @torch.no_grad()
+    def _get_td_error(self,
+                      n_obses_list: List[torch.Tensor],
+                      n_actions: torch.Tensor,
+                      n_rewards: torch.Tensor,
+                      next_obs_list: List[torch.Tensor],
+                      n_dones: torch.Tensor,
+                      n_mu_probs: torch.Tensor = None,
+                      rnn_state: torch.Tensor = None):
         """
-        tf.function
-        Return the td-error of (burn-in + n-step) observations (sampled from replay buffer)
+        Args:
+            n_obses_list: list([Batch, N, *obs_shapes_i], ...)
+            n_actions: [Batch, N, action_size]
+            n_rewards: [Batch, N]
+            next_obs_list: list([Batch, *obs_shapes_i], ...)
+            n_dones: [Batch, N]
+            n_mu_probs: [Batch, N]
+            rnn_states: [Batch, *rnn_state_shape]
+
+        Returns:
+            The td-error of observations, [Batch, 1]
         """
-        m_obses_list = [tf.concat([n_obses, tf.reshape(next_obs, (-1, 1, *next_obs.shape[1:]))], axis=1)
+        m_obses_list = [torch.cat([n_obses, next_obs.view(-1, 1, *next_obs.shape[1:])], dim=1)
                         for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
         if self.use_rnn:
             tmp_states, _ = self.model_rep([m_obses[:, :self.burn_in_step + 1, ...] for m_obses in m_obses_list],
@@ -1108,16 +1186,16 @@ class SAC_Base(object):
             m_target_states = self.model_target_rep(m_obses_list)
 
         action = n_actions[:, self.burn_in_step, ...]
-        d_action = action[..., :self.d_action_dim]
-        c_action = action[..., self.d_action_dim:]
+        d_action = action[..., :self.d_action_size]
+        c_action = action[..., self.d_action_size:]
 
-        # ([Batch, action_dim], [Batch, 1])
+        # ([Batch, action_size], [Batch, 1])
         q_list = [q(state, c_action) for q in self.model_q_list]
-        d_q_list = [q[0] for q in q_list]  # [Batch, action_dim]
+        d_q_list = [q[0] for q in q_list]  # [Batch, action_size]
         c_q_list = [q[1] for q in q_list]  # [Batch, 1]
 
-        if self.d_action_dim:
-            d_q_list = [tf.reduce_sum(d_action * q, axis=-1, keepdims=True) for q in d_q_list]
+        if self.d_action_size:
+            d_q_list = [torch.sum(d_action * q, dim=-1, keepdim=True) for q in d_q_list]
             # [Batch, 1]
 
         d_y, c_y = self._get_y(m_target_states[:, self.burn_in_step:-1, ...],
@@ -1128,52 +1206,55 @@ class SAC_Base(object):
                                n_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
 
         # [Batch, 1]
-        q_td_error_list = [tf.zeros((tf.shape(state)[0], 1)) for _ in range(self.ensemble_q_num)]
-        if self.d_action_dim:
+        q_td_error_list = [torch.zeros((state.shape[0], 1), device=self.device) for _ in range(self.ensemble_q_num)]
+        if self.d_action_size:
             for i in range(self.ensemble_q_num):
-                q_td_error_list[i] += tf.abs(d_q_list[i] - d_y)
+                q_td_error_list[i] += torch.abs(d_q_list[i] - d_y)
 
-        if self.c_action_dim:
+        if self.c_action_size:
             for i in range(self.ensemble_q_num):
-                q_td_error_list[i] += tf.abs(c_q_list[i] - c_y)
+                q_td_error_list[i] += torch.abs(c_q_list[i] - c_y)
 
-        td_error = tf.reduce_mean(tf.concat(q_td_error_list, axis=-1),
-                                  axis=-1, keepdims=True)
+        td_error = torch.mean(torch.cat(q_td_error_list, dim=-1),
+                              dim=-1, keepdim=True)
         return td_error
 
     def get_episode_td_error(self,
-                             n_obses_list,
-                             n_actions,
-                             n_rewards,
-                             next_obs_list,
-                             n_dones,
-                             n_mu_probs=None,
-                             n_rnn_states=None):
+                             n_obses_list: List[np.ndarray],
+                             n_actions: np.ndarray,
+                             n_rewards: np.ndarray,
+                             next_obs_list: List[np.ndarray],
+                             n_dones: np.ndarray,
+                             n_mu_probs: np.ndarray = None,
+                             n_rnn_states: np.ndarray = None):
         """
-        n_obses_list: list([1, episode_len, obs_dim_i], ...)
-        n_actions: [1, episode_len, action_dim]
-        n_rewards: [1, episode_len]
-        next_obs_list: list([1, obs_dim_i], ...)
-        n_dones: [1, episode_len]
-        n_rnn_states: [1, episode_len, rnn_state_dim]
+        Args:
+            n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
+            n_actions: [1, episode_len, action_size]
+            n_rewards: [1, episode_len]
+            next_obs_list: list([1, *obs_shapes_i], ...)
+            n_dones: [1, episode_len]
+            n_rnn_states: [1, episode_len, *rnn_state_shape]
 
-        Return the td-error of raw episode observations
+        Returns:
+            The td-error of raw episode observations
+            [episode_len, ]
         """
         ignore_size = self.burn_in_step + self.n_step
 
         tmp_n_obses_list = [None] * len(n_obses_list)
-        for i, n_obses in enumerate(n_obses_list):
-            tmp_n_obses_list[i] = np.concatenate([n_obses[:, i:i + ignore_size]
+        for j, n_obses in enumerate(n_obses_list):
+            tmp_n_obses_list[j] = np.concatenate([n_obses[:, i:i + ignore_size]
                                                   for i in range(n_obses.shape[1] - ignore_size + 1)], axis=0)
         n_actions = np.concatenate([n_actions[:, i:i + ignore_size]
                                     for i in range(n_actions.shape[1] - ignore_size + 1)], axis=0)
         n_rewards = np.concatenate([n_rewards[:, i:i + ignore_size]
                                     for i in range(n_rewards.shape[1] - ignore_size + 1)], axis=0)
         tmp_next_obs_list = [None] * len(next_obs_list)
-        for i, n_obses in enumerate(n_obses_list):
-            tmp_next_obs_list[i] = np.concatenate([n_obses[:, i + ignore_size]
+        for j, n_obses in enumerate(n_obses_list):
+            tmp_next_obs_list[j] = np.concatenate([n_obses[:, i + ignore_size]
                                                    for i in range(n_obses.shape[1] - ignore_size)]
-                                                  + [next_obs_list[i]],
+                                                  + [next_obs_list[j]],
                                                   axis=0)
         n_dones = np.concatenate([n_dones[:, i:i + ignore_size]
                                   for i in range(n_dones.shape[1] - ignore_size + 1)], axis=0)
@@ -1189,37 +1270,27 @@ class SAC_Base(object):
         all_batch = tmp_n_obses_list[0].shape[0]
         for i in range(math.ceil(all_batch / C.GET_EPISODE_TD_ERROR_SEG)):
             b_i, b_j = i * C.GET_EPISODE_TD_ERROR_SEG, (i + 1) * C.GET_EPISODE_TD_ERROR_SEG
-            td_error = self.get_td_error(n_obses_list=[o[b_i:b_j, :] for o in tmp_n_obses_list],
-                                         n_actions=n_actions[b_i:b_j, :],
-                                         n_rewards=n_rewards[b_i:b_j, :],
-                                         next_obs_list=[o[b_i:b_j, :] for o in tmp_next_obs_list],
-                                         n_dones=n_dones[b_i:b_j, :],
-                                         n_mu_probs=n_mu_probs[b_i:b_j, :] if self.use_n_step_is else None,
-                                         rnn_state=rnn_state[b_i:b_j, :] if self.use_rnn else None).numpy()
+
+            _n_obses_list = [torch.from_numpy(o[b_i:b_j, :]).to(self.device) for o in tmp_n_obses_list]
+            _n_actions = torch.from_numpy(n_actions[b_i:b_j, :]).to(self.device)
+            _n_rewards = torch.from_numpy(n_rewards[b_i:b_j, :]).to(self.device)
+            _next_obs_list = [torch.from_numpy(o[b_i:b_j, :]).to(self.device) for o in tmp_next_obs_list]
+            _n_dones = torch.from_numpy(n_dones[b_i:b_j, :]).to(self.device)
+            _n_mu_probs = torch.from_numpy(n_mu_probs[b_i:b_j, :]).to(self.device) if self.use_n_step_is else None
+            _rnn_state = torch.from_numpy(rnn_state[b_i:b_j, :]).to(self.device) if self.use_rnn else None
+
+            td_error = self._get_td_error(n_obses_list=_n_obses_list,
+                                          n_actions=_n_actions,
+                                          n_rewards=_n_rewards,
+                                          next_obs_list=_next_obs_list,
+                                          n_dones=_n_dones,
+                                          n_mu_probs=_n_mu_probs,
+                                          rnn_state=_rnn_state).detach().cpu().numpy()
             td_error_list.append(td_error.flatten())
 
         td_error = np.concatenate([*td_error_list,
                                    np.zeros(ignore_size, dtype=np.float32)])
         return td_error
-
-    def write_constant_summaries(self, constant_summaries, iteration=None):
-        """
-        Write constant information like reward, iteration from sac_main.py
-        """
-        with self.summary_writer.as_default():
-            for s in constant_summaries:
-                tf.summary.scalar(s['tag'], s['simple_value'],
-                                  step=self.global_step if iteration is None else iteration)
-
-        self.summary_writer.flush()
-
-    def save_model(self):
-        self.ckpt_manager.save(self.global_step)
-        logger.info(f"Model saved at {self.global_step.numpy()}")
-
-    @tf.function
-    def _increase_global_step(self):
-        self.global_step.assign_add(1)
 
     def fill_replay_buffer(self,
                            n_obses_list,
@@ -1229,22 +1300,23 @@ class SAC_Base(object):
                            n_dones,
                            n_rnn_states=None):
         """
-        n_obses_list: list([1, episode_len, obs_dim_i], ...)
-        n_actions: [1, episode_len, action_dim]
-        n_rewards: [1, episode_len]
-        next_obs_list: list([1, obs_dim_i], ...)
-        n_dones: [1, episode_len]
-        n_rnn_states: [1, episode_len, rnn_state_dim]
+        Args:
+            n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
+            n_actions: [1, episode_len, action_size]
+            n_rewards: [1, episode_len]
+            next_obs_list: list([1, *obs_shapes_i], ...)
+            n_dones: [1, episode_len]
+            n_rnn_states: [1, episode_len, *rnn_state_shape]
         """
 
-        # Ignore episodes whose length is too short
+        # Ignore episodes which length is too short
         if n_obses_list[0].shape[1] < self.burn_in_step + self.n_step:
             return
 
         # Reshape [1, episode_len, ...] to [episode_len, ...]
         obs_list = [n_obses.reshape([-1, *n_obses.shape[2:]]) for n_obses in n_obses_list]
         if self.use_normalization:
-            self._udpate_normalizer(obs_list)
+            self._udpate_normalizer([torch.from_numpy(obs).to(self.device) for obs in obs_list])
         action = n_actions.reshape([-1, n_actions.shape[-1]])
         reward = n_rewards.reshape([-1])
         done = n_dones.reshape([-1])
@@ -1267,8 +1339,12 @@ class SAC_Base(object):
         }
 
         if self.use_n_step_is:
-            n_mu_probs = self.get_n_probs(n_obses_list, n_actions,
-                                          n_rnn_states[:, 0, ...] if self.use_rnn else None).numpy()
+            n_mu_probs = self.get_n_probs(
+                [torch.from_numpy(n_obses).to(self.device) for n_obses in n_obses_list],
+                torch.from_numpy(n_actions).to(self.device),
+                torch.from_numpy(n_rnn_states[:, 0, ...]).to(self.device) if self.use_rnn else None
+            )
+            n_mu_probs = n_mu_probs.detach().cpu().numpy()
 
             mu_prob = n_mu_probs.reshape([-1])
             mu_prob = np.concatenate([mu_prob,
@@ -1276,9 +1352,9 @@ class SAC_Base(object):
             storage_data['mu_prob'] = mu_prob
 
         if self.use_rnn:
-            rnn_state = n_rnn_states.reshape([-1, n_rnn_states.shape[-1]])
+            rnn_state = n_rnn_states.reshape([-1, *n_rnn_states.shape[2:]])
             rnn_state = np.concatenate([rnn_state,
-                                        np.empty([1, rnn_state.shape[-1]], dtype=np.float32)])
+                                        np.empty([1, *rnn_state.shape[1:]], dtype=np.float32)])
             storage_data['rnn_state'] = rnn_state
 
         # n_step transitions except the first one and the last obs_, n_step - 1 + 1
@@ -1297,19 +1373,35 @@ class SAC_Base(object):
                                    ignore_size=self.burn_in_step + self.n_step)
 
     def _sample(self):
-        # Sample from replay buffer
+        """
+        Sample from replay buffer
+
+        Returns:
+            pointers: [Batch, ]
+            (
+                n_obses_list: list([Batch, N, *obs_shapes_i], ...)
+                n_actions: [Batch, N, action_size]
+                n_rewards: [Batch, N]
+                next_obs_list: list([Batch, *obs_shapes_i], ...)
+                n_dones: [Batch, N]
+                n_mu_probs: [Batch, N]
+                priority_is: [Batch, 1]
+                rnn_states: [Batch, *rnn_state_shape]
+            )
+        """
+
         sampled = self.replay_buffer.sample()
         if sampled is None:
             return None
 
         """
         trans:
-            obs_i: [Batch, obs_dim_i]
-            action: [Batch, action_dim]
+            obs_i: [Batch, *obs_shapes_i]
+            action: [Batch, action_size]
             reward: [Batch, ]
             done: [Batch, ]
             mu_prob: [Batch, ]
-            rnn_state: [Batch, rnn_state_dim]
+            rnn_state: [Batch, *rnn_state_shape]
         """
         pointers, trans, priority_is = sampled
 
@@ -1325,14 +1417,14 @@ class SAC_Base(object):
             trans[k] = np.concatenate([np.expand_dims(t, 1) for t in v], axis=1)
 
         """
-        m_obses_list: list([Batch, N + 1, obs_dim_i])
-        m_actions: [Batch, N + 1, action_dim]
+        m_obses_list: list([Batch, N + 1, *obs_shapes_i], ...)
+        m_actions: [Batch, N + 1, action_size]
         m_rewards: [Batch, N + 1]
         m_dones: [Batch, N + 1]
         m_mu_probs: [Batch, N + 1]
-        m_rnn_states: [Batch, N + 1, rnn_state_dim]
+        m_rnn_states: [Batch, N + 1, *rnn_state_shape]
         """
-        m_obses_list = [trans[f'obs_{i}'] for i in range(len(self.obs_dims))]
+        m_obses_list = [trans[f'obs_{i}'] for i in range(len(self.obs_shapes))]
         m_actions = trans['action']
         m_rewards = trans['reward']
         m_dones = trans['done']
@@ -1361,14 +1453,36 @@ class SAC_Base(object):
                           rnn_state if self.use_rnn else None)
 
     def train(self):
-        train_data = self._train_data_buffer.get_data()
+        train_data = self._sample()
         if train_data is None:
             return 0
 
+        """
+        n_obses_list: list([Batch, N, *obs_shapes_i], ...)
+        n_actions: [Batch, N, action_size]
+        n_rewards: [Batch, N]
+        next_obs_list: list([Batch, *obs_shapes_i], ...)
+        n_dones: [Batch, N]
+        n_mu_probs: [Batch, N]
+        priority_is: [Batch, 1]
+        rnn_states: [Batch, *rnn_state_shape]
+        """
         pointers, (n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
                    n_mu_probs,
                    priority_is,
                    rnn_state) = train_data
+
+        n_obses_list = [torch.from_numpy(t).to(self.device) for t in n_obses_list]
+        n_actions = torch.from_numpy(n_actions).to(self.device)
+        n_rewards = torch.from_numpy(n_rewards).to(self.device)
+        next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
+        n_dones = torch.from_numpy(n_dones).to(self.device)
+        if self.use_n_step_is:
+            n_mu_probs = torch.from_numpy(n_mu_probs).to(self.device)
+        if self.use_priority:
+            priority_is = torch.from_numpy(priority_is).to(self.device)
+        if self.use_rnn:
+            rnn_state = torch.from_numpy(rnn_state).to(self.device)
 
         self._train(n_obses_list=n_obses_list,
                     n_actions=n_actions,
@@ -1379,7 +1493,7 @@ class SAC_Base(object):
                     priority_is=priority_is if self.use_priority else None,
                     initial_rnn_state=rnn_state if self.use_rnn else None)
 
-        step = self.global_step.numpy()
+        step = self.global_step.item()
 
         if step % self.save_model_per_step == 0 \
                 and (time.time() - self._last_save_time) / 60 >= self.save_model_per_minute:
@@ -1393,28 +1507,28 @@ class SAC_Base(object):
 
         # Update td_error
         if self.use_priority:
-            td_error = self.get_td_error(n_obses_list=n_obses_list,
-                                         n_actions=n_actions,
-                                         n_rewards=n_rewards,
-                                         next_obs_list=next_obs_list,
-                                         n_dones=n_dones,
-                                         n_mu_probs=n_pi_probs_tensor if self.use_n_step_is else None,
-                                         rnn_state=rnn_state if self.use_rnn else None).numpy()
+            td_error = self._get_td_error(n_obses_list=n_obses_list,
+                                          n_actions=n_actions,
+                                          n_rewards=n_rewards,
+                                          next_obs_list=next_obs_list,
+                                          n_dones=n_dones,
+                                          n_mu_probs=n_pi_probs_tensor if self.use_n_step_is else None,
+                                          rnn_state=rnn_state if self.use_rnn else None).detach().cpu().numpy()
             self.replay_buffer.update(pointers, td_error)
 
         # Update rnn_state
         if self.use_rnn:
             pointers_list = [pointers + i for i in range(1, self.burn_in_step + self.n_step + 1)]
             tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-            n_rnn_states = self.get_n_rnn_states(n_obses_list, n_actions, rnn_state).numpy()
-            rnn_states = n_rnn_states.reshape(-1, n_rnn_states.shape[-1])
+            n_rnn_states = self.get_n_rnn_states(n_obses_list, n_actions, rnn_state).detach().cpu().numpy()
+            rnn_states = n_rnn_states.reshape(-1, *n_rnn_states.shape[2:])
             self.replay_buffer.update_transitions(tmp_pointers, 'rnn_state', rnn_states)
 
         # Update n_mu_probs
         if self.use_n_step_is:
             pointers_list = [pointers + i for i in range(0, self.burn_in_step + self.n_step)]
             tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-            pi_probs = n_pi_probs_tensor.numpy().reshape(-1)
+            pi_probs = n_pi_probs_tensor.detach().cpu().numpy().reshape(-1)
             self.replay_buffer.update_transitions(tmp_pointers, 'mu_prob', pi_probs)
 
         self._increase_global_step()

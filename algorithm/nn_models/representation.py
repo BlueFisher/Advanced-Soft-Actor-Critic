@@ -1,64 +1,49 @@
-import tensorflow as tf
+import torch
+from torch import nn
 
 
-class ModelBaseSimpleRep(tf.keras.Model):
-    def __init__(self, obs_dims):
+class ModelBaseSimpleRep(nn.Module):
+    def __init__(self, obs_shapes):
         super().__init__()
-        self.obs_dims = obs_dims
+        self.obs_shapes = obs_shapes
 
-    def init(self):
-        return self.call([tf.keras.Input(shape=o) for o in self.obs_dims])
+        self._bulid_model()
 
-    def call(self, obs_list):
+    def _bulid_model(self):
+        pass
+
+    def get_output_shape(self, device):
+        output = self([torch.empty(1, *obs_shape, device=device) for obs_shape in self.obs_shapes])
+
+        return output.shape[-1]
+
+    def forward(self, obs_list):
         raise Exception("ModelSimpleRep not implemented")
 
 
 class ModelSimpleRep(ModelBaseSimpleRep):
-    def call(self, obs_list):
+    def forward(self, obs_list):
         return obs_list[0]
 
 
-class ModelBaseRNNRep(tf.keras.Model):
-    def __init__(self, obs_dims, d_action_dim, c_action_dim, rnn_units):
+class ModelBaseRNNRep(nn.Module):
+    def __init__(self, obs_shapes, d_action_size, c_action_size):
         super().__init__()
-        self.obs_dims = obs_dims
-        self.d_action_dim = d_action_dim
-        self.c_action_dim = c_action_dim
-        self.rnn_units = rnn_units
+        self.obs_shapes = obs_shapes
+        self.d_action_size = d_action_size
+        self.c_action_size = c_action_size
 
-    def init(self):
-        return self.call([tf.keras.Input(shape=(None, *o)) for o in self.obs_dims],
-                         tf.keras.Input(shape=(None, self.d_action_dim + self.c_action_dim)),
-                         tf.keras.Input(shape=(self.rnn_units,)))
+        self._build_model()
 
-    def call(self, obs_list, pre_action, rnn_state):
+    def _build_model(self):
+        pass
+
+    def get_output_shape(self, device):
+        obs_list = [torch.empty(1, 1, *obs_shape, device=device) for obs_shape in self.obs_shapes]
+        pre_action = torch.empty(1, 1, self.d_action_size + self.c_action_size, device=device)
+        output, next_rnn_state = self(obs_list, pre_action)
+
+        return output.shape[-1], next_rnn_state.shape[1:]
+
+    def forward(self, obs_list, pre_action, rnn_state=None):
         raise Exception("ModelRNNRep not implemented")
-
-
-class ModelBaseGRURep(ModelBaseRNNRep):
-    def __init__(self, obs_dims, d_action_dim, c_action_dim,
-                 rnn_units=64):
-        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units)
-
-        # TODO Disabled temporarily because of the issue
-        # https://github.com/tensorflow/tensorflow/issues/39697
-        self.gru = tf.keras.layers.RNN(tf.keras.layers.GRUCell(rnn_units),
-                                       return_sequences=True,
-                                       return_state=True)
-
-
-class ModelBaseLSTMRep(ModelBaseRNNRep):
-    def __init__(self, obs_dims, d_action_dim, c_action_dim,
-                 rnn_units=64):
-        super().__init__(obs_dims, d_action_dim, c_action_dim, rnn_units)
-
-        # TODO Disabled temporarily because of the issue
-        # https://github.com/tensorflow/tensorflow/issues/39697
-        self.lstm = tf.keras.layers.RNN(tf.keras.layers.LSTMCell(rnn_units),
-                                        return_sequences=True,
-                                        return_state=True)
-
-    def init(self):
-        return self.call([tf.keras.Input(shape=(None, *o)) for o in self.obs_dims],
-                         tf.keras.Input(shape=(None, self.d_action_dim + self.c_action_dim)),
-                         tf.keras.Input(shape=(self.rnn_units * 2,)))

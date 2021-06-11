@@ -84,7 +84,7 @@ sac_config:
   v_lambda: 1.0 # Discount factor for V-trace
   v_rho: 1.0 # Rho for V-trace
   v_c: 1.0 # C for V-trace
-  clip_epsilon: 0.2 # Epsilon for q and policy clip
+  clip_epsilon: 0.2 # Epsilon for q clip
 
   discrete_dqn_like: false # If use policy or only Q network if discrete is in action spaces
   use_prediction: false # If train a transition model

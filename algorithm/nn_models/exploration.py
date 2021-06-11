@@ -1,44 +1,52 @@
-import tensorflow as tf
+import torch
+from torch import nn
+
+from .layers import LinearLayers
 
 
-class ModelBaseRND(tf.keras.Model):
-    def __init__(self, state_dim, action_dim):
+class ModelBaseRND(nn.Module):
+    def __init__(self, state_size, action_size):
         super().__init__()
-        self.state_dim = state_dim
-        self.action_dim = action_dim
+        self.state_size = state_size
+        self.action_size = action_size
 
-    def init(self):
-        return self(tf.keras.Input(shape=(self.state_dim,)),
-                    tf.keras.Input(shape=(self.action_dim,)))
+        self._build_model()
 
-    def call(self, obs_list, action):
+    def _build_model(self):
+        pass
+
+    def forward(self, state, action):
         raise Exception("ModelBaseRND not implemented")
 
 
-class ModelBaseForward(tf.keras.Model):
-    def __init__(self, state_dim, action_dim):
+class ModelRND(ModelBaseRND):
+    def _build_model(self, dense_n=64, dense_depth=2):
+        self.dense = LinearLayers(self.state_size + self.action_size,
+                                  dense_n, dense_depth)
+
+    def forward(self, state, action):
+        return self.dense(torch.cat([state, action], dim=-1))
+
+
+class ModelBaseForward(nn.Module):
+    def __init__(self, state_size, action_size):
         super().__init__()
-        self.state_dim = state_dim
-        self.action_dim = action_dim
+        self.state_size = state_size
+        self.action_size = action_size
 
-    def init(self):
-        self(tf.keras.Input(shape=(self.state_dim,)),
-             tf.keras.Input(shape=(self.action_dim,)))
+        self._build_model()
 
-    def call(self, state, action):
+    def _build_model(self):
+        pass
+
+    def forward(self, state, action):
         raise Exception("ModelBaseForward not implemented")
 
 
 class ModelForward(ModelBaseForward):
-    def __init__(self, state_dim, action_dim,
-                 dense_n=64, dense_depth=2):
-        super().__init__(state_dim, action_dim)
+    def _build_model(self, dense_n=64, dense_depth=2):
+        self.dense = LinearLayers(self.state_size + self.action_size,
+                                  dense_n, dense_depth, self.state_size)
 
-        self.dense = tf.keras.Sequential([
-            tf.keras.layers.Dense(dense_n, tf.nn.relu) for _ in range(dense_depth)
-        ] + [tf.keras.layers.Dense(state_dim)])
-
-    def call(self, state, action):
-        next_state = self.dense(tf.concat([state, action], -1))
-
-        return next_state
+    def forward(self, state, action):
+        return self.dense(torch.cat([state, action], dim=-1))

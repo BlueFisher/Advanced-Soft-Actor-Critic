@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from .sac_base import SAC_Base
 class Main(object):
     train_mode = True
     _agent_class = Agent  # For different environments
+    _should_save_model = False
 
     def __init__(self, root_dir, config_dir, args):
         """
@@ -46,6 +48,7 @@ class Main(object):
                                                            args.config)
 
         # Initialize config from command line arguments
+        self.device = args.device
         self.train_mode = not args.run
         self.last_ckpt = args.ckpt
         self.render = args.render
@@ -110,8 +113,8 @@ class Main(object):
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')
 
-        self.obs_dims, self.d_action_dim, self.c_action_dim = self.env.init()
-        self.action_dim = self.d_action_dim + self.c_action_dim
+        self.obs_shapes, self.d_action_size, self.c_action_size = self.env.init()
+        self.action_size = self.d_action_size + self.c_action_size
 
         # If model exists, load saved model, or copy a new one
         nn_model_abs_path = Path(model_abs_dir).joinpath('nn_models.py')
@@ -125,17 +128,25 @@ class Main(object):
         custom_nn_model = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(custom_nn_model)
 
-        self.sac = SAC_Base(obs_dims=self.obs_dims,
-                            d_action_dim=self.d_action_dim,
-                            c_action_dim=self.c_action_dim,
+        self.sac = SAC_Base(obs_shapes=self.obs_shapes,
+                            d_action_size=self.d_action_size,
+                            c_action_size=self.c_action_size,
                             model_abs_dir=model_abs_dir,
                             model=custom_nn_model,
+                            device=self.device,
                             train_mode=self.train_mode,
                             last_ckpt=self.last_ckpt,
 
                             replay_config=replay_config,
 
                             **sac_config)
+
+        def save_model():
+            while True:
+                if input() == 's':
+                    self._should_save_model = True
+
+        threading.Thread(target=save_model, daemon=True).start()
 
     def _run(self):
         use_rnn = self.sac.use_rnn
@@ -169,7 +180,7 @@ class Main(object):
                     agent.reset()
 
             is_max_reached = False
-            action = np.zeros([len(agents), self.action_dim], dtype=np.float32)
+            action = np.zeros([len(agents), self.action_size], dtype=np.float32)
             step = 0
 
             while False in [a.done for a in agents]:
@@ -177,23 +188,20 @@ class Main(object):
                     # burn-in padding
                     for agent in [a for a in agents if a.is_empty()]:
                         for _ in range(self.sac.burn_in_step):
-                            agent.add_transition([np.zeros(t) for t in self.obs_dims],
-                                                 np.zeros(self.action_dim),
+                            agent.add_transition([np.zeros(t) for t in self.obs_shapes],
+                                                 np.zeros(self.action_size),
                                                  0, False, False,
-                                                 [np.zeros(t) for t in self.obs_dims],
+                                                 [np.zeros(t) for t in self.obs_shapes],
                                                  initial_rnn_state[0])
 
                     action, next_rnn_state = self.sac.choose_rnn_action([o.astype(np.float32) for o in obs_list],
                                                                         action,
                                                                         rnn_state)
-                    next_rnn_state = next_rnn_state.numpy()
                 else:
                     action = self.sac.choose_action([o.astype(np.float32) for o in obs_list])
 
-                action = action.numpy()
-
-                next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_dim],
-                                                                               action[..., self.d_action_dim:])
+                next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
+                                                                               action[..., self.d_action_size:])
 
                 if step == self.config['max_step_each_iter']:
                     local_done = [True] * len(agents)
@@ -219,7 +227,7 @@ class Main(object):
                     trained_steps = self.sac.train()
 
                 obs_list = next_obs_list
-                action[local_done] = np.zeros(self.action_dim)
+                action[local_done] = np.zeros(self.action_size)
                 if use_rnn:
                     rnn_state = next_rnn_state
                     rnn_state[local_done] = initial_rnn_state[local_done]
@@ -227,23 +235,26 @@ class Main(object):
                 step += 1
 
             if self.train_mode:
-                self._log_episode_summaries(iteration, agents)
+                self._log_episode_summaries(agents)
 
             self._log_episode_info(iteration, agents)
+
+            if self._should_save_model:
+                self.sac.save_model()
+                self._should_save_model = False
 
             iteration += 1
 
         self.sac.save_model()
         self.env.close()
 
-    def _log_episode_summaries(self, iteration, agents):
-        # iteration has no effect, the real step is the `global_step` in sac_base
+    def _log_episode_summaries(self, agents):
         rewards = np.array([a.reward for a in agents])
         self.sac.write_constant_summaries([
             {'tag': 'reward/mean', 'simple_value': rewards.mean()},
             {'tag': 'reward/max', 'simple_value': rewards.max()},
             {'tag': 'reward/min', 'simple_value': rewards.min()}
-        ], None)
+        ])
 
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]

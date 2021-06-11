@@ -1,0 +1,32 @@
+default:
+  base_config:
+    scene: USV
+
+    build_path:
+      win32: C:\Users\fisher\Nextcloud\Documents\Unity\win-RL-Envs\RLEnvironments.exe
+      linux: /data/linux-RL-Envs/RLEnvironments.x86_64
+
+    n_agents: 10
+    reset_on_iteration: false
+
+  reset_config:
+    force_reset: true
+
+  sac_config:
+    write_summary_per_step: 100
+
+    n_step: 3
+
+    # use_curiosity: true
+    # curiosity_strength: 2
+
+    # use_rnd: true
+    # rnd_n_sample: 20
+
+rnd:
+  sac_config:
+    use_curiosity: true
+    curiosity_strength: 1
+
+    use_rnd: true
+    rnd_n_sample: 20
