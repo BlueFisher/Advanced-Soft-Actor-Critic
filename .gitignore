@@ -118,6 +118,7 @@ dmypy.json
 .history
 models
 models_bak
+tests/model
 csharp_timers.json
 train.txt
 sort_import.py

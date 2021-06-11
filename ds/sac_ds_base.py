@@ -1,10 +1,13 @@
 import logging
 import sys
 import time
+from itertools import chain
 from pathlib import Path
+from typing import List, Tuple, Union
 
 import numpy as np
-import tensorflow as tf
+import torch
+from torch.utils.tensorboard import SummaryWriter
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from algorithm.sac_base import SAC_Base
@@ -14,14 +17,15 @@ logger = logging.getLogger('sac.base.ds')
 
 class SAC_DS_Base(SAC_Base):
     def __init__(self,
-                 obs_dims,
-                 d_action_dim,
-                 c_action_dim,
-                 model_abs_dir,  # None in actor
+                 obs_shapes: Tuple,
+                 d_action_size: int,
+                 c_action_size: int,
+                 model_abs_dir: Union[str, None],
                  model,
-                 summary_path='log',
-                 train_mode=True,
-                 last_ckpt=None,
+                 device: Union[str, None] = None,
+                 summary_path: str = 'log',
+                 train_mode: bool = True,
+                 last_ckpt: Union[str, None] = None,
 
                  seed=None,
                  write_summary_per_step=1e3,
@@ -58,13 +62,9 @@ class SAC_DS_Base(SAC_Base):
 
                  noise=0.):
 
-        physical_devices = tf.config.experimental.list_physical_devices('GPU')
-        if len(physical_devices) > 0:
-            tf.config.experimental.set_memory_growth(physical_devices[0], True)
-
-        self.obs_dims = obs_dims
-        self.d_action_dim = d_action_dim
-        self.c_action_dim = c_action_dim
+        self.obs_shapes = obs_shapes
+        self.d_action_size = d_action_size
+        self.c_action_size = c_action_size
         self.train_mode = train_mode
 
         self.ensemble_q_num = ensemble_q_num
@@ -100,155 +100,138 @@ class SAC_DS_Base(SAC_Base):
 
         self.noise = noise
 
-        self.action_dim = self.d_action_dim + self.c_action_dim
+        self.device = device
+        if device is None:
+            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         if seed is not None:
-            tf.random.set_seed(seed)
+            torch.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
 
-        self._build_model(model, init_log_alpha, learning_rate)
-        self._init_or_restore(model_abs_dir, last_ckpt)
-
+        self.summary_writer = None
         if model_abs_dir:
             summary_path = Path(model_abs_dir).joinpath(summary_path)
-            self.summary_writer = tf.summary.create_file_writer(str(summary_path))
+            self.summary_writer = SummaryWriter(str(summary_path))
 
-        self._init_tf_function()
+        self._build_model(model, init_log_alpha, learning_rate)
+        self._init_or_restore(model_abs_dir, int(last_ckpt) if last_ckpt is not None else None)
 
-    def _init_tf_function(self):
-        super()._init_tf_function()
+    def _random_action(self, action):
+        batch = action.shape[0]
+        d_action = action[..., :self.d_action_size]
+        c_action = action[..., self.d_action_size:]
 
-        self.update_all_variables = tf.function(self.update_all_variables.python_function,
-                                                input_signature=[[tf.TensorSpec(v.shape,
-                                                                                v.dtype)
-                                                                  for v in self.get_all_variables()]])
+        if self.d_action_size:
+            action_random = np.eye(self.d_action_size)[np.random.randint(0, self.d_action_size, size=batch)]
+            cond = np.random.rand(batch) < self.noise
+            d_action[cond] = action_random[cond]
 
-    @tf.function
+        if self.c_action_size:
+            c_action = np.tanh(np.arctanh(c_action) + np.random.randn(batch, self.c_action_size) * self.noise)
+
+        return np.concatenate([d_action, c_action], axis=-1)
+
     def choose_action(self, obs_list):
         action = super().choose_action(obs_list)
-        d_action = action[..., :self.d_action_dim]
-        c_action = action[..., self.d_action_dim:]
 
-        if self.d_action_dim:
-            action_random = tf.one_hot(tf.squeeze(tf.random.categorical(tf.ones_like(d_action), 1)), self.d_action_dim)
-            cond = tf.tile(tf.reshape(tf.random.uniform((tf.shape(d_action)[0],)) < self.noise, [-1, 1]), [1, self.d_action_dim])
-            d_action = tf.where(cond, d_action, action_random)
+        return self._random_action(action)
 
-        if self.c_action_dim:
-            c_action = tf.tanh(tf.atanh(c_action) + tf.random.normal(tf.shape(c_action), stddev=self.noise))
-
-        return tf.concat([d_action, c_action], axis=-1)
-
-    @tf.function
     def choose_rnn_action(self, obs_list, pre_action, rnn_state):
         action, next_rnn_state = super().choose_rnn_action(obs_list, pre_action, rnn_state)
 
-        d_action = action[..., :self.d_action_dim]
-        c_action = action[..., self.d_action_dim:]
+        return self._random_action(action), next_rnn_state
 
-        if self.d_action_dim:
-            action_random = tf.one_hot(tf.squeeze(tf.random.categorical(tf.ones_like(d_action), 1)), self.d_action_dim)
-            cond = tf.tile(tf.reshape(tf.random.uniform((tf.shape(d_action)[0],)) < self.noise, [-1, 1]), [1, self.d_action_dim])
-            d_action = tf.where(cond, d_action, action_random)
+    def get_policy_variables(self, get_numpy=True):
+        """
+        For learner to send variables to actors
+        """
+        variables = chain(self.model_rep.parameters(), self.model_policy.parameters())
 
-        if self.c_action_dim:
-            c_action = tf.tanh(tf.atanh(c_action) + tf.random.normal(tf.shape(c_action), stddev=self.noise))
+        if get_numpy:
+            return [v.detach().cpu().numpy() for v in variables]
+        else:
+            return variables
 
-        return tf.concat([d_action, c_action], axis=-1), next_rnn_state
-
-    # For learner to send variables to actors
-    # If use @tf.function, the function will return Tensors, not Variables
-    def get_policy_variables(self):
-        variables = self.model_rep.trainable_variables + self.model_policy.trainable_variables
-
-        return variables
-
-    # For actor to update its own network from learner
-    @tf.function
-    def update_policy_variables(self, t_variables):
-        variables = self.get_policy_variables()
+    def update_policy_variables(self, t_variables: List[np.ndarray]):
+        """
+        For actor to update its own network from learner
+        """
+        variables = self.get_policy_variables(get_numpy=False)
 
         for v, t_v in zip(variables, t_variables):
-            v.assign(tf.cast(t_v, v.dtype))
+            v.data.copy_(torch.from_numpy(t_v).to(self.device))
 
-    # For learner to send variables to evolver
-    def get_nn_variables(self):
-        variables = self.model_rep.trainable_variables +\
-            self.model_policy.trainable_variables +\
-            [self.log_alpha_d, self.log_alpha_c]
+    def get_nn_variables(self, get_numpy=True):
+        """
+        For learner to send variables to evolver
+        """
+        variables = chain(self.model_rep.parameters(),
+                          self.model_policy.parameters(),
+                          [self.log_d_alpha, self.log_c_alpha])
 
         for model_q in self.model_q_list:
-            variables += model_q.trainable_variables
+            variables = chain(variables,
+                              model_q.parameters())
 
         if self.use_prediction:
-            variables += self.model_transition.trainable_variables +\
-                self.model_reward.trainable_variables +\
-                self.model_observation.trainable_variables
+            variables = chain(variables,
+                              self.model_transition.parameters(),
+                              self.model_reward.parameters(),
+                              self.model_observation.parameters())
 
         if self.use_curiosity:
-            variables += self.model_forward.trainable_variables
+            variables = chain(variables,
+                              self.model_forward.parameters())
 
         if self.use_rnd:
-            variables += self.model_rnd.trainable_variables +\
-                self.model_target_rnd.trainable_variables
+            variables = chain(variables,
+                              self.model_rnd.parameters(),
+                              self.model_target_rnd.parameters())
 
-        return variables
+        if get_numpy:
+            return [v.detach().cpu().numpy() for v in variables]
+        else:
+            return variables
 
-    # Update own network from evolver selection
-    @tf.function
-    def update_nn_variables(self, t_variables):
-        variables = self.get_nn_variables()
+    def update_nn_variables(self, t_variables: List[np.ndarray]):
+        """
+        Update own network from evolver selection
+        """
+        variables = self.get_nn_variables(get_numpy=False)
 
         for v, t_v in zip(variables, t_variables):
-            v.assign(tf.cast(t_v, v.dtype))
+            v.data.copy_(torch.from_numpy(t_v).to(self.device))
 
         self._update_target_variables()
 
-    def get_all_variables(self):
-        variables = self.get_nn_variables()
-        variables += self.model_target_rep.trainable_variables
+    def get_all_variables(self, get_numpy=True):
+        variables = self.get_nn_variables(get_numpy=False)
+        variables = chain(variables, self.model_target_rep.parameters())
 
         for model_target_q in self.model_target_q_list:
-            variables += model_target_q.trainable_variables
+            variables = chain(variables, model_target_q.parameters())
 
         if self.use_normalization:
-            variables += [self.normalizer_step] +\
-                self.running_means +\
-                self.running_variances
+            variables = chain(variables,
+                              [self.normalizer_step],
+                              self.running_means,
+                              self.running_variances)
 
-        return variables
+        if get_numpy:
+            return [v.detach().cpu().numpy() for v in variables]
+        else:
+            return variables
 
-    @tf.function
-    def update_all_variables(self, t_variables):
-        if tf.reduce_any([tf.math.is_nan(tf.reduce_min(tf.cast(v, dtype=tf.float32)))
-                          for v in t_variables]):
+    def update_all_variables(self, t_variables: List[np.ndarray]):
+        if any([np.isnan(v.sum()) for v in t_variables]):
             return False
 
-        variables = self.get_all_variables()
+        variables = self.get_all_variables(get_numpy=False)
 
         for v, t_v in zip(variables, t_variables):
-            v.assign(t_v)
+            v.data.copy_(torch.from_numpy(t_v).to(self.device))
 
         return True
-
-    @tf.function
-    def reset_optimizers(self):
-        opt_variables = self.optimizer_rep.weights +\
-            self.optimizer_policy.weights
-
-        for optimizer_q in self.optimizer_q_list:
-            opt_variables += optimizer_q.weights
-
-        if self.use_auto_alpha:
-            opt_variables += self.optimizer_alpha.weights
-
-        if self.use_curiosity:
-            opt_variables += self.optimizer_forward
-
-        if self.use_rnd:
-            opt_variables += self.optimizer_rnd
-
-        for v in opt_variables:
-            v.assign(tf.zeros_like(v))
 
     def train(self,
               pointers,
@@ -261,6 +244,16 @@ class SAC_DS_Base(SAC_Base):
               priority_is,
               rnn_state=None):
 
+        n_obses_list = [torch.from_numpy(t).to(self.device) for t in n_obses_list]
+        n_actions = torch.from_numpy(n_actions).to(self.device)
+        n_rewards = torch.from_numpy(n_rewards).to(self.device)
+        next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
+        n_dones = torch.from_numpy(n_dones).to(self.device)
+        n_mu_probs = torch.from_numpy(n_mu_probs).to(self.device)
+        priority_is = torch.from_numpy(priority_is).to(self.device)
+        if self.use_rnn:
+            rnn_state = torch.from_numpy(rnn_state).to(self.device)
+
         self._train(n_obses_list=n_obses_list,
                     n_actions=n_actions,
                     n_rewards=n_rewards,
@@ -270,7 +263,7 @@ class SAC_DS_Base(SAC_Base):
                     priority_is=priority_is,
                     initial_rnn_state=rnn_state if self.use_rnn else None)
 
-        step = self.global_step.numpy()
+        step = self.global_step.item()
 
         if step % self.save_model_per_step == 0 \
                 and (time.time() - self._last_save_time) / 60 >= self.save_model_per_minute:
@@ -287,22 +280,22 @@ class SAC_DS_Base(SAC_Base):
                                      next_obs_list=next_obs_list,
                                      n_dones=n_dones,
                                      n_mu_probs=n_pi_probs_tensor,
-                                     rnn_state=rnn_state if self.use_rnn else None).numpy()
+                                     rnn_state=rnn_state if self.use_rnn else None).detach().cpu().numpy()
 
-        update_data = list()
+        update_data = []
 
         pointers_list = [pointers + i for i in range(0, self.burn_in_step + self.n_step)]
         tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-        pi_probs = n_pi_probs_tensor.numpy().reshape(-1)
+        pi_probs = n_pi_probs_tensor.detach().cpu().numpy().reshape(-1)
         update_data.append((tmp_pointers, 'mu_prob', pi_probs))
 
         if self.use_rnn:
             pointers_list = [pointers + i for i in range(1, self.burn_in_step + self.n_step + 1)]
             tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-            n_rnn_states = self.get_n_rnn_states(n_obses_list, n_actions, rnn_state).numpy()
+            n_rnn_states = self.get_n_rnn_states(n_obses_list, n_actions, rnn_state).detach().cpu().numpy()
             rnn_states = n_rnn_states.reshape(-1, n_rnn_states.shape[-1])
             update_data.append((tmp_pointers, 'rnn_state', rnn_states))
 
         self._increase_global_step()
 
-        return step, td_error, update_data
+        return step + 1, td_error, update_data

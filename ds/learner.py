@@ -169,8 +169,8 @@ class Learner:
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
-        self.obs_dims, self.d_action_dim, self.c_action_dim = self.env.init()
-        self.action_dim = self.d_action_dim + self.c_action_dim
+        self.obs_shapes, self.d_action_size, self.c_action_size = self.env.init()
+        self.action_size = self.d_action_size + self.c_action_size
 
         self.logger.info(f'{self.base_config["build_path"]} initialized')
 
@@ -185,6 +185,8 @@ class Learner:
 
         custom_nn_model = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(custom_nn_model)
+
+        # Initialize all queues for learner_trainer and replay
 
         self.get_sampled_data_queue = mp.Queue(C.GET_SAMPLED_DATA_QUEUE_SIZE)
         self.update_td_error_queue = mp.Queue(C.UPDATE_TD_ERROR_QUEUE_SIZE)
@@ -201,9 +203,9 @@ class Learner:
             'process_nn_variables_conn': process_nn_variables_sac_conn,
 
             'logger_in_file': self.cmd_args.logger_in_file,
-            'obs_dims': self.obs_dims,
-            'd_action_dim': self.d_action_dim,
-            'c_action_dim': self.c_action_dim,
+            'obs_shapes': self.obs_shapes,
+            'd_action_size': self.d_action_size,
+            'c_action_size': self.c_action_size,
             'model_abs_dir': model_abs_dir,
             'model_spec': spec,
             'last_ckpt': self.last_ckpt,
@@ -215,9 +217,9 @@ class Learner:
         self._check_td_error = MaxMutexCheck(5)
 
         self.sac_bak = SAC_DS_Base(train_mode=False,
-                                   obs_dims=self.obs_dims,
-                                   d_action_dim=self.d_action_dim,
-                                   c_action_dim=self.c_action_dim,
+                                   obs_shapes=self.obs_shapes,
+                                   d_action_size=self.d_action_size,
+                                   c_action_size=self.c_action_size,
                                    model_abs_dir=model_abs_dir,
                                    model=custom_nn_model,
                                    summary_path='log/bak',
@@ -240,7 +242,7 @@ class Learner:
         all_variables = self.update_sac_bak_queue.get()
 
         with self._sac_bak_lock.write():
-            res = self.sac_bak.update_all_variables(all_variables).numpy()
+            res = self.sac_bak.update_all_variables(all_variables)
 
             if not res:
                 self.logger.warning('NAN in variables, closing...')
@@ -288,15 +290,12 @@ class Learner:
     def _get_policy_variables(self):
         with self._sac_bak_lock.read('_get_policy_variables'):
             variables = self.sac_bak.get_policy_variables()
-            variables = [v.numpy() for v in variables]
 
         return variables
 
     def _get_nn_variables(self):
         self.process_nn_variables_conn.send(('GET', None))
         nn_variables = self.process_nn_variables_conn.recv()
-
-        nn_variables = [v.numpy() for v in nn_variables]
 
         return nn_variables
 
@@ -311,10 +310,10 @@ class Learner:
             if self.sac_bak.use_rnn:
                 action, next_rnn_state = self.sac_bak.choose_rnn_action(obs_list, rnn_state)
                 next_rnn_state = next_rnn_state
-                return action.numpy(), next_rnn_state.numpy()
+                return action, next_rnn_state
             else:
                 action = self.sac_bak.choose_action(obs_list)
-                return action.numpy()
+                return action
 
     def _get_td_error(self,
                       n_obses_list,
@@ -325,10 +324,10 @@ class Learner:
                       n_mu_probs,
                       n_rnn_states=None):
         """
-        n_obses_list: list([1, episode_len, obs_dim_i], ...)
-        n_actions: [1, episode_len, action_dim]
+        n_obses_list: list([1, episode_len, obs_shape_i], ...)
+        n_actions: [1, episode_len, action_size]
         n_rewards: [1, episode_len]
-        next_obs_list: list([1, obs_dim_i], ...)
+        next_obs_list: list([1, obs_shape_i], ...)
         n_dones: [1, episode_len]
         n_rnn_states: [1, episode_len, rnn_state_dim]
         """
@@ -381,7 +380,7 @@ class Learner:
                         agent.reset()
 
                 is_useless_episode = False
-                action = np.zeros([len(agents), self.action_dim], dtype=np.float32)
+                action = np.zeros([len(agents), self.action_size], dtype=np.float32)
                 step = 0
 
                 while False in [a.done for a in agents] and not self._closed:
@@ -390,7 +389,6 @@ class Learner:
                             action, next_rnn_state = self.sac_bak.choose_rnn_action([o.astype(np.float32) for o in obs_list],
                                                                                     action,
                                                                                     rnn_state)
-                            next_rnn_state = next_rnn_state.numpy()
 
                             if np.isnan(np.min(next_rnn_state)):
                                 self.logger.warning('NAN in next_rnn_state, ending episode')
@@ -400,10 +398,8 @@ class Learner:
                         else:
                             action = self.sac_bak.choose_action([o.astype(np.float32) for o in obs_list])
 
-                        action = action.numpy()
-
-                    next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_dim],
-                                                                                   action[..., self.d_action_dim:])
+                    next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
+                                                                                   action[..., self.d_action_size:])
 
                     if step == self.base_config['max_step_each_iter']:
                         local_done = [True] * len(agents)
@@ -419,7 +415,7 @@ class Learner:
                                              rnn_state[i] if use_rnn else None)
 
                     obs_list = next_obs_list
-                    action[local_done] = np.zeros(self.action_dim)
+                    action[local_done] = np.zeros(self.action_size)
                     if use_rnn:
                         rnn_state = next_rnn_state
                         rnn_state[local_done] = initial_rnn_state[local_done]
@@ -430,7 +426,7 @@ class Learner:
                 if is_useless_episode:
                     self.logger.warning('Useless episode')
                 else:
-                    self._log_episode_summaries(iteration, agents)
+                    self._log_episode_summaries(agents)
                     self._log_episode_info(iteration, start_time, agents)
 
                 if self.base_config['evolver_enabled']:
@@ -445,13 +441,13 @@ class Learner:
         except Exception as e:
             self.logger.error(e)
 
-    def _log_episode_summaries(self, iteration, agents):
+    def _log_episode_summaries(self, agents):
         rewards = np.array([a.reward for a in agents])
         self.sac_bak.write_constant_summaries([
             {'tag': 'reward/mean', 'simple_value': rewards.mean()},
             {'tag': 'reward/max', 'simple_value': rewards.max()},
             {'tag': 'reward/min', 'simple_value': rewards.min()}
-        ], iteration)
+        ])
 
     def _log_episode_info(self, iteration, start_time, agents):
         time_elapse = (time.time() - start_time) / 60
@@ -658,15 +654,17 @@ class EvolverStubController:
     _closed = False
 
     def __init__(self, evolver_host, evolver_port):
+        self._logger = logging.getLogger('ds.learner.evolver_stub')
+
         self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}', [
             ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS),
             ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
             ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
         ])
         self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
-        self._evolver_connected = False
+        self._logger.info(f'Starting evolver stub [{evolver_host}:{evolver_port}]')
 
-        self._logger = logging.getLogger('ds.learner.evolver_stub')
+        self._evolver_connected = False
 
         t_evolver = threading.Thread(target=self._start_evolver_persistence)
         t_evolver.start()
@@ -775,6 +773,7 @@ class ReplayStubController:
                 ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
             ])
             self._replay_stub = replay_pb2_grpc.ReplayServiceStub(self._replay_channel)
+            self._logger.info(f'Starting replay stub [{replay_host}:{replay_port}]')
 
             for _ in range(C.GET_SAMPLED_DATA_THREAD_SIZE):
                 threading.Thread(target=self._forever_sample_data).start()

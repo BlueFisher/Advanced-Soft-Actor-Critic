@@ -11,7 +11,6 @@ import numpy as np
 
 import algorithm.config_helper as config_helper
 import algorithm.constants as C
-from algorithm.cpu2gpu_buffer import CPU2GPUBuffer
 from algorithm.utils import RLock
 
 from .sac_ds_base import SAC_DS_Base
@@ -61,9 +60,9 @@ class Trainer:
                  process_nn_variables_conn: Connection,
 
                  logger_in_file,
-                 obs_dims,
-                 d_action_dim,
-                 c_action_dim,
+                 obs_shapes,
+                 d_action_size,
+                 c_action_size,
                  model_abs_dir,
                  model_spec,
                  last_ckpt,
@@ -85,9 +84,9 @@ class Trainer:
 
         self.sac_lock = RLock(1)
 
-        self.sac = SAC_DS_Base(obs_dims=obs_dims,
-                               d_action_dim=d_action_dim,
-                               c_action_dim=c_action_dim,
+        self.sac = SAC_DS_Base(obs_shapes=obs_shapes,
+                               d_action_size=d_action_size,
+                               c_action_size=c_action_size,
                                model_abs_dir=model_abs_dir,
                                model=custom_nn_model,
                                last_ckpt=last_ckpt,
@@ -121,8 +120,6 @@ class Trainer:
                 self.logger.info('Updated all nn variables')
 
     def run_train(self):
-        sample_data_buffer = CPU2GPUBuffer(lambda: self._get_sampled_data_queue.get(),
-                                           self.sac.get_train_input_signature())
         update_data_buffer = UpdateDataBuffer(lambda pointers, td_error:
                                               self._update_td_error_queue.put((pointers, td_error)),
                                               lambda pointers, key, data:
@@ -137,7 +134,7 @@ class Trainer:
               n_dones,
               n_mu_probs,
               priority_is,
-              rnn_state)) = sample_data_buffer.get_data()
+              rnn_state)) = self._get_sampled_data_queue.get()
             self._is_training = True
 
             with self.sac_lock:
@@ -162,6 +159,5 @@ class Trainer:
             for pointers, key, data in update_data:
                 update_data_buffer.add_data(False, pointers, key, data)
 
-        sample_data_buffer.close()
         update_data_buffer.close()
         self.logger.warning('Training exits')

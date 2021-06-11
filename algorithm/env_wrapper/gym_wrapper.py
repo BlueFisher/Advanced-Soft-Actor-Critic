@@ -93,12 +93,12 @@ class GymWrapper:
         self._state_dim = env.observation_space.shape[0]
         self.is_discrete = isinstance(env.action_space, gym.spaces.Discrete)
 
-        d_action_dim, c_action_dim = 0, 0
+        d_action_size, c_action_size = 0, 0
 
         if self.is_discrete:
-            d_action_dim = env.action_space.n
+            d_action_size = env.action_space.n
         else:
-            c_action_dim = env.action_space.shape[0]
+            c_action_size = env.action_space.shape[0]
 
         if not self._seq_envs:
             env.close()
@@ -113,7 +113,7 @@ class GymWrapper:
                                             daemon=True)
                 p.start()
 
-        return [(self._state_dim, )], d_action_dim, c_action_dim
+        return [(self._state_dim, )], d_action_size, c_action_size
 
     def reset(self, reset_config=None):
         if self._seq_envs:

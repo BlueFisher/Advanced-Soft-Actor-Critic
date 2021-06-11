@@ -17,9 +17,9 @@ default:
     tau: 0.9
     v_lambda: 0.99
     init_log_alpha: 0
-    use_curiosity: true
-    curiosity_strength: 500
-    # use_rnd: true
+    # use_curiosity: true
+    # curiosity_strength: 500
+    use_rnd: true
 
 rnd1:
   sac_config:

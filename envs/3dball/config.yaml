@@ -3,8 +3,8 @@ default:
     scene: 3DBall
     
     build_path:
-      win32: C:\Users\Fisher\Nextcloud\Documents\Unity\win-RL-Envs\UnityEnvironment.exe
-      linux: /data/linux-RL-Envs/RL-Envs.x86_64
+      win32: C:\Users\fisher\Nextcloud\Documents\Unity\win-RL-Envs\RLEnvironments.exe
+      linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
     max_iter: 200
     n_agents: 10
@@ -17,11 +17,6 @@ default:
     n_step: 5
 
     init_log_alpha: -4.6
-
-hard_nornn:
-  base_config:
-    name: "hard_nornn_{time}" 
-    nn: nn_hard_nornn
 
 hard:
   base_config: &hard_base
