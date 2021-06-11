@@ -27,7 +27,10 @@ class LinearLayers(nn.Module):
         self.output_size = input_size
         dense = []
         for i in range(dense_depth):
-            dense.append(nn.Linear(input_size if i == 0 else dense_n, dense_n))
+            linear = nn.Linear(input_size if i == 0 else dense_n, dense_n)
+            nn.init.xavier_uniform_(linear.weight.data)
+            torch.zero_(linear.bias.data)
+            dense.append(linear)
             dense.append(nn.ReLU())
             self.output_size = dense_n
         if output_size:

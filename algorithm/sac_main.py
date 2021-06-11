@@ -146,7 +146,7 @@ class Main(object):
                 if input() == 's':
                     self._should_save_model = True
 
-        threading.Thread(target=save_model).start()
+        threading.Thread(target=save_model, daemon=True).start()
 
     def _run(self):
         use_rnn = self.sac.use_rnn
@@ -235,7 +235,7 @@ class Main(object):
                 step += 1
 
             if self.train_mode:
-                self._log_episode_summaries(iteration, agents)
+                self._log_episode_summaries(agents)
 
             self._log_episode_info(iteration, agents)
 
@@ -248,14 +248,13 @@ class Main(object):
         self.sac.save_model()
         self.env.close()
 
-    def _log_episode_summaries(self, iteration, agents):
-        # iteration has no effect, the real step is the `global_step` in sac_base
+    def _log_episode_summaries(self, agents):
         rewards = np.array([a.reward for a in agents])
         self.sac.write_constant_summaries([
             {'tag': 'reward/mean', 'simple_value': rewards.mean()},
             {'tag': 'reward/max', 'simple_value': rewards.max()},
             {'tag': 'reward/min', 'simple_value': rewards.min()}
-        ], None)
+        ])
 
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]

@@ -469,6 +469,16 @@ class SAC_Base(object):
 
     @torch.no_grad()
     def get_n_rnn_states(self, n_obses_list, n_actions, rnn_state):
+        """
+        Args:
+            n_obses_list: list([Batch, n, *obs_shapes_i], ...)
+            n_actions: [Batch, n, action_size]
+            rnn_state: [Batch, *rnn_state_shape]
+
+        Returns:
+            n_rnn_states: [Batch, n, *rnn_state_shape]
+        """
+
         n_rnn_states = list()
         n_actions = gen_pre_n_actions(n_actions)
         for i in range(n_obses_list[0].shape[1]):
@@ -483,10 +493,14 @@ class SAC_Base(object):
     def get_dqn_like_d_y(self, n_rewards, n_dones,
                          stacked_next_q, stacked_next_target_q):
         """
-        n_rewards: [Batch, n]
-        n_dones: [Batch, n]
-        stacked_next_q: [ensemble_q_sample, Batch, n, d_action_size]
-        stacked_next_target_q: [ensemble_q_sample, Batch, n, d_action_size]
+        Args:
+            n_rewards: [Batch, n]
+            n_dones: [Batch, n]
+            stacked_next_q: [ensemble_q_sample, Batch, n, d_action_size]
+            stacked_next_target_q: [ensemble_q_sample, Batch, n, d_action_size]
+
+        Returns:
+            y: [Batch, 1]
         """
 
         stacked_next_q = stacked_next_q[..., -1, :]  # [ensemble_q_sample, Batch, d_action_size]
@@ -516,12 +530,16 @@ class SAC_Base(object):
                  n_mu_probs, n_pi_probs,
                  v, next_v):
         """
-        n_rewards: [Batch, n]
-        n_dones: [Batch, n]
-        n_mu_probs: [Batch, n]
-        n_pi_probs: [Batch, n]
-        v: [Batch, n]
-        next_v: [Batch, n],
+        Args:
+            n_rewards: [Batch, n]
+            n_dones: [Batch, n]
+            n_mu_probs: [Batch, n]
+            n_pi_probs: [Batch, n]
+            v: [Batch, n]
+            next_v: [Batch, n]
+
+        Returns:
+            y: [Batch, 1]
         """
         td_error = n_rewards + self.gamma * (1 - n_dones) * next_v - v  # [Batch, n]
         td_error = self._gamma_ratio * td_error
@@ -655,7 +673,7 @@ class SAC_Base(object):
                                 n_pi_probs if self.use_n_step_is else None,
                                 v, next_v)
 
-        return d_y, c_y  # [None, 1]
+        return d_y, c_y  # [Batch, 1]
 
     def _train_rep_q(self, n_obses_list: List[torch.Tensor],
                      n_actions: torch.Tensor,
@@ -940,6 +958,18 @@ class SAC_Base(object):
                n_mu_probs: torch.Tensor = None,
                priority_is: torch.Tensor = None,
                initial_rnn_state: torch.Tensor = None):
+        """
+        Args:
+            n_obses_list: list([Batch, N, *obs_shapes_i], ...)
+            n_actions: [Batch, N, action_size]
+            n_rewards: [Batch, N]
+            next_obs_list: list([Batch, *obs_shapes_i], ...)
+            n_dones: [Batch, N]
+            n_mu_probs: [Batch, N]
+            priority_is: [Batch, 1]
+            initial_rnn_state: [Batch, *rnn_state_shape]
+        """
+
         if self.global_step % self.update_target_per_step == 0:
             self._update_target_variables(tau=self.tau)
 
@@ -1014,6 +1044,18 @@ class SAC_Base(object):
 
     @torch.no_grad()
     def rnd_sample(self, state, d_policy, c_policy):
+        """
+        Sample action `self.rnd_n_sample` times, 
+        choose the action that has the max (model_rnd(state, action) - model_target_rnd(state, action))**2
+
+        Args:
+            state: [Batch, state_size]
+            d_policy: [Batch, d_action_size]
+            c_policy: [Batch, c_action_size]
+
+        Returns:
+            action: [Batch, d_action_size + c_action_size]
+        """
         batch = state.shape[0]
         n_sample = self.rnd_n_sample
 
@@ -1038,6 +1080,13 @@ class SAC_Base(object):
 
     @torch.no_grad()
     def _choose_action(self, state):
+        """
+        Args:
+            state: [Batch, state_size]
+
+        Returns:
+            action: [Batch, d_action_size + c_action_size]
+        """
         batch = state.shape[0]
         d_policy, c_policy = self.model_policy(state)
         if self.use_rnd:
@@ -1078,9 +1127,9 @@ class SAC_Base(object):
     def choose_rnn_action(self, obs_list, pre_action, rnn_state):
         """
         Args:
-            obs_list: list([None, *obs_shapes_i], ...)
-            pre_action: [None, d_action_size + c_action_size]
-            rnn_state: [None, *rnn_state_shape]
+            obs_list: list([Batch, *obs_shapes_i], ...)
+            pre_action: [Batch, d_action_size + c_action_size]
+            rnn_state: [Batch, *rnn_state_shape]
 
         Returns:
             action: [Batch, d_action_size + c_action_size] (numpy)
@@ -1098,60 +1147,6 @@ class SAC_Base(object):
         action = self._choose_action(state)
 
         return action.detach().cpu().numpy(), next_rnn_state.detach().cpu().numpy()
-
-    # def _cal_cem_reward(self, state, action):
-    #     cem_horizon = 12
-
-    #     if self.cem_rewards is None:
-    #         self.cem_rewards = tf.Variable(tf.zeros([state.shape[0], cem_horizon]))
-
-    #     for j in range(cem_horizon):
-    #         state_ = self.model_transition(state, action).sample()
-    #         self.cem_rewards[:, j:j + 1].assign(self.model_reward(state_))
-    #         state = state_
-    #         action = tf.tanh(self.model_policy(state).sample())
-
-    #     return self.cem_rewards
-
-    # def choose_action_by_cem(self, obs, rnn_state):
-    #     obs = tf.reshape(obs, (-1, 1, obs.shape[-1]))
-    #     state, next_rnn_state, _ = self.model_rnn(obs, [rnn_state])
-
-    #     state = tf.reshape(state, (-1, state.shape[-1]))
-
-    #     repeat = 1000
-    #     top = 100
-    #     iteration = 10
-
-    #     batch = state.shape[0]
-    #     dist = self.model_policy(state)
-    #     mean, std = dist.loc, dist.scale
-
-    #     for i in range(iteration):
-    #         state_repeated = tf.repeat(state, repeat, axis=0)
-    #         mean_repeated = tf.repeat(mean, repeat, axis=0)
-    #         std_repeated = tf.repeat(std, repeat, axis=0)
-
-    #         action_repeated = tfp.distributions.Normal(mean_repeated, std_repeated)
-    #         action_repeated = tf.tanh(action_repeated.sample())
-
-    #         rewards = self._cal_cem_reward(state_repeated, action_repeated)
-
-    #         cum_reward = tf.reshape(tf.reduce_sum(rewards, axis=1), [batch, repeat])
-    #         sorted_index = tf.argsort(cum_reward, axis=1)
-    #         sorted_index = sorted_index[..., -top:]
-    #         sorted_index = tf.reshape(sorted_index, [-1])
-    #         tmp_index = tf.repeat(tf.range(batch), top, axis=0)
-
-    #         action_repeated = tf.reshape(action_repeated, [batch, repeat, 2])
-    #         action_repeated = tf.gather_nd(action_repeated, tf.unstack([tmp_index, sorted_index], axis=1))
-    #         action_repeated = tf.reshape(action_repeated, [batch, top, 2])
-    #         mean = tf.reduce_mean(tf.atanh(action_repeated * 0.9999), axis=1)
-    #         std = tf.math.reduce_std(tf.atanh(action_repeated * 0.9999), axis=1)
-
-    #     action = tfp.distributions.Normal(mean, std)
-    #     action = tf.tanh(action.sample())
-    #     return action, next_rnn_state
 
     @torch.no_grad()
     def _get_td_error(self,
@@ -1248,18 +1243,18 @@ class SAC_Base(object):
         ignore_size = self.burn_in_step + self.n_step
 
         tmp_n_obses_list = [None] * len(n_obses_list)
-        for i, n_obses in enumerate(n_obses_list):
-            tmp_n_obses_list[i] = np.concatenate([n_obses[:, i:i + ignore_size]
+        for j, n_obses in enumerate(n_obses_list):
+            tmp_n_obses_list[j] = np.concatenate([n_obses[:, i:i + ignore_size]
                                                   for i in range(n_obses.shape[1] - ignore_size + 1)], axis=0)
         n_actions = np.concatenate([n_actions[:, i:i + ignore_size]
                                     for i in range(n_actions.shape[1] - ignore_size + 1)], axis=0)
         n_rewards = np.concatenate([n_rewards[:, i:i + ignore_size]
                                     for i in range(n_rewards.shape[1] - ignore_size + 1)], axis=0)
         tmp_next_obs_list = [None] * len(next_obs_list)
-        for i, n_obses in enumerate(n_obses_list):
-            tmp_next_obs_list[i] = np.concatenate([n_obses[:, i + ignore_size]
+        for j, n_obses in enumerate(n_obses_list):
+            tmp_next_obs_list[j] = np.concatenate([n_obses[:, i + ignore_size]
                                                    for i in range(n_obses.shape[1] - ignore_size)]
-                                                  + [next_obs_list[i]],
+                                                  + [next_obs_list[j]],
                                                   axis=0)
         n_dones = np.concatenate([n_dones[:, i:i + ignore_size]
                                   for i in range(n_dones.shape[1] - ignore_size + 1)], axis=0)
@@ -1314,7 +1309,7 @@ class SAC_Base(object):
             n_rnn_states: [1, episode_len, *rnn_state_shape]
         """
 
-        # Ignore episodes whose length is too short
+        # Ignore episodes which length is too short
         if n_obses_list[0].shape[1] < self.burn_in_step + self.n_step:
             return
 
@@ -1344,9 +1339,12 @@ class SAC_Base(object):
         }
 
         if self.use_n_step_is:
-            n_mu_probs = self.get_n_probs([torch.from_numpy(n_obses).to(self.device) for n_obses in n_obses_list],
-                                          torch.from_numpy(n_actions).to(self.device),
-                                          torch.from_numpy(n_rnn_states[:, 0, ...]).to(self.device) if self.use_rnn else None).detach().cpu().numpy()
+            n_mu_probs = self.get_n_probs(
+                [torch.from_numpy(n_obses).to(self.device) for n_obses in n_obses_list],
+                torch.from_numpy(n_actions).to(self.device),
+                torch.from_numpy(n_rnn_states[:, 0, ...]).to(self.device) if self.use_rnn else None
+            )
+            n_mu_probs = n_mu_probs.detach().cpu().numpy()
 
             mu_prob = n_mu_probs.reshape([-1])
             mu_prob = np.concatenate([mu_prob,
@@ -1419,7 +1417,7 @@ class SAC_Base(object):
             trans[k] = np.concatenate([np.expand_dims(t, 1) for t in v], axis=1)
 
         """
-        m_obses_list: list([Batch, N + 1, *obs_shapes_i])
+        m_obses_list: list([Batch, N + 1, *obs_shapes_i], ...)
         m_actions: [Batch, N + 1, action_size]
         m_rewards: [Batch, N + 1]
         m_dones: [Batch, N + 1]
@@ -1459,6 +1457,16 @@ class SAC_Base(object):
         if train_data is None:
             return 0
 
+        """
+        n_obses_list: list([Batch, N, *obs_shapes_i], ...)
+        n_actions: [Batch, N, action_size]
+        n_rewards: [Batch, N]
+        next_obs_list: list([Batch, *obs_shapes_i], ...)
+        n_dones: [Batch, N]
+        n_mu_probs: [Batch, N]
+        priority_is: [Batch, 1]
+        rnn_states: [Batch, *rnn_state_shape]
+        """
         pointers, (n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
                    n_mu_probs,
                    priority_is,
