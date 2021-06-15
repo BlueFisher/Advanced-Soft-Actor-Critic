@@ -25,7 +25,6 @@ class TestSAC_DS_Base(unittest.TestCase):
             c_action_size=3,
             model_abs_dir=None,
             model=nn_vanilla,
-            device='cpu',
             n_step=N_STEP
         )
 
@@ -35,7 +34,6 @@ class TestSAC_DS_Base(unittest.TestCase):
             c_action_size=3,
             model_abs_dir=None,
             model=nn_rnn,
-            device='cpu',
             use_rnn=True,
             n_step=N_STEP
         )

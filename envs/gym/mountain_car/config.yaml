@@ -17,30 +17,47 @@ default:
     tau: 0.9
     v_lambda: 0.99
     init_log_alpha: 0
-    # use_curiosity: true
-    # curiosity_strength: 500
-    use_rnd: true
+    use_curiosity: false
+    curiosity_strength: 500
 
 rnd1:
+  base_config:
+    name: "rnd1_{time}"
   sac_config:
+    use_rnd: true
     rnd_n_sample: 1
 
 rnd10:
+  base_config:
+    name: "rnd10_{time}"
   sac_config:
+    use_rnd: true
     rnd_n_sample: 10
 
 rnd20:
+  base_config:
+    name: "rnd20_{time}"
   sac_config:
+    use_rnd: true
     rnd_n_sample: 20
 
 rnd30:
+  base_config:
+    name: "rnd30_{time}"
   sac_config:
+    use_rnd: true
     rnd_n_sample: 30
 
 rnd40:
+  base_config:
+    name: "rnd40_{time}"
   sac_config:
+    use_rnd: true
     rnd_n_sample: 40
 
 rnd50:
+  base_config:
+    name: "rnd50_{time}"
   sac_config:
+    use_rnd: true
     rnd_n_sample: 50

@@ -21,7 +21,7 @@ class TestConvModel(unittest.TestCase):
             def _build_model(self):
                 super()._build_model()
 
-                self.conv = m.ConvLayers(84, 84, 3, conv_name, dense_depth=2, output_size=32)
+                self.conv = m.ConvLayers(84, 84, 3, conv_name, out_dense_depth=2, output_size=32)
         nn_conv.ModelRep = ModelRep
 
         obs_shapes = [(10,), (84, 84, 3)]
@@ -32,7 +32,6 @@ class TestConvModel(unittest.TestCase):
             c_action_size=4,
             model_abs_dir=None,
             model=nn_conv,
-            device='cpu',
             use_rnn=True,
             **param_dict
         )

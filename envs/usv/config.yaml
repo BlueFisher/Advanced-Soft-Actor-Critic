@@ -17,16 +17,29 @@ default:
 
     n_step: 3
 
-    # use_curiosity: true
-    # curiosity_strength: 2
-
-    # use_rnd: true
-    # rnd_n_sample: 20
-
 rnd:
+  base_config:
+    name: "rnd_{time}"
+
+  sac_config:
+    use_rnd: true
+    rnd_n_sample: 50
+
+curiosity:
+  base_config:
+    name: "curiosity_{time}"
+
   sac_config:
     use_curiosity: true
-    curiosity_strength: 1
+    curiosity_strength: 2
+
+curiosity_rnd:
+  base_config:
+    name: "curiosity_rnd_{time}"
+
+  sac_config:
+    use_curiosity: true
+    curiosity_strength: 2
 
     use_rnd: true
-    rnd_n_sample: 20
+    rnd_n_sample: 50

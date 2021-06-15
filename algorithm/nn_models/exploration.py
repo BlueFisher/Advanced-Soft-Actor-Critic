@@ -20,9 +20,9 @@ class ModelBaseRND(nn.Module):
 
 
 class ModelRND(ModelBaseRND):
-    def _build_model(self, dense_n=64, dense_depth=2):
+    def _build_model(self, dense_n=64, dense_depth=2, output_size=None):
         self.dense = LinearLayers(self.state_size + self.action_size,
-                                  dense_n, dense_depth)
+                                  dense_n, dense_depth, output_size)
 
     def forward(self, state, action):
         return self.dense(torch.cat([state, action], dim=-1))
