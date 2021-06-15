@@ -18,7 +18,6 @@ class TestVanilla(unittest.TestCase):
             obs_shapes=obs_shapes,
             model_abs_dir=None,
             model=nn_vanilla,
-            device='cpu',
             use_add_with_td=True,
             **param_dict
         )

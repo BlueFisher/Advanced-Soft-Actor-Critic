@@ -18,7 +18,6 @@ class TestRNN(unittest.TestCase):
             obs_shapes=obs_shapes,
             model_abs_dir=None,
             model=nn_rnn,
-            device='cpu',
             use_rnn=True,
             **param_dict
         )

@@ -33,7 +33,6 @@ class TestNNModel(unittest.TestCase):
             c_action_size=4,
             model_abs_dir=None,
             model=nn_vanilla,
-            device='cpu',
         )
 
         step = 0

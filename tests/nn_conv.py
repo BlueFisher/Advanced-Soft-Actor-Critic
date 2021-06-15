@@ -9,7 +9,7 @@ EXTRA_SIZE = 3
 
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):
-        self.conv = m.ConvLayers(84, 84, 3, 'simple', dense_depth=2, output_size=32)
+        self.conv = m.ConvLayers(84, 84, 3, 'simple', out_dense_depth=2, output_size=32)
 
         self.rnn = m.GRU(self.obs_shapes[0][0] - EXTRA_SIZE
                          + self.conv.output_size

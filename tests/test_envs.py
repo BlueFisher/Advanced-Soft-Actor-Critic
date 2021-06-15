@@ -22,7 +22,6 @@ class TestEnvs(unittest.TestCase):
             c_action_size=c_action_size,
             model_abs_dir=None,
             model=custom_nn_model,
-            device='cpu',
             **param_dict
         )
 
@@ -51,7 +50,6 @@ class TestEnvs(unittest.TestCase):
             c_action_size=c_action_size,
             model_abs_dir=None,
             model=custom_nn_model,
-            device='cpu',
             use_rnn=True,
             **param_dict
         )

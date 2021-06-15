@@ -941,7 +941,7 @@ class SAC_Base(object):
         approx_f = self.model_rnd(n_states[:, self.burn_in_step:, ...],
                                   n_actions[:, self.burn_in_step:, ...])
         f = self.model_target_rnd(n_states[:, self.burn_in_step:, ...],
-                                  n_actions[:, self.burn_in_step:, ...])
+                                  n_actions[:, self.burn_in_step:, ...]).detach()
         loss_rnd = loss_mse(f, approx_f)
 
         self.optimizer_rnd.zero_grad()

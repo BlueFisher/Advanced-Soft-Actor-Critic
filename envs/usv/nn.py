@@ -20,4 +20,4 @@ class ModelForward(m.ModelForward):
 
 class ModelRND(m.ModelRND):
     def _build_model(self):
-        return super()._build_model(dense_n=128, dense_depth=2)
+        return super()._build_model(dense_n=128, dense_depth=1, output_size=128)
