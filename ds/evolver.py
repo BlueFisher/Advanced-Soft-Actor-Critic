@@ -1,7 +1,6 @@
 import copy
 import json
 import logging
-import os
 import threading
 import time
 from collections import deque
@@ -85,9 +84,7 @@ class Evolver:
     def __init__(self, root_dir, config_dir, args):
         self.logger = logging.getLogger('ds.evolver')
 
-        (self.config,
-         model_abs_dir,
-         config_abs_dir) = self._init_config(root_dir, config_dir, args)
+        self._init_config(root_dir, config_dir, args)
 
         self._config_generator = ConfigGenerator(self.config)
 
@@ -111,9 +108,9 @@ class Evolver:
             self.close()
 
     def _init_config(self, root_dir, config_dir, args):
+        default_config_file_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
         config_abs_dir = Path(root_dir).joinpath(config_dir)
         config_abs_path = config_abs_dir.joinpath('config_ds.yaml')
-        default_config_file_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
         config = config_helper.initialize_config_from_yaml(default_config_file_path,
                                                            config_abs_path,
                                                            args.config,
@@ -128,7 +125,7 @@ class Evolver:
         model_abs_dir = Path(root_dir).joinpath('models',
                                                 config['base_config']['scene'],
                                                 config['base_config']['name'])
-        os.makedirs(model_abs_dir)
+        model_abs_dir.mkdir(parents=True, exist_ok=True)
 
         if args.logger_in_file:
             config_helper.set_logger(Path(model_abs_dir).joinpath('evolver.log'))
@@ -137,9 +134,7 @@ class Evolver:
 
         config_helper.display_config(config, self.logger)
 
-        return (config,
-                model_abs_dir,
-                config_abs_dir)
+        self.config = config
 
     def _get_new_learner_config(self, peer):
         config = self._config_generator.generate(peer)

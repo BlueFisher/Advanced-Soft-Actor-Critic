@@ -61,9 +61,9 @@ class Replay:
         self._run_replay_server(net_config['replay_port'])
 
     def _init_constant_config(self, root_dir, config_dir, args):
+        default_config_abs_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
         config_abs_dir = Path(root_dir).joinpath(config_dir)
         config_abs_path = config_abs_dir.joinpath('config_ds.yaml')
-        default_config_abs_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
         config = config_helper.initialize_config_from_yaml(default_config_abs_path,
                                                            config_abs_path,
                                                            args.config)

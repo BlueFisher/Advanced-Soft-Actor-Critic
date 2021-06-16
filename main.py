@@ -1,5 +1,5 @@
 import argparse
-import os
+from pathlib import Path
 import sys
 
 from algorithm.config_helper import set_logger
@@ -28,7 +28,7 @@ if __name__ == '__main__':
     else:
         from algorithm.sac_main import Main
 
-    root_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = Path(__file__).resolve().parent
     if sys.platform == 'win32':
         for _ in range(args.repeat):
             Main(root_dir, f'envs/{args.env}', args)

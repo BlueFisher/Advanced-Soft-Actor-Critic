@@ -1,5 +1,4 @@
 import argparse
-import os
 import sys
 from pathlib import Path
 import multiprocessing as mp
@@ -41,7 +40,7 @@ if __name__ == '__main__':
     parser.add_argument('--noise', type=float, help='additional noise for actor')
     args = parser.parse_args()
 
-    root_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = Path(__file__).resolve().parent
     config_dir = f'envs/{args.env}'
 
     if args.process_type in ['replay', 'r']:

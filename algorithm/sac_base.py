@@ -1089,7 +1089,7 @@ class SAC_Base(object):
         """
         batch = state.shape[0]
         d_policy, c_policy = self.model_policy(state)
-        if self.use_rnd:
+        if self.use_rnd and self.train_mode:
             return self.rnd_sample(state, d_policy, c_policy)
         else:
             if self.d_action_size:
