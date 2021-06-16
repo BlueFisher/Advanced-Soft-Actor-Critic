@@ -87,9 +87,10 @@ class Actor(object):
         self.close()
 
     def _init_constant_config(self, root_dir, config_dir, args):
+        default_config_abs_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
         config_abs_dir = Path(root_dir).joinpath(config_dir)
         config_abs_path = config_abs_dir.joinpath('config_ds.yaml')
-        config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
+        config = config_helper.initialize_config_from_yaml(default_config_abs_path,
                                                            config_abs_path,
                                                            args.config)
 
@@ -162,7 +163,8 @@ class Actor(object):
 
         self.logger.info(f'{self.base_config["build_path"]} initialized')
 
-        spec = importlib.util.spec_from_file_location('nn', f'{config_abs_dir}/{self.base_config["nn"]}.py')
+        nn_abs_path = Path(config_abs_dir).joinpath(f'{self.base_config["nn"]}.py')
+        spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
         custom_nn_model = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(custom_nn_model)
 

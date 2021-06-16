@@ -1,6 +1,5 @@
 import importlib
 import logging
-import os
 import shutil
 import sys
 import time
@@ -25,15 +24,9 @@ class Main(object):
         """
         self.logger = logging.getLogger('sac')
 
-        (self.config, self.reset_config,
-         replay_config,
-         sac_config,
-         model_abs_dir,
-         config_abs_dir) = self._init_config(root_dir, config_dir, args)
+        config_abs_dir = self._init_config(root_dir, config_dir, args)
 
-        self._init_env(model_abs_dir, config_abs_dir,
-                       sac_config,
-                       replay_config)
+        self._init_env(config_abs_dir)
         self._run()
 
     def _init_config(self, root_dir, config_dir, args):
@@ -62,11 +55,13 @@ class Main(object):
             config['base_config']['n_agents'] = args.agents
 
         config['base_config']['name'] = config_helper.generate_base_name(config['base_config']['name'])
+
+        # The absolute directory of a specific training
         model_abs_dir = Path(root_dir).joinpath('models',
                                                 config['base_config']['scene'],
                                                 config['base_config']['name'])
-
-        os.makedirs(model_abs_dir, exist_ok=True)
+        model_abs_dir.mkdir(parents=True, exist_ok=True)
+        self.model_abs_dir = model_abs_dir
 
         if args.logger_in_file:
             config_helper.set_logger(Path(model_abs_dir).joinpath(f'log.log'))
@@ -76,50 +71,48 @@ class Main(object):
 
         config_helper.display_config(config, self.logger)
 
-        return (config['base_config'],
-                config['reset_config'],
-                config['replay_config'],
-                config['sac_config'],
-                model_abs_dir,
-                config_abs_dir)
+        self.base_config = config['base_config']
+        self.reset_config = config['reset_config']
+        self.replay_config = config['replay_config']
+        self.sac_config = config['sac_config']
 
-    def _init_env(self, model_abs_dir, config_abs_dir,
-                  sac_config,
-                  replay_config):
-        if self.config['env_type'] == 'UNITY':
+        return config_abs_dir
+
+    def _init_env(self, config_abs_dir: Path):
+        if self.base_config['env_type'] == 'UNITY':
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
             if self.run_in_editor:
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         base_port=5004,
-                                        n_agents=self.config['n_agents'])
+                                        n_agents=self.base_config['n_agents'])
             else:
                 self.env = UnityWrapper(train_mode=self.train_mode,
-                                        file_name=self.config['build_path'][sys.platform],
-                                        base_port=self.config['port'],
-                                        no_graphics=self.config['no_graphics'] and not self.render,
-                                        scene=self.config['scene'],
-                                        n_agents=self.config['n_agents'])
+                                        file_name=self.base_config['build_path'][sys.platform],
+                                        base_port=self.base_config['port'],
+                                        no_graphics=self.base_config['no_graphics'] and not self.render,
+                                        scene=self.base_config['scene'],
+                                        n_agents=self.base_config['n_agents'])
 
-        elif self.config['env_type'] == 'GYM':
+        elif self.base_config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
 
             self.env = GymWrapper(train_mode=self.train_mode,
-                                  env_name=self.config['build_path'],
+                                  env_name=self.base_config['build_path'],
                                   render=self.render,
-                                  n_agents=self.config['n_agents'])
+                                  n_agents=self.base_config['n_agents'])
         else:
-            raise RuntimeError(f'Undefined Environment Type: {self.config["env_type"]}')
+            raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
         self.obs_shapes, self.d_action_size, self.c_action_size = self.env.init()
         self.action_size = self.d_action_size + self.c_action_size
 
         # If model exists, load saved model, or copy a new one
-        nn_model_abs_path = Path(model_abs_dir).joinpath('nn_models.py')
-        if os.path.isfile(nn_model_abs_path):
+        nn_model_abs_path = Path(self.model_abs_dir).joinpath('nn_models.py')
+        if nn_model_abs_path.exists():
             spec = importlib.util.spec_from_file_location('nn', str(nn_model_abs_path))
         else:
-            nn_abs_path = Path(config_abs_dir).joinpath(f'{self.config["nn"]}.py')
+            nn_abs_path = Path(config_abs_dir).joinpath(f'{self.base_config["nn"]}.py')
             spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
             shutil.copyfile(nn_abs_path, nn_model_abs_path)
 
@@ -129,15 +122,15 @@ class Main(object):
         self.sac = SAC_Base(obs_shapes=self.obs_shapes,
                             d_action_size=self.d_action_size,
                             c_action_size=self.c_action_size,
-                            model_abs_dir=model_abs_dir,
+                            model_abs_dir=self.model_abs_dir,
                             model=custom_nn_model,
                             device=self.device,
                             train_mode=self.train_mode,
                             last_ckpt=self.last_ckpt,
 
-                            replay_config=replay_config,
+                            replay_config=self.replay_config,
 
-                            **sac_config)
+                            **self.sac_config)
 
     def _run(self):
         use_rnn = self.sac.use_rnn
@@ -145,7 +138,7 @@ class Main(object):
         obs_list = self.env.reset(reset_config=self.reset_config)
 
         agents = [self._agent_class(i, use_rnn=self.sac.use_rnn)
-                  for i in range(self.config['n_agents'])]
+                  for i in range(self.base_config['n_agents'])]
 
         if use_rnn:
             initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))
@@ -155,11 +148,11 @@ class Main(object):
         iteration = 0
         trained_steps = 0
 
-        while iteration != self.config['max_iter']:
-            if self.config['max_step'] != -1 and trained_steps >= self.config['max_step']:
+        while iteration != self.base_config['max_iter']:
+            if self.base_config['max_step'] != -1 and trained_steps >= self.base_config['max_step']:
                 break
 
-            if self.config['reset_on_iteration'] or is_max_reached:
+            if self.base_config['reset_on_iteration'] or is_max_reached:
                 obs_list = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
@@ -194,7 +187,7 @@ class Main(object):
                 next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
                                                                                action[..., self.d_action_size:])
 
-                if step == self.config['max_step_each_iter']:
+                if step == self.base_config['max_step_each_iter']:
                     local_done = [True] * len(agents)
                     max_reached = [True] * len(agents)
                     is_max_reached = True
@@ -229,6 +222,10 @@ class Main(object):
                 self._log_episode_summaries(agents)
 
             self._log_episode_info(iteration, agents)
+
+            if (p := self.model_abs_dir.joinpath('save_model')).exists():
+                self.sac.save_model()
+                p.unlink()
 
             iteration += 1
 

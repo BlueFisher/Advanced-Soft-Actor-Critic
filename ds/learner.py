@@ -2,7 +2,6 @@ import importlib
 import json
 import logging
 import multiprocessing as mp
-import os
 import shutil
 import socket
 import sys
@@ -74,9 +73,10 @@ class Learner:
         self.close()
 
     def _init_constant_config(self, root_dir, config_dir, args):
+        default_config_abs_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
         config_abs_dir = Path(root_dir).joinpath(config_dir)
         config_abs_path = config_abs_dir.joinpath('config_ds.yaml')
-        config = config_helper.initialize_config_from_yaml(f'{Path(__file__).resolve().parent}/default_config.yaml',
+        config = config_helper.initialize_config_from_yaml(default_config_abs_path,
                                                            config_abs_path,
                                                            args.config)
 
@@ -141,8 +141,8 @@ class Learner:
                                                      self.base_config['scene'],
                                                      self.base_config['name'],
                                                      f'learner{self.id}')
+        model_abs_dir.mkdir(parents=True, exist_ok=True)
         self.model_abs_dir = model_abs_dir
-        os.makedirs(model_abs_dir)
 
         if self.cmd_args.logger_in_file:
             config_helper.set_logger(Path(model_abs_dir).joinpath(f'learner.log'))
@@ -176,7 +176,7 @@ class Learner:
 
         # If model exists, load saved model, or copy a new one
         nn_model_abs_path = Path(model_abs_dir).joinpath('nn_models.py')
-        if os.path.isfile(nn_model_abs_path):
+        if nn_model_abs_path.exists():
             spec = importlib.util.spec_from_file_location('nn', str(nn_model_abs_path))
         else:
             nn_abs_path = Path(config_abs_dir).joinpath(f'{self.base_config["nn"]}.py')

@@ -1,10 +1,10 @@
 import json
 import logging
 import logging.handlers
-import os
 import random
 import string
 import time
+from pathlib import Path
 
 import numpy as np
 import yaml
@@ -95,10 +95,10 @@ def set_logger(logger_file=None):
         logger.addHandler(fh)
 
 
-def save_config(config, model_root_path, config_name):
-    if not os.path.exists(model_root_path):
-        os.makedirs(model_root_path)
-    with open(f'{model_root_path}/{config_name}', 'w') as f:
+def save_config(config, model_root_path: Path, config_name):
+    model_root_path.mkdir(parents=True, exist_ok=True)
+
+    with open(model_root_path.joinpath(config_name), 'w') as f:
         yaml.dump(config, f, default_flow_style=False)
 
 
