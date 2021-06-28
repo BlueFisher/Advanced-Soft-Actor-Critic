@@ -67,6 +67,8 @@ class UnityWrapper:
             continuous action size: int
         """
         behavior_spec = self._env.behavior_specs[self.bahavior_name]
+        obs_names = [o.name for o in behavior_spec.observation_specs]
+        logger.info(f'Observation names: {obs_names}')
         obs_shapes = [o.shape for o in behavior_spec.observation_specs]
         logger.info(f'Observation shapes: {obs_shapes}')
 

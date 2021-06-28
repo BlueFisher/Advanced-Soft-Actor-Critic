@@ -3,7 +3,7 @@ default:
     scene: USV
 
     build_path:
-      win32: C:\Users\fisher\Nextcloud\Documents\Unity\win-RL-Envs\RLEnvironments.exe
+      win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
       linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
     n_agents: 10
@@ -13,33 +13,60 @@ default:
     force_reset: true
 
   sac_config:
-    write_summary_per_step: 100
+    write_summary_per_step: 1000
 
     n_step: 3
-
-rnd:
-  base_config:
-    name: "rnd_{time}"
-
-  sac_config:
     use_rnd: true
     rnd_n_sample: 50
 
-curiosity:
+ray:
   base_config:
-    name: "curiosity_{time}"
+    name: "ray_rnd_{time}"
+    nn: nn_ray
 
   sac_config:
-    use_curiosity: true
-    curiosity_strength: 2
-
-curiosity_rnd:
-  base_config:
-    name: "curiosity_rnd_{time}"
-
-  sac_config:
-    use_curiosity: true
-    curiosity_strength: 2
-
     use_rnd: true
-    rnd_n_sample: 50
+
+ray_nornd:
+  base_config:
+    name: "ray_nornd_{time}"
+    nn: nn_ray
+
+  sac_config:
+    use_rnd: false
+
+ray_rnn:
+  base_config:
+    name: "ray_rnn_{time}"
+    nn: nn_ray_rnn
+
+  sac_config:
+    use_rnn: true
+
+ray_rnn_nornd:
+  base_config:
+    name: "ray_rnn_nornd_{time}"
+    nn: nn_ray_rnn
+
+  sac_config:
+    use_rnn: true
+    use_rnd: false
+
+ray_rnn_pre:
+  base_config:
+    name: "ray_rnn_pre_{time}"
+    nn: nn_ray_rnn
+
+  sac_config:
+    use_rnn: true
+    use_prediction: true
+
+ray_rnn_pre_noextra:
+  base_config:
+    name: "ray_rnn_pre_noextra_{time}"
+    nn: nn_ray_rnn
+
+  sac_config:
+    use_rnn: true
+    use_prediction: true
+    use_extra_data: false

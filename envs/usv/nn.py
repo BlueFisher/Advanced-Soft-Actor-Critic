@@ -1,6 +1,14 @@
 import algorithm.nn_models as m
 
-ModelRep = m.ModelSimpleRep
+
+class ModelRep(m.ModelBaseSimpleRep):
+    def _bulid_model(self):
+        assert self.obs_shapes[2] == (11,)
+
+    def forward(self, obs_list):
+        ray_1, ray_2, vec = obs_list
+
+        return vec
 
 
 class ModelQ(m.ModelQ):
@@ -11,11 +19,6 @@ class ModelQ(m.ModelQ):
 class ModelPolicy(m.ModelPolicy):
     def _build_model(self):
         return super()._build_model(c_dense_n=128, c_dense_depth=2)
-
-
-class ModelForward(m.ModelForward):
-    def _build_model(self):
-        return super()._build_model(dense_n=self.state_size + self.action_size, dense_depth=2)
 
 
 class ModelRND(m.ModelRND):
