@@ -201,9 +201,9 @@ class Actor(object):
 
         # TODO if not update_policy_mode, do not need get_n_probs
         with self._sac_actor_lock.read():
-            n_mu_probs = self.sac_actor.get_n_probs(n_obses_list,
-                                                    n_actions,
-                                                    n_rnn_states[:, 0, ...] if self.sac_actor.use_rnn else None)
+            n_mu_probs = self.sac_actor.get_n_probs_np(n_obses_list,
+                                                       n_actions,
+                                                       n_rnn_states[:, 0, ...] if self.sac_actor.use_rnn else None)
 
         self._stub.add_transitions(n_obses_list,
                                    n_actions,

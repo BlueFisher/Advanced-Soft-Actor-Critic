@@ -274,13 +274,13 @@ class SAC_DS_Base(SAC_Base):
                                              n_actions,
                                              rnn_state=rnn_state if self.use_rnn else None)
 
-        td_error = self.get_td_error(n_obses_list=n_obses_list,
-                                     n_actions=n_actions,
-                                     n_rewards=n_rewards,
-                                     next_obs_list=next_obs_list,
-                                     n_dones=n_dones,
-                                     n_mu_probs=n_pi_probs_tensor,
-                                     rnn_state=rnn_state if self.use_rnn else None).detach().cpu().numpy()
+        td_error = self._get_td_error(n_obses_list=n_obses_list,
+                                      n_actions=n_actions,
+                                      n_rewards=n_rewards,
+                                      next_obs_list=next_obs_list,
+                                      n_dones=n_dones,
+                                      n_mu_probs=n_pi_probs_tensor,
+                                      rnn_state=rnn_state if self.use_rnn else None).detach().cpu().numpy()
 
         update_data = []
 
