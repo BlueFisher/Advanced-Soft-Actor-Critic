@@ -443,12 +443,12 @@ class SAC_Base(object):
         self.running_variances = new_variance
 
     @torch.no_grad()
-    def get_n_probs(self, n_obses_list: List[np.ndarray],
-                    n_selected_actions: np.ndarray,
-                    rnn_state: np.ndarray = None):
+    def get_n_probs(self, n_obses_list: List[torch.Tensor],
+                    n_actions: torch.Tensor,
+                    rnn_state: torch.Tensor = None):
         if self.use_rnn:
             n_states, _ = self.model_rep(n_obses_list,
-                                         gen_pre_n_actions(n_selected_actions),
+                                         gen_pre_n_actions(n_actions),
                                          rnn_state)
         else:
             n_states = self.model_rep(n_obses_list)
@@ -458,16 +458,25 @@ class SAC_Base(object):
         policy_prob = torch.ones((n_states.shape[:2]), device=self.device)  # [Batch, n]
 
         if self.d_action_size:
-            n_selected_d_actions = n_selected_actions[..., :self.d_action_size]
+            n_selected_d_actions = n_actions[..., :self.d_action_size]
             policy_prob *= torch.exp(d_policy.log_prob(n_selected_d_actions))   # [Batch, n]
 
         if self.c_action_size:
-            n_selected_c_actions = n_selected_actions[..., self.d_action_size:]
+            n_selected_c_actions = n_actions[..., self.d_action_size:]
             c_policy_prob = squash_correction_prob(c_policy, torch.atanh(n_selected_c_actions))
             # [Batch, n, action_size]
             policy_prob *= torch.prod(c_policy_prob, dim=-1)  # [Batch, n]
 
         return policy_prob
+
+    def get_n_probs_np(self, n_obses_list: List[np.ndarray],
+                       n_actions: np.ndarray,
+                       rnn_state: np.ndarray = None):
+        probs = self.get_n_probs([torch.from_numpy(n_obses).to(self.device) for n_obses in n_obses_list],
+                                 torch.from_numpy(n_actions).to(self.device),
+                                 torch.from_numpy(rnn_state).to(self.device) if self.use_rnn else None)
+
+        return probs.cpu().numpy()
 
     @torch.no_grad()
     def get_n_rnn_states(self, n_obses_list: List[np.ndarray],
@@ -1351,12 +1360,11 @@ class SAC_Base(object):
         }
 
         if self.use_n_step_is:
-            n_mu_probs = self.get_n_probs(
-                [torch.from_numpy(n_obses).to(self.device) for n_obses in n_obses_list],
-                torch.from_numpy(n_actions).to(self.device),
-                torch.from_numpy(n_rnn_states[:, 0, ...]).to(self.device) if self.use_rnn else None
+            n_mu_probs = self.get_n_probs_np(
+                n_obses_list,
+                n_actions,
+                n_rnn_states[:, 0, ...] if self.use_rnn else None
             )
-            n_mu_probs = n_mu_probs.detach().cpu().numpy()
 
             mu_prob = n_mu_probs.reshape([-1])
             mu_prob = np.concatenate([mu_prob,
