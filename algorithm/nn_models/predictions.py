@@ -34,6 +34,8 @@ class ModelTransition(ModelBaseTransition):
     def _build_model(self, dense_n=64, dense_depth=0, extra_size=0):
         input_size = self.state_size + self.action_size
         if self.use_extra_data:
+            if extra_size == 0:
+                raise Exception("use_extra_data is True but extra_size is zero")
             input_size += extra_size
         self.dense = LinearLayers(input_size,
                                   dense_n, dense_depth,

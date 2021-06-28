@@ -426,7 +426,7 @@ class SAC_Base(object):
             )
 
     @torch.no_grad()
-    def _udpate_normalizer(self, obs_list):
+    def _udpate_normalizer(self, obs_list: List[torch.Tensor]):
         self.normalizer_step = self.normalizer_step + obs_list[0].shape[0]
 
         input_to_old_means = [obs_list[i] - self.running_means[i] for i in range(len(obs_list))]
@@ -443,7 +443,9 @@ class SAC_Base(object):
         self.running_variances = new_variance
 
     @torch.no_grad()
-    def get_n_probs(self, n_obses_list, n_selected_actions, rnn_state=None):
+    def get_n_probs(self, n_obses_list: List[np.ndarray],
+                    n_selected_actions: np.ndarray,
+                    rnn_state: np.ndarray = None):
         if self.use_rnn:
             n_states, _ = self.model_rep(n_obses_list,
                                          gen_pre_n_actions(n_selected_actions),
@@ -468,7 +470,9 @@ class SAC_Base(object):
         return policy_prob
 
     @torch.no_grad()
-    def get_n_rnn_states(self, n_obses_list, n_actions, rnn_state):
+    def get_n_rnn_states(self, n_obses_list: List[np.ndarray],
+                         n_actions: np.ndarray,
+                         rnn_state: np.ndarray):
         """
         Args:
             n_obses_list: list([Batch, n, *obs_shapes_i], ...)
@@ -479,7 +483,7 @@ class SAC_Base(object):
             n_rnn_states: [Batch, n, *rnn_state_shape]
         """
 
-        n_rnn_states = list()
+        n_rnn_states = []
         n_actions = gen_pre_n_actions(n_actions)
         for i in range(n_obses_list[0].shape[1]):
             _, rnn_state = self.model_rep([o[:, i:i + 1, ...] for o in n_obses_list],
@@ -490,8 +494,8 @@ class SAC_Base(object):
         return torch.stack(n_rnn_states, dim=1)
 
     @torch.no_grad()
-    def get_dqn_like_d_y(self, n_rewards, n_dones,
-                         stacked_next_q, stacked_next_target_q):
+    def get_dqn_like_d_y(self, n_rewards: torch.Tensor, n_dones: torch.Tensor,
+                         stacked_next_q: torch.Tensor, stacked_next_target_q: torch.Tensor):
         """
         Args:
             n_rewards: [Batch, n]
@@ -526,9 +530,9 @@ class SAC_Base(object):
         return y
 
     @torch.no_grad()
-    def _v_trace(self, n_rewards, n_dones,
-                 n_mu_probs, n_pi_probs,
-                 v, next_v):
+    def _v_trace(self, n_rewards: torch.Tensor, n_dones: torch.Tensor,
+                 n_mu_probs: torch.Tensor, n_pi_probs: torch.Tensor,
+                 v: torch.Tensor, next_v: torch.Tensor):
         """
         Args:
             n_rewards: [Batch, n]
@@ -569,8 +573,12 @@ class SAC_Base(object):
         return y
 
     @torch.no_grad()
-    def _get_y(self, n_states, n_actions, n_rewards, state_, n_dones,
-               n_mu_probs=None):
+    def _get_y(self, n_states: torch.Tensor,
+               n_actions: torch.Tensor,
+               n_rewards: torch.Tensor,
+               state_: torch.Tensor,
+               n_dones: torch.Tensor,
+               n_mu_probs: torch.Tensor = None):
         d_alpha = torch.exp(self.log_d_alpha)
         c_alpha = torch.exp(self.log_c_alpha)
 
@@ -1043,7 +1051,9 @@ class SAC_Base(object):
             self.summary_writer.flush()
 
     @torch.no_grad()
-    def rnd_sample(self, state, d_policy, c_policy):
+    def rnd_sample(self, state: torch.Tensor,
+                   d_policy: distributions.Categorical,
+                   c_policy: distributions.Normal):
         """
         Sample action `self.rnd_n_sample` times, 
         choose the action that has the max (model_rnd(state, action) - model_target_rnd(state, action))**2
@@ -1079,7 +1089,7 @@ class SAC_Base(object):
         return actions[torch.tensor(range(batch)), idx]
 
     @torch.no_grad()
-    def _choose_action(self, state):
+    def _choose_action(self, state: torch.Tensor):
         """
         Args:
             state: [Batch, state_size]
@@ -1111,7 +1121,7 @@ class SAC_Base(object):
             return torch.cat([d_action, c_action], dim=-1)
 
     @torch.no_grad()
-    def choose_action(self, obs_list):
+    def choose_action(self, obs_list: List[np.ndarray]):
         """
         Args:
             obs_list: list([Batch, *obs_shapes_i], ...)
@@ -1124,7 +1134,9 @@ class SAC_Base(object):
         return self._choose_action(state).detach().cpu().numpy()
 
     @torch.no_grad()
-    def choose_rnn_action(self, obs_list, pre_action, rnn_state):
+    def choose_rnn_action(self, obs_list: List[np.ndarray],
+                          pre_action: np.ndarray,
+                          rnn_state: np.ndarray):
         """
         Args:
             obs_list: list([Batch, *obs_shapes_i], ...)
@@ -1293,12 +1305,12 @@ class SAC_Base(object):
         return td_error
 
     def fill_replay_buffer(self,
-                           n_obses_list,
-                           n_actions,
-                           n_rewards,
-                           next_obs_list,
-                           n_dones,
-                           n_rnn_states=None):
+                           n_obses_list: List[np.ndarray],
+                           n_actions: np.ndarray,
+                           n_rewards: np.ndarray,
+                           next_obs_list: List[np.ndarray],
+                           n_dones: np.ndarray,
+                           n_rnn_states: np.ndarray = None):
         """
         Args:
             n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
@@ -1390,8 +1402,7 @@ class SAC_Base(object):
             )
         """
 
-        sampled = self.replay_buffer.sample()
-        if sampled is None:
+        if (sampled := self.replay_buffer.sample()) is None:
             return None
 
         """
@@ -1453,8 +1464,7 @@ class SAC_Base(object):
                           rnn_state if self.use_rnn else None)
 
     def train(self):
-        train_data = self._sample()
-        if train_data is None:
+        if (train_data := self._sample()) is None:
             return 0
 
         """

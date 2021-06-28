@@ -15,6 +15,8 @@ class ModelBaseSimpleRep(nn.Module):
     def get_output_shape(self, device):
         output = self([torch.empty(1, *obs_shape, device=device) for obs_shape in self.obs_shapes])
 
+        assert len(output.shape) == 2
+
         return output.shape[-1]
 
     def forward(self, obs_list):
@@ -23,7 +25,7 @@ class ModelBaseSimpleRep(nn.Module):
 
 class ModelSimpleRep(ModelBaseSimpleRep):
     def forward(self, obs_list):
-        return obs_list[0]
+        return torch.cat(obs_list, dim=-1)
 
 
 class ModelBaseRNNRep(nn.Module):
