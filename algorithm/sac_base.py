@@ -1029,10 +1029,12 @@ class SAC_Base(object):
                 self.summary_writer.add_scalar('loss/q', loss_q, self.global_step)
                 if self.d_action_size:
                     self.summary_writer.add_scalar('loss/d_entropy', d_policy_entropy, self.global_step)
-                    self.summary_writer.add_scalar('loss/d_alpha', d_alpha, self.global_step)
+                    if self.use_auto_alpha and not self.discrete_dqn_like:
+                        self.summary_writer.add_scalar('loss/d_alpha', d_alpha, self.global_step)
                 if self.c_action_size:
                     self.summary_writer.add_scalar('loss/c_entropy', c_policy_entropy, self.global_step)
-                    self.summary_writer.add_scalar('loss/c_alpha', c_alpha, self.global_step)
+                    if self.use_auto_alpha:
+                        self.summary_writer.add_scalar('loss/c_alpha', c_alpha, self.global_step)
 
                 if self.use_prediction:
                     approx_next_state_dist_entropy, loss_reward, loss_obs = loss_predictions
