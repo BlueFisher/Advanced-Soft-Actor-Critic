@@ -20,6 +20,7 @@ if __name__ == '__main__':
                                                  'evolver', 'e'])
     parser.add_argument('--config', '-c', help='config file')
     parser.add_argument('--run', action='store_true', help='inference mode')
+    parser.add_argument('--logger_in_file', action='store_true', help='logging into a file')
 
     parser.add_argument('--evolver_host', help='evolver host')
     parser.add_argument('--evolver_port', type=int, help='evolver port')
@@ -30,13 +31,14 @@ if __name__ == '__main__':
 
     parser.add_argument('--render', action='store_true', help='render')
     parser.add_argument('--editor', action='store_true', help='running in Unity Editor')
-    parser.add_argument('--logger_in_file', action='store_true', help='logging into a file')
-    parser.add_argument('--name', '-n', help='training name')
+    parser.add_argument('--additional_args', help='additional args for Unity')
     parser.add_argument('--build_port', '-p', type=int, default=5005, help='communication port')
+    parser.add_argument('--agents', type=int, help='number of agents')
+
+    parser.add_argument('--name', '-n', help='training name')
     parser.add_argument('--nn', help='neural network model')
     parser.add_argument('--device', help='cpu or gpu')
     parser.add_argument('--ckpt', help='ckeckpoint to restore')
-    parser.add_argument('--agents', type=int, help='number of agents')
     parser.add_argument('--noise', type=float, help='additional noise for actor')
     args = parser.parse_args()
 

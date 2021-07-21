@@ -17,7 +17,12 @@ default:
     tau: 0.9
     v_lambda: 0.99
     init_log_alpha: 0
-    use_curiosity: false
+
+curiosity:
+  base_config:
+    name: "curiosity_{time}"
+  sac_config:
+    use_curiosity: true
     curiosity_strength: 500
 
 rnd1:

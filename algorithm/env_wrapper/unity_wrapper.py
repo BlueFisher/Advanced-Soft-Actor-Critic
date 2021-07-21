@@ -21,6 +21,7 @@ class UnityWrapper:
                  no_graphics=True,
                  seed=None,
                  scene=None,
+                 additional_args=None,
                  n_agents=1):
         """
         train_mode: If in train mode, Unity will run in the highest quality
@@ -34,6 +35,7 @@ class UnityWrapper:
         self.scene = scene
 
         seed = seed if seed is not None else np.random.randint(0, 65536)
+        additional_args = [] if additional_args is None else additional_args.split(' ')
 
         self.engine_configuration_channel = EngineConfigurationChannel()
         self.environment_parameters_channel = EnvironmentParametersChannel()
@@ -44,7 +46,7 @@ class UnityWrapper:
                                      base_port=base_port if file_name else 5004,
                                      no_graphics=no_graphics and train_mode,
                                      seed=seed,
-                                     additional_args=['--scene', scene],
+                                     additional_args=['--scene', scene] + additional_args,
                                      side_channels=[self.engine_configuration_channel,
                                                     self.environment_parameters_channel])
 

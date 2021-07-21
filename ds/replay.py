@@ -81,15 +81,19 @@ class Replay:
         if args.replay_port is not None:
             config['net_config']['replay_port'] = args.replay_port
 
+        if config['net_config']['evolver_host'] is None:
+            self.logger.error('evolver_host is None')
+
         hostname = socket.gethostname()
         ip = socket.gethostbyname(hostname)
-
-        if config['net_config']['evolver_host'] is None:
-            config['net_config']['evolver_host'] = ip
-        if config['net_config']['learner_host'] is None:
-            config['net_config']['learner_host'] = ip
+        # ! If replay_host is not set, use ip as default
         if config['net_config']['replay_host'] is None:
             config['net_config']['replay_host'] = ip
+
+        # ! If in attach mode and learner_host is not set, use ip as default,
+        # ! since replay_host should be identical to the learner_host
+        if self.attached and config['net_config']['learner_host'] is None:
+            config['net_config']['learner_host'] = ip
 
         return config
 
@@ -259,9 +263,6 @@ class Replay:
 
     def wait_for_termination(self):
         self.server.wait_for_termination()
-
-
-
 
 
 class ReplayService(replay_pb2_grpc.ReplayServiceServicer):

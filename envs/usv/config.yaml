@@ -6,6 +6,8 @@ default:
       win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
       linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
+    no_graphics: false
+
     n_agents: 10
     reset_on_iteration: false
 
@@ -19,13 +21,60 @@ default:
     use_rnd: true
     rnd_n_sample: 50
 
-ray:
+visual:
   base_config:
-    name: "ray_rnd_{time}"
+    name: "vis_{time}"
+    nn: nn_visual
+
+visual_nature:
+  base_config:
+    name: "vis_nature_{time}"
+    nn: nn_visual_nature
+
+
+ray_rnd50:
+  base_config:
+    name: "ray_rnd50_{time}"
     nn: nn_ray
 
   sac_config:
     use_rnd: true
+
+ray_rnd10:
+  base_config:
+    name: "ray_rnd10_{time}"
+    nn: nn_ray
+
+  sac_config:
+    use_rnd: true
+    rnd_n_sample: 10
+
+ray_rnd20:
+  base_config:
+    name: "ray_rnd20_{time}"
+    nn: nn_ray
+
+  sac_config:
+    use_rnd: true
+    rnd_n_sample: 20
+
+ray_rnd30:
+  base_config:
+    name: "ray_rnd30_{time}"
+    nn: nn_ray
+
+  sac_config:
+    use_rnd: true
+    rnd_n_sample: 30
+
+ray_rnd40:
+  base_config:
+    name: "ray_rnd40_{time}"
+    nn: nn_ray
+
+  sac_config:
+    use_rnd: true
+    rnd_n_sample: 40
 
 ray_nornd:
   base_config:
@@ -42,6 +91,7 @@ ray_rnn:
 
   sac_config:
     use_rnn: true
+    burn_in_step: 30
 
 ray_rnn_nornd:
   base_config:
@@ -50,6 +100,7 @@ ray_rnn_nornd:
 
   sac_config:
     use_rnn: true
+    burn_in_step: 30
     use_rnd: false
 
 ray_rnn_pre:
@@ -59,6 +110,7 @@ ray_rnn_pre:
 
   sac_config:
     use_rnn: true
+    burn_in_step: 30
     use_prediction: true
 
 ray_rnn_pre_noextra:
@@ -68,5 +120,6 @@ ray_rnn_pre_noextra:
 
   sac_config:
     use_rnn: true
+    burn_in_step: 30
     use_prediction: true
     use_extra_data: false

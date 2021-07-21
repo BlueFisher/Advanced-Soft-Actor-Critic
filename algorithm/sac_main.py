@@ -44,6 +44,7 @@ class Main(object):
         self.last_ckpt = args.ckpt
         self.render = args.render
         self.run_in_editor = args.editor
+        self.additional_args = args.additional_args
 
         if args.name is not None:
             config['base_config']['name'] = args.name
@@ -92,6 +93,7 @@ class Main(object):
                                         base_port=self.base_config['port'],
                                         no_graphics=self.base_config['no_graphics'] and not self.render,
                                         scene=self.base_config['scene'],
+                                        additional_args=self.additional_args,
                                         n_agents=self.base_config['n_agents'])
 
         elif self.base_config['env_type'] == 'GYM':
