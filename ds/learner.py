@@ -94,12 +94,13 @@ class Learner:
         if args.learner_port is not None:
             config['net_config']['learner_port'] = args.learner_port
 
-        hostname = socket.gethostname()
-        ip = socket.gethostbyname(hostname)
-
         if config['net_config']['evolver_host'] is None:
-            config['net_config']['evolver_host'] = ip
+            self.logger.error('evolver_host is None')
+
+        # ! If learner_host is not set, use ip as default
         if config['net_config']['learner_host'] is None:
+            hostname = socket.gethostname()
+            ip = socket.gethostbyname(hostname)
             config['net_config']['learner_host'] = ip
 
         return config, config_abs_dir
@@ -159,6 +160,7 @@ class Learner:
                                         base_port=self.base_config['build_port'],
                                         no_graphics=self.base_config['no_graphics'],
                                         scene=self.base_config['scene'],
+                                        additional_args=self.cmd_args.additional_args,
                                         n_agents=self.base_config['n_agents'])
 
         elif self.base_config['env_type'] == 'GYM':
