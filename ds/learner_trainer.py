@@ -118,6 +118,9 @@ class Trainer:
                 with self.sac_lock:
                     self.sac.update_nn_variables(args)
                 self.logger.info('Updated all nn variables')
+            elif cmd == 'SAVE_MODEL':
+                with self.sac_lock:
+                    self.sac.save_model()
 
     def run_train(self):
         update_data_buffer = UpdateDataBuffer(lambda pointers, td_error:
