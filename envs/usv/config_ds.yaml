@@ -1,0 +1,33 @@
+default:
+  base_config:
+    scene: USV
+
+    build_path:
+      win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
+      linux: /data/linux-RL-Envs/RLEnvironments.x86_64
+
+    no_graphics: false
+
+    n_agents: 10
+    reset_on_iteration: false
+
+    attach_replay: true
+    evolver_enabled: false
+
+  reset_config:
+    force_reset: true
+
+  sac_config:
+    write_summary_per_step: 1000
+
+    n_step: 3
+    use_rnd: true
+    rnd_n_sample: 50
+
+  replay_config:
+    batch_size: 1024
+
+visual_nature:
+  base_config:
+    name: "vis_nature_{time}"
+    nn: nn_visual_nature

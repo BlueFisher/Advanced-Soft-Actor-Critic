@@ -304,6 +304,9 @@ class Learner:
     def _udpate_nn_variables(self, variables):
         self.process_nn_variables_conn.send(('UPDATE', variables))
 
+    def _save_model(self):
+        self.process_nn_variables_conn.send(('SAVE_MODEL', None))
+
     def _get_action(self, obs_list, rnn_state=None):
         if self.sac_bak.use_rnn:
             assert rnn_state is not None
@@ -353,11 +356,6 @@ class Learner:
         try:
             use_rnn = self.sac_bak.use_rnn
 
-            iteration = 0
-            steps_count = 0
-            force_reset = False
-            start_time = time.time()
-
             obs_list = self.env.reset(reset_config=self.reset_config)
 
             agents = [self._agent_class(i, use_rnn=use_rnn)
@@ -367,6 +365,11 @@ class Learner:
                 initial_rnn_state = self.sac_bak.get_initial_rnn_state(len(agents))
                 rnn_state = initial_rnn_state
 
+            force_reset = False
+            iteration = 0
+            steps_count = 0
+            start_time = time.time()
+
             while not self._closed:
                 if self.base_config['reset_on_iteration'] or force_reset:
                     obs_list = self.env.reset(reset_config=self.reset_config)
@@ -375,12 +378,11 @@ class Learner:
 
                     if use_rnn:
                         rnn_state = initial_rnn_state
-
-                    force_reset = False
                 else:
                     for agent in agents:
                         agent.reset()
 
+                force_reset = False
                 is_useless_episode = False
                 action = np.zeros([len(agents), self.action_size], dtype=np.float32)
                 step = 0
@@ -406,6 +408,7 @@ class Learner:
                     if step == self.base_config['max_step_each_iter']:
                         local_done = [True] * len(agents)
                         max_reached = [True] * len(agents)
+                        force_reset = True
 
                     for i, agent in enumerate(agents):
                         agent.add_transition([o[i] for o in obs_list],
@@ -430,6 +433,10 @@ class Learner:
                 else:
                     self._log_episode_summaries(agents)
                     self._log_episode_info(iteration, start_time, agents)
+
+                if (p := self.model_abs_dir.joinpath('save_model')).exists():
+                    self._save_model()
+                    p.unlink()
 
                 if self.base_config['evolver_enabled']:
                     if is_useless_episode:
