@@ -1,4 +1,3 @@
-import json
 import logging
 import logging.handlers
 import random
@@ -103,7 +102,7 @@ def save_config(config, model_root_path: Path, config_name):
 
 
 def display_config(config, logger):
-    logger.info('Config:\n' + json.dumps(config, indent=4, separators=('', ': ')))
+    logger.info('Config:\n' + yaml.dump(config, default_flow_style=False))
 
 
 def generate_base_name(name, prefix=None):

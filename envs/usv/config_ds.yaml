@@ -24,9 +24,6 @@ default:
     use_rnd: true
     rnd_n_sample: 50
 
-  replay_config:
-    batch_size: 1024
-
 visual_nature:
   base_config:
     name: "vis_nature_{time}"

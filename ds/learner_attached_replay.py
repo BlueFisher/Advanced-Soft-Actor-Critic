@@ -1,3 +1,4 @@
+import logging
 import multiprocessing as mp
 import threading
 
@@ -17,6 +18,8 @@ class AttachedReplay:
         self.update_td_error_queue = update_td_error_queue
         self.update_transition_queue = update_transition_queue
         self.replay = Replay(*init_config, attached=True)
+
+        self.logger = logging.getLogger('ds.learner.attached_replay')
 
         for _ in range(C.GET_SAMPLED_DATA_THREAD_SIZE):
             threading.Thread(target=self._forever_sample_data).start()

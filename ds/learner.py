@@ -431,7 +431,7 @@ class Learner:
                 if is_useless_episode:
                     self.logger.warning('Useless episode')
                 else:
-                    self._log_episode_summaries(agents)
+                    self._log_episode_summaries(agents, iteration)
                     self._log_episode_info(iteration, start_time, agents)
 
                 if (p := self.model_abs_dir.joinpath('save_model')).exists():
@@ -450,13 +450,13 @@ class Learner:
         except Exception as e:
             self.logger.error(e)
 
-    def _log_episode_summaries(self, agents):
+    def _log_episode_summaries(self, agents, iteration):
         rewards = np.array([a.reward for a in agents])
         self.sac_bak.write_constant_summaries([
             {'tag': 'reward/mean', 'simple_value': rewards.mean()},
             {'tag': 'reward/max', 'simple_value': rewards.max()},
             {'tag': 'reward/min', 'simple_value': rewards.min()}
-        ])
+        ], iteration)
 
     def _log_episode_info(self, iteration, start_time, agents):
         time_elapse = (time.time() - start_time) / 60
