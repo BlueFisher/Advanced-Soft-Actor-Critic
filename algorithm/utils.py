@@ -2,6 +2,8 @@ import inspect
 import threading
 import time
 
+from enum import Enum
+
 import torch
 
 
@@ -29,7 +31,13 @@ def scale_inverse_h(x, epsilon=0.001):
     return torch.sign(x) * ((torch.sqrt(t) - 1) / (2 * epsilon) - 1)
 
 
-def _format_lock_log(custom_log=None, start_time=None):
+class LockLogState(Enum):
+    REQUEST = 1
+    TIMEOUT = 2
+    ACQUIRED = 3
+
+
+def _format_lock_log(state: LockLogState, start_time, custom_log=None):
     stack = inspect.stack()
 
     if custom_log is None:
@@ -40,16 +48,14 @@ def _format_lock_log(custom_log=None, start_time=None):
                 stack_log = f'[{frame.filename}, {frame.lineno}, {frame.function}]'
                 break
 
-    if start_time is None:
-        if custom_log:
-            return f'Timeout! {custom_log}, ident: {threading.get_ident()}'
-        else:
-            return f'Timeout! {stack_log}, ident: {threading.get_ident()}'
-    else:
-        if custom_log:
-            return f'Acquired in {time.time()-start_time:.1f}s. {custom_log}, ident: {threading.get_ident()}'
-        else:
-            return f'Acquired in {time.time()-start_time:.1f}s. {stack_log}, ident: {threading.get_ident()}'
+    log = stack_log if custom_log is None else custom_log
+
+    if state == LockLogState.REQUEST:
+        return f'Request. {log}, id: {threading.get_ident()}'
+    elif state == LockLogState.TIMEOUT:
+        return f'Timeout {time.time()-start_time:.1f}! {log}, id: {threading.get_ident()}'
+    elif state == LockLogState.ACQUIRED:
+        return f'Acquired in {time.time()-start_time:.1f}s. {log}, id: {threading.get_ident()}'
 
 
 class MaxMutexCheck:
@@ -88,10 +94,10 @@ class RLock(object):
         while not self._lock.acquire(timeout=timeout):
             if not timeout_occur and self._logger is not None:
                 timeout_occur = True
-                self._logger.warning(_format_lock_log(custom_log))
+                self._logger.warning(_format_lock_log(LockLogState.TIMEOUT, start_time, custom_log))
 
         if timeout_occur and self._logger is not None:
-            self._logger.warning(_format_lock_log(custom_log, start_time))
+            self._logger.warning(_format_lock_log(LockLogState.ACQUIRED, start_time, custom_log))
 
         self._locked = True
 
@@ -101,7 +107,10 @@ class RLock(object):
 
 
 class ReadWriteLock:
-    def __init__(self, max_read=None, read_timeout=-1, write_timeout=-1, write_first=True, logger=None):
+    def __init__(self, max_read=None,
+                 read_timeout=-1, write_timeout=-1,
+                 write_first=True,
+                 logger=None):
         self.max_read = max_read
         self._read_timeout = read_timeout
         self._write_timeout = write_timeout
@@ -157,14 +166,11 @@ class ReadWriteLock:
             while not self._wcond.wait_for(lambda: self._write_acquire(me),
                                            timeout=self._write_timeout):
                 if not timeout_occur and self._logger is not None:
-                    self._logger.warning(f'Write {_format_lock_log(custom_log)}')
+                    self._logger.warning(f'Write {_format_lock_log(LockLogState.TIMEOUT, start_time, custom_log)}')
                 timeout_occur += 1
 
-                if timeout_occur > 10 and self._logger is not None:
-                    self._logger.warning('.'.join([str(o) for o in self._owners]))
-
             if timeout_occur and self._logger is not None:
-                self._logger.warning(f'Write {_format_lock_log(custom_log, start_time)}')
+                self._logger.warning(f'Write {_format_lock_log(LockLogState.ACQUIRED, start_time, custom_log)}')
             self._write_waiter -= 1
         return True
 
@@ -187,14 +193,11 @@ class ReadWriteLock:
 
             while not self._rcond.wait_for(lambda: self._read_acquire(me), timeout=self._read_timeout):
                 if not timeout_occur and self._logger is not None:
-                    self._logger.warning(f'Read {_format_lock_log(custom_log)}')
+                    self._logger.warning(f'Read {_format_lock_log(LockLogState.TIMEOUT, start_time, custom_log)}')
                 timeout_occur += 1
 
-                if timeout_occur > 10 and self._logger is not None:
-                    self._logger.warning('.'.join([str(o) for o in self._owners]))
-
-            if timeout_occur and self._logger is not None:
-                self._logger.warning(f'Read {_format_lock_log(custom_log, start_time)}')
+            if (timeout_occur and self._logger is not None):
+                self._logger.warning(f'Read {_format_lock_log(LockLogState.ACQUIRED, start_time, custom_log)}')
             self._read_waiter -= 1
         return True
 

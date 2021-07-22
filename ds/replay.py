@@ -11,7 +11,8 @@ import numpy as np
 
 import algorithm.config_helper as config_helper
 import algorithm.constants as C
-from algorithm.replay_buffer import PrioritizedReplayBuffer
+from algorithm.utils import MaxMutexCheck
+from algorithm.replay_buffer import PrioritizedReplayBuffer, HighPerformancePrioritizedReplayBuffer
 
 from .proto import (evolver_pb2, evolver_pb2_grpc, learner_pb2,
                     learner_pb2_grpc, replay_pb2, replay_pb2_grpc)
@@ -114,7 +115,8 @@ class Replay:
         self.burn_in_step = sac_config['burn_in_step']
         self.n_step = sac_config['n_step']
 
-        self._replay_buffer = PrioritizedReplayBuffer(**replay_config)
+        self._check_add = MaxMutexCheck(5)
+        self._replay_buffer = HighPerformancePrioritizedReplayBuffer(**replay_config)
         self._curr_percent = -1
 
         if self.cmd_args.logger_in_file and not self.attached:
@@ -133,58 +135,64 @@ class Replay:
              n_mu_probs,
              n_rnn_states=None):
 
-        self.obs_list_len = len(n_obses_list)
-        # Reshape [1, episode_len, ...] to [episode_len, ...]
-        obs_list = [n_obses.reshape([-1, *n_obses.shape[2:]]) for n_obses in n_obses_list]
-        action = n_actions.reshape([-1, n_actions.shape[-1]])
-        reward = n_rewards.reshape([-1])
-        done = n_dones.reshape([-1])
-        mu_prob = n_mu_probs.reshape([-1])
+        with self._check_add as checked:
+            if not checked:
+                self.logger.warning('_add buffer is full, ignored _add')
+                return None
 
-        # Padding next_obs for episode experience replay
-        obs_list = [np.concatenate([obs, next_obs]) for obs, next_obs in zip(obs_list, next_obs_list)]
-        action = np.concatenate([action,
-                                 np.empty([1, action.shape[-1]], dtype=np.float32)])
-        reward = np.concatenate([reward,
-                                 np.zeros([1], dtype=np.float32)])
-        done = np.concatenate([done,
-                               np.zeros([1], dtype=np.float32)])
-        mu_prob = np.concatenate([mu_prob,
-                                  np.empty([1], dtype=np.float32)])
+            self.obs_list_len = len(n_obses_list)
+            # Reshape [1, episode_len, ...] to [episode_len, ...]
+            obs_list = [n_obses.reshape([-1, *n_obses.shape[2:]]) for n_obses in n_obses_list]
+            action = n_actions.reshape([-1, n_actions.shape[-1]])
+            reward = n_rewards.reshape([-1])
+            done = n_dones.reshape([-1])
+            mu_prob = n_mu_probs.reshape([-1])
 
-        storage_data = {f'obs_{i}': obs for i, obs in enumerate(obs_list)}
-        storage_data = {
-            **storage_data,
-            'action': action,
-            'reward': reward,
-            'done': done,
-            'mu_prob': mu_prob
-        }
+            # Padding next_obs for episode experience replay
+            obs_list = [np.concatenate([obs, next_obs]) for obs, next_obs in zip(obs_list, next_obs_list)]
+            action = np.concatenate([action,
+                                    np.empty([1, action.shape[-1]], dtype=np.float32)])
+            reward = np.concatenate([reward,
+                                    np.zeros([1], dtype=np.float32)])
+            done = np.concatenate([done,
+                                   np.zeros([1], dtype=np.float32)])
+            mu_prob = np.concatenate([mu_prob,
+                                      np.empty([1], dtype=np.float32)])
 
-        if self.use_rnn:
-            rnn_state = n_rnn_states.reshape([-1, n_rnn_states.shape[-1]])
-            rnn_state = np.concatenate([rnn_state,
-                                        np.empty([1, rnn_state.shape[-1]], dtype=np.float32)])
-            storage_data['rnn_state'] = rnn_state
+            storage_data = {f'obs_{i}': obs for i, obs in enumerate(obs_list)}
+            storage_data = {
+                **storage_data,
+                'action': action,
+                'reward': reward,
+                'done': done,
+                'mu_prob': mu_prob
+            }
 
-        # Get td_error
-        td_error = self._learner_stub.get_td_error(n_obses_list,
-                                                   n_actions,
-                                                   n_rewards,
-                                                   next_obs_list,
-                                                   n_dones,
-                                                   n_mu_probs,
-                                                   n_rnn_states=n_rnn_states if self.use_rnn else None)
+            if self.use_rnn:
+                rnn_state = n_rnn_states.reshape([-1, n_rnn_states.shape[-1]])
+                rnn_state = np.concatenate([rnn_state,
+                                            np.empty([1, rnn_state.shape[-1]], dtype=np.float32)])
+                storage_data['rnn_state'] = rnn_state
 
-        if td_error is not None:
-            td_error = td_error.flatten()
-            self._replay_buffer.add_with_td_error(td_error, storage_data,
-                                                  ignore_size=self.burn_in_step + self.n_step)
+            # Get td_error
+            # TODO use pipe
+            td_error = self._learner_stub.get_td_error(n_obses_list,
+                                                       n_actions,
+                                                       n_rewards,
+                                                       next_obs_list,
+                                                       n_dones,
+                                                       n_mu_probs,
+                                                       n_rnn_states=n_rnn_states if self.use_rnn else None)
 
-            percent = int(self._replay_buffer.size / self._replay_buffer.capacity * 100)
-            if percent > self._curr_percent:
-                self.logger.info(f'Buffer size: {percent}%')
-                self._curr_percent = percent
+            if td_error is not None:
+                td_error = td_error.flatten()
+                self._replay_buffer.add_with_td_error(td_error, storage_data,
+                                                      ignore_size=self.burn_in_step + self.n_step)
+
+                percent = int(self._replay_buffer.size / self._replay_buffer.capacity * 100)
+                if percent > self._curr_percent:
+                    self.logger.info(f'Buffer size: {percent}%')
+                    self._curr_percent = percent
 
     def sample(self):
         sampled = self._replay_buffer.sample()

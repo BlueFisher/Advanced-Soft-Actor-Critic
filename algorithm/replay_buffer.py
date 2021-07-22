@@ -1,5 +1,6 @@
 import logging
 import math
+import threading
 
 import numpy as np
 
@@ -71,6 +72,20 @@ class DataStorage:
         Get true data ids
         """
         return self._buffer['id'][ids % self.capacity]
+
+    def copy(self, src):
+        src: DataStorage = src
+
+        if self._size == 0:
+            self._buffer = dict()
+            for k in src._buffer:
+                self._buffer[k] = src._buffer[k].copy()
+        else:
+            for k in self._buffer:
+                np.copyto(self._buffer[k], src._buffer[k])
+
+        self._size = src._size
+        self._id = src._id
 
     def clear(self):
         self._size = 0
@@ -156,6 +171,10 @@ class SumTree:
         for i in range(self.depth):
             print(self._tree[2**i - 1:2**(i + 1) - 1])
 
+    def copy(self, src):
+        src: SumTree = src
+        np.copyto(self._tree, src._tree)
+
     @property
     def total_p(self):
         return self._tree[0]  # the root
@@ -184,7 +203,7 @@ class PrioritizedReplayBuffer:
         self._sum_tree = SumTree(self.capacity)
         self._trans_storage = DataStorage(self.capacity)
 
-        self._lock = ReadWriteLock(None, 1, 1, logger)
+        self._lock = ReadWriteLock(None, 1, 1, True, logger)
 
     def add(self, transitions: dict, ignore_size=0):
         with self._lock.write():
@@ -277,6 +296,11 @@ class PrioritizedReplayBuffer:
         self._trans_storage.clear()
         self._sum_tree.clear()
 
+    def copy(self, src):
+        with self._lock.write(), src._lock.write():
+            self._trans_storage.copy(src._trans_storage)
+            self._sum_tree.copy(src._sum_tree)
+
     @property
     def is_full(self):
         with self._lock.read():
@@ -291,6 +315,99 @@ class PrioritizedReplayBuffer:
     def is_lg_batch_size(self):
         with self._lock.read():
             return self._trans_storage.size > self.batch_size
+
+
+class HighPerformancePrioritizedReplayBuffer:
+    def __init__(self,
+                 batch_size=256,
+                 capacity=524288,
+                 alpha=0.9,  # [0~1] Convert the importance of TD error to priority
+                 beta=0.4,  # Importance-sampling, from initial value increasing to 1
+                 beta_increment_per_sampling=0.001,
+                 td_error_min=0.01,  # Small amount to avoid zero priority
+                 td_error_max=1.):  # Clipped abs error
+
+        self.batch_size = batch_size
+        self.capacity = int(2**math.floor(math.log2(capacity)))
+        self.alpha = alpha
+        self.beta = beta
+        self.beta_increment_per_sampling = beta_increment_per_sampling
+        self.td_error_min = td_error_min
+        self.td_error_max = td_error_max
+
+        self._lock = ReadWriteLock(read_timeout=1, write_timeout=1, logger=logger)
+
+        self._read_replay = PrioritizedReplayBuffer(batch_size,
+                                                    capacity,
+                                                    alpha,
+                                                    beta,
+                                                    beta_increment_per_sampling,
+                                                    td_error_min,
+                                                    td_error_max)
+        self._write_replay = PrioritizedReplayBuffer(batch_size,
+                                                     capacity,
+                                                     alpha,
+                                                     beta,
+                                                     beta_increment_per_sampling,
+                                                     td_error_min,
+                                                     td_error_max)
+
+        threading.Thread(target=self._update_replay_buffer).start()
+
+    def _update_replay_buffer(self):
+        while True:
+            if self._write_replay.size - self._read_replay.size >= 2048:
+                with self._lock.write():
+                    self._read_replay.copy(self._write_replay)
+                    logger.info('Copyed')
+
+    def add(self, transitions: dict, ignore_size=0):
+        with self._lock.read():
+            self._write_replay.add(transitions, ignore_size)
+
+    def add_with_td_error(self, td_error, transitions: dict, ignore_size=0):
+        with self._lock.read():
+            self._write_replay.add_with_td_error(td_error, transitions, ignore_size)
+
+    def sample(self):
+        with self._lock.read():
+            return self._read_replay.sample()
+
+    def get_storage_data(self, data_ids):
+        with self._lock.read():
+            return self._read_replay.get_storage_data(data_ids)
+
+    def get_storage_data_ids(self, data_ids):
+        with self._lock.read():
+            return self._read_replay.get_storage_data_ids(data_ids)
+
+    def update(self, data_ids, td_error):
+        with self._lock.read():
+            self._write_replay.update(data_ids, td_error)
+
+    def update_transitions(self, data_ids, key, data):
+        with self._lock.read():
+            self._write_replay.update_transitions(data_ids, key, data)
+
+    def clear(self):
+        with self._lock.write():
+            self._read_replay.clear()
+            self._write_replay.clear()
+
+    @property
+    def is_full(self):
+        with self._lock.read():
+            return self._read_replay.is_full
+
+    @property
+    def size(self):
+        with self._lock.read():
+            return self._read_replay.size
+
+    @property
+    def is_lg_batch_size(self):
+        with self._lock.read():
+            return self._read_replay.is_lg_batch_size
 
 
 if __name__ == "__main__":
