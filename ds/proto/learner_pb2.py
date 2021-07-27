@@ -21,103 +21,11 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\rlearner.proto\x12\x07learner\x1a\rndarray.proto\x1a\x0epingpong.proto\"A\n\x15RegisterReplayRequest\x12\x13\n\x0breplay_host\x18\x01 \x01(\t\x12\x13\n\x0breplay_port\x18\x02 \x01(\x05\"\x7f\n\x16RegisterReplayResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x19\n\x11reset_config_json\x18\x02 \x01(\t\x12\x1a\n\x12replay_config_json\x18\x03 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x04 \x01(\t\"\x91\x01\n\x15RegisterActorResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x11\n\tunique_id\x18\x02 \x01(\x05\x12\x19\n\x11reset_config_json\x18\x03 \x01(\t\x12\x1a\n\x12replay_config_json\x18\x04 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x05 \x01(\t\"K\n\x10GetActionRequest\x12\x1a\n\x08obs_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"?\n\x06\x41\x63tion\x12\x18\n\x06\x61\x63tion\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"*\n\x0bNNVariables\x12\x1b\n\tvariables\x18\x01 \x03(\x0b\x32\x08.NDarray\"\xe7\x01\n\x11GetTDErrorRequest\x12\x1e\n\x0cn_obses_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x1f\n\rnext_obs_list\x18\x04 \x03(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cn_rnn_states\x18\x07 \x01(\x0b\x32\x08.NDarray\"8\n\x07TDError\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x1a\n\x08td_error\x18\x02 \x01(\x0b\x32\x08.NDarray2\xe7\x03\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12Q\n\x0eRegisterReplay\x12\x1e.learner.RegisterReplayRequest\x1a\x1f.learner.RegisterReplayResponse\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.learner.RegisterActorResponse\x12\x37\n\tGetAction\x12\x19.learner.GetActionRequest\x1a\x0f.learner.Action\x12\x32\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12:\n\nGetTDError\x12\x1a.learner.GetTDErrorRequest\x1a\x10.learner.TDError\x12.\n\x0eGetNNVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12\x31\n\x11UpdateNNVariables\x12\x14.learner.NNVariables\x1a\x06.Empty\x12\x1c\n\nForceClose\x12\x06.Empty\x1a\x06.Emptyb\x06proto3'
+  serialized_pb=b'\n\rlearner.proto\x12\x07learner\x1a\rndarray.proto\x1a\x0epingpong.proto\"u\n\x15RegisterActorResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x11\n\tunique_id\x18\x02 \x01(\x05\x12\x19\n\x11reset_config_json\x18\x03 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x04 \x01(\t\"K\n\x10GetActionRequest\x12\x1a\n\x08obs_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"?\n\x06\x41\x63tion\x12\x18\n\x06\x61\x63tion\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"\xe0\x01\n\nAddRequest\x12\x1e\n\x0cn_obses_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x1f\n\rnext_obs_list\x18\x04 \x03(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cn_rnn_states\x18\x07 \x01(\x0b\x32\x08.NDarray\"*\n\x0bNNVariables\x12\x1b\n\tvariables\x18\x01 \x03(\x0b\x32\x08.NDarray2\xfc\x02\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.learner.RegisterActorResponse\x12\x37\n\tGetAction\x12\x19.learner.GetActionRequest\x1a\x0f.learner.Action\x12\x32\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12\"\n\x03\x41\x64\x64\x12\x13.learner.AddRequest\x1a\x06.Empty\x12.\n\x0eGetNNVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12\x31\n\x11UpdateNNVariables\x12\x14.learner.NNVariables\x1a\x06.Empty\x12\x1c\n\nForceClose\x12\x06.Empty\x1a\x06.Emptyb\x06proto3'
   ,
   dependencies=[ndarray__pb2.DESCRIPTOR,pingpong__pb2.DESCRIPTOR,])
 
 
-
-
-_REGISTERREPLAYREQUEST = _descriptor.Descriptor(
-  name='RegisterReplayRequest',
-  full_name='learner.RegisterReplayRequest',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='replay_host', full_name='learner.RegisterReplayRequest.replay_host', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='replay_port', full_name='learner.RegisterReplayRequest.replay_port', index=1,
-      number=2, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=57,
-  serialized_end=122,
-)
-
-
-_REGISTERREPLAYRESPONSE = _descriptor.Descriptor(
-  name='RegisterReplayResponse',
-  full_name='learner.RegisterReplayResponse',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='model_abs_dir', full_name='learner.RegisterReplayResponse.model_abs_dir', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='reset_config_json', full_name='learner.RegisterReplayResponse.reset_config_json', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='replay_config_json', full_name='learner.RegisterReplayResponse.replay_config_json', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='sac_config_json', full_name='learner.RegisterReplayResponse.sac_config_json', index=3,
-      number=4, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=124,
-  serialized_end=251,
-)
 
 
 _REGISTERACTORRESPONSE = _descriptor.Descriptor(
@@ -150,15 +58,8 @@ _REGISTERACTORRESPONSE = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='replay_config_json', full_name='learner.RegisterActorResponse.replay_config_json', index=3,
+      name='sac_config_json', full_name='learner.RegisterActorResponse.sac_config_json', index=3,
       number=4, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='sac_config_json', full_name='learner.RegisterActorResponse.sac_config_json', index=4,
-      number=5, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -175,8 +76,8 @@ _REGISTERACTORRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=254,
-  serialized_end=399,
+  serialized_start=57,
+  serialized_end=174,
 )
 
 
@@ -214,8 +115,8 @@ _GETACTIONREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=401,
-  serialized_end=476,
+  serialized_start=176,
+  serialized_end=251,
 )
 
 
@@ -253,8 +154,82 @@ _ACTION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=478,
-  serialized_end=541,
+  serialized_start=253,
+  serialized_end=316,
+)
+
+
+_ADDREQUEST = _descriptor.Descriptor(
+  name='AddRequest',
+  full_name='learner.AddRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='n_obses_list', full_name='learner.AddRequest.n_obses_list', index=0,
+      number=1, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='n_actions', full_name='learner.AddRequest.n_actions', index=1,
+      number=2, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='n_rewards', full_name='learner.AddRequest.n_rewards', index=2,
+      number=3, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='next_obs_list', full_name='learner.AddRequest.next_obs_list', index=3,
+      number=4, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='n_dones', full_name='learner.AddRequest.n_dones', index=4,
+      number=5, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='n_mu_probs', full_name='learner.AddRequest.n_mu_probs', index=5,
+      number=6, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='n_rnn_states', full_name='learner.AddRequest.n_rnn_states', index=6,
+      number=7, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=319,
+  serialized_end=543,
 )
 
 
@@ -285,159 +260,28 @@ _NNVARIABLES = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=543,
-  serialized_end=585,
-)
-
-
-_GETTDERRORREQUEST = _descriptor.Descriptor(
-  name='GetTDErrorRequest',
-  full_name='learner.GetTDErrorRequest',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='n_obses_list', full_name='learner.GetTDErrorRequest.n_obses_list', index=0,
-      number=1, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='n_actions', full_name='learner.GetTDErrorRequest.n_actions', index=1,
-      number=2, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='n_rewards', full_name='learner.GetTDErrorRequest.n_rewards', index=2,
-      number=3, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='next_obs_list', full_name='learner.GetTDErrorRequest.next_obs_list', index=3,
-      number=4, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='n_dones', full_name='learner.GetTDErrorRequest.n_dones', index=4,
-      number=5, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='n_mu_probs', full_name='learner.GetTDErrorRequest.n_mu_probs', index=5,
-      number=6, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='n_rnn_states', full_name='learner.GetTDErrorRequest.n_rnn_states', index=6,
-      number=7, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=588,
-  serialized_end=819,
-)
-
-
-_TDERROR = _descriptor.Descriptor(
-  name='TDError',
-  full_name='learner.TDError',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='succeeded', full_name='learner.TDError.succeeded', index=0,
-      number=1, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='td_error', full_name='learner.TDError.td_error', index=1,
-      number=2, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=821,
-  serialized_end=877,
+  serialized_start=545,
+  serialized_end=587,
 )
 
 _GETACTIONREQUEST.fields_by_name['obs_list'].message_type = ndarray__pb2._NDARRAY
 _GETACTIONREQUEST.fields_by_name['rnn_state'].message_type = ndarray__pb2._NDARRAY
 _ACTION.fields_by_name['action'].message_type = ndarray__pb2._NDARRAY
 _ACTION.fields_by_name['rnn_state'].message_type = ndarray__pb2._NDARRAY
+_ADDREQUEST.fields_by_name['n_obses_list'].message_type = ndarray__pb2._NDARRAY
+_ADDREQUEST.fields_by_name['n_actions'].message_type = ndarray__pb2._NDARRAY
+_ADDREQUEST.fields_by_name['n_rewards'].message_type = ndarray__pb2._NDARRAY
+_ADDREQUEST.fields_by_name['next_obs_list'].message_type = ndarray__pb2._NDARRAY
+_ADDREQUEST.fields_by_name['n_dones'].message_type = ndarray__pb2._NDARRAY
+_ADDREQUEST.fields_by_name['n_mu_probs'].message_type = ndarray__pb2._NDARRAY
+_ADDREQUEST.fields_by_name['n_rnn_states'].message_type = ndarray__pb2._NDARRAY
 _NNVARIABLES.fields_by_name['variables'].message_type = ndarray__pb2._NDARRAY
-_GETTDERRORREQUEST.fields_by_name['n_obses_list'].message_type = ndarray__pb2._NDARRAY
-_GETTDERRORREQUEST.fields_by_name['n_actions'].message_type = ndarray__pb2._NDARRAY
-_GETTDERRORREQUEST.fields_by_name['n_rewards'].message_type = ndarray__pb2._NDARRAY
-_GETTDERRORREQUEST.fields_by_name['next_obs_list'].message_type = ndarray__pb2._NDARRAY
-_GETTDERRORREQUEST.fields_by_name['n_dones'].message_type = ndarray__pb2._NDARRAY
-_GETTDERRORREQUEST.fields_by_name['n_mu_probs'].message_type = ndarray__pb2._NDARRAY
-_GETTDERRORREQUEST.fields_by_name['n_rnn_states'].message_type = ndarray__pb2._NDARRAY
-_TDERROR.fields_by_name['td_error'].message_type = ndarray__pb2._NDARRAY
-DESCRIPTOR.message_types_by_name['RegisterReplayRequest'] = _REGISTERREPLAYREQUEST
-DESCRIPTOR.message_types_by_name['RegisterReplayResponse'] = _REGISTERREPLAYRESPONSE
 DESCRIPTOR.message_types_by_name['RegisterActorResponse'] = _REGISTERACTORRESPONSE
 DESCRIPTOR.message_types_by_name['GetActionRequest'] = _GETACTIONREQUEST
 DESCRIPTOR.message_types_by_name['Action'] = _ACTION
+DESCRIPTOR.message_types_by_name['AddRequest'] = _ADDREQUEST
 DESCRIPTOR.message_types_by_name['NNVariables'] = _NNVARIABLES
-DESCRIPTOR.message_types_by_name['GetTDErrorRequest'] = _GETTDERRORREQUEST
-DESCRIPTOR.message_types_by_name['TDError'] = _TDERROR
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
-
-RegisterReplayRequest = _reflection.GeneratedProtocolMessageType('RegisterReplayRequest', (_message.Message,), {
-  'DESCRIPTOR' : _REGISTERREPLAYREQUEST,
-  '__module__' : 'learner_pb2'
-  # @@protoc_insertion_point(class_scope:learner.RegisterReplayRequest)
-  })
-_sym_db.RegisterMessage(RegisterReplayRequest)
-
-RegisterReplayResponse = _reflection.GeneratedProtocolMessageType('RegisterReplayResponse', (_message.Message,), {
-  'DESCRIPTOR' : _REGISTERREPLAYRESPONSE,
-  '__module__' : 'learner_pb2'
-  # @@protoc_insertion_point(class_scope:learner.RegisterReplayResponse)
-  })
-_sym_db.RegisterMessage(RegisterReplayResponse)
 
 RegisterActorResponse = _reflection.GeneratedProtocolMessageType('RegisterActorResponse', (_message.Message,), {
   'DESCRIPTOR' : _REGISTERACTORRESPONSE,
@@ -460,26 +304,19 @@ Action = _reflection.GeneratedProtocolMessageType('Action', (_message.Message,),
   })
 _sym_db.RegisterMessage(Action)
 
+AddRequest = _reflection.GeneratedProtocolMessageType('AddRequest', (_message.Message,), {
+  'DESCRIPTOR' : _ADDREQUEST,
+  '__module__' : 'learner_pb2'
+  # @@protoc_insertion_point(class_scope:learner.AddRequest)
+  })
+_sym_db.RegisterMessage(AddRequest)
+
 NNVariables = _reflection.GeneratedProtocolMessageType('NNVariables', (_message.Message,), {
   'DESCRIPTOR' : _NNVARIABLES,
   '__module__' : 'learner_pb2'
   # @@protoc_insertion_point(class_scope:learner.NNVariables)
   })
 _sym_db.RegisterMessage(NNVariables)
-
-GetTDErrorRequest = _reflection.GeneratedProtocolMessageType('GetTDErrorRequest', (_message.Message,), {
-  'DESCRIPTOR' : _GETTDERRORREQUEST,
-  '__module__' : 'learner_pb2'
-  # @@protoc_insertion_point(class_scope:learner.GetTDErrorRequest)
-  })
-_sym_db.RegisterMessage(GetTDErrorRequest)
-
-TDError = _reflection.GeneratedProtocolMessageType('TDError', (_message.Message,), {
-  'DESCRIPTOR' : _TDERROR,
-  '__module__' : 'learner_pb2'
-  # @@protoc_insertion_point(class_scope:learner.TDError)
-  })
-_sym_db.RegisterMessage(TDError)
 
 
 
@@ -490,8 +327,8 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=880,
-  serialized_end=1367,
+  serialized_start=590,
+  serialized_end=970,
   methods=[
   _descriptor.MethodDescriptor(
     name='Persistence',
@@ -504,19 +341,9 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
     create_key=_descriptor._internal_create_key,
   ),
   _descriptor.MethodDescriptor(
-    name='RegisterReplay',
-    full_name='learner.LearnerService.RegisterReplay',
-    index=1,
-    containing_service=None,
-    input_type=_REGISTERREPLAYREQUEST,
-    output_type=_REGISTERREPLAYRESPONSE,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
     name='RegisterActor',
     full_name='learner.LearnerService.RegisterActor',
-    index=2,
+    index=1,
     containing_service=None,
     input_type=ndarray__pb2._EMPTY,
     output_type=_REGISTERACTORRESPONSE,
@@ -526,7 +353,7 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='GetAction',
     full_name='learner.LearnerService.GetAction',
-    index=3,
+    index=2,
     containing_service=None,
     input_type=_GETACTIONREQUEST,
     output_type=_ACTION,
@@ -536,7 +363,7 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='GetPolicyVariables',
     full_name='learner.LearnerService.GetPolicyVariables',
-    index=4,
+    index=3,
     containing_service=None,
     input_type=ndarray__pb2._EMPTY,
     output_type=_NNVARIABLES,
@@ -544,19 +371,19 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
     create_key=_descriptor._internal_create_key,
   ),
   _descriptor.MethodDescriptor(
-    name='GetTDError',
-    full_name='learner.LearnerService.GetTDError',
-    index=5,
+    name='Add',
+    full_name='learner.LearnerService.Add',
+    index=4,
     containing_service=None,
-    input_type=_GETTDERRORREQUEST,
-    output_type=_TDERROR,
+    input_type=_ADDREQUEST,
+    output_type=ndarray__pb2._EMPTY,
     serialized_options=None,
     create_key=_descriptor._internal_create_key,
   ),
   _descriptor.MethodDescriptor(
     name='GetNNVariables',
     full_name='learner.LearnerService.GetNNVariables',
-    index=6,
+    index=5,
     containing_service=None,
     input_type=ndarray__pb2._EMPTY,
     output_type=_NNVARIABLES,
@@ -566,7 +393,7 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='UpdateNNVariables',
     full_name='learner.LearnerService.UpdateNNVariables',
-    index=7,
+    index=6,
     containing_service=None,
     input_type=_NNVARIABLES,
     output_type=ndarray__pb2._EMPTY,
@@ -576,7 +403,7 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='ForceClose',
     full_name='learner.LearnerService.ForceClose',
-    index=8,
+    index=7,
     containing_service=None,
     input_type=ndarray__pb2._EMPTY,
     output_type=ndarray__pb2._EMPTY,

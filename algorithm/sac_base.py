@@ -1242,14 +1242,14 @@ class SAC_Base(object):
                               dim=-1, keepdim=True)
         return td_error
 
-    def get_episode_td_error(self,
-                             n_obses_list: List[np.ndarray],
-                             n_actions: np.ndarray,
-                             n_rewards: np.ndarray,
-                             next_obs_list: List[np.ndarray],
-                             n_dones: np.ndarray,
-                             n_mu_probs: np.ndarray = None,
-                             n_rnn_states: np.ndarray = None):
+    def episode_to_batch(self,
+                         n_obses_list: List[np.ndarray],
+                         n_actions: np.ndarray,
+                         n_rewards: np.ndarray,
+                         next_obs_list: List[np.ndarray],
+                         n_dones: np.ndarray,
+                         n_mu_probs: np.ndarray = None,
+                         n_rnn_states: np.ndarray = None):
         """
         Args:
             n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
@@ -1257,11 +1257,17 @@ class SAC_Base(object):
             n_rewards: [1, episode_len]
             next_obs_list: list([1, *obs_shapes_i], ...)
             n_dones: [1, episode_len]
+            n_mu_probs: [1, episode_len]
             n_rnn_states: [1, episode_len, *rnn_state_shape]
 
         Returns:
-            The td-error of raw episode observations
-            [episode_len, ]
+            n_obses_list: list([episode_len - ignore + 1, N, *obs_shapes_i], ...)
+            n_actions: [episode_len - ignore + 1, N, action_size]
+            n_rewards: [episode_len - ignore + 1, N]
+            next_obs_list: list([episode_len - ignore + 1, *obs_shapes_i], ...)
+            n_dones: [episode_len - ignore + 1, N]
+            n_mu_probs: [episode_len - ignore + 1, N]
+            rnn_state: [episode_len - ignore + 1, *rnn_state_shape]
         """
         ignore_size = self.burn_in_step + self.n_step
 
@@ -1285,19 +1291,78 @@ class SAC_Base(object):
         if self.use_n_step_is:
             n_mu_probs = np.concatenate([n_mu_probs[:, i:i + ignore_size]
                                          for i in range(n_mu_probs.shape[1] - ignore_size + 1)], axis=0)
+
         if self.use_rnn:
             rnn_state = np.concatenate([n_rnn_states[:, i]
                                         for i in range(n_rnn_states.shape[1] - ignore_size + 1)], axis=0)
 
+        return (
+            tmp_n_obses_list,
+            n_actions,
+            n_rewards,
+            tmp_next_obs_list,
+            n_dones,
+            n_mu_probs if self.use_n_step_is else None,
+            rnn_state if self.use_rnn else None
+        )
+
+    def get_episode_td_error(self,
+                             n_obses_list: List[np.ndarray],
+                             n_actions: np.ndarray,
+                             n_rewards: np.ndarray,
+                             next_obs_list: List[np.ndarray],
+                             n_dones: np.ndarray,
+                             n_mu_probs: np.ndarray = None,
+                             n_rnn_states: np.ndarray = None):
+        """
+        Args:
+            n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
+            n_actions: [1, episode_len, action_size]
+            n_rewards: [1, episode_len]
+            next_obs_list: list([1, *obs_shapes_i], ...)
+            n_dones: [1, episode_len]
+            n_mu_probs: [1, episode_len]
+            n_rnn_states: [1, episode_len, *rnn_state_shape]
+
+        Returns:
+            The td-error of raw episode observations
+            [episode_len, ]
+        """
+        ignore_size = self.burn_in_step + self.n_step
+
+        (n_obses_list,
+         n_actions,
+         n_rewards,
+         next_obs_list,
+         n_dones,
+         n_mu_probs,
+         rnn_state) = self.episode_to_batch(n_obses_list,
+                                            n_actions,
+                                            n_rewards,
+                                            next_obs_list,
+                                            n_dones,
+                                            n_mu_probs,
+                                            n_rnn_states)
+
+        """
+        n_obses_list: list([episode_len - ignore + 1, N, *obs_shapes_i], ...)
+        n_actions: [episode_len - ignore + 1, N, action_size]
+        n_rewards: [episode_len - ignore + 1, N]
+        next_obs_list: list([episode_len - ignore + 1, *obs_shapes_i], ...)
+        n_dones: [episode_len - ignore + 1, N]
+        n_mu_probs: [episode_len - ignore + 1, N]
+        rnn_state: [episode_len - ignore + 1, *rnn_state_shape]
+        """
+
         td_error_list = []
-        all_batch = tmp_n_obses_list[0].shape[0]
+        all_batch = n_obses_list[0].shape[0]
         for i in range(math.ceil(all_batch / C.GET_EPISODE_TD_ERROR_SEG)):
             b_i, b_j = i * C.GET_EPISODE_TD_ERROR_SEG, (i + 1) * C.GET_EPISODE_TD_ERROR_SEG
 
-            _n_obses_list = [torch.from_numpy(o[b_i:b_j, :]).to(self.device) for o in tmp_n_obses_list]
+            _n_obses_list = [torch.from_numpy(o[b_i:b_j, :]).to(self.device) for o in n_obses_list]
             _n_actions = torch.from_numpy(n_actions[b_i:b_j, :]).to(self.device)
             _n_rewards = torch.from_numpy(n_rewards[b_i:b_j, :]).to(self.device)
-            _next_obs_list = [torch.from_numpy(o[b_i:b_j, :]).to(self.device) for o in tmp_next_obs_list]
+            _next_obs_list = [torch.from_numpy(o[b_i:b_j, :]).to(self.device) for o in next_obs_list]
             _n_dones = torch.from_numpy(n_dones[b_i:b_j, :]).to(self.device)
             _n_mu_probs = torch.from_numpy(n_mu_probs[b_i:b_j, :]).to(self.device) if self.use_n_step_is else None
             _rnn_state = torch.from_numpy(rnn_state[b_i:b_j, :]).to(self.device) if self.use_rnn else None

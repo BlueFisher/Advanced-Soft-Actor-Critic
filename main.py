@@ -4,6 +4,8 @@ import sys
 
 from algorithm.config_helper import set_logger
 
+HITTED_ENVS = {'roller', 'square', 'pyramid', 'antisubmarine', 'usv'}
+
 if __name__ == '__main__':
     set_logger()
 
@@ -26,7 +28,7 @@ if __name__ == '__main__':
     parser.add_argument('--repeat', type=int, default=1, help='number of repeated experiments')
     args = parser.parse_args()
 
-    if args.env in ['roller', 'square', 'pyramid', 'antisubmarine', 'usv']:
+    if args.env in HITTED_ENVS:
         from algorithm.sac_main_hitted import MainHitted as Main
     else:
         from algorithm.sac_main import Main

@@ -8,14 +8,15 @@ from algorithm.config_helper import set_logger
 # for correctly import protoc
 sys.path.append(str(Path(__file__).resolve().parent.joinpath('ds/proto')))
 
+HITTED_ENVS ={'roller', 'square', 'pyramid', 'antisubmarine', 'usv'}
+
 if __name__ == '__main__':
     set_logger()
     mp.set_start_method('spawn')
 
     parser = argparse.ArgumentParser()
     parser.add_argument('env')
-    parser.add_argument('process_type', choices=['replay', 'r',
-                                                 'learner', 'l',
+    parser.add_argument('process_type', choices=['learner', 'l',
                                                  'actor', 'a',
                                                  'evolver', 'e'])
     parser.add_argument('--config', '-c', help='config file')
@@ -26,8 +27,6 @@ if __name__ == '__main__':
     parser.add_argument('--evolver_port', type=int, help='evolver port')
     parser.add_argument('--learner_host', help='learner host')
     parser.add_argument('--learner_port', type=int, help='learner port')
-    parser.add_argument('--replay_host', help='replay host')
-    parser.add_argument('--replay_port', type=int, help='replay port')
 
     parser.add_argument('--render', action='store_true', help='render')
     parser.add_argument('--editor', action='store_true', help='running in Unity Editor')
@@ -45,17 +44,14 @@ if __name__ == '__main__':
     root_dir = Path(__file__).resolve().parent
     config_dir = f'envs/{args.env}'
 
-    if args.process_type in ['replay', 'r']:
-        from ds.replay import Replay
-        Replay(root_dir, config_dir, args)
-    elif args.process_type in ['learner', 'l']:
-        if args.env in ['simple_roller', 'ray_roller', 'antisubmarine']:
+    if args.process_type in ['learner', 'l']:
+        if args.env in HITTED_ENVS:
             from ds.main_hitted import LearnerHitted as Learner
         else:
             from ds.learner import Learner
         Learner(root_dir, config_dir, args)
     elif args.process_type in ['actor', 'a']:
-        if args.env in ['simple_roller', 'ray_roller', 'antisubmarine']:
+        if args.env in HITTED_ENVS:
             from ds.main_hitted import ActorHitted as Actor
         else:
             from ds.actor import Actor
