@@ -19,11 +19,14 @@ from .sac_ds_base import SAC_DS_Base
 
 
 class BatchDataBuffer:
-    def __init__(self, sac: SAC_DS_Base, batch_size: int):
+    def __init__(self, sac: SAC_DS_Base,
+                 batch_size: int,
+                 buffer_size: int = C.LEARNER_BATCH_DATA_BUFFER_SIZE):
         self._sac = sac
         self.batch_size = batch_size
 
-        self._buffer = Queue(maxsize=C.LEARNER_BATCH_DATA_BUFFER_SIZE)
+        self._tmp = None
+        self._buffer = Queue(maxsize=buffer_size)
         self._logger = logging.getLogger('ds.learner.trainer.batch_data_buffer')
 
     def add_episode(self,
@@ -45,8 +48,7 @@ class BatchDataBuffer:
             n_rnn_states: [1, episode_len, *rnn_state_shape]
         """
         if self._buffer.full():
-            self._logger.warning('Buffer is full, episode ignored')
-            return
+            self._buffer.get()
 
         (n_obses_list,
          n_actions,
@@ -62,25 +64,54 @@ class BatchDataBuffer:
                                                  n_mu_probs,
                                                  n_rnn_states)
 
-        all_batch = n_obses_list[0].shape[0]
-        for i in range(math.ceil(all_batch / self.batch_size)):
+        if self._tmp is not None:
+            (tmp_n_obses_list,
+             tmp_n_actions,
+             tmp_n_rewards,
+             tmp_next_obs_list,
+             tmp_n_dones,
+             tmp_n_mu_probs,
+             tmp_rnn_state) = self._tmp
+
+            n_obses_list = [np.concatenate([tmp_o, o]) for tmp_o, o in zip(tmp_n_obses_list, n_obses_list)]
+            n_actions = np.concatenate([tmp_n_actions, n_actions])
+            n_rewards = np.concatenate([tmp_n_rewards, n_rewards])
+            next_obs_list = [np.concatenate([tmp_o, o]) for tmp_o, o in zip(tmp_next_obs_list, next_obs_list)]
+            n_dones = np.concatenate([tmp_n_dones, n_dones])
+            n_mu_probs = np.concatenate([tmp_n_mu_probs, n_mu_probs])
+            rnn_state = np.concatenate([tmp_rnn_state, rnn_state]) if self._sac.use_rnn else None
+
+            self._tmp = None
+
+        all_batch_size = n_obses_list[0].shape[0]
+        idx = np.arange(all_batch_size)
+        np.random.shuffle(idx)
+
+        n_obses_list = [o[idx] for o in n_obses_list]
+        n_actions = n_actions[idx]
+        n_rewards = n_rewards[idx]
+        next_obs_list = [o[idx] for o in next_obs_list]
+        n_dones = n_dones[idx]
+        n_mu_probs = n_mu_probs[idx]
+        rnn_state = rnn_state[idx] if self._sac.use_rnn else None
+
+        for i in range(math.ceil(all_batch_size / self.batch_size)):
             b_i, b_j = i * self.batch_size, (i + 1) * self.batch_size
 
-            _n_obses_list = [o[b_i:b_j, :] for o in n_obses_list]
-            _n_actions = n_actions[b_i:b_j, :]
-            _n_rewards = n_rewards[b_i:b_j, :]
-            _next_obs_list = [o[b_i:b_j, :] for o in next_obs_list]
-            _n_dones = n_dones[b_i:b_j, :]
-            _n_mu_probs = n_mu_probs[b_i:b_j, :]
-            _rnn_state = rnn_state[b_i:b_j, :] if self._sac.use_rnn else None
+            batch = (
+                [o[b_i:b_j, :] for o in n_obses_list],
+                n_actions[b_i:b_j, :],
+                n_rewards[b_i:b_j, :],
+                [o[b_i:b_j, :] for o in next_obs_list],
+                n_dones[b_i:b_j, :],
+                n_mu_probs[b_i:b_j, :],
+                rnn_state[b_i:b_j, :] if self._sac.use_rnn else None
+            )
 
-            self._buffer.put((_n_obses_list,
-                              _n_actions,
-                              _n_rewards,
-                              _next_obs_list,
-                              _n_dones,
-                              _n_mu_probs,
-                              _rnn_state))
+            if b_j > all_batch_size:
+                self._tmp = batch
+            else:
+                self._buffer.put(batch)
 
     def get(self):
         return self._buffer.get()
@@ -174,15 +205,14 @@ class Trainer:
              n_mu_probs,
              rnn_state) = self._batch_data_buffer.get()
 
-            with elapsed_timer(self._logger, 'train'):
-                with self.sac_lock:
-                    step = self.sac.train(n_obses_list=n_obses_list,
-                                          n_actions=n_actions,
-                                          n_rewards=n_rewards,
-                                          next_obs_list=next_obs_list,
-                                          n_dones=n_dones,
-                                          n_mu_probs=n_mu_probs,
-                                          rnn_state=rnn_state)
+            with self.sac_lock:
+                step = self.sac.train(n_obses_list=n_obses_list,
+                                      n_actions=n_actions,
+                                      n_rewards=n_rewards,
+                                      next_obs_list=next_obs_list,
+                                      n_dones=n_dones,
+                                      n_mu_probs=n_mu_probs,
+                                      rnn_state=rnn_state)
 
             if step % self.base_config['update_sac_bak_per_step'] == 0:
                 self._update_sac_bak()
