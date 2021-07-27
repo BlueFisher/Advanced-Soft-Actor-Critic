@@ -1,63 +1,96 @@
 import importlib
 import logging
+import math
 import multiprocessing as mp
 import threading
 import time
 from multiprocessing.connection import Connection
 from pathlib import Path
-from queue import Full, Queue
+from queue import Queue
+from typing import List
 
 import numpy as np
 
 import algorithm.config_helper as config_helper
 import algorithm.constants as C
-from algorithm.utils import RLock
+from algorithm.utils import RLock, elapsed_timer
 
 from .sac_ds_base import SAC_DS_Base
 
 
-class UpdateDataBuffer:
-    def __init__(self, update_td_error, update_transitions):
-        self._update_td_error = update_td_error
-        self._update_transitions = update_transitions
+class BatchDataBuffer:
+    def __init__(self, sac: SAC_DS_Base, batch_size: int):
+        self._sac = sac
+        self.batch_size = batch_size
 
-        self._closed = False
-        self._buffer = Queue(maxsize=C.UPDATE_DATA_BUFFER_MAXSIZE)
-        self.logger = logging.getLogger('ds.learner.trainer.update_data_buffer')
+        self._buffer = Queue(maxsize=C.LEARNER_BATCH_DATA_BUFFER_SIZE)
+        self._logger = logging.getLogger('ds.learner.trainer.batch_data_buffer')
 
-        ts = [threading.Thread(target=self._run) for _ in range(C.UPDATE_DATA_BUFFER_THREADS)]
-        for t in ts:
-            t.start()
+    def add_episode(self,
+                    n_obses_list: List[np.ndarray],
+                    n_actions: np.ndarray,
+                    n_rewards: np.ndarray,
+                    next_obs_list: List[np.ndarray],
+                    n_dones: np.ndarray,
+                    n_mu_probs: np.ndarray,
+                    n_rnn_states: np.ndarray = None):
+        """
+        Args:
+            n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
+            n_actions: [1, episode_len, action_size]
+            n_rewards: [1, episode_len]
+            next_obs_list: list([1, *obs_shapes_i], ...)
+            n_dones: [1, episode_len]
+            n_mu_probs: [1, episode_len]
+            n_rnn_states: [1, episode_len, *rnn_state_shape]
+        """
+        if self._buffer.full():
+            self._logger.warning('Buffer is full, episode ignored')
+            return
 
-    def _run(self):
-        # TODO .numpy() threading
-        while not self._closed:
-            is_td_error, *data = self._buffer.get()
-            if is_td_error:
-                pointers, td_error = data
-                self._update_td_error(pointers, td_error)
-            else:
-                pointers, key, data = data
-                self._update_transitions(pointers, key, data)
+        (n_obses_list,
+         n_actions,
+         n_rewards,
+         next_obs_list,
+         n_dones,
+         n_mu_probs,
+         rnn_state) = self._sac.episode_to_batch(n_obses_list,
+                                                 n_actions,
+                                                 n_rewards,
+                                                 next_obs_list,
+                                                 n_dones,
+                                                 n_mu_probs,
+                                                 n_rnn_states)
 
-    def add_data(self, is_td_error, *data):
-        try:
-            self._buffer.put_nowait((is_td_error, *data))
-        except Full:
-            self.logger.warning('Buffer is full, the data to be update is ignored')
+        all_batch = n_obses_list[0].shape[0]
+        for i in range(math.ceil(all_batch / self.batch_size)):
+            b_i, b_j = i * self.batch_size, (i + 1) * self.batch_size
 
-    def close(self):
-        self._closed = True
+            _n_obses_list = [o[b_i:b_j, :] for o in n_obses_list]
+            _n_actions = n_actions[b_i:b_j, :]
+            _n_rewards = n_rewards[b_i:b_j, :]
+            _next_obs_list = [o[b_i:b_j, :] for o in next_obs_list]
+            _n_dones = n_dones[b_i:b_j, :]
+            _n_mu_probs = n_mu_probs[b_i:b_j, :]
+            _rnn_state = rnn_state[b_i:b_j, :] if self._sac.use_rnn else None
+
+            self._buffer.put((_n_obses_list,
+                              _n_actions,
+                              _n_rewards,
+                              _next_obs_list,
+                              _n_dones,
+                              _n_mu_probs,
+                              _rnn_state))
+
+    def get(self):
+        return self._buffer.get()
 
 
 class Trainer:
     def __init__(self,
-                 get_sampled_data_queue: mp.Queue,
-                 update_td_error_queue: mp.Queue,
-                 update_transition_queue: mp.Queue,
-                 update_sac_bak_queue: mp.Queue,
-
-                 process_nn_variables_conn: Connection,
+                 all_variables_queue: mp.Queue,
+                 episode_queue: mp.Queue,
+                 cmd_pipe_server: Connection,
 
                  logger_in_file,
                  obs_shapes,
@@ -68,11 +101,8 @@ class Trainer:
                  last_ckpt,
                  config):
 
-        self.logger = logging.getLogger('ds.learner.trainer')
-        self._get_sampled_data_queue = get_sampled_data_queue
-        self._update_td_error_queue = update_td_error_queue
-        self._update_transition_queue = update_transition_queue
-        self._update_sac_bak_queue = update_sac_bak_queue
+        self._logger = logging.getLogger('ds.learner.trainer')
+        self._all_variables_queue = all_variables_queue
 
         self.base_config = config['base_config']
 
@@ -93,10 +123,18 @@ class Trainer:
 
                                **config['sac_config'])
 
-        self.logger.info('SAC started')
+        self._logger.info('SAC started')
 
-        threading.Thread(target=self._forever_process_nn_variables,
-                         args=[process_nn_variables_conn],
+        self._batch_data_buffer = BatchDataBuffer(self.sac,
+                                                  batch_size=config['replay_config']['batch_size'])
+
+        for _ in range(C.LEARNER_PROCESS_EPISODE_THREAD_NUM):
+            threading.Thread(target=self._forever_process_add_episode,
+                             args=[episode_queue],
+                             daemon=True).start()
+
+        threading.Thread(target=self._forever_run_cmd_pipe,
+                         args=[cmd_pipe_server],
                          daemon=True).start()
 
         self._update_sac_bak()
@@ -104,63 +142,48 @@ class Trainer:
 
     def _update_sac_bak(self):
         with self.sac_lock:
-            self.logger.info('Updated sac_bak')
+            self._logger.info('Updated sac_bak')
             all_variables = self.sac.get_all_variables()
-            self._update_sac_bak_queue.put(all_variables)
+            self._all_variables_queue.put(all_variables)
 
-    def _forever_process_nn_variables(self, process_nn_variables_conn):
+    def _forever_process_add_episode(self, episode_queue: mp.Queue):
         while True:
-            cmd, args = process_nn_variables_conn.recv()
+            self._batch_data_buffer.add_episode(*episode_queue.get())
+
+    def _forever_run_cmd_pipe(self, cmd_pipe_server):
+        while True:
+            cmd, args = cmd_pipe_server.recv()
             if cmd == 'GET':
-                process_nn_variables_conn.send(self.sac.get_nn_variables())
-                self.logger.info('Sent all nn variables')
+                cmd_pipe_server.send(self.sac.get_nn_variables())
+                self._logger.info('Sent all nn variables')
             elif cmd == 'UPDATE':
                 with self.sac_lock:
                     self.sac.update_nn_variables(args)
-                self.logger.info('Updated all nn variables')
+                self._logger.info('Updated all nn variables')
             elif cmd == 'SAVE_MODEL':
                 with self.sac_lock:
                     self.sac.save_model()
 
     def run_train(self):
-        update_data_buffer = UpdateDataBuffer(lambda pointers, td_error:
-                                              self._update_td_error_queue.put((pointers, td_error)),
-                                              lambda pointers, key, data:
-                                              self._update_transition_queue.put((pointers, key, data)))
-
         while True:
-            (pointers,
-             (n_obses_list,
-              n_actions,
-              n_rewards,
-              next_obs_list,
-              n_dones,
-              n_mu_probs,
-              priority_is,
-              rnn_state)) = self._get_sampled_data_queue.get()
-            self._is_training = True
+            with elapsed_timer(self._logger, 'batch_data_buffer get'):
+                (n_obses_list,
+                 n_actions,
+                 n_rewards,
+                 next_obs_list,
+                 n_dones,
+                 n_mu_probs,
+                 rnn_state) = self._batch_data_buffer.get()
 
-            with self.sac_lock:
-                step, td_error, update_data = self.sac.train(pointers=pointers,
-                                                             n_obses_list=n_obses_list,
-                                                             n_actions=n_actions,
-                                                             n_rewards=n_rewards,
-                                                             next_obs_list=next_obs_list,
-                                                             n_dones=n_dones,
-                                                             n_mu_probs=n_mu_probs,
-                                                             priority_is=priority_is,
-                                                             rnn_state=rnn_state)
+            with elapsed_timer(self._logger, 'train'):
+                with self.sac_lock:
+                    step = self.sac.train(n_obses_list=n_obses_list,
+                                          n_actions=n_actions,
+                                          n_rewards=n_rewards,
+                                          next_obs_list=next_obs_list,
+                                          n_dones=n_dones,
+                                          n_mu_probs=n_mu_probs,
+                                          rnn_state=rnn_state)
 
             if step % self.base_config['update_sac_bak_per_step'] == 0:
                 self._update_sac_bak()
-
-            if np.isnan(np.min(td_error)):
-                self.logger.error('NAN in td_error')
-                break
-
-            update_data_buffer.add_data(True, pointers, td_error)
-            for pointers, key, data in update_data:
-                update_data_buffer.add_data(False, pointers, key, data)
-
-        update_data_buffer.close()
-        self.logger.warning('Training exits')

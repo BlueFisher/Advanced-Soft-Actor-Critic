@@ -7,12 +7,11 @@ import "pingpong.proto";
 service LearnerService {
   rpc Persistence(stream Ping) returns (stream Pong);
 
-  rpc RegisterReplay(RegisterReplayRequest) returns (RegisterReplayResponse);
   rpc RegisterActor(Empty) returns (RegisterActorResponse);
 
   rpc GetAction(GetActionRequest) returns (Action);
   rpc GetPolicyVariables(Empty) returns (NNVariables);
-  rpc GetTDError(GetTDErrorRequest) returns (TDError);
+  rpc Add(AddRequest) returns (Empty);
   // Update variables from evolver
   rpc GetNNVariables(Empty) returns (NNVariables);
   rpc UpdateNNVariables(NNVariables) returns (Empty);
@@ -20,25 +19,12 @@ service LearnerService {
   rpc ForceClose(Empty) returns (Empty);
 }
 
-message RegisterReplayRequest{
-  string replay_host = 1;
-  int32 replay_port = 2;
-}
-message RegisterReplayResponse{
-  string model_abs_dir = 1;
-
-  string reset_config_json = 2;
-  string replay_config_json = 3;
-  string sac_config_json = 4;
-}
-
 message RegisterActorResponse{
   string model_abs_dir = 1;
   int32 unique_id = 2;
 
   string reset_config_json = 3;
-  string replay_config_json = 4;
-  string sac_config_json = 5;
+  string sac_config_json = 4;
 }
 
 message GetActionRequest {
@@ -50,11 +36,7 @@ message Action {
   NDarray rnn_state = 3;
 }
 
-message NNVariables {
-  repeated NDarray variables = 1;
-}
-
-message GetTDErrorRequest {
+message AddRequest {
   repeated NDarray n_obses_list = 1;
   NDarray n_actions = 2;
   NDarray n_rewards = 3;
@@ -63,7 +45,7 @@ message GetTDErrorRequest {
   NDarray n_mu_probs = 6;
   NDarray n_rnn_states = 7;
 }
-message TDError {
-  bool succeeded = 1;
-  NDarray td_error = 2;
+
+message NNVariables {
+  repeated NDarray variables = 1;
 }

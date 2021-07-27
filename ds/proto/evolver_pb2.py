@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\revolver.proto\x12\x07\x65volver\x1a\rndarray.proto\x1a\x0epingpong.proto\"D\n\x16RegisterLearnerRequest\x12\x14\n\x0clearner_host\x18\x02 \x01(\t\x12\x14\n\x0clearner_port\x18\x03 \x01(\x05\"\x83\x01\n\x17RegisterLearnerResponse\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\n\n\x02id\x18\x02 \x01(\x05\x12\x19\n\x11reset_config_json\x18\x03 \x01(\t\x12\x1a\n\x12replay_config_json\x18\x04 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x05 \x01(\t\"\x9e\x01\n\x15RegisterReplayRequest\x12\x13\n\x0breplay_host\x18\x01 \x01(\t\x12\x13\n\x0breplay_port\x18\x02 \x01(\x05\x12\x17\n\x0f\x61ttached_replay\x18\x03 \x01(\x08\x12 \n\x18\x61ttached_to_learner_host\x18\x04 \x01(\t\x12 \n\x18\x61ttached_to_learner_port\x18\x05 \x01(\x05\"W\n\x16RegisterReplayResponse\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x14\n\x0clearner_host\x18\x02 \x01(\t\x12\x14\n\x0clearner_port\x18\x03 \x01(\x05\"\x80\x01\n\x15RegisterActorResponse\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x14\n\x0clearner_host\x18\x02 \x01(\t\x12\x14\n\x0clearner_port\x18\x03 \x01(\x05\x12\x13\n\x0breplay_host\x18\x04 \x01(\t\x12\x13\n\x0breplay_port\x18\x05 \x01(\x05\",\n\x1aPostRewardToEvolverRequest\x12\x0e\n\x06reward\x18\x01 \x01(\x02\"H\n\x16GetNNVariablesResponse\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x1b\n\tvariables\x18\x02 \x03(\x0b\x32\x08.NDarray2\x89\x03\n\x0e\x45volverService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12T\n\x0fRegisterLearner\x12\x1f.evolver.RegisterLearnerRequest\x1a .evolver.RegisterLearnerResponse\x12Q\n\x0eRegisterReplay\x12\x1e.evolver.RegisterReplayRequest\x1a\x1f.evolver.RegisterReplayResponse\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.evolver.RegisterActorResponse\x12\x39\n\nPostReward\x12#.evolver.PostRewardToEvolverRequest\x1a\x06.Empty\x12\x39\n\x0eGetNNVariables\x12\x06.Empty\x1a\x1f.evolver.GetNNVariablesResponseb\x06proto3'
+  serialized_pb=b'\n\revolver.proto\x12\x07\x65volver\x1a\rndarray.proto\x1a\x0epingpong.proto\"D\n\x16RegisterLearnerRequest\x12\x14\n\x0clearner_host\x18\x02 \x01(\t\x12\x14\n\x0clearner_port\x18\x03 \x01(\x05\"g\n\x17RegisterLearnerResponse\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\n\n\x02id\x18\x02 \x01(\x05\x12\x19\n\x11reset_config_json\x18\x03 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x05 \x01(\t\"V\n\x15RegisterActorResponse\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x14\n\x0clearner_host\x18\x02 \x01(\t\x12\x14\n\x0clearner_port\x18\x03 \x01(\x05\",\n\x1aPostRewardToEvolverRequest\x12\x0e\n\x06reward\x18\x01 \x01(\x02\"H\n\x16GetNNVariablesResponse\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x1b\n\tvariables\x18\x02 \x03(\x0b\x32\x08.NDarray2\xb6\x02\n\x0e\x45volverService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12T\n\x0fRegisterLearner\x12\x1f.evolver.RegisterLearnerRequest\x1a .evolver.RegisterLearnerResponse\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.evolver.RegisterActorResponse\x12\x39\n\nPostReward\x12#.evolver.PostRewardToEvolverRequest\x1a\x06.Empty\x12\x39\n\x0eGetNNVariables\x12\x06.Empty\x1a\x1f.evolver.GetNNVariablesResponseb\x06proto3'
   ,
   dependencies=[ndarray__pb2.DESCRIPTOR,pingpong__pb2.DESCRIPTOR,])
 
@@ -97,14 +97,7 @@ _REGISTERLEARNERRESPONSE = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='replay_config_json', full_name='evolver.RegisterLearnerResponse.replay_config_json', index=3,
-      number=4, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='sac_config_json', full_name='evolver.RegisterLearnerResponse.sac_config_json', index=4,
+      name='sac_config_json', full_name='evolver.RegisterLearnerResponse.sac_config_json', index=3,
       number=5, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
@@ -122,114 +115,8 @@ _REGISTERLEARNERRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=128,
-  serialized_end=259,
-)
-
-
-_REGISTERREPLAYREQUEST = _descriptor.Descriptor(
-  name='RegisterReplayRequest',
-  full_name='evolver.RegisterReplayRequest',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='replay_host', full_name='evolver.RegisterReplayRequest.replay_host', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='replay_port', full_name='evolver.RegisterReplayRequest.replay_port', index=1,
-      number=2, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='attached_replay', full_name='evolver.RegisterReplayRequest.attached_replay', index=2,
-      number=3, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='attached_to_learner_host', full_name='evolver.RegisterReplayRequest.attached_to_learner_host', index=3,
-      number=4, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='attached_to_learner_port', full_name='evolver.RegisterReplayRequest.attached_to_learner_port', index=4,
-      number=5, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=262,
-  serialized_end=420,
-)
-
-
-_REGISTERREPLAYRESPONSE = _descriptor.Descriptor(
-  name='RegisterReplayResponse',
-  full_name='evolver.RegisterReplayResponse',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='succeeded', full_name='evolver.RegisterReplayResponse.succeeded', index=0,
-      number=1, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='learner_host', full_name='evolver.RegisterReplayResponse.learner_host', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='learner_port', full_name='evolver.RegisterReplayResponse.learner_port', index=2,
-      number=3, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=422,
-  serialized_end=509,
+  serialized_start=127,
+  serialized_end=230,
 )
 
 
@@ -262,20 +149,6 @@ _REGISTERACTORRESPONSE = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='replay_host', full_name='evolver.RegisterActorResponse.replay_host', index=3,
-      number=4, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='replay_port', full_name='evolver.RegisterActorResponse.replay_port', index=4,
-      number=5, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -288,8 +161,8 @@ _REGISTERACTORRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=512,
-  serialized_end=640,
+  serialized_start=232,
+  serialized_end=318,
 )
 
 
@@ -320,8 +193,8 @@ _POSTREWARDTOEVOLVERREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=642,
-  serialized_end=686,
+  serialized_start=320,
+  serialized_end=364,
 )
 
 
@@ -359,15 +232,13 @@ _GETNNVARIABLESRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=688,
-  serialized_end=760,
+  serialized_start=366,
+  serialized_end=438,
 )
 
 _GETNNVARIABLESRESPONSE.fields_by_name['variables'].message_type = ndarray__pb2._NDARRAY
 DESCRIPTOR.message_types_by_name['RegisterLearnerRequest'] = _REGISTERLEARNERREQUEST
 DESCRIPTOR.message_types_by_name['RegisterLearnerResponse'] = _REGISTERLEARNERRESPONSE
-DESCRIPTOR.message_types_by_name['RegisterReplayRequest'] = _REGISTERREPLAYREQUEST
-DESCRIPTOR.message_types_by_name['RegisterReplayResponse'] = _REGISTERREPLAYRESPONSE
 DESCRIPTOR.message_types_by_name['RegisterActorResponse'] = _REGISTERACTORRESPONSE
 DESCRIPTOR.message_types_by_name['PostRewardToEvolverRequest'] = _POSTREWARDTOEVOLVERREQUEST
 DESCRIPTOR.message_types_by_name['GetNNVariablesResponse'] = _GETNNVARIABLESRESPONSE
@@ -386,20 +257,6 @@ RegisterLearnerResponse = _reflection.GeneratedProtocolMessageType('RegisterLear
   # @@protoc_insertion_point(class_scope:evolver.RegisterLearnerResponse)
   })
 _sym_db.RegisterMessage(RegisterLearnerResponse)
-
-RegisterReplayRequest = _reflection.GeneratedProtocolMessageType('RegisterReplayRequest', (_message.Message,), {
-  'DESCRIPTOR' : _REGISTERREPLAYREQUEST,
-  '__module__' : 'evolver_pb2'
-  # @@protoc_insertion_point(class_scope:evolver.RegisterReplayRequest)
-  })
-_sym_db.RegisterMessage(RegisterReplayRequest)
-
-RegisterReplayResponse = _reflection.GeneratedProtocolMessageType('RegisterReplayResponse', (_message.Message,), {
-  'DESCRIPTOR' : _REGISTERREPLAYRESPONSE,
-  '__module__' : 'evolver_pb2'
-  # @@protoc_insertion_point(class_scope:evolver.RegisterReplayResponse)
-  })
-_sym_db.RegisterMessage(RegisterReplayResponse)
 
 RegisterActorResponse = _reflection.GeneratedProtocolMessageType('RegisterActorResponse', (_message.Message,), {
   'DESCRIPTOR' : _REGISTERACTORRESPONSE,
@@ -431,8 +288,8 @@ _EVOLVERSERVICE = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=763,
-  serialized_end=1156,
+  serialized_start=441,
+  serialized_end=751,
   methods=[
   _descriptor.MethodDescriptor(
     name='Persistence',
@@ -455,19 +312,9 @@ _EVOLVERSERVICE = _descriptor.ServiceDescriptor(
     create_key=_descriptor._internal_create_key,
   ),
   _descriptor.MethodDescriptor(
-    name='RegisterReplay',
-    full_name='evolver.EvolverService.RegisterReplay',
-    index=2,
-    containing_service=None,
-    input_type=_REGISTERREPLAYREQUEST,
-    output_type=_REGISTERREPLAYRESPONSE,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
     name='RegisterActor',
     full_name='evolver.EvolverService.RegisterActor',
-    index=3,
+    index=2,
     containing_service=None,
     input_type=ndarray__pb2._EMPTY,
     output_type=_REGISTERACTORRESPONSE,
@@ -477,7 +324,7 @@ _EVOLVERSERVICE = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='PostReward',
     full_name='evolver.EvolverService.PostReward',
-    index=4,
+    index=3,
     containing_service=None,
     input_type=_POSTREWARDTOEVOLVERREQUEST,
     output_type=ndarray__pb2._EMPTY,
@@ -487,7 +334,7 @@ _EVOLVERSERVICE = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='GetNNVariables',
     full_name='evolver.EvolverService.GetNNVariables',
-    index=5,
+    index=4,
     containing_service=None,
     input_type=ndarray__pb2._EMPTY,
     output_type=_GETNNVARIABLESRESPONSE,

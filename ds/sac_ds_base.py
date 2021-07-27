@@ -95,7 +95,7 @@ class SAC_DS_Base(SAC_Base):
         self.use_rnd = use_rnd
         self.rnd_n_sample = rnd_n_sample
         self.use_normalization = use_normalization
-        self.use_priority = True
+        self.use_priority = False
         self.use_n_step_is = True
 
         self.noise = noise
@@ -234,14 +234,12 @@ class SAC_DS_Base(SAC_Base):
         return True
 
     def train(self,
-              pointers,
               n_obses_list,
               n_actions,
               n_rewards,
               next_obs_list,
               n_dones,
               n_mu_probs,
-              priority_is,
               rnn_state=None):
 
         n_obses_list = [torch.from_numpy(t).to(self.device) for t in n_obses_list]
@@ -250,7 +248,6 @@ class SAC_DS_Base(SAC_Base):
         next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
         n_dones = torch.from_numpy(n_dones).to(self.device)
         n_mu_probs = torch.from_numpy(n_mu_probs).to(self.device)
-        priority_is = torch.from_numpy(priority_is).to(self.device)
         if self.use_rnn:
             rnn_state = torch.from_numpy(rnn_state).to(self.device)
 
@@ -260,7 +257,7 @@ class SAC_DS_Base(SAC_Base):
                     next_obs_list=next_obs_list,
                     n_dones=n_dones,
                     n_mu_probs=n_mu_probs,
-                    priority_is=priority_is,
+                    priority_is=None,
                     initial_rnn_state=rnn_state if self.use_rnn else None)
 
         step = self.global_step.item()
@@ -270,32 +267,6 @@ class SAC_DS_Base(SAC_Base):
             self.save_model()
             self._last_save_time = time.time()
 
-        n_pi_probs_tensor = self.get_n_probs(n_obses_list,
-                                             n_actions,
-                                             rnn_state=rnn_state if self.use_rnn else None)
-
-        td_error = self._get_td_error(n_obses_list=n_obses_list,
-                                      n_actions=n_actions,
-                                      n_rewards=n_rewards,
-                                      next_obs_list=next_obs_list,
-                                      n_dones=n_dones,
-                                      n_mu_probs=n_pi_probs_tensor,
-                                      rnn_state=rnn_state if self.use_rnn else None).detach().cpu().numpy()
-
-        update_data = []
-
-        pointers_list = [pointers + i for i in range(0, self.burn_in_step + self.n_step)]
-        tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-        pi_probs = n_pi_probs_tensor.detach().cpu().numpy().reshape(-1)
-        update_data.append((tmp_pointers, 'mu_prob', pi_probs))
-
-        if self.use_rnn:
-            pointers_list = [pointers + i for i in range(1, self.burn_in_step + self.n_step + 1)]
-            tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-            n_rnn_states = self.get_n_rnn_states(n_obses_list, n_actions, rnn_state).detach().cpu().numpy()
-            rnn_states = n_rnn_states.reshape(-1, n_rnn_states.shape[-1])
-            update_data.append((tmp_pointers, 'rnn_state', rnn_states))
-
         self._increase_global_step()
 
-        return step + 1, td_error, update_data
+        return step + 1

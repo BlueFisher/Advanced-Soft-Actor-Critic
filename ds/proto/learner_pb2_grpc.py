@@ -21,11 +21,6 @@ class LearnerServiceStub(object):
                 request_serializer=pingpong__pb2.Ping.SerializeToString,
                 response_deserializer=pingpong__pb2.Pong.FromString,
                 )
-        self.RegisterReplay = channel.unary_unary(
-                '/learner.LearnerService/RegisterReplay',
-                request_serializer=learner__pb2.RegisterReplayRequest.SerializeToString,
-                response_deserializer=learner__pb2.RegisterReplayResponse.FromString,
-                )
         self.RegisterActor = channel.unary_unary(
                 '/learner.LearnerService/RegisterActor',
                 request_serializer=ndarray__pb2.Empty.SerializeToString,
@@ -41,10 +36,10 @@ class LearnerServiceStub(object):
                 request_serializer=ndarray__pb2.Empty.SerializeToString,
                 response_deserializer=learner__pb2.NNVariables.FromString,
                 )
-        self.GetTDError = channel.unary_unary(
-                '/learner.LearnerService/GetTDError',
-                request_serializer=learner__pb2.GetTDErrorRequest.SerializeToString,
-                response_deserializer=learner__pb2.TDError.FromString,
+        self.Add = channel.unary_unary(
+                '/learner.LearnerService/Add',
+                request_serializer=learner__pb2.AddRequest.SerializeToString,
+                response_deserializer=ndarray__pb2.Empty.FromString,
                 )
         self.GetNNVariables = channel.unary_unary(
                 '/learner.LearnerService/GetNNVariables',
@@ -72,12 +67,6 @@ class LearnerServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def RegisterReplay(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def RegisterActor(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -96,7 +85,7 @@ class LearnerServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetTDError(self, request, context):
+    def Add(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -129,11 +118,6 @@ def add_LearnerServiceServicer_to_server(servicer, server):
                     request_deserializer=pingpong__pb2.Ping.FromString,
                     response_serializer=pingpong__pb2.Pong.SerializeToString,
             ),
-            'RegisterReplay': grpc.unary_unary_rpc_method_handler(
-                    servicer.RegisterReplay,
-                    request_deserializer=learner__pb2.RegisterReplayRequest.FromString,
-                    response_serializer=learner__pb2.RegisterReplayResponse.SerializeToString,
-            ),
             'RegisterActor': grpc.unary_unary_rpc_method_handler(
                     servicer.RegisterActor,
                     request_deserializer=ndarray__pb2.Empty.FromString,
@@ -149,10 +133,10 @@ def add_LearnerServiceServicer_to_server(servicer, server):
                     request_deserializer=ndarray__pb2.Empty.FromString,
                     response_serializer=learner__pb2.NNVariables.SerializeToString,
             ),
-            'GetTDError': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetTDError,
-                    request_deserializer=learner__pb2.GetTDErrorRequest.FromString,
-                    response_serializer=learner__pb2.TDError.SerializeToString,
+            'Add': grpc.unary_unary_rpc_method_handler(
+                    servicer.Add,
+                    request_deserializer=learner__pb2.AddRequest.FromString,
+                    response_serializer=ndarray__pb2.Empty.SerializeToString,
             ),
             'GetNNVariables': grpc.unary_unary_rpc_method_handler(
                     servicer.GetNNVariables,
@@ -193,23 +177,6 @@ class LearnerService(object):
         return grpc.experimental.stream_stream(request_iterator, target, '/learner.LearnerService/Persistence',
             pingpong__pb2.Ping.SerializeToString,
             pingpong__pb2.Pong.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def RegisterReplay(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/RegisterReplay',
-            learner__pb2.RegisterReplayRequest.SerializeToString,
-            learner__pb2.RegisterReplayResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -265,7 +232,7 @@ class LearnerService(object):
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
-    def GetTDError(request,
+    def Add(request,
             target,
             options=(),
             channel_credentials=None,
@@ -275,9 +242,9 @@ class LearnerService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/GetTDError',
-            learner__pb2.GetTDErrorRequest.SerializeToString,
-            learner__pb2.TDError.FromString,
+        return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/Add',
+            learner__pb2.AddRequest.SerializeToString,
+            ndarray__pb2.Empty.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 

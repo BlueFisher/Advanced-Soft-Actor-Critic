@@ -1,7 +1,6 @@
 import inspect
 import threading
 import time
-
 from enum import Enum
 
 import torch
@@ -29,6 +28,19 @@ def scale_h(x, epsilon=0.001):
 def scale_inverse_h(x, epsilon=0.001):
     t = 1 + 4 * epsilon * (torch.abs(x) + 1 + epsilon)
     return torch.sign(x) * ((torch.sqrt(t) - 1) / (2 * epsilon) - 1)
+
+
+class elapsed_timer():
+    def __init__(self, logger, custom_log):
+        self._custom_log = custom_log
+        self._logger = logger
+
+    def __enter__(self):
+        self.start = time.time()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        end = time.time()
+        self._logger.info(f'{self._custom_log}: {end - self.start:.2f}s')
 
 
 class LockLogState(Enum):

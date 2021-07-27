@@ -41,27 +41,10 @@ class MainHitted(Main):
             {'tag': 'reward/hitted', 'simple_value': hitted}
         ])
 
-    def _log_episode_info(self, iteration, agents):
+    def _log_episode_info(self, iteration, iter_time, agents):
         rewards = [a.reward for a in agents]
         hitted = sum([a.hitted for a in agents])
 
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
         steps = [a.steps for a in agents]
-        self.logger.info(f'{iteration}, S {max(steps)}, R {rewards}, hitted {hitted}')
-
-
-class AgentAntisubmarineHitted(AgentHitted):
-    def _extra_log(self,
-                   obs_list,
-                   action,
-                   reward,
-                   local_done,
-                   max_reached,
-                   next_obs_list):
-
-        if not self.done and reward >= 10:
-            self.hitted += 1
-
-
-class MainAntisubmarineHitted(MainHitted):
-    _agent_class = AgentAntisubmarineHitted
+        self._logger.info(f'{iteration}, T {iter_time:.2f}s, S {max(steps)}, R {rewards}, hitted {hitted}')
