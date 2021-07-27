@@ -166,14 +166,13 @@ class Trainer:
 
     def run_train(self):
         while True:
-            with elapsed_timer(self._logger, 'batch_data_buffer get'):
-                (n_obses_list,
-                 n_actions,
-                 n_rewards,
-                 next_obs_list,
-                 n_dones,
-                 n_mu_probs,
-                 rnn_state) = self._batch_data_buffer.get()
+            (n_obses_list,
+             n_actions,
+             n_rewards,
+             next_obs_list,
+             n_dones,
+             n_mu_probs,
+             rnn_state) = self._batch_data_buffer.get()
 
             with elapsed_timer(self._logger, 'train'):
                 with self.sac_lock:

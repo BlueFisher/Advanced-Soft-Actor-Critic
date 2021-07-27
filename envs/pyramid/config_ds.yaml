@@ -13,8 +13,6 @@ default:
     n_agents: 10
     reset_on_iteration: false
 
-    attach_replay: true
-
     evolver_enabled: false
 
   net_config:

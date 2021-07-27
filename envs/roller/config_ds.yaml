@@ -28,8 +28,6 @@ visual:
 
   net_config:
     evolver_host: visual-roller-ds-evolver
-    learner_host: visual-roller-ds-lr
-    replay_host: visual-roller-ds-lr
 
 visual_hard:
   base_config: &visual_hard_base
@@ -37,8 +35,6 @@ visual_hard:
     nn: nn_visual_hard
   net_config:
     evolver_host: visual-roller-hard-ds-evolver
-    learner_host: visual-roller-hard-ds-lr
-    replay_host: visual-roller-hard-ds-lr
   sac_config: &visual_hard_sac
     burn_in_step: 40
     use_rnn: true
@@ -49,8 +45,6 @@ visual_hard_pre:
     name: "hard_pre_{time}"
   net_config:
     evolver_host: visual-roller-hard-pre-ds-evolver
-    learner_host: visual-roller-hard-pre-ds-lr
-    replay_host: visual-roller-hard-pre-ds-lr
   sac_config:
     <<: *visual_hard_sac
     use_prediction: true
@@ -61,8 +55,6 @@ visual_hard_pre_noextra:
     name: "hard_pre_noextra_{time}"
   net_config:
     evolver_host: visual-roller-hard-pre-noextra-ds-evolver
-    learner_host: visual-roller-hard-pre-noextra-ds-lr
-    replay_host: visual-roller-hard-pre-noextra-ds-lr
   sac_config:
     <<: *visual_hard_sac
     use_prediction: true
