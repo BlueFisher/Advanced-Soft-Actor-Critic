@@ -14,8 +14,6 @@ default:
 
   net_config:
     evolver_host: human-ds-evolver
-    learner_host: human-ds-lr
-    replay_host: human-ds-lr
 
   sac_config:
     write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
@@ -36,8 +34,6 @@ hard:
 
   net_config:
     evolver_host: human-hard-ds-evolver
-    learner_host: human-hard-ds-lr
-    replay_host: human-hard-ds-lr
 
   sac_config: &hard_sac
     use_rnn: true

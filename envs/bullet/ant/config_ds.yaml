@@ -12,8 +12,6 @@ default:
 
     evolver_cem_time: 8
 
-    attach_replay: true
-
   net_config:
     evolver_host: ant-ds-evolver
 

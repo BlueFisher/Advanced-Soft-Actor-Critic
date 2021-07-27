@@ -14,8 +14,6 @@ default:
 
   net_config:
     evolver_host: cheetah-ds-evolver
-    learner_host: cheetah-ds-learner
-    replay_host: cheetah-ds-replay
 
   sac_config:
     write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
@@ -35,8 +33,6 @@ hard:
 
   net_config:
     evolver_host: cheetah-hard-ds-evolver
-    learner_host: cheetah-hard-ds-lr
-    replay_host: cheetah-hard-ds-lr
 
   sac_config: &hard_sac
     use_rnn: true

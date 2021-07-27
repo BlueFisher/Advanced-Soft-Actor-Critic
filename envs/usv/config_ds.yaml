@@ -11,8 +11,10 @@ default:
     n_agents: 10
     reset_on_iteration: false
 
-    attach_replay: true
     evolver_enabled: false
+
+  replay_config:
+    batch_size: 1024
 
   reset_config:
     force_reset: true

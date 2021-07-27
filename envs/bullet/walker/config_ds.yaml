@@ -12,7 +12,6 @@ default:
 
     evolver_cem_time: 8
 
-    attach_replay: true
     evolver_enabled: false
 
   net_config:
@@ -56,8 +55,6 @@ hard_nopre:
 
   net_config:
     evolver_host: walker-hard-nopre-ds-evolver
-    learner_host: walker-hard-nopre-ds-lr
-    replay_host: walker-hard-nopre-ds-lr
 
   sac_config:
     <<: *hard_sac
