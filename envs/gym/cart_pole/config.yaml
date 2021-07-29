@@ -17,7 +17,6 @@ default:
 
   sac_config:
     save_model_per_step: 1000 # Save model every N steps
-    save_model_per_minute: 1 # Save model every N minutes
 
     learning_rate: 0.01
 

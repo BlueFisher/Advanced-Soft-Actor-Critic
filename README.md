@@ -81,8 +81,6 @@ sac_config:
   seed: null # Random seed
   write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
   save_model_per_step: 100000 # Save model every N steps
-  save_model_per_minute: 5 # Save model every N minutes
-  # Note that only both `save_model_per_step` and `save_model_per_minute` satisfied, model can be saved
 
   ensemble_q_num: 2 # Number of Qs
   ensemble_q_sample: 2 # Number of min Qs
@@ -116,7 +114,6 @@ sac_config:
   use_rnd: false # If use RND
   rnd_n_sample: 10 # RND sample times
   use_normalization: false # If use observation normalization
-
 ```
 
 All default distributed training configurations are listed below. It can also be found in `ds/default_config.yaml`
@@ -153,8 +150,6 @@ base_config:
 
   max_actors_each_learner: 10 # The max number of actors of each learner
 
-  attach_replay: false
-
   evolver_enabled: true
   evolver_cem_length: 50 # Start CEM if all learners have eavluated evolver_cem_length times
   evolver_cem_best: 0.3 # The ratio of best learners
@@ -169,25 +164,16 @@ net_config:
   evolver_port: 61000
   learner_host: null
   learner_port: 61001
-  replay_host: null
-  replay_port: 61002
 
 reset_config: null # Reset parameters sent to Unity
 
 replay_config:
   batch_size: 256
-  capacity: 524288
-  alpha: 0.9 # [0~1] convert the importance of TD error to priority. If 0, PER will reduce to vanilla replay buffer
-  beta: 0.4 # Importance-sampling, from initial value increasing to 1
-  beta_increment_per_sampling: 0.001 # Increment step
-  td_error_min: 0.01 # Small amount to avoid zero priority
-  td_error_max: 1. # Clipped abs error
 
 sac_config:
   seed: null # Random seed
   write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
   save_model_per_step: 100000 # Save model every N steps
-  save_model_per_minute: 5 # Save model every N minutes
 
   ensemble_q_num: 2 # Number of Qs
   ensemble_q_sample: 2 # Number of min Qs
@@ -225,16 +211,14 @@ sac_config:
   #     in: [n1, n2, n3]
   #     truncated: [n1 ,n2]
   #     std: n
-
 ```
 
 ## Start Training
 
 ```
-usage: main.py [-h] [--config CONFIG] [--run] [--render]
-               [--editor] [--logger_in_file] [--name NAME]
-               [--port PORT] [--nn NN] [--device DEVICE]
-               [--ckpt CKPT] [--agents AGENTS] [--repeat REPEAT]
+usage: main.py [-h] [--config CONFIG] [--run] [--logger_in_file] [--render] [--editor]
+               [--additional_args ADDITIONAL_ARGS] [--port PORT] [--agents AGENTS] [--name NAME] [--nn NN]
+               [--device DEVICE] [--ckpt CKPT] [--repeat REPEAT]
                env
 
 positional arguments:
@@ -245,15 +229,17 @@ optional arguments:
   --config CONFIG, -c CONFIG
                         config file
   --run                 inference mode
+  --logger_in_file      logging into a file
   --render              render
   --editor              running in Unity Editor
-  --logger_in_file      logging into a file
-  --name NAME, -n NAME  training name
+  --additional_args ADDITIONAL_ARGS
+                        additional args for Unity
   --port PORT, -p PORT  communication port
+  --agents AGENTS       number of agents
+  --name NAME, -n NAME  training name
   --nn NN               neural network model
   --device DEVICE       cpu or gpu
   --ckpt CKPT           ckeckpoint to restore
-  --agents AGENTS       number of agents
   --repeat REPEAT       number of repeated experiments
 
 examples:
@@ -268,28 +254,22 @@ python main.py roller -c vanilla -n nowall_202003251644192jWy --run --agents=1
 ## Start Distributed Training
 
 ```
-usage: main_ds.py [-h] [--config CONFIG] [--run]
-                  [--evolver_host EVOLVER_HOST]
-                  [--evolver_port EVOLVER_PORT]
-                  [--learner_host LEARNER_HOST]
-                  [--learner_port LEARNER_PORT]
-                  [--replay_host REPLAY_HOST]
-                  [--replay_port REPLAY_PORT] [--in_k8s]
-                  [--render] [--editor] [--logger_in_file]
-                  [--name NAME] [--build_port BUILD_PORT]
-                  [--nn NN] [--ckpt CKPT] [--agents AGENTS]
-                  [--noise NOISE]
-                  env {replay,r,learner,l,actor,a,evolver,e}
+usage: main_ds.py [-h] [--config CONFIG] [--run] [--logger_in_file] [--evolver_host EVOLVER_HOST]
+                  [--evolver_port EVOLVER_PORT] [--learner_host LEARNER_HOST] [--learner_port LEARNER_PORT] [--render]
+                  [--editor] [--additional_args ADDITIONAL_ARGS] [--build_port BUILD_PORT] [--agents AGENTS]
+                  [--name NAME] [--nn NN] [--device DEVICE] [--ckpt CKPT] [--noise NOISE]
+                  env {learner,l,actor,a,evolver,e}
 
 positional arguments:
   env
-  {replay,r,learner,l,actor,a,evolver,e}
+  {learner,l,actor,a,evolver,e}
 
 optional arguments:
   -h, --help            show this help message and exit
   --config CONFIG, -c CONFIG
                         config file
   --run                 inference mode
+  --logger_in_file      logging into a file
   --evolver_host EVOLVER_HOST
                         evolver host
   --evolver_port EVOLVER_PORT
@@ -298,28 +278,25 @@ optional arguments:
                         learner host
   --learner_port LEARNER_PORT
                         learner port
-  --replay_host REPLAY_HOST
-                        replay host
-  --replay_port REPLAY_PORT
-                        replay port
-  --in_k8s
   --render              render
   --editor              running in Unity Editor
-  --logger_in_file      logging into a file
-  --name NAME, -n NAME  training name
+  --additional_args ADDITIONAL_ARGS
+                        additional args for Unity
   --build_port BUILD_PORT, -p BUILD_PORT
                         communication port
-  --nn NN               neural network model
-  --ckpt CKPT           ckeckpoint to restore
   --agents AGENTS       number of agents
+  --name NAME, -n NAME  training name
+  --nn NN               neural network model
+  --device DEVICE       cpu or gpu
+  --ckpt CKPT           ckeckpoint to restore
   --noise NOISE         additional noise for actor
 
 examples:
-python main_ds.py bullet/walker evolver --evolver_host=127.0.0.1 --learner_host=127.0.0.1 --replay_host=127.0.0.1 --logger_in_file
+python main_ds.py bullet/walker evolver --evolver_host=127.0.0.1 --logger_in_file
 
-python main_ds.py bullet/walker learner --evolver_host=127.0.0.1 --learner_host=127.0.0.1 --replay_host=127.0.0.1 --logger_in_file
+python main_ds.py bullet/walker learner --evolver_host=127.0.0.1 --logger_in_file
 
-python main_ds.py bullet/walker replay --evolver_host=127.0.0.1 --learner_host=127.0.0.1 --replay_host=127.0.0.1 --logger_in_file
+python main_ds.py bullet/walker replay --evolver_host=127.0.0.1 --logger_in_file
 
-python main_ds.py bullet/walker actor --evolver_host=127.0.0.1 --learner_host=127.0.0.1 --replay_host=127.0.0.1 --logger_in_file
+python main_ds.py bullet/walker actor --evolver_host=127.0.0.1 --logger_in_file
 ```
