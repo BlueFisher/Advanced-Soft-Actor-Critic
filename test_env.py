@@ -1,18 +1,15 @@
 import argparse
 import logging
 import sys
-import time
 from pathlib import Path
-from PIL import Image
 
 import numpy as np
+from PIL import Image
 
 import algorithm.config_helper as config_helper
-
 from algorithm.agent import Agent
-
-
 from algorithm.config_helper import set_logger
+from algorithm.utils import elapsed_timer
 
 
 class Main(object):
@@ -47,6 +44,15 @@ class Main(object):
             config['base_config']['port'] = args.port
         if args.agents is not None:
             config['base_config']['n_agents'] = args.agents
+
+        config['base_config']['name'] = config_helper.generate_base_name(config['base_config']['name'])
+
+        # The absolute directory of a specific training
+        model_abs_dir = Path(root_dir).joinpath('models',
+                                                config['base_config']['scene'],
+                                                config['base_config']['name'])
+        model_abs_dir.mkdir(parents=True, exist_ok=True)
+        self.model_abs_dir = model_abs_dir
 
         config_helper.display_config(config, self._logger)
 
@@ -95,6 +101,8 @@ class Main(object):
         is_max_reached = False
         iteration = 0
 
+        step_timer = elapsed_timer(self._logger, 'One step interacting', 200)
+
         while iteration != self.base_config['max_iter']:
             if self.base_config['reset_on_iteration'] or is_max_reached:
                 obs_list = self.env.reset(reset_config=self.reset_config)
@@ -109,11 +117,11 @@ class Main(object):
             step = 0
 
             while False in [a.done for a in agents]:
-                self._logger.info(f'{iteration}-{step}')
                 action = np.random.rand(len(agents), self.action_size)
 
-                next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
-                                                                               action[..., self.d_action_size:])
+                with step_timer:
+                    next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
+                                                                                   action[..., self.d_action_size:])
 
                 if step == self.base_config['max_step_each_iter']:
                     local_done = [True] * len(agents)
@@ -138,8 +146,8 @@ class Main(object):
                         n_obses = n_obses[0]
                         if len(n_obses.shape) > 2:
                             img = Image.fromarray(np.uint8(n_obses[0] * 255))
-                            self._logger.info(f'saved {img_save_index}-{i}')
-                            img.save(f'{img_save_index}-{i}.gif',
+                            self._logger.info(f'Saved {img_save_index}-{i}')
+                            img.save(self.model_abs_dir.joinpath(f'{img_save_index}-{i}.gif'),
                                      save_all=True,
                                      append_images=[Image.fromarray(np.uint8(o * 255)) for o in n_obses[1:]])
 

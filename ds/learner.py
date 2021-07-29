@@ -57,7 +57,9 @@ class Learner:
         constant_config['sac_config'] = sac_config
         self._registered = True
 
-        self._init_env(_id, constant_config, config_abs_dir)
+        self._init_config(_id, constant_config)
+        self._init_env()
+        self._init_sac(config_abs_dir)
 
         threading.Thread(target=self._policy_evaluation, daemon=True).start()
 
@@ -110,7 +112,7 @@ class Learner:
 
         return _id, name, reset_config, sac_config
 
-    def _init_env(self, _id, config, config_abs_dir):
+    def _init_config(self, _id, config):
         if self.cmd_args.name is not None:
             config['base_config']['name'] = self.cmd_args.name
         if self.cmd_args.build_port is not None:
@@ -120,6 +122,7 @@ class Learner:
         if self.cmd_args.agents is not None:
             config['base_config']['n_agents'] = self.cmd_args.agents
 
+        self.config = config
         self.base_config = config['base_config']
         self.reset_config = config['reset_config']
         self.sac_config = config['sac_config']
@@ -136,6 +139,7 @@ class Learner:
 
         config_helper.display_config(config, self._logger)
 
+    def _init_env(self):
         if self.base_config['env_type'] == 'UNITY':
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
@@ -162,8 +166,9 @@ class Learner:
 
         self._logger.info(f'{self.base_config["build_path"]} initialized')
 
+    def _init_sac(self, config_abs_dir):
         # If model exists, load saved model, or copy a new one
-        nn_model_abs_path = Path(model_abs_dir).joinpath('nn_models.py')
+        nn_model_abs_path = Path(self.model_abs_dir).joinpath('nn_models.py')
         if nn_model_abs_path.exists():
             spec = importlib.util.spec_from_file_location('nn', str(nn_model_abs_path))
         else:
@@ -188,10 +193,10 @@ class Learner:
             'obs_shapes': self.obs_shapes,
             'd_action_size': self.d_action_size,
             'c_action_size': self.c_action_size,
-            'model_abs_dir': model_abs_dir,
+            'model_abs_dir': self.model_abs_dir,
             'model_spec': spec,
             'last_ckpt': self.last_ckpt,
-            'config': config
+            'config': self.config
         }, daemon=True)
         self.learner_trainer_process.start()
 
@@ -201,7 +206,7 @@ class Learner:
                                    obs_shapes=self.obs_shapes,
                                    d_action_size=self.d_action_size,
                                    c_action_size=self.c_action_size,
-                                   model_abs_dir=model_abs_dir,
+                                   model_abs_dir=self.model_abs_dir,
                                    model=custom_nn_model,
                                    summary_path='log/bak',
                                    last_ckpt=self.last_ckpt,

@@ -20,8 +20,6 @@ logger = logging.getLogger('sac.base')
 
 
 class SAC_Base(object):
-    _last_save_time = 0
-
     def __init__(self,
                  obs_shapes: Tuple,
                  d_action_size: int,
@@ -36,7 +34,6 @@ class SAC_Base(object):
                  seed=None,
                  write_summary_per_step=1e3,
                  save_model_per_step=1e5,
-                 save_model_per_minute=5,
 
                  ensemble_q_num=2,
                  ensemble_q_sample=2,
@@ -83,7 +80,6 @@ class SAC_Base(object):
         seed: Random seed
         write_summary_per_step: Write summaries in TensorBoard every `write_summary_per_step` steps
         save_model_per_step: Save model every N steps
-        save_model_per_minute: Save model every N minutes
 
         ensemble_q_num: 2 # Number of Qs
         ensemble_q_sample: 2 # Number of min Qs
@@ -129,7 +125,6 @@ class SAC_Base(object):
 
         self.write_summary_per_step = int(write_summary_per_step)
         self.save_model_per_step = int(save_model_per_step)
-        self.save_model_per_minute = save_model_per_minute
         self.tau = tau
         self.update_target_per_step = update_target_per_step
         self.use_auto_alpha = use_auto_alpha
@@ -1580,10 +1575,8 @@ class SAC_Base(object):
 
         step = self.global_step.item()
 
-        if step % self.save_model_per_step == 0 \
-                and (time.time() - self._last_save_time) / 60 >= self.save_model_per_minute:
+        if step % self.save_model_per_step == 0:
             self.save_model()
-            self._last_save_time = time.time()
 
         if self.use_n_step_is:
             n_pi_probs_tensor = self.get_n_probs(n_obses_list,
