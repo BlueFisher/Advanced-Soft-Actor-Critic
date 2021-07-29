@@ -30,17 +30,23 @@ def scale_inverse_h(x, epsilon=0.001):
     return torch.sign(x) * ((torch.sqrt(t) - 1) / (2 * epsilon) - 1)
 
 
-class elapsed_timer():
-    def __init__(self, logger, custom_log):
-        self._custom_log = custom_log
+class elapsed_timer:
+    def __init__(self, logger, custom_log, repeat=1):
         self._logger = logger
+        self._custom_log = custom_log
+        self._repeat = repeat
+
+        self._times = []
 
     def __enter__(self):
         self.start = time.time()
 
     def __exit__(self, exc_type, exc_value, traceback):
-        end = time.time()
-        self._logger.info(f'{self._custom_log}: {end - self.start:.2f}s')
+        self._times.append(time.time() - self.start)
+
+        if len(self._times) == self._repeat:
+            self._logger.info(f'{self._custom_log}: {sum(self._times) / len(self._times):.2f}s')
+            self._times = []
 
 
 class LockLogState(Enum):

@@ -3,7 +3,6 @@ import logging
 import math
 import multiprocessing as mp
 import threading
-import time
 from multiprocessing.connection import Connection
 from pathlib import Path
 from queue import Queue
@@ -196,23 +195,28 @@ class Trainer:
                     self.sac.save_model()
 
     def run_train(self):
-        while True:
-            (n_obses_list,
-             n_actions,
-             n_rewards,
-             next_obs_list,
-             n_dones,
-             n_mu_probs,
-             rnn_state) = self._batch_data_buffer.get()
+        timer_get = elapsed_timer(self._logger, 'Get a batch', 50)
+        timer_train = elapsed_timer(self._logger, 'Train a step', 50)
 
-            with self.sac_lock:
-                step = self.sac.train(n_obses_list=n_obses_list,
-                                      n_actions=n_actions,
-                                      n_rewards=n_rewards,
-                                      next_obs_list=next_obs_list,
-                                      n_dones=n_dones,
-                                      n_mu_probs=n_mu_probs,
-                                      rnn_state=rnn_state)
+        while True:
+            with timer_get:
+                (n_obses_list,
+                 n_actions,
+                 n_rewards,
+                 next_obs_list,
+                 n_dones,
+                 n_mu_probs,
+                 rnn_state) = self._batch_data_buffer.get()
+
+            with timer_train:
+                with self.sac_lock:
+                    step = self.sac.train(n_obses_list=n_obses_list,
+                                          n_actions=n_actions,
+                                          n_rewards=n_rewards,
+                                          next_obs_list=next_obs_list,
+                                          n_dones=n_dones,
+                                          n_mu_probs=n_mu_probs,
+                                          rnn_state=rnn_state)
 
             if step % self.base_config['update_sac_bak_per_step'] == 0:
                 self._update_sac_bak()
