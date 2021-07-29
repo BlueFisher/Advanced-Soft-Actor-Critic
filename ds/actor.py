@@ -14,7 +14,7 @@ import numpy as np
 import algorithm.config_helper as config_helper
 import algorithm.constants as C
 from algorithm.agent import Agent
-from algorithm.utils import ReadWriteLock
+from algorithm.utils import ReadWriteLock, elapsed_timer
 
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
 from .proto.ndarray_pb2 import Empty
@@ -314,6 +314,8 @@ class Actor(object):
 
             self._log_episode_info(iteration, agents)
             iteration += 1
+
+        self.close()
 
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]
