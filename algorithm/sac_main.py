@@ -26,7 +26,9 @@ class Main(object):
 
         config_abs_dir = self._init_config(root_dir, config_dir, args)
 
-        self._init_env(config_abs_dir)
+        self._init_env()
+        self._init_sac(config_abs_dir)
+
         self._run()
 
     def _init_config(self, root_dir, config_dir, args):
@@ -79,7 +81,7 @@ class Main(object):
 
         return config_abs_dir
 
-    def _init_env(self, config_abs_dir: Path):
+    def _init_env(self):
         if self.base_config['env_type'] == 'UNITY':
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
@@ -109,6 +111,9 @@ class Main(object):
         self.obs_shapes, self.d_action_size, self.c_action_size = self.env.init()
         self.action_size = self.d_action_size + self.c_action_size
 
+        self._logger.info(f'{self.base_config["build_path"]} initialized')
+
+    def _init_sac(self, config_abs_dir: Path):
         # If model exists, load saved model, or copy a new one
         nn_model_abs_path = Path(self.model_abs_dir).joinpath('nn_models.py')
         if nn_model_abs_path.exists():
@@ -150,90 +155,99 @@ class Main(object):
         iteration = 0
         trained_steps = 0
 
-        while iteration != self.base_config['max_iter']:
-            if self.base_config['max_step'] != -1 and trained_steps >= self.base_config['max_step']:
-                break
+        try:
+            while iteration != self.base_config['max_iter']:
+                if self.base_config['max_step'] != -1 and trained_steps >= self.base_config['max_step']:
+                    break
 
-            if self.base_config['reset_on_iteration'] or is_max_reached:
-                obs_list = self.env.reset(reset_config=self.reset_config)
-                for agent in agents:
-                    agent.clear()
+                if self.base_config['reset_on_iteration'] or is_max_reached:
+                    obs_list = self.env.reset(reset_config=self.reset_config)
+                    for agent in agents:
+                        agent.clear()
 
-                if use_rnn:
-                    rnn_state = initial_rnn_state
-            else:
-                for agent in agents:
-                    agent.reset()
-
-            is_max_reached = False
-            action = np.zeros([len(agents), self.action_size], dtype=np.float32)
-            step = 0
-            iter_time = time.time()
-
-            while False in [a.done for a in agents]:
-                if use_rnn:
-                    # burn-in padding
-                    for agent in [a for a in agents if a.is_empty()]:
-                        for _ in range(self.sac.burn_in_step):
-                            agent.add_transition([np.zeros(t) for t in self.obs_shapes],
-                                                 np.zeros(self.action_size),
-                                                 0, False, False,
-                                                 [np.zeros(t) for t in self.obs_shapes],
-                                                 initial_rnn_state[0])
-
-                    action, next_rnn_state = self.sac.choose_rnn_action([o.astype(np.float32) for o in obs_list],
-                                                                        action,
-                                                                        rnn_state)
+                    if use_rnn:
+                        rnn_state = initial_rnn_state
                 else:
-                    action = self.sac.choose_action([o.astype(np.float32) for o in obs_list])
+                    for agent in agents:
+                        agent.reset()
 
-                next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
-                                                                               action[..., self.d_action_size:])
+                is_max_reached = False
+                action = np.zeros([len(agents), self.action_size], dtype=np.float32)
+                step = 0
+                iter_time = time.time()
 
-                if step == self.base_config['max_step_each_iter']:
-                    local_done = [True] * len(agents)
-                    max_reached = [True] * len(agents)
-                    is_max_reached = True
+                while False in [a.done for a in agents]:
+                    if use_rnn:
+                        # burn-in padding
+                        for agent in [a for a in agents if a.is_empty()]:
+                            for _ in range(self.sac.burn_in_step):
+                                agent.add_transition([np.zeros(t) for t in self.obs_shapes],
+                                                     np.zeros(self.action_size),
+                                                     0, False, False,
+                                                     [np.zeros(t) for t in self.obs_shapes],
+                                                     initial_rnn_state[0])
 
-                episode_trans_list = [agents[i].add_transition([o[i] for o in obs_list],
-                                                               action[i],
-                                                               reward[i],
-                                                               local_done[i],
-                                                               max_reached[i],
-                                                               [o[i] for o in next_obs_list],
-                                                               rnn_state[i] if use_rnn else None)
-                                      for i in range(len(agents))]
+                        action, next_rnn_state = self.sac.choose_rnn_action([o.astype(np.float32) for o in obs_list],
+                                                                            action,
+                                                                            rnn_state)
+                    else:
+                        action = self.sac.choose_action([o.astype(np.float32) for o in obs_list])
+
+                    next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
+                                                                                   action[..., self.d_action_size:])
+
+                    if step == self.base_config['max_step_each_iter']:
+                        local_done = [True] * len(agents)
+                        max_reached = [True] * len(agents)
+                        is_max_reached = True
+
+                    episode_trans_list = [agents[i].add_transition([o[i] for o in obs_list],
+                                                                   action[i],
+                                                                   reward[i],
+                                                                   local_done[i],
+                                                                   max_reached[i],
+                                                                   [o[i] for o in next_obs_list],
+                                                                   rnn_state[i] if use_rnn else None)
+                                          for i in range(len(agents))]
+
+                    if self.train_mode:
+                        episode_trans_list = [t for t in episode_trans_list if t is not None]
+                        if len(episode_trans_list) != 0:
+                            # n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
+                            # n_rnn_states
+                            for episode_trans in episode_trans_list:
+                                self.sac.fill_replay_buffer(*episode_trans)
+                        trained_steps = self.sac.train()
+
+                    obs_list = next_obs_list
+                    action[local_done] = np.zeros(self.action_size)
+                    if use_rnn:
+                        rnn_state = next_rnn_state
+                        rnn_state[local_done] = initial_rnn_state[local_done]
+
+                    step += 1
 
                 if self.train_mode:
-                    episode_trans_list = [t for t in episode_trans_list if t is not None]
-                    if len(episode_trans_list) != 0:
-                        # n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
-                        # n_rnn_states
-                        for episode_trans in episode_trans_list:
-                            self.sac.fill_replay_buffer(*episode_trans)
-                    trained_steps = self.sac.train()
+                    self._log_episode_summaries(agents)
 
-                obs_list = next_obs_list
-                action[local_done] = np.zeros(self.action_size)
-                if use_rnn:
-                    rnn_state = next_rnn_state
-                    rnn_state[local_done] = initial_rnn_state[local_done]
+                self._log_episode_info(iteration, time.time() - iter_time, agents)
 
-                step += 1
+                if (p := self.model_abs_dir.joinpath('save_model')).exists():
+                    self.sac.save_model()
+                    p.unlink()
 
-            if self.train_mode:
-                self._log_episode_summaries(agents)
+                iteration += 1
 
-            self._log_episode_info(iteration, time.time() - iter_time, agents)
-
-            if (p := self.model_abs_dir.joinpath('save_model')).exists():
-                self.sac.save_model()
-                p.unlink()
-
-            iteration += 1
+        except Exception as e:
+            self._logger.error(e)
 
         self.sac.save_model()
         self.env.close()
+
+        self._logger.info(f'Rerun {self.base_config["build_path"]}')
+        self.base_config['port'] += 1
+        self._init_env()
+        self._run()
 
     def _log_episode_summaries(self, agents):
         rewards = np.array([a.reward for a in agents])
