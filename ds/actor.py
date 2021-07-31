@@ -14,7 +14,7 @@ import numpy as np
 import algorithm.config_helper as config_helper
 import algorithm.constants as C
 from algorithm.agent import Agent
-from algorithm.utils import ReadWriteLock, elapsed_timer
+from algorithm.utils import EnvException, ReadWriteLock, elapsed_timer
 
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
 from .proto.ndarray_pb2 import Empty
@@ -137,12 +137,11 @@ class Actor(object):
         config_helper.display_config(config, self._logger)
 
     def _init_env(self):
-        # Initialize environment
         if self.base_config['env_type'] == 'UNITY':
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
             if self.run_in_editor:
-                self.env = UnityWrapper(base_port=5004)
+                self.env = UnityWrapper()
             else:
                 self.env = UnityWrapper(file_name=self.base_config['build_path'][sys.platform],
                                         base_port=self.base_config['build_port'],
@@ -216,22 +215,21 @@ class Actor(object):
                                    n_rnn_states if self.sac_actor.use_rnn else None)
 
     def _run(self):
+        use_rnn = self.sac_actor.use_rnn
+
+        obs_list = self.env.reset(reset_config=self.reset_config)
+
+        agents = [self._agent_class(i, use_rnn=use_rnn)
+                    for i in range(self.base_config['n_agents'])]
+
+        if use_rnn:
+            initial_rnn_state = self.sac_actor.get_initial_rnn_state(len(agents))
+            rnn_state = initial_rnn_state
+
         iteration = 0
 
         while self._stub.connected and self._evolver_stub.connected:
-            # Learner is online, reset all settings
-            if iteration == 0 and self._stub.connected:
-                use_rnn = self.sac_actor.use_rnn
-                obs_list = self.env.reset(reset_config=self.reset_config)
-
-                agents = [self._agent_class(i, use_rnn=use_rnn)
-                          for i in range(self.base_config['n_agents'])]
-
-                if use_rnn:
-                    initial_rnn_state = self.sac_actor.get_initial_rnn_state(len(agents))
-                    rnn_state = initial_rnn_state
-
-            if self.base_config['reset_on_iteration']:
+            if self.base_config['reset_on_iteration'] or any([a.max_reached for a in agents]):
                 obs_list = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
@@ -251,73 +249,86 @@ class Actor(object):
                 self._update_policy_variables()
                 self._logger.info('_update_policy_variables')
 
-            while False in [a.done for a in agents] and self._stub.connected:
-                # burn in padding
-                for agent in agents:
-                    if agent.is_empty():
-                        for _ in range(self.sac_actor.burn_in_step):
-                            agent.add_transition([np.zeros(t) for t in self.obs_shapes],
-                                                 np.zeros(self.action_size),
-                                                 0, False, False,
-                                                 [np.zeros(t) for t in self.obs_shapes],
-                                                 initial_rnn_state[0])
+            try:
+                while not all([a.done for a in agents]) and self._stub.connected:
+                    # burn in padding
+                    for agent in agents:
+                        if agent.is_empty():
+                            for _ in range(self.sac_actor.burn_in_step):
+                                agent.add_transition([np.zeros(t) for t in self.obs_shapes],
+                                                     np.zeros(self.action_size),
+                                                     0, False, False,
+                                                     [np.zeros(t) for t in self.obs_shapes],
+                                                     initial_rnn_state[0])
 
-                if self.base_config['update_policy_mode']:
-                    # Update policy variables each "update_policy_variables_per_step"
-                    if self.base_config['update_policy_variables_per_step'] != -1 \
-                            and step % self.base_config['update_policy_variables_per_step'] == 0:
-                        self._update_policy_variables()
+                    if self.base_config['update_policy_mode']:
+                        # Update policy variables each "update_policy_variables_per_step"
+                        if self.base_config['update_policy_variables_per_step'] != -1 \
+                                and step % self.base_config['update_policy_variables_per_step'] == 0:
+                            self._update_policy_variables()
 
-                    with self._sac_actor_lock.read():
-                        if use_rnn:
-                            action, next_rnn_state = self.sac_actor.choose_rnn_action([o.astype(np.float32) for o in obs_list],
-                                                                                      action,
-                                                                                      rnn_state)
-                        else:
-                            action = self.sac_actor.choose_action([o.astype(np.float32) for o in obs_list])
+                        with self._sac_actor_lock.read():
+                            if use_rnn:
+                                action, next_rnn_state = self.sac_actor.choose_rnn_action([o.astype(np.float32) for o in obs_list],
+                                                                                          action,
+                                                                                          rnn_state)
+                            else:
+                                action = self.sac_actor.choose_action([o.astype(np.float32) for o in obs_list])
 
-                else:
-                    # Get action from learner each step
-                    # TODO need prob
-                    if use_rnn:
-                        action_rnn_state = self._stub.get_action([o.astype(np.float32) for o in obs_list],
-                                                                 rnn_state)
-                        if action_rnn_state is None:
-                            break
-                        action, next_rnn_state = action_rnn_state
                     else:
-                        action = self._stub.get_action([o.astype(np.float32) for o in obs_list])
-                        if action is None:
-                            break
+                        # Get action from learner each step
+                        # TODO need prob
+                        if use_rnn:
+                            action_rnn_state = self._stub.get_action([o.astype(np.float32) for o in obs_list],
+                                                                     rnn_state)
+                            if action_rnn_state is None:
+                                break
+                            action, next_rnn_state = action_rnn_state
+                        else:
+                            action = self._stub.get_action([o.astype(np.float32) for o in obs_list])
+                            if action is None:
+                                break
 
-                next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
-                                                                               action[..., self.d_action_size:])
+                    next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
+                                                                                   action[..., self.d_action_size:])
 
-                if step == self.base_config['max_step_each_iter']:
-                    local_done = [True] * len(agents)
-                    max_reached = [True] * len(agents)
+                    if step == self.base_config['max_step_each_iter']:
+                        local_done = [True] * len(agents)
+                        max_reached = [True] * len(agents)
 
-                episode_trans_list = [agents[i].add_transition([o[i] for o in obs_list],
-                                                               action[i],
-                                                               reward[i],
-                                                               local_done[i],
-                                                               max_reached[i],
-                                                               [o[i] for o in next_obs_list],
-                                                               rnn_state[i] if use_rnn else None)
-                                      for i in range(len(agents))]
+                    episode_trans_list = [agents[i].add_transition([o[i] for o in obs_list],
+                                                                   action[i],
+                                                                   reward[i],
+                                                                   local_done[i],
+                                                                   max_reached[i],
+                                                                   [o[i] for o in next_obs_list],
+                                                                   rnn_state[i] if use_rnn else None)
+                                          for i in range(len(agents))]
 
-                episode_trans_list = [t for t in episode_trans_list if t is not None]
-                if len(episode_trans_list) != 0:
-                    for episode_trans in episode_trans_list:
-                        self._add_trans_buffer.add_trans(episode_trans)
+                    episode_trans_list = [t for t in episode_trans_list if t is not None]
+                    if len(episode_trans_list) != 0:
+                        for episode_trans in episode_trans_list:
+                            self._add_trans_buffer.add_trans(episode_trans)
 
-                obs_list = next_obs_list
-                action[local_done] = np.zeros(self.action_size)
-                if use_rnn:
-                    rnn_state = next_rnn_state
-                    rnn_state[local_done] = initial_rnn_state[local_done]
+                    obs_list = next_obs_list
+                    action[local_done] = np.zeros(self.action_size)
+                    if use_rnn:
+                        rnn_state = next_rnn_state
+                        rnn_state[local_done] = initial_rnn_state[local_done]
 
-                step += 1
+                    step += 1
+
+            except EnvException as e:
+                self._logger.error(e)
+                self.env.close()
+                self._logger.info(f'Restarting {self.base_config["build_path"]}...')
+                self._init_env()
+                continue
+
+            except Exception as e:
+                self._logger.error(e)
+                self._logger.error('Exiting...')
+                break
 
             self._log_episode_info(iteration, agents)
             iteration += 1

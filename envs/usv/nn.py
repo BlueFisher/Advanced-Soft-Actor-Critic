@@ -3,10 +3,13 @@ import algorithm.nn_models as m
 
 class ModelRep(m.ModelBaseSimpleRep):
     def _bulid_model(self):
-        assert self.obs_shapes[2] == (11,)
+        assert self.obs_shapes[0] == (84, 84, 3)
+        assert self.obs_shapes[1] == (18,)
+        assert self.obs_shapes[2] == (18,)
+        assert self.obs_shapes[3] == (11,)
 
     def forward(self, obs_list):
-        ray_1, ray_2, vec = obs_list
+        vis, ray_1, ray_2, vec = obs_list
 
         return vec
 

@@ -27,7 +27,7 @@ base_config:
   max_step_each_iter: -1 # Max step in each iteration
   reset_on_iteration: true # If to force reset agent if an episode terminated
 
-  max_actors_each_learner: 10 # The max number of actors of each learner
+  max_actors_each_learner: -1 # The max number of actors of each learner, -1 indicates no limit
 
   evolver_enabled: true
   evolver_cem_length: 50 # Start CEM if all learners have eavluated evolver_cem_length times
