@@ -17,25 +17,35 @@ from algorithm.utils import RLock, elapsed_timer
 from .sac_ds_base import SAC_DS_Base
 
 
-class BatchDataBuffer:
-    def __init__(self, sac: SAC_DS_Base,
+class BatchGenerator:
+    def __init__(self,
+                 use_rnn: bool,
+                 burn_in_step: int,
+                 n_step: int,
                  batch_size: int,
-                 buffer_size: int = C.LEARNER_BATCH_DATA_BUFFER_SIZE):
-        self._sac = sac
+                 episode_queue: mp.Queue,
+                 batch_queue: mp.Queue):
+        self.use_rnn = use_rnn
+        self.burn_in_step = burn_in_step
+        self.n_step = n_step
         self.batch_size = batch_size
+        self.episode_queue = episode_queue
+        self.batch_queue = batch_queue
 
         self._tmp = None
-        self._buffer = Queue(maxsize=buffer_size)
-        self._logger = logging.getLogger('ds.learner.trainer.batch_data_buffer')
+        self._logger = logging.getLogger('ds.learner.trainer.batch_generator')
 
-    def add_episode(self,
-                    n_obses_list: List[np.ndarray],
-                    n_actions: np.ndarray,
-                    n_rewards: np.ndarray,
-                    next_obs_list: List[np.ndarray],
-                    n_dones: np.ndarray,
-                    n_mu_probs: np.ndarray,
-                    n_rnn_states: np.ndarray = None):
+        while True:
+            self.run()
+
+    def _episode_to_batch(self,
+                          n_obses_list: List[np.ndarray],
+                          n_actions: np.ndarray,
+                          n_rewards: np.ndarray,
+                          next_obs_list: List[np.ndarray],
+                          n_dones: np.ndarray,
+                          n_mu_probs: np.ndarray = None,
+                          n_rnn_states: np.ndarray = None):
         """
         Args:
             n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
@@ -45,9 +55,60 @@ class BatchDataBuffer:
             n_dones: [1, episode_len]
             n_mu_probs: [1, episode_len]
             n_rnn_states: [1, episode_len, *rnn_state_shape]
+
+        Returns:
+            n_obses_list: list([episode_len - ignore + 1, N, *obs_shapes_i], ...)
+            n_actions: [episode_len - ignore + 1, N, action_size]
+            n_rewards: [episode_len - ignore + 1, N]
+            next_obs_list: list([episode_len - ignore + 1, *obs_shapes_i], ...)
+            n_dones: [episode_len - ignore + 1, N]
+            n_mu_probs: [episode_len - ignore + 1, N]
+            rnn_state: [episode_len - ignore + 1, *rnn_state_shape]
         """
-        if self._buffer.full():
-            self._buffer.get()
+        ignore_size = self.burn_in_step + self.n_step
+
+        tmp_n_obses_list = [None] * len(n_obses_list)
+        for j, n_obses in enumerate(n_obses_list):
+            tmp_n_obses_list[j] = np.concatenate([n_obses[:, i:i + ignore_size]
+                                                  for i in range(n_obses.shape[1] - ignore_size + 1)], axis=0)
+        n_actions = np.concatenate([n_actions[:, i:i + ignore_size]
+                                    for i in range(n_actions.shape[1] - ignore_size + 1)], axis=0)
+        n_rewards = np.concatenate([n_rewards[:, i:i + ignore_size]
+                                    for i in range(n_rewards.shape[1] - ignore_size + 1)], axis=0)
+        tmp_next_obs_list = [None] * len(next_obs_list)
+        for j, n_obses in enumerate(n_obses_list):
+            tmp_next_obs_list[j] = np.concatenate([n_obses[:, i + ignore_size]
+                                                   for i in range(n_obses.shape[1] - ignore_size)]
+                                                  + [next_obs_list[j]],
+                                                  axis=0)
+        n_dones = np.concatenate([n_dones[:, i:i + ignore_size]
+                                  for i in range(n_dones.shape[1] - ignore_size + 1)], axis=0)
+
+        n_mu_probs = np.concatenate([n_mu_probs[:, i:i + ignore_size]
+                                     for i in range(n_mu_probs.shape[1] - ignore_size + 1)], axis=0)
+
+        if self.use_rnn:
+            rnn_state = np.concatenate([n_rnn_states[:, i]
+                                        for i in range(n_rnn_states.shape[1] - ignore_size + 1)], axis=0)
+
+        return (
+            tmp_n_obses_list,
+            n_actions,
+            n_rewards,
+            tmp_next_obs_list,
+            n_dones,
+            n_mu_probs,
+            rnn_state if self.use_rnn else None
+        )
+
+    def run(self):
+        (n_obses_list,
+         n_actions,
+         n_rewards,
+         next_obs_list,
+         n_dones,
+         n_mu_probs,
+         n_rnn_states) = self.episode_queue.get()
 
         (n_obses_list,
          n_actions,
@@ -55,13 +116,13 @@ class BatchDataBuffer:
          next_obs_list,
          n_dones,
          n_mu_probs,
-         rnn_state) = self._sac.episode_to_batch(n_obses_list,
-                                                 n_actions,
-                                                 n_rewards,
-                                                 next_obs_list,
-                                                 n_dones,
-                                                 n_mu_probs,
-                                                 n_rnn_states)
+         rnn_state) = self._episode_to_batch(n_obses_list,
+                                             n_actions,
+                                             n_rewards,
+                                             next_obs_list,
+                                             n_dones,
+                                             n_mu_probs,
+                                             n_rnn_states)
 
         if self._tmp is not None:
             (tmp_n_obses_list,
@@ -78,7 +139,7 @@ class BatchDataBuffer:
             next_obs_list = [np.concatenate([tmp_o, o]) for tmp_o, o in zip(tmp_next_obs_list, next_obs_list)]
             n_dones = np.concatenate([tmp_n_dones, n_dones])
             n_mu_probs = np.concatenate([tmp_n_mu_probs, n_mu_probs])
-            rnn_state = np.concatenate([tmp_rnn_state, rnn_state]) if self._sac.use_rnn else None
+            rnn_state = np.concatenate([tmp_rnn_state, rnn_state]) if self.use_rnn else None
 
             self._tmp = None
 
@@ -92,7 +153,7 @@ class BatchDataBuffer:
         next_obs_list = [o[idx] for o in next_obs_list]
         n_dones = n_dones[idx]
         n_mu_probs = n_mu_probs[idx]
-        rnn_state = rnn_state[idx] if self._sac.use_rnn else None
+        rnn_state = rnn_state[idx] if self.use_rnn else None
 
         for i in range(math.ceil(all_batch_size / self.batch_size)):
             b_i, b_j = i * self.batch_size, (i + 1) * self.batch_size
@@ -104,16 +165,13 @@ class BatchDataBuffer:
                 [o[b_i:b_j, :] for o in next_obs_list],
                 n_dones[b_i:b_j, :],
                 n_mu_probs[b_i:b_j, :],
-                rnn_state[b_i:b_j, :] if self._sac.use_rnn else None
+                rnn_state[b_i:b_j, :] if self.use_rnn else None
             )
 
             if b_j > all_batch_size:
                 self._tmp = batch
             else:
-                self._buffer.put(batch)
-
-    def get(self):
-        return self._buffer.get()
+                self.batch_queue.put(batch)
 
 
 class Trainer:
@@ -155,13 +213,17 @@ class Trainer:
 
         self._logger.info('SAC started')
 
-        self._batch_data_buffer = BatchDataBuffer(self.sac,
-                                                  batch_size=config['replay_config']['batch_size'])
+        self.batch_queue = mp.Queue(C.BATCH_QUEUE_SIZE)
 
-        for _ in range(C.LEARNER_PROCESS_EPISODE_THREAD_NUM):
-            threading.Thread(target=self._forever_process_add_episode,
-                             args=[episode_queue],
-                             daemon=True).start()
+        for _ in range(C.BATCH_GENERATOR_PROCESS_NUM):
+            mp.Process(target=BatchGenerator, kwargs={
+                'use_rnn': self.sac.use_rnn,
+                'burn_in_step': self.sac.burn_in_step,
+                'n_step': self.sac.n_step,
+                'batch_size': config['replay_config']['batch_size'],
+                'episode_queue': episode_queue,
+                'batch_queue': self.batch_queue
+            }).start()
 
         threading.Thread(target=self._forever_run_cmd_pipe,
                          args=[cmd_pipe_server],
@@ -175,10 +237,6 @@ class Trainer:
             self._logger.info('Updated sac_bak')
             all_variables = self.sac.get_all_variables()
             self._all_variables_queue.put(all_variables)
-
-    def _forever_process_add_episode(self, episode_queue: mp.Queue):
-        while True:
-            self._batch_data_buffer.add_episode(*episode_queue.get())
 
     def _forever_run_cmd_pipe(self, cmd_pipe_server):
         while True:
@@ -206,7 +264,7 @@ class Trainer:
                  next_obs_list,
                  n_dones,
                  n_mu_probs,
-                 rnn_state) = self._batch_data_buffer.get()
+                 rnn_state) = self.batch_queue.get()
 
             with timer_train:
                 with self.sac_lock:

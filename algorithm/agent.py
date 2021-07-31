@@ -9,6 +9,7 @@ class Agent(object):
     steps = 0  # The step count of the first complete episode
     _last_steps = 0  # The step count of the last episode
     done = False  # If has one complete episode
+    max_reached = False
 
     def __init__(self, agent_id, use_rnn=False):
         self.agent_id = agent_id
@@ -51,6 +52,7 @@ class Agent(object):
 
         if local_done:
             self.done = True
+            self.max_reached = max_reached
             self._last_reward = 0
             self._last_steps = 0
 
@@ -105,6 +107,7 @@ class Agent(object):
         self.reward = 0
         self.steps = 0
         self.done = False
+        self.max_reached = False
         self._tmp_episode_trans.clear()
 
     def reset(self):
@@ -114,6 +117,7 @@ class Agent(object):
         self.reward = self._last_reward
         self.steps = self._last_steps
         self.done = False
+        self.max_reached = False
 
 
 if __name__ == "__main__":

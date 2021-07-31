@@ -1,3 +1,4 @@
+from algorithm.utils import EnvException
 import importlib
 import logging
 import shutil
@@ -87,7 +88,6 @@ class Main(object):
 
             if self.run_in_editor:
                 self.env = UnityWrapper(train_mode=self.train_mode,
-                                        base_port=5004,
                                         n_agents=self.base_config['n_agents'])
             else:
                 self.env = UnityWrapper(train_mode=self.train_mode,
@@ -151,32 +151,30 @@ class Main(object):
             initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))
             rnn_state = initial_rnn_state
 
-        is_max_reached = False
         iteration = 0
         trained_steps = 0
 
-        try:
-            while iteration != self.base_config['max_iter']:
-                if self.base_config['max_step'] != -1 and trained_steps >= self.base_config['max_step']:
-                    break
+        while iteration != self.base_config['max_iter']:
+            if self.base_config['max_step'] != -1 and trained_steps >= self.base_config['max_step']:
+                break
 
-                if self.base_config['reset_on_iteration'] or is_max_reached:
-                    obs_list = self.env.reset(reset_config=self.reset_config)
-                    for agent in agents:
-                        agent.clear()
+            if self.base_config['reset_on_iteration'] or any([a.max_reached for a in agents]):
+                obs_list = self.env.reset(reset_config=self.reset_config)
+                for agent in agents:
+                    agent.clear()
 
-                    if use_rnn:
-                        rnn_state = initial_rnn_state
-                else:
-                    for agent in agents:
-                        agent.reset()
+                if use_rnn:
+                    rnn_state = initial_rnn_state
+            else:
+                for agent in agents:
+                    agent.reset()
 
-                is_max_reached = False
-                action = np.zeros([len(agents), self.action_size], dtype=np.float32)
-                step = 0
-                iter_time = time.time()
+            action = np.zeros([len(agents), self.action_size], dtype=np.float32)
+            step = 0
+            iter_time = time.time()
 
-                while False in [a.done for a in agents]:
+            try:
+                while not all([a.done for a in agents]):
                     if use_rnn:
                         # burn-in padding
                         for agent in [a for a in agents if a.is_empty()]:
@@ -199,7 +197,6 @@ class Main(object):
                     if step == self.base_config['max_step_each_iter']:
                         local_done = [True] * len(agents)
                         max_reached = [True] * len(agents)
-                        is_max_reached = True
 
                     episode_trans_list = [agents[i].add_transition([o[i] for o in obs_list],
                                                                    action[i],
@@ -227,27 +224,31 @@ class Main(object):
 
                     step += 1
 
-                if self.train_mode:
-                    self._log_episode_summaries(agents)
+            except EnvException as e:
+                self._logger.error(e)
+                self.env.close()
+                self._logger.info(f'Restarting {self.base_config["build_path"]}...')
+                self._init_env()
+                continue
 
-                self._log_episode_info(iteration, time.time() - iter_time, agents)
+            except Exception as e:
+                self._logger.error(e)
+                self._logger.error('Exiting...')
+                break
 
-                if (p := self.model_abs_dir.joinpath('save_model')).exists():
-                    self.sac.save_model()
-                    p.unlink()
+            if self.train_mode:
+                self._log_episode_summaries(agents)
 
-                iteration += 1
+            self._log_episode_info(iteration, time.time() - iter_time, agents)
 
-        except Exception as e:
-            self._logger.error(e)
+            if (p := self.model_abs_dir.joinpath('save_model')).exists():
+                self.sac.save_model()
+                p.unlink()
+
+            iteration += 1
 
         self.sac.save_model()
         self.env.close()
-
-        self._logger.info(f'Rerun {self.base_config["build_path"]}')
-        self.base_config['port'] += 1
-        self._init_env()
-        self._run()
 
     def _log_episode_summaries(self, agents):
         rewards = np.array([a.reward for a in agents])

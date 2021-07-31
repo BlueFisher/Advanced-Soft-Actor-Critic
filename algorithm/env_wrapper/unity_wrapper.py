@@ -1,9 +1,11 @@
+from algorithm.utils import EnvException
 import itertools
 import logging
 from typing import List, Tuple
 
 import numpy as np
 from mlagents_envs.environment import ActionTuple, UnityEnvironment
+from mlagents_envs.exception import UnityTimeOutException
 from mlagents_envs.side_channel.engine_configuration_channel import (
     EngineConfig, EngineConfigurationChannel)
 from mlagents_envs.side_channel.environment_parameters_channel import \
@@ -43,7 +45,7 @@ class UnityWrapper:
         self.environment_parameters_channel.set_float_parameter('env_copys', float(n_agents))
 
         self._env = UnityEnvironment(file_name=file_name,
-                                     base_port=base_port if file_name else 5004,
+                                     base_port=base_port if file_name else None,
                                      no_graphics=no_graphics and train_mode,
                                      seed=seed,
                                      additional_args=['--scene', scene] + additional_args,
@@ -126,28 +128,32 @@ class UnityWrapper:
             done: (NAgents, ), np.bool
             max_step: (NAgents, ), np.bool
         """
-        if self.d_action_size:
-            d_action = np.argmax(d_action, axis=1)
-            d_action = self.action_product[d_action]
 
-        self._env.set_actions(self.bahavior_name,
-                              ActionTuple(continuous=c_action, discrete=d_action))
-        self._env.step()
+        try:
+            if self.d_action_size:
+                d_action = np.argmax(d_action, axis=1)
+                d_action = self.action_product[d_action]
 
-        decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
-
-        tmp_terminal_steps = terminal_steps
-
-        while len(decision_steps) == 0:
-            self._env.set_actions(self.bahavior_name, self._empty_action(0))
+            self._env.set_actions(self.bahavior_name,
+                                  ActionTuple(continuous=c_action, discrete=d_action))
             self._env.step()
+
             decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
-            tmp_terminal_steps.agent_id = np.concatenate([tmp_terminal_steps.agent_id,
-                                                          terminal_steps.agent_id])
-            tmp_terminal_steps.reward = np.concatenate([tmp_terminal_steps.reward,
-                                                        terminal_steps.reward])
-            tmp_terminal_steps.interrupted = np.concatenate([tmp_terminal_steps.interrupted,
-                                                             terminal_steps.interrupted])
+
+            tmp_terminal_steps = terminal_steps
+
+            while len(decision_steps) == 0:
+                self._env.set_actions(self.bahavior_name, self._empty_action(0))
+                self._env.step()
+                decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
+                tmp_terminal_steps.agent_id = np.concatenate([tmp_terminal_steps.agent_id,
+                                                              terminal_steps.agent_id])
+                tmp_terminal_steps.reward = np.concatenate([tmp_terminal_steps.reward,
+                                                            terminal_steps.reward])
+                tmp_terminal_steps.interrupted = np.concatenate([tmp_terminal_steps.interrupted,
+                                                                terminal_steps.interrupted])
+        except UnityTimeOutException as e:
+            raise EnvException(*e.args)
 
         reward = decision_steps.reward
         reward[tmp_terminal_steps.agent_id] = tmp_terminal_steps.reward

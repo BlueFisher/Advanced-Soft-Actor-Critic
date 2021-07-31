@@ -18,7 +18,7 @@ import numpy as np
 import algorithm.config_helper as config_helper
 import algorithm.constants as C
 from algorithm.agent import Agent
-from algorithm.utils import ReadWriteLock
+from algorithm.utils import EnvException, ReadWriteLock, UselessEpisodeException
 
 from .learner_trainer import Trainer
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
@@ -144,7 +144,7 @@ class Learner:
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
             if self.run_in_editor:
-                self.env = UnityWrapper(base_port=5004)
+                self.env = UnityWrapper()
             else:
                 self.env = UnityWrapper(file_name=self.base_config['build_path'][sys.platform],
                                         base_port=self.base_config['build_port'],
@@ -197,7 +197,7 @@ class Learner:
             'model_spec': spec,
             'last_ckpt': self.last_ckpt,
             'config': self.config
-        }, daemon=True)
+        })
         self.learner_trainer_process.start()
 
         self._sac_bak_lock = ReadWriteLock(None, 2, 2, logger=self._logger)
@@ -310,41 +310,40 @@ class Learner:
             self._logger.warning('episode_queue is full, episode ignored')
 
     def _policy_evaluation(self):
-        try:
-            use_rnn = self.sac_bak.use_rnn
+        use_rnn = self.sac_bak.use_rnn
 
-            obs_list = self.env.reset(reset_config=self.reset_config)
+        obs_list = self.env.reset(reset_config=self.reset_config)
 
-            agents = [self._agent_class(i, use_rnn=use_rnn)
-                      for i in range(self.base_config['n_agents'])]
+        agents = [self._agent_class(i, use_rnn=use_rnn)
+                  for i in range(self.base_config['n_agents'])]
 
-            if use_rnn:
-                initial_rnn_state = self.sac_bak.get_initial_rnn_state(len(agents))
-                rnn_state = initial_rnn_state
+        if use_rnn:
+            initial_rnn_state = self.sac_bak.get_initial_rnn_state(len(agents))
+            rnn_state = initial_rnn_state
 
-            force_reset = False
-            iteration = 0
-            steps_count = 0
-            start_time = time.time()
+        force_reset = False
+        iteration = 0
+        start_time = time.time()
 
-            while not self._closed:
-                if self.base_config['reset_on_iteration'] or force_reset:
-                    obs_list = self.env.reset(reset_config=self.reset_config)
-                    for agent in agents:
-                        agent.clear()
+        while not self._closed:
+            if self.base_config['reset_on_iteration'] or any([a.max_reached for a in agents]) or force_reset:
+                obs_list = self.env.reset(reset_config=self.reset_config)
+                for agent in agents:
+                    agent.clear()
 
-                    if use_rnn:
-                        rnn_state = initial_rnn_state
-                else:
-                    for agent in agents:
-                        agent.reset()
+                if use_rnn:
+                    rnn_state = initial_rnn_state
 
                 force_reset = False
-                is_useless_episode = False
-                action = np.zeros([len(agents), self.action_size], dtype=np.float32)
-                step = 0
+            else:
+                for agent in agents:
+                    agent.reset()
 
-                while False in [a.done for a in agents] and not self._closed:
+            action = np.zeros([len(agents), self.action_size], dtype=np.float32)
+            step = 0
+
+            try:
+                while not all([a.done for a in agents]) and not self._closed:
                     with self._sac_bak_lock.read('choose_action'):
                         if use_rnn:
                             action, next_rnn_state = self.sac_bak.choose_rnn_action([o.astype(np.float32) for o in obs_list],
@@ -352,10 +351,7 @@ class Learner:
                                                                                     rnn_state)
 
                             if np.isnan(np.min(next_rnn_state)):
-                                self._logger.warning('NAN in next_rnn_state, ending episode')
-                                force_reset = True
-                                is_useless_episode = True
-                                break
+                                raise UselessEpisodeException()
                         else:
                             action = self.sac_bak.choose_action([o.astype(np.float32) for o in obs_list])
 
@@ -365,7 +361,6 @@ class Learner:
                     if step == self.base_config['max_step_each_iter']:
                         local_done = [True] * len(agents)
                         max_reached = [True] * len(agents)
-                        force_reset = True
 
                     for i, agent in enumerate(agents):
                         agent.add_transition([o[i] for o in obs_list],
@@ -384,28 +379,40 @@ class Learner:
 
                     step += 1
 
-                steps_count += step
-                if is_useless_episode:
-                    self._logger.warning('Useless episode')
-                else:
-                    self._log_episode_summaries(agents, iteration)
-                    self._log_episode_info(iteration, start_time, agents)
+            except EnvException as e:
+                self._logger.error(e)
+                self.env.close()
+                self._logger.info(f'Restarting {self.base_config["build_path"]}...')
+                self._init_env()
+                continue
 
-                if (p := self.model_abs_dir.joinpath('save_model')).exists():
-                    self._save_model()
-                    p.unlink()
+            except UselessEpisodeException:
+                self._logger.warning('Useless episode')
+                force_reset = True
 
                 if self.base_config['evolver_enabled']:
-                    if is_useless_episode:
-                        self._evolver_stub.post_reward(float('-inf'))
-                    else:
-                        self._evolver_stub.post_reward(np.mean([a.reward for a in agents]))
+                    self._evolver_stub.post_reward(float('-inf'))
 
-                iteration += 1
+                continue
 
-            self._logger.warning('Evaluation exits')
-        except Exception as e:
-            self._logger.error(e)
+            except Exception as e:
+                self._logger.error(e)
+                self._logger.error('Exiting...')
+                break
+
+            self._log_episode_summaries(agents, iteration)
+            self._log_episode_info(iteration, start_time, agents)
+
+            if (p := self.model_abs_dir.joinpath('save_model')).exists():
+                self._save_model()
+                p.unlink()
+
+            if self.base_config['evolver_enabled']:
+                self._evolver_stub.post_reward(np.mean([a.reward for a in agents]))
+
+            iteration += 1
+
+        self._logger.warning('Evaluation exits')
 
     def _log_episode_summaries(self, agents, iteration):
         rewards = np.array([a.reward for a in agents])

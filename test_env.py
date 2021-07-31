@@ -2,6 +2,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+import time
 
 import numpy as np
 from PIL import Image
@@ -9,7 +10,7 @@ from PIL import Image
 import algorithm.config_helper as config_helper
 from algorithm.agent import Agent
 from algorithm.config_helper import set_logger
-from algorithm.utils import elapsed_timer
+from algorithm.utils import EnvException, elapsed_timer
 
 
 class Main(object):
@@ -22,7 +23,7 @@ class Main(object):
 
         config_abs_dir = self._init_config(root_dir, config_dir, args)
 
-        self._init_env(config_abs_dir)
+        self._init_env()
         self._run()
 
     def _init_config(self, root_dir, config_dir, args):
@@ -39,6 +40,7 @@ class Main(object):
         self.render = args.render
         self.run_in_editor = args.editor
         self.additional_args = args.additional_args
+        self.save_image = args.save_image
 
         if args.port is not None:
             config['base_config']['port'] = args.port
@@ -61,13 +63,12 @@ class Main(object):
 
         return config_abs_dir
 
-    def _init_env(self, config_abs_dir: Path):
+    def _init_env(self):
         if self.base_config['env_type'] == 'UNITY':
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
             if self.run_in_editor:
                 self.env = UnityWrapper(train_mode=self.train_mode,
-                                        base_port=5004,
                                         n_agents=self.base_config['n_agents'])
             else:
                 self.env = UnityWrapper(train_mode=self.train_mode,
@@ -91,6 +92,8 @@ class Main(object):
         self.obs_shapes, self.d_action_size, self.c_action_size = self.env.init()
         self.action_size = self.d_action_size + self.c_action_size
 
+        self._logger.info(f'{self.base_config["build_path"]} initialized')
+
     def _run(self):
         obs_list = self.env.reset(reset_config=self.reset_config)
 
@@ -98,13 +101,12 @@ class Main(object):
 
         img_save_index = 0
 
-        is_max_reached = False
         iteration = 0
 
         step_timer = elapsed_timer(self._logger, 'One step interacting', 200)
 
         while iteration != self.base_config['max_iter']:
-            if self.base_config['reset_on_iteration'] or is_max_reached:
+            if self.base_config['reset_on_iteration'] or any([a.max_reached for a in agents]):
                 obs_list = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
@@ -112,50 +114,62 @@ class Main(object):
                 for agent in agents:
                     agent.reset()
 
-            is_max_reached = False
             action = np.zeros([len(agents), self.action_size], dtype=np.float32)
             step = 0
 
-            while False in [a.done for a in agents]:
-                action = np.random.rand(len(agents), self.action_size)
+            try:
+                while not all([a.done for a in agents]):
+                    action = np.random.rand(len(agents), self.action_size)
 
-                with step_timer:
-                    next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
-                                                                                   action[..., self.d_action_size:])
+                    with step_timer:
+                        next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
+                                                                                    action[..., self.d_action_size:])
 
-                if step == self.base_config['max_step_each_iter']:
-                    local_done = [True] * len(agents)
-                    max_reached = [True] * len(agents)
-                    is_max_reached = True
+                    if step == self.base_config['max_step_each_iter']:
+                        local_done = [True] * len(agents)
+                        max_reached = [True] * len(agents)
 
-                episode_trans_list = [agents[i].add_transition([o[i] for o in obs_list],
-                                                               action[i],
-                                                               reward[i],
-                                                               local_done[i],
-                                                               max_reached[i],
-                                                               [o[i] for o in next_obs_list],
-                                                               None)
-                                      for i in range(len(agents))]
+                    episode_trans_list = [agents[i].add_transition([o[i] for o in obs_list],
+                                                                action[i],
+                                                                reward[i],
+                                                                local_done[i],
+                                                                max_reached[i],
+                                                                [o[i] for o in next_obs_list],
+                                                                None)
+                                        for i in range(len(agents))]
 
-                episode_trans_list = [t for t in episode_trans_list if t is not None]
-                for episode_trans in episode_trans_list:
-                    # n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-                    n_obses_list, *_ = episode_trans
+                    if self.save_image:
+                        episode_trans_list = [t for t in episode_trans_list if t is not None]
+                        for episode_trans in episode_trans_list:
+                            # n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
+                            n_obses_list, *_ = episode_trans
 
-                    for i, n_obses in enumerate(n_obses_list):
-                        n_obses = n_obses[0]
-                        if len(n_obses.shape) > 2:
-                            img = Image.fromarray(np.uint8(n_obses[0] * 255))
-                            self._logger.info(f'Saved {img_save_index}-{i}')
-                            img.save(self.model_abs_dir.joinpath(f'{img_save_index}-{i}.gif'),
-                                     save_all=True,
-                                     append_images=[Image.fromarray(np.uint8(o * 255)) for o in n_obses[1:]])
+                            for i, n_obses in enumerate(n_obses_list):
+                                n_obses = n_obses[0]
+                                if len(n_obses.shape) > 2:
+                                    img = Image.fromarray(np.uint8(n_obses[0] * 255))
+                                    self._logger.info(f'Saved {img_save_index}-{i}')
+                                    img.save(self.model_abs_dir.joinpath(f'{img_save_index}-{i}.gif'),
+                                            save_all=True,
+                                            append_images=[Image.fromarray(np.uint8(o * 255)) for o in n_obses[1:]])
 
-                    img_save_index += 1
+                        img_save_index += 1
 
-                obs_list = next_obs_list
+                    obs_list = next_obs_list
 
-                step += 1
+                    step += 1
+
+            except EnvException as e:
+                self._logger.error(e)
+                self.env.close()
+                self._logger.info(f'Restarting {self.base_config["build_path"]}...')
+                self._init_env()
+                continue
+            
+            except Exception as e:
+                self._logger.error(e)
+                self._logger.error('Exiting...')
+                break
 
             iteration += 1
 
@@ -175,6 +189,8 @@ if __name__ == '__main__':
     parser.add_argument('--additional_args', help='additional args for Unity')
     parser.add_argument('--port', '-p', type=int, default=5005, help='communication port')
     parser.add_argument('--agents', type=int, help='number of agents')
+
+    parser.add_argument('--save_image', action='store_true')
     args = parser.parse_args()
 
     root_dir = Path(__file__).resolve().parent

@@ -6,6 +6,14 @@ from enum import Enum
 import torch
 
 
+class EnvException(Exception):
+    pass
+
+
+class UselessEpisodeException(Exception):
+    pass
+
+
 def squash_correction_log_prob(dist, x):
     return dist.log_prob(x) - torch.log(torch.maximum(1 - torch.square(torch.tanh(x)), torch.tensor(1e-2)))
 
