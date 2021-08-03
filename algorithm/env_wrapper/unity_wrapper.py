@@ -1,4 +1,3 @@
-from algorithm.utils import EnvException
 import itertools
 import logging
 from typing import List, Tuple
@@ -10,6 +9,8 @@ from mlagents_envs.side_channel.engine_configuration_channel import (
     EngineConfig, EngineConfigurationChannel)
 from mlagents_envs.side_channel.environment_parameters_channel import \
     EnvironmentParametersChannel
+
+from algorithm.utils import EnvException
 
 logger = logging.getLogger('UnityWrapper')
 logger.setLevel(level=logging.INFO)

@@ -2,12 +2,11 @@ import importlib
 import logging
 import math
 import multiprocessing as mp
-from multiprocessing.shared_memory import SharedMemory
 import os
-import threading
 from multiprocessing.connection import Connection
+from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
-from queue import Empty, Full, Queue
+from queue import Empty
 from typing import List, Tuple, Union
 
 import numpy as np
