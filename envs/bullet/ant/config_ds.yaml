@@ -26,7 +26,7 @@ default:
     use_normalization: true
 
   replay_config:
-    batch_size: 1024
+    batch_size: 256
 
 hard:
   base_config: &hard_base
