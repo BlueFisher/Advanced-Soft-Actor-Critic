@@ -296,18 +296,18 @@ class Learner:
                      n_mu_probs: np.ndarray,
                      n_rnn_states: np.ndarray = None):
 
-        try:
-            self.episode_queue.put_nowait((
-                n_obses_list,
-                n_actions,
-                n_rewards,
-                next_obs_list,
-                n_dones,
-                n_mu_probs,
-                n_rnn_states
-            ))
-        except Full:
-            self._logger.warning('episode_queue is full, episode ignored')
+        if self.episode_queue.full():
+            self.episode_queue.get()
+
+        self.episode_queue.put((
+            n_obses_list,
+            n_actions,
+            n_rewards,
+            next_obs_list,
+            n_dones,
+            n_mu_probs,
+            n_rnn_states
+        ))
 
     def _policy_evaluation(self):
         use_rnn = self.sac_bak.use_rnn

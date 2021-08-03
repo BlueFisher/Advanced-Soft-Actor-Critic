@@ -44,17 +44,55 @@ class elapsed_timer:
         self._custom_log = custom_log
         self._repeat = repeat
 
-        self._times = []
+        self._step = 1
+        self._sum_time = 0
+
+        self._ignore = False
 
     def __enter__(self):
         self.start = time.time()
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self._times.append(time.time() - self.start)
+        if self._ignore:
+            self._ignore = False
+            return
 
-        if len(self._times) == self._repeat:
-            self._logger.info(f'{self._custom_log}: {sum(self._times) / len(self._times):.2f}s')
-            self._times = []
+        self._sum_time += time.time() - self._start
+
+        if self._step == self._repeat:
+            self._logger.info(f'{self._custom_log}: {self._sum_time / self._repeat:.2f}s')
+            self._step = 0
+            self._sum_time = 0
+
+        self._step += 1
+
+    def ignore(self):
+        self._ignore = True
+
+
+class elapsed_counter:
+    def __init__(self, logger, custom_log, repeat=1):
+        self._logger = logger
+        self._custom_log = custom_log
+        self._repeat = repeat
+
+        self._step = 1
+        self._counter = 0
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self._step == self._repeat:
+            if self._counter > 0:
+                self._logger.info(f'{self._custom_log}: {self._counter} in {self._repeat}')
+            self._step = 0
+            self._counter = 0
+
+        self._step += 1
+
+    def add(self, n=1):
+        self._counter += n
 
 
 class LockLogState(Enum):
