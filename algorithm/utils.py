@@ -46,11 +46,12 @@ class elapsed_timer:
 
         self._step = 1
         self._sum_time = 0
+        self._last_avg_time = -1
 
         self._ignore = False
 
     def __enter__(self):
-        self.start = time.time()
+        self._start = time.time()
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self._ignore:
@@ -60,7 +61,10 @@ class elapsed_timer:
         self._sum_time += time.time() - self._start
 
         if self._step == self._repeat:
-            self._logger.info(f'{self._custom_log}: {self._sum_time / self._repeat:.2f}s')
+            avg_time = self._sum_time / self._repeat
+            if abs(avg_time - self._last_avg_time) > 0.01:
+                self._logger.info(f'{self._custom_log}: {avg_time:.2f}s')
+            self._last_avg_time = avg_time
             self._step = 0
             self._sum_time = 0
 

@@ -1,4 +1,3 @@
-from algorithm.utils import EnvException
 import importlib
 import logging
 import shutil
@@ -9,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 import algorithm.config_helper as config_helper
+from algorithm.utils import EnvException
 
 from .agent import Agent
 from .sac_base import SAC_Base

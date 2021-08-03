@@ -9,7 +9,6 @@ import threading
 import time
 from concurrent import futures
 from pathlib import Path
-from queue import Full
 from typing import List
 
 import grpc
@@ -18,7 +17,8 @@ import numpy as np
 import algorithm.config_helper as config_helper
 import algorithm.constants as C
 from algorithm.agent import Agent
-from algorithm.utils import EnvException, ReadWriteLock, UselessEpisodeException
+from algorithm.utils import (EnvException, ReadWriteLock,
+                             UselessEpisodeException)
 
 from .learner_trainer import Trainer
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
