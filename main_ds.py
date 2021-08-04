@@ -8,7 +8,7 @@ from algorithm.config_helper import set_logger
 # for correctly import protoc
 sys.path.append(str(Path(__file__).resolve().parent.joinpath('ds/proto')))
 
-HITTED_ENVS ={'roller', 'square', 'pyramid', 'antisubmarine', 'usv'}
+HITTED_ENVS = {'roller', 'square', 'pyramid', 'usv', 'realcar'}
 
 if __name__ == '__main__':
     set_logger()
@@ -37,7 +37,6 @@ if __name__ == '__main__':
     parser.add_argument('--nn', help='neural network model')
     parser.add_argument('--device', help='cpu or gpu')
     parser.add_argument('--ckpt', help='ckeckpoint to restore')
-    parser.add_argument('--noise', type=float, help='additional noise for actor')
     args = parser.parse_args()
 
     root_dir = Path(__file__).resolve().parent
