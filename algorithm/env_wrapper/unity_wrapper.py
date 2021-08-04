@@ -57,9 +57,7 @@ class UnityWrapper:
             width=200 if train_mode else 1280,
             height=200 if train_mode else 720,
             quality_level=5,
-            time_scale=20 if train_mode else 1,
-            target_frame_rate=-1,
-            capture_frame_rate=60)
+            time_scale=20 if train_mode else 1)
 
         self._env.reset()
         self.bahavior_name = list(self._env.behavior_specs)[0]
