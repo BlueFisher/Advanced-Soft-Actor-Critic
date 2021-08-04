@@ -123,8 +123,6 @@ class Actor(object):
 
         config['reset_config'] = self.reset_config = reset_config
         config['sac_config'] = sac_config
-        if self.cmd_args.noise is not None:
-            config['sac_config']['noise'] = self.cmd_args.noise
 
         self.sac_config = config['sac_config']
 

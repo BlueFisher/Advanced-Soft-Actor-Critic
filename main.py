@@ -4,7 +4,7 @@ import sys
 
 from algorithm.config_helper import set_logger
 
-HITTED_ENVS = {'roller', 'square', 'pyramid', 'antisubmarine', 'usv'}
+HITTED_ENVS = {'roller', 'square', 'pyramid', 'usv', 'realcar'}
 
 if __name__ == '__main__':
     set_logger()
