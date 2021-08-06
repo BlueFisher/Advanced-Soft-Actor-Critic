@@ -7,6 +7,7 @@ from multiprocessing.connection import Connection
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from queue import Empty
+import threading
 from typing import List, Tuple, Union
 
 import numpy as np
@@ -228,6 +229,7 @@ class Trainer:
                  c_action_size,
                  model_abs_dir,
                  model_spec,
+                 device,
                  last_ckpt,
                  config):
 
@@ -249,6 +251,7 @@ class Trainer:
                                c_action_size=c_action_size,
                                model_abs_dir=model_abs_dir,
                                model=custom_nn_model,
+                               device=device,
                                last_ckpt=last_ckpt,
 
                                **config['sac_config'])
@@ -303,6 +306,10 @@ class Trainer:
                 'batch_shm_index_queue': self.batch_shm_index_queue,
                 'batch_free_shm_index_queue': self.batch_free_shm_index_queue
             }).start()
+
+        threading.Thread(target=self._forever_run_cmd_pipe,
+                         args=[cmd_pipe_server],
+                         daemon=True).start()
 
         self._update_sac_bak()
         self.run_train()

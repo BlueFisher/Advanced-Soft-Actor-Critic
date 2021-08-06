@@ -77,6 +77,7 @@ class Learner:
                                                            args.config)
 
         # Initialize config from command line arguments
+        self.device = args.device
         self.last_ckpt = args.ckpt
         self.render = args.render
         self.run_in_editor = args.editor
@@ -196,6 +197,7 @@ class Learner:
             'c_action_size': self.c_action_size,
             'model_abs_dir': self.model_abs_dir,
             'model_spec': spec,
+            'device': self.device,
             'last_ckpt': self.last_ckpt,
             'config': self.config
         })
@@ -203,13 +205,14 @@ class Learner:
 
         self._sac_bak_lock = ReadWriteLock(None, 2, 2, logger=self._logger)
 
-        self.sac_bak = SAC_DS_Base(train_mode=False,
-                                   obs_shapes=self.obs_shapes,
+        self.sac_bak = SAC_DS_Base(obs_shapes=self.obs_shapes,
                                    d_action_size=self.d_action_size,
                                    c_action_size=self.c_action_size,
                                    model_abs_dir=self.model_abs_dir,
                                    model=custom_nn_model,
+                                   device=self.device,
                                    summary_path='log/bak',
+                                   train_mode=False,
                                    last_ckpt=self.last_ckpt,
 
                                    **self.sac_config)
