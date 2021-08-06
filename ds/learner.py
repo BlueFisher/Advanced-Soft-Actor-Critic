@@ -17,7 +17,7 @@ import numpy as np
 import algorithm.config_helper as config_helper
 import algorithm.constants as C
 from algorithm.agent import Agent
-from algorithm.utils import (EnvException, RLock, ReadWriteLock,
+from algorithm.utils import (EnvException, ReadWriteLock, RLock,
                              UselessEpisodeException)
 
 from .learner_trainer import Trainer
