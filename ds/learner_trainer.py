@@ -3,11 +3,11 @@ import logging
 import math
 import multiprocessing as mp
 import os
+import threading
 from multiprocessing.connection import Connection
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from queue import Empty
-import threading
 from typing import List, Tuple, Union
 
 import numpy as np
@@ -17,6 +17,19 @@ import algorithm.constants as C
 from algorithm.utils import RLock, elapsed_counter, elapsed_timer
 
 from .sac_ds_base import SAC_DS_Base
+
+
+def traverse_lists(data: Tuple, process):
+    buffer = []
+    for d in zip(*data):
+        if isinstance(d[0], list):
+            buffer.append(traverse_lists(d, process))
+        elif d[0] is None:
+            buffer.append(None)
+        else:
+            buffer.append(process(*d))
+
+    return buffer
 
 
 class BatchGenerator:
@@ -203,16 +216,10 @@ class BatchGenerator:
                             shm_idx = self.batch_free_shm_index_queue.get()
 
                         # Copy batch data to shm
-                        for i, b in enumerate(batch):
-                            if isinstance(b, list):
-                                for j, c_b in enumerate(b):
-                                    shm_np = np.ndarray(self.batch_shapes[i][j], dtype=np.float32, buffer=self.batch_shms[i][j][shm_idx].buf)
-                                    shm_np[:] = c_b[:]
-                            elif b is None:
-                                continue
-                            else:
-                                shm_np = np.ndarray(self.batch_shapes[i], dtype=np.float32, buffer=self.batch_shms[i][shm_idx].buf)
-                                shm_np[:] = b[:]
+                        def _tra(b, shape, shms):
+                            shm_np = np.ndarray(shape, dtype=np.float32, buffer=shms[shm_idx].buf)
+                            shm_np[:] = b[:]
+                        traverse_lists((batch, self.batch_shapes, self.batch_shms), _tra)
 
                         self.batch_shm_index_queue.put(shm_idx)
 
@@ -271,21 +278,10 @@ class Trainer:
             (batch_size, *self.sac.rnn_state_shape) if self.sac.use_rnn else None
         ]
 
-        self.batch_buffer = []  # Store numpy copys from shm
-        self.batch_shms = []
-
-        for s in self.batch_shapes:
-            if isinstance(s, list):
-                self.batch_buffer.append(c_buffer := [])
-                self.batch_shms.append(c_shms := [])
-                for c_s in s:
-                    c_buffer.append(buffer := np.empty(c_s, dtype=np.float32))
-                    c_shms.append([SharedMemory(create=True, size=buffer.nbytes) for _ in range(C.BATCH_QUEUE_SIZE)])
-            elif s is None:
-                self.batch_buffer.append(None)
-            else:
-                self.batch_buffer.append(buffer := np.empty(s, dtype=np.float32))
-                self.batch_shms.append([SharedMemory(create=True, size=buffer.nbytes) for _ in range(C.BATCH_QUEUE_SIZE)])
+        self.batch_buffer = traverse_lists((self.batch_shapes,),
+                                           lambda d: np.empty(d, dtype=np.float32))  # Store numpy copys from shm
+        self.batch_shms = traverse_lists((self.batch_buffer,),
+                                         lambda d: [SharedMemory(create=True, size=d.nbytes) for _ in range(C.BATCH_QUEUE_SIZE)])
 
         self.batch_shm_index_queue = mp.Queue(C.BATCH_QUEUE_SIZE)  # shm index that have batch data
         self.batch_free_shm_index_queue = mp.Queue(C.BATCH_QUEUE_SIZE)  # shm index that have not batch data
