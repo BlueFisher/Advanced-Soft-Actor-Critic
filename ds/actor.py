@@ -94,6 +94,7 @@ class Actor(object):
                                                            args.config)
 
         # Initialize config from command line arguments
+        self.device = args.device
         self.run_in_editor = args.editor
 
         if args.evolver_host is not None:
@@ -172,6 +173,7 @@ class Actor(object):
                                      c_action_size=self.c_action_size,
                                      model_abs_dir=None,
                                      model=custom_nn_model,
+                                     device=self.device,
                                      train_mode=False,
 
                                      **self.sac_config)
