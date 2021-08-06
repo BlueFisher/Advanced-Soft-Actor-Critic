@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\rlearner.proto\x12\x07learner\x1a\rndarray.proto\x1a\x0epingpong.proto\"u\n\x15RegisterActorResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x11\n\tunique_id\x18\x02 \x01(\x05\x12\x19\n\x11reset_config_json\x18\x03 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x04 \x01(\t\"K\n\x10GetActionRequest\x12\x1a\n\x08obs_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"?\n\x06\x41\x63tion\x12\x18\n\x06\x61\x63tion\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"\xe0\x01\n\nAddRequest\x12\x1e\n\x0cn_obses_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x1f\n\rnext_obs_list\x18\x04 \x03(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cn_rnn_states\x18\x07 \x01(\x0b\x32\x08.NDarray\"*\n\x0bNNVariables\x12\x1b\n\tvariables\x18\x01 \x03(\x0b\x32\x08.NDarray2\xfc\x02\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.learner.RegisterActorResponse\x12\x37\n\tGetAction\x12\x19.learner.GetActionRequest\x1a\x0f.learner.Action\x12\x32\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12\"\n\x03\x41\x64\x64\x12\x13.learner.AddRequest\x1a\x06.Empty\x12.\n\x0eGetNNVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12\x31\n\x11UpdateNNVariables\x12\x14.learner.NNVariables\x1a\x06.Empty\x12\x1c\n\nForceClose\x12\x06.Empty\x1a\x06.Emptyb\x06proto3'
+  serialized_pb=b'\n\rlearner.proto\x12\x07learner\x1a\rndarray.proto\x1a\x0epingpong.proto\"u\n\x15RegisterActorResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x11\n\tunique_id\x18\x02 \x01(\x05\x12\x19\n\x11reset_config_json\x18\x03 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x04 \x01(\t\"K\n\x10GetActionRequest\x12\x1a\n\x08obs_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"?\n\x06\x41\x63tion\x12\x18\n\x06\x61\x63tion\x18\x01 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\trnn_state\x18\x03 \x01(\x0b\x32\x08.NDarray\"\xe0\x01\n\nAddRequest\x12\x1e\n\x0cn_obses_list\x18\x01 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\tn_actions\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tn_rewards\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x1f\n\rnext_obs_list\x18\x04 \x03(\x0b\x32\x08.NDarray\x12\x19\n\x07n_dones\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nn_mu_probs\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cn_rnn_states\x18\x07 \x01(\x0b\x32\x08.NDarray\"=\n\x0bNNVariables\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x1b\n\tvariables\x18\x02 \x03(\x0b\x32\x08.NDarray2\xfc\x02\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.learner.RegisterActorResponse\x12\x37\n\tGetAction\x12\x19.learner.GetActionRequest\x1a\x0f.learner.Action\x12\x32\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12\"\n\x03\x41\x64\x64\x12\x13.learner.AddRequest\x1a\x06.Empty\x12.\n\x0eGetNNVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12\x31\n\x11UpdateNNVariables\x12\x14.learner.NNVariables\x1a\x06.Empty\x12\x1c\n\nForceClose\x12\x06.Empty\x1a\x06.Emptyb\x06proto3'
   ,
   dependencies=[ndarray__pb2.DESCRIPTOR,pingpong__pb2.DESCRIPTOR,])
 
@@ -242,8 +242,15 @@ _NNVARIABLES = _descriptor.Descriptor(
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='variables', full_name='learner.NNVariables.variables', index=0,
-      number=1, type=11, cpp_type=10, label=3,
+      name='succeeded', full_name='learner.NNVariables.succeeded', index=0,
+      number=1, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='variables', full_name='learner.NNVariables.variables', index=1,
+      number=2, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -261,7 +268,7 @@ _NNVARIABLES = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=545,
-  serialized_end=587,
+  serialized_end=606,
 )
 
 _GETACTIONREQUEST.fields_by_name['obs_list'].message_type = ndarray__pb2._NDARRAY
@@ -327,8 +334,8 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=590,
-  serialized_end=970,
+  serialized_start=609,
+  serialized_end=989,
   methods=[
   _descriptor.MethodDescriptor(
     name='Persistence',

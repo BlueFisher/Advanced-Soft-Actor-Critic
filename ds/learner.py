@@ -17,7 +17,7 @@ import numpy as np
 import algorithm.config_helper as config_helper
 import algorithm.constants as C
 from algorithm.agent import Agent
-from algorithm.utils import (EnvException, ReadWriteLock,
+from algorithm.utils import (EnvException, RLock, ReadWriteLock,
                              UselessEpisodeException)
 
 from .learner_trainer import Trainer
@@ -31,6 +31,7 @@ from .utils import PeerSet, rpc_error_inspector
 
 class Learner:
     _agent_class = Agent
+    _policy_variables_cache = None
 
     def __init__(self, root_dir, config_dir, args):
         self.root_dir = root_dir
@@ -225,6 +226,7 @@ class Learner:
         threading.Thread(target=self._forever_update_sac_bak, daemon=True).start()
 
     def _update_sac_bak(self):
+        # TODO: could use shm
         all_variables = self.all_variables_queue.get()
 
         with self._sac_bak_lock.write():
@@ -235,32 +237,27 @@ class Learner:
                 self._force_close()
                 return
 
-        self._logger.info('Updateded sac_bak')
+        self._policy_variables_cache = self.sac_bak.get_policy_variables()
+
+        self._logger.info('Updated sac_bak')
 
     def _forever_update_sac_bak(self):
         while True:
             self._update_sac_bak()
 
-    _unique_id = -1
-
     def _get_actor_register_result(self, actors_num):
         if self._registered:
-            self._unique_id += 1
 
             noise = self.base_config['noise_increasing_rate'] * (actors_num - 1)
             actor_sac_config = self.sac_config
             actor_sac_config['noise'] = min(noise, self.base_config['noise_max'])
 
             return (str(self.model_abs_dir),
-                    self._unique_id,
                     self.reset_config,
                     actor_sac_config)
 
     def _get_policy_variables(self):
-        with self._sac_bak_lock.read('_get_policy_variables'):
-            variables = self.sac_bak.get_policy_variables()
-
-        return variables
+        return self._policy_variables_cache
 
     def _get_nn_variables(self):
         self.cmd_pipe_client.send(('GET', None))
@@ -431,15 +428,7 @@ class Learner:
         self._logger.info(f'{iteration}, {time_elapse:.2f}m, S {max(steps)}, R {rewards}')
 
     def _run_learner_server(self, learner_port):
-        servicer = LearnerService(self._get_actor_register_result,
-
-                                  self._get_action,
-                                  self._add_episode,
-                                  self._get_policy_variables,
-                                  self._get_nn_variables,
-                                  self._udpate_nn_variables,
-
-                                  self._force_close)
+        servicer = LearnerService(self)
         self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS),
                                   options=[
             ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
@@ -473,38 +462,33 @@ class Learner:
 
 
 class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
-    def __init__(self,
-                 get_actor_register_result,
+    _policy_variables_id_cache = None
+    _proto_policy_variables_cache = None
 
-                 get_action,
-                 add_episode,
-                 get_policy_variables,
-                 get_nn_variables,
-                 udpate_nn_variables,
+    def __init__(self, learner: Learner):
+        self._get_actor_register_result = learner._get_actor_register_result
 
-                 force_close):
-        self._get_actor_register_result = get_actor_register_result
+        self._get_action = learner._get_action
+        self._add_episode = learner._add_episode
+        self._get_policy_variables = learner._get_policy_variables
+        self._get_nn_variables = learner._get_nn_variables
+        self._udpate_nn_variables = learner._udpate_nn_variables
 
-        self._get_action = get_action
-        self._add_episode = add_episode
-        self._get_policy_variables = get_policy_variables
-        self._get_nn_variables = get_nn_variables
-        self._udpate_nn_variables = udpate_nn_variables
-
-        self._force_close = force_close
+        self._force_close = learner._force_close
 
         self._logger = logging.getLogger('ds.learner.service')
         self._peer_set = PeerSet(self._logger)
-        self._actors = set()
+
+        self._lock = RLock(timeout=1, logger=self._logger)
+        self._actor_id = 0
 
     def _record_peer(self, context):
         peer = context.peer()
 
         def _unregister_peer():
-            if peer in self._actors:
-                self._actors.remove(peer)
+            with self._lock:
                 self._logger.warning(f'Actor {peer} disconnected')
-            self._peer_set.disconnect(context.peer())
+                self._peer_set.disconnect(context.peer())
 
         context.add_callback(_unregister_peer)
         self._peer_set.connect(peer)
@@ -516,22 +500,30 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
     def RegisterActor(self, request, context):
         peer = context.peer()
+        self._logger.info(f'{peer} is registering actor...')
 
-        self._actors.add(peer)
+        with self._lock:
+            res = self._get_actor_register_result(len(self._peer_set))
+            if res is not None:
+                actor_id = self._actor_id
 
-        res = self._get_actor_register_result(len(self._actors))
-        if res is not None:
-            self._logger.info(f'Actor {peer} registered')
-            (model_abs_dir,
-             _id,
-             reset_config,
-             sac_config) = res
-            return learner_pb2.RegisterActorResponse(model_abs_dir=model_abs_dir,
-                                                     unique_id=_id,
-                                                     reset_config_json=json.dumps(reset_config),
-                                                     sac_config_json=json.dumps(sac_config))
-        else:
-            return learner_pb2.RegisterActorResponse(unique_id=-1)
+                self._peer_set.add_info(peer, {
+                    'policy_variables_id_cache': None
+                })
+
+                self._logger.info(f'Actor {peer} registered')
+
+                self._actor_id += 1
+
+                (model_abs_dir,
+                 reset_config,
+                 sac_config) = res
+                return learner_pb2.RegisterActorResponse(model_abs_dir=model_abs_dir,
+                                                         unique_id=actor_id,
+                                                         reset_config_json=json.dumps(reset_config),
+                                                         sac_config_json=json.dumps(sac_config))
+            else:
+                return learner_pb2.RegisterActorResponse(unique_id=-1)
 
     # From actor
     def GetAction(self, request: learner_pb2.GetActionRequest, context):
@@ -549,8 +541,24 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
     # From actor
     def GetPolicyVariables(self, request, context):
+        peer = context.peer()
+
         variables = self._get_policy_variables()
-        return learner_pb2.NNVariables(variables=[ndarray_to_proto(v) for v in variables])
+        if variables is None:
+            return learner_pb2.NNVariables(succeeded=False)
+
+        if id(variables) != self._policy_variables_id_cache:
+            self._policy_variables_id_cache = id(variables)
+            self._proto_policy_variables_cache = [ndarray_to_proto(v) for v in variables]
+
+        actor_info = self._peer_set.get_info(peer)
+
+        if self._policy_variables_id_cache == actor_info['policy_variables_id_cache']:
+            return learner_pb2.NNVariables(succeeded=False)
+
+        actor_info['policy_variables_id_cache'] = self._policy_variables_id_cache
+        return learner_pb2.NNVariables(succeeded=True,
+                                       variables=self._proto_policy_variables_cache)
 
     # From actor
     def Add(self, request, context):
@@ -567,7 +575,8 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
     # From evolver
     def GetNNVariables(self, request, context):
         variables = self._get_nn_variables()
-        return learner_pb2.NNVariables(variables=[ndarray_to_proto(v) for v in variables])
+        return learner_pb2.NNVariables(succeeded=True,
+                                       variables=[ndarray_to_proto(v) for v in variables])
 
     # From evolver
     def UpdateNNVariables(self, request, context):

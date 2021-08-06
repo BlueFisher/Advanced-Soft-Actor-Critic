@@ -5,7 +5,7 @@ default:
 
     build_path: "AntBulletEnv-v0"
 
-    update_policy_variables_per_step: 20
+    update_policy_variables_per_step: -1
     noise_increasing_rate: 0.01
 
     n_agents: 10

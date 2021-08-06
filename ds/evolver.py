@@ -259,10 +259,7 @@ class Evolver:
     def _run(self):
         self.servicer = EvolverService(self.base_config['name'],
                                        self.base_config['max_actors_each_learner'],
-                                       self._learner_connected,
-                                       self._get_new_learner_config,
-                                       self._post_reward,
-                                       self._get_nn_variables)
+                                       self)
         self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS))
         evolver_pb2_grpc.add_EvolverServiceServicer_to_server(self.servicer, self.server)
         self.server.add_insecure_port(f'[::]:{self.net_config["evolver_port"]}')
@@ -308,17 +305,14 @@ class LearnerStubController:
 
 class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
     def __init__(self, name, max_actors_each_learner,
-                 learner_connected,
-                 get_new_learner_config,
-                 post_reward,
-                 get_nn_variables):
+                 evolver: Evolver):
         self.name = name
         self.max_actors_each_learner = max_actors_each_learner
 
-        self._learner_connected = learner_connected
-        self._get_new_learner_config = get_new_learner_config
-        self._post_reward = post_reward
-        self._get_nn_variables = get_nn_variables
+        self._learner_connected = evolver._learner_connected
+        self._get_new_learner_config = evolver._get_new_learner_config
+        self._post_reward = evolver._post_reward
+        self._get_nn_variables = evolver._get_nn_variables
 
         self._logger = logging.getLogger('ds.evolver.service')
         self._peer_set = PeerSet(self._logger)
