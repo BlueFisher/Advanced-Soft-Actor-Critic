@@ -68,3 +68,7 @@ class PeerSet(object):
     def peers(self):
         with self._peers_lock:
             return self._peers
+
+    def __len__(self):
+        with self._peers_lock:
+            return len(self._peers)

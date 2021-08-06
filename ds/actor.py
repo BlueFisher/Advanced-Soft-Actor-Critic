@@ -184,6 +184,7 @@ class Actor(object):
             if not any([np.isnan(np.min(v)) for v in variables]):
                 with self._sac_actor_lock.write():
                     self.sac_actor.update_policy_variables(variables)
+                self._logger.info('Policy variables updated')
             else:
                 self._logger.warning('NAN in variables, skip updating')
 
@@ -218,7 +219,7 @@ class Actor(object):
         obs_list = self.env.reset(reset_config=self.reset_config)
 
         agents = [self._agent_class(i, use_rnn=use_rnn)
-                    for i in range(self.base_config['n_agents'])]
+                  for i in range(self.base_config['n_agents'])]
 
         if use_rnn:
             initial_rnn_state = self.sac_actor.get_initial_rnn_state(len(agents))
@@ -243,9 +244,7 @@ class Actor(object):
 
             if self.base_config['update_policy_mode'] \
                     and self.base_config['update_policy_variables_per_step'] == -1:
-                self._logger.info('start _update_policy_variables')
                 self._update_policy_variables()
-                self._logger.info('_update_policy_variables')
 
             try:
                 while not all([a.done for a in agents]) and self._stub.connected:
@@ -495,7 +494,8 @@ class StubController:
     @rpc_error_inspector
     def get_policy_variables(self):
         response = self._learner_stub.GetPolicyVariables(Empty())
-        return [proto_to_ndarray(v) for v in response.variables]
+        if response.succeeded:
+            return [proto_to_ndarray(v) for v in response.variables]
 
     def _start_learner_persistence(self):
         def request_messages():

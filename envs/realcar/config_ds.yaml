@@ -11,11 +11,14 @@ default:
     n_agents: 10
     reset_on_iteration: false
 
+    evolver_enabled: false
+
   reset_config:
     force_reset: true
 
   sac_config:
-    write_summary_per_step: 1000
+    write_summary_per_step: 500 # Write summaries in TensorBoard every N steps
+    save_model_per_step: 10000 # Save model every N steps
 
     n_step: 3
     use_rnd: true

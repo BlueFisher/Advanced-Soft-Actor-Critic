@@ -309,7 +309,7 @@ class Trainer:
 
     def _update_sac_bak(self):
         with self.sac_lock:
-            self._logger.info('Updated sac_bak')
+            self._logger.info('Updating sac_bak...')
             all_variables = self.sac.get_all_variables()
             self._all_variables_queue.put(all_variables)
 

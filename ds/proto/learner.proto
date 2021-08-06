@@ -47,5 +47,6 @@ message AddRequest {
 }
 
 message NNVariables {
-  repeated NDarray variables = 1;
+  bool succeeded = 1;
+  repeated NDarray variables = 2;
 }
