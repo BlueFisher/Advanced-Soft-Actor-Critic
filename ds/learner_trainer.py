@@ -16,20 +16,8 @@ import algorithm.config_helper as config_helper
 import algorithm.constants as C
 from algorithm.utils import RLock, elapsed_counter, elapsed_timer
 
+from .utils import traverse_lists
 from .sac_ds_base import SAC_DS_Base
-
-
-def traverse_lists(data: Tuple, process):
-    buffer = []
-    for d in zip(*data):
-        if isinstance(d[0], list):
-            buffer.append(traverse_lists(d, process))
-        elif d[0] is None:
-            buffer.append(None)
-        else:
-            buffer.append(process(*d))
-
-    return buffer
 
 
 class BatchGenerator:
@@ -216,17 +204,18 @@ class BatchGenerator:
                             shm_idx = self.batch_free_shm_index_queue.get()
 
                         # Copy batch data to shm
-                        def _tra(b, shape, shms):
-                            shm_np = np.ndarray(shape, dtype=np.float32, buffer=shms[shm_idx].buf)
+                        def _tra(b, shms):
+                            shm_np = np.ndarray(b.shape, dtype=np.float32, buffer=shms[shm_idx].buf)
                             shm_np[:] = b[:]
-                        traverse_lists((batch, self.batch_shapes, self.batch_shms), _tra)
+                        traverse_lists((batch, self.batch_shms), _tra)
 
                         self.batch_shm_index_queue.put(shm_idx)
 
 
 class Trainer:
     def __init__(self,
-                 all_variables_queue: mp.Queue,
+                 all_variables_avaiable_queue: mp.Queue,
+                 all_variables_shms: List[SharedMemory],
                  episode_queue: mp.Queue,
                  cmd_pipe_server: Connection,
 
@@ -241,7 +230,8 @@ class Trainer:
                  config):
 
         self._logger = logging.getLogger('ds.learner.trainer')
-        self._all_variables_queue = all_variables_queue
+        self._all_variables_avaiable_queue = all_variables_avaiable_queue
+        self._all_variables_shms = all_variables_shms
 
         self.base_config = config['base_config']
 
@@ -278,9 +268,9 @@ class Trainer:
             (batch_size, *self.sac.rnn_state_shape) if self.sac.use_rnn else None
         ]
 
-        self.batch_buffer = traverse_lists((self.batch_shapes,),
-                                           lambda d: np.empty(d, dtype=np.float32))  # Store numpy copys from shm
-        self.batch_shms = traverse_lists((self.batch_buffer,),
+        self._batch_buffer = traverse_lists(self.batch_shapes,
+                                            lambda d: np.empty(d, dtype=np.float32))  # Store numpy copys from shm
+        self.batch_shms = traverse_lists(self._batch_buffer,
                                          lambda d: [SharedMemory(create=True, size=d.nbytes) for _ in range(C.BATCH_QUEUE_SIZE)])
 
         self.batch_shm_index_queue = mp.Queue(C.BATCH_QUEUE_SIZE)  # shm index that have batch data
@@ -311,10 +301,18 @@ class Trainer:
         self.run_train()
 
     def _update_sac_bak(self):
+        self._logger.info('Updating sac_bak...')
         with self.sac_lock:
-            self._logger.info('Updating sac_bak...')
             all_variables = self.sac.get_all_variables()
-            self._all_variables_queue.put(all_variables)
+
+        def _tra(v, shm):
+            if len(v.shape) == 0:
+                return
+            print(v.shape)
+            shm_np = np.ndarray(v.shape, dtype=v.dtype, buffer=shm.buf)
+            shm_np[:] = v[:]
+        traverse_lists((all_variables, self._all_variables_shms), _tra)
+        self._all_variables_avaiable_queue.put(True)
 
     def _forever_run_cmd_pipe(self, cmd_pipe_server):
         while True:
@@ -349,16 +347,10 @@ class Trainer:
 
             with timer_get:
                 # Copy shm to batch_buffer
-                for i, s in enumerate(self.batch_shapes):
-                    if isinstance(s, list):
-                        for j, c_s in enumerate(s):
-                            shm_np = np.ndarray(c_s, dtype=np.float32, buffer=self.batch_shms[i][j][shm_idx].buf)
-                            self.batch_buffer[i][j][:] = shm_np[:]
-                    elif s is None:
-                        continue
-                    else:
-                        shm_np = np.ndarray(s, dtype=np.float32, buffer=self.batch_shms[i][shm_idx].buf)
-                        self.batch_buffer[i][:] = shm_np[:]
+                def _tra(b: np.ndarray, shms: SharedMemory):
+                    shm_np = np.ndarray(b.shape, dtype=np.float32, buffer=shms[shm_idx].buf)
+                    b[:] = shm_np[:]
+                traverse_lists((self._batch_buffer, self.batch_shms), _tra)
 
                 self.batch_free_shm_index_queue.put(shm_idx)
 
@@ -368,7 +360,7 @@ class Trainer:
              next_obs_list,
              n_dones,
              n_mu_probs,
-             rnn_state) = self.batch_buffer
+             rnn_state) = self._batch_buffer
 
             with timer_train:
                 with self.sac_lock:

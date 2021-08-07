@@ -1,9 +1,27 @@
 import functools
 import threading
+from typing import Tuple
 
 import grpc
+import numpy as np
 
 from algorithm.constants import RPC_ERR_RETRY
+
+
+def traverse_lists(data: Tuple, process):
+    if not isinstance(data, tuple):
+        data = (data, )
+
+    buffer = []
+    for d in zip(*data):
+        if isinstance(d[0], list):
+            buffer.append(traverse_lists(d, process))
+        elif d[0] is None:
+            buffer.append(None)
+        else:
+            buffer.append(process(*d))
+
+    return buffer
 
 
 def rpc_error_inspector(func):

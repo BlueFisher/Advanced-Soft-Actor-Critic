@@ -2,6 +2,7 @@ import importlib
 import json
 import logging
 import multiprocessing as mp
+from multiprocessing.shared_memory import SharedMemory
 import shutil
 import socket
 import sys
@@ -26,7 +27,7 @@ from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
 from .sac_ds_base import SAC_DS_Base
-from .utils import PeerSet, rpc_error_inspector
+from .utils import PeerSet, rpc_error_inspector, traverse_lists
 
 
 class Learner:
@@ -181,28 +182,6 @@ class Learner:
         custom_nn_model = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(custom_nn_model)
 
-        # Initialize all queues for learner_trainer
-        self.all_variables_queue = mp.Queue(1)  # sac_bak get all variables from sac
-        self.episode_queue = mp.Queue(C.EPISODE_QUEUE_SIZE)  # actors send episode to sac
-        self.cmd_pipe_client, cmd_pipe_server = mp.Pipe()
-
-        self.learner_trainer_process = mp.Process(target=Trainer, kwargs={
-            'all_variables_queue': self.all_variables_queue,
-            'episode_queue': self.episode_queue,
-            'cmd_pipe_server': cmd_pipe_server,
-
-            'logger_in_file': self.cmd_args.logger_in_file,
-            'obs_shapes': self.obs_shapes,
-            'd_action_size': self.d_action_size,
-            'c_action_size': self.c_action_size,
-            'model_abs_dir': self.model_abs_dir,
-            'model_spec': spec,
-            'device': self.device,
-            'last_ckpt': self.last_ckpt,
-            'config': self.config
-        })
-        self.learner_trainer_process.start()
-
         self._sac_bak_lock = ReadWriteLock(None, 2, 2, logger=self._logger)
 
         self.sac_bak = SAC_DS_Base(obs_shapes=self.obs_shapes,
@@ -219,26 +198,59 @@ class Learner:
 
         self._logger.info('SAC_BAK started')
 
+        # Initialize all queues for learner_trainer
+        self._all_variables_buffer = self.sac_bak.get_all_variables()
+        self.all_variables_avaiable_queue = mp.Queue(1)  # sac_bak get all variables from sac
+        self.all_variables_shms = traverse_lists(self._all_variables_buffer,
+                                                 lambda v: SharedMemory(create=True, size=v.nbytes))
+        self.episode_queue = mp.Queue(C.EPISODE_QUEUE_SIZE)  # actors send episode to sac
+        self.cmd_pipe_client, cmd_pipe_server = mp.Pipe()
+
+        self.learner_trainer_process = mp.Process(target=Trainer, kwargs={
+            'all_variables_avaiable_queue': self.all_variables_avaiable_queue,
+            'all_variables_shms': self.all_variables_shms,
+            'episode_queue': self.episode_queue,
+            'cmd_pipe_server': cmd_pipe_server,
+
+            'logger_in_file': self.cmd_args.logger_in_file,
+            'obs_shapes': self.obs_shapes,
+            'd_action_size': self.d_action_size,
+            'c_action_size': self.c_action_size,
+            'model_abs_dir': self.model_abs_dir,
+            'model_spec': spec,
+            'device': self.device,
+            'last_ckpt': self.last_ckpt,
+            'config': self.config
+        })
+        self.learner_trainer_process.start()
+
         nn_variables = self._evolver_stub.get_nn_variables()
         if nn_variables:
             self._udpate_nn_variables(nn_variables)
             self._logger.info(f'Initialized from evolver')
 
+        self._logger.info('Waiting for updating sac_bak in first time')
         self._update_sac_bak()
 
         threading.Thread(target=self._forever_update_sac_bak, daemon=True).start()
 
     def _update_sac_bak(self):
-        # TODO: could use shm
-        all_variables = self.all_variables_queue.get()
+        self.all_variables_avaiable_queue.get()  # Block, waiting for all variables available
+
+        def _tra(v, shm):
+            if len(v.shape) == 0:
+                return
+            shm_np = np.ndarray(v.shape, dtype=v.dtype, buffer=shm.buf)
+            v[:] = shm_np[:]
+        traverse_lists((self._all_variables_buffer, self.all_variables_shms), _tra)
 
         with self._sac_bak_lock.write():
-            res = self.sac_bak.update_all_variables(all_variables)
+            res = self.sac_bak.update_all_variables(self._all_variables_buffer)
 
-            if not res:
-                self._logger.warning('NAN in variables, closing...')
-                self._force_close()
-                return
+        if not res:
+            self._logger.warning('NAN in variables, closing...')
+            self._force_close()
+            return
 
         self._policy_variables_cache = self.sac_bak.get_policy_variables()
 
