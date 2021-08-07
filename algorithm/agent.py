@@ -11,9 +11,10 @@ class Agent(object):
     done = False  # If has one complete episode
     max_reached = False
 
-    def __init__(self, agent_id, use_rnn=False):
+    def __init__(self, agent_id, use_rnn=False, max_return_episode_trans=-1):
         self.agent_id = agent_id
         self.use_rnn = use_rnn
+        self.max_return_episode_trans = max_return_episode_trans
 
         self._tmp_episode_trans = list()
 
@@ -56,6 +57,7 @@ class Agent(object):
             self._last_reward = 0
             self._last_steps = 0
 
+        if local_done or len(self._tmp_episode_trans) == self.max_return_episode_trans:
             episode_trans = self._get_episode_trans()
             self._tmp_episode_trans.clear()
 

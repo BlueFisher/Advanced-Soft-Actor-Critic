@@ -8,7 +8,6 @@ default:
       win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
       linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
-    update_policy_variables_per_step: 20
     noise_increasing_rate: 0.01
 
     n_agents: 10

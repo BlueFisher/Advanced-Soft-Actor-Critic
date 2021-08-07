@@ -18,8 +18,7 @@ base_config:
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
   nn: nn # Neural network models file
-  update_policy_mode: true # update policy variables each "update_policy_variables_per_step" or get action from learner each step
-  update_policy_variables_per_step: -1 # -1 for policy variables being updated each iteration
+  update_policy_mode: true # Update policy variables at the beginning of each episode if True or get action from learner each step
   update_sac_bak_per_step: 200 # Every N step update sac_bak
   noise_increasing_rate: 0 # Noise = N * number of actors
   noise_max: 0.1 # Max noise for actors

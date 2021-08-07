@@ -308,7 +308,6 @@ class Trainer:
         def _tra(v, shm):
             if len(v.shape) == 0:
                 return
-            print(v.shape)
             shm_np = np.ndarray(v.shape, dtype=v.dtype, buffer=shm.buf)
             shm_np[:] = v[:]
         traverse_lists((all_variables, self._all_variables_shms), _tra)
