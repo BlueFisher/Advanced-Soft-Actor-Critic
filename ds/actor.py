@@ -32,9 +32,7 @@ class AddTransitionBuffer:
         self._buffer = Queue(maxsize=10)
         self._logger = logging.getLogger('ds.actor.add_transition_buffer')
 
-        ts = [threading.Thread(target=self.run) for _ in range(5)]
-        for t in ts:
-            t.start()
+        threading.Thread(target=self.run).start()
 
     def run(self):
         while not self._closed:
@@ -220,7 +218,7 @@ class Actor(object):
 
         obs_list = self.env.reset(reset_config=self.reset_config)
 
-        agents = [self._agent_class(i, use_rnn=use_rnn)
+        agents = [self._agent_class(i, use_rnn=use_rnn, max_return_episode_trans=500)
                   for i in range(self.base_config['n_agents'])]
 
         if use_rnn:
@@ -244,8 +242,7 @@ class Actor(object):
             action = np.zeros([len(agents), self.action_size], dtype=np.float32)
             step = 0
 
-            if self.base_config['update_policy_mode'] \
-                    and self.base_config['update_policy_variables_per_step'] == -1:
+            if self.base_config['update_policy_mode']:
                 self._update_policy_variables()
 
             try:
@@ -261,11 +258,6 @@ class Actor(object):
                                                      initial_rnn_state[0])
 
                     if self.base_config['update_policy_mode']:
-                        # Update policy variables each "update_policy_variables_per_step"
-                        if self.base_config['update_policy_variables_per_step'] != -1 \
-                                and step % self.base_config['update_policy_variables_per_step'] == 0:
-                            self._update_policy_variables()
-
                         with self._sac_actor_lock.read():
                             if use_rnn:
                                 action, next_rnn_state = self.sac_actor.choose_rnn_action([o.astype(np.float32) for o in obs_list],
@@ -308,7 +300,6 @@ class Actor(object):
                     if len(episode_trans_list) != 0:
                         for episode_trans in episode_trans_list:
                             self._add_trans_buffer.add_trans(episode_trans)
-                            # TODO no need episode
 
                     obs_list = next_obs_list
                     action[local_done] = np.zeros(self.action_size)
