@@ -308,6 +308,7 @@ class Actor(object):
                     if len(episode_trans_list) != 0:
                         for episode_trans in episode_trans_list:
                             self._add_trans_buffer.add_trans(episode_trans)
+                            # TODO no need episode
 
                     obs_list = next_obs_list
                     action[local_done] = np.zeros(self.action_size)
