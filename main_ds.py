@@ -12,6 +12,7 @@ HITTED_ENVS = {'roller', 'square', 'pyramid', 'usv', 'realcar'}
 
 if __name__ == '__main__':
     set_logger()
+    mp.set_start_method('spawn')
 
     parser = argparse.ArgumentParser()
     parser.add_argument('env')
