@@ -2,6 +2,7 @@ import importlib
 import json
 import logging
 import logging.handlers
+import math
 import sys
 import threading
 import time
@@ -21,7 +22,7 @@ from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
 from .sac_ds_base import SAC_DS_Base
-from .utils import rpc_error_inspector
+from .utils import rpc_error_inspector, traverse_lists
 
 
 class AddTransitionBuffer:
@@ -35,12 +36,19 @@ class AddTransitionBuffer:
         threading.Thread(target=self.run).start()
 
     def run(self):
+        timer_waiting_trans = elapsed_timer(self._logger, 'Waiting trans', repeat=C.ELAPSED_REPEAT)
+        timer_add_trans = elapsed_timer(self._logger, 'Add trans', repeat=C.ELAPSED_REPEAT)
+
         while not self._closed:
-            episode_trans = self._buffer.get()
-            self._add_trans(*episode_trans)
+            with timer_waiting_trans:
+                episode_trans = self._buffer.get()
+
+            with timer_add_trans:
+                self._add_trans(*episode_trans)
 
     def add_trans(self, episode_trans):
         try:
+            print(self._buffer.qsize())
             self._buffer.put_nowait(episode_trans)
         except Full:
             self._logger.warning('Buffer is full, ignored')
@@ -218,7 +226,7 @@ class Actor(object):
 
         obs_list = self.env.reset(reset_config=self.reset_config)
 
-        agents = [self._agent_class(i, use_rnn=use_rnn, max_return_episode_trans=500)
+        agents = [self._agent_class(i, use_rnn=use_rnn, max_return_episode_trans=C.MAX_EPISODE_SIZE)
                   for i in range(self.base_config['n_agents'])]
 
         if use_rnn:

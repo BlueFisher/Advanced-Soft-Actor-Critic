@@ -2,7 +2,6 @@ import importlib
 import json
 import logging
 import multiprocessing as mp
-from multiprocessing.shared_memory import SharedMemory
 import shutil
 import socket
 import sys
@@ -27,7 +26,7 @@ from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
 from .sac_ds_base import SAC_DS_Base
-from .utils import PeerSet, rpc_error_inspector, traverse_lists
+from .utils import PeerSet, SharedMemoryManager, rpc_error_inspector
 
 
 class Learner:
@@ -149,7 +148,8 @@ class Learner:
             if self.run_in_editor:
                 self.env = UnityWrapper()
             else:
-                self.env = UnityWrapper(file_name=self.base_config['build_path'][sys.platform],
+                self.env = UnityWrapper(train_mode=False,
+                                        file_name=self.base_config['build_path'][sys.platform],
                                         base_port=self.base_config['build_port'],
                                         no_graphics=self.base_config['no_graphics'],
                                         scene=self.base_config['scene'],
@@ -159,7 +159,8 @@ class Learner:
         elif self.base_config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
 
-            self.env = GymWrapper(env_name=self.base_config['build_path'],
+            self.env = GymWrapper(train_mode=False,
+                                  env_name=self.base_config['build_path'],
                                   n_agents=self.base_config['n_agents'])
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
@@ -199,17 +200,33 @@ class Learner:
         self._logger.info('SAC_BAK started')
 
         # Initialize all queues for learner_trainer
-        self._all_variables_buffer = self.sac_bak.get_all_variables()
-        self.all_variables_avaiable_queue = mp.Queue(1)  # sac_bak get all variables from sac
-        self.all_variables_shms = traverse_lists(self._all_variables_buffer,
-                                                 lambda v: SharedMemory(create=True, size=v.nbytes))
-        self.episode_queue = mp.Queue(C.EPISODE_QUEUE_SIZE)  # actors send episode to sac
+        self._all_variables_buffer = SharedMemoryManager(1)
+        self._all_variables_buffer.init_from_data_buffer(self.sac_bak.get_all_variables())
+
+        episode_shapes = [
+            [(1, C.MAX_EPISODE_SIZE, *o) for o in self.obs_shapes],
+            (1, C.MAX_EPISODE_SIZE, self.d_action_size + self.c_action_size),
+            (1, C.MAX_EPISODE_SIZE),
+            [(1, *o) for o in self.obs_shapes],
+            (1, C.MAX_EPISODE_SIZE),
+            (1, C.MAX_EPISODE_SIZE),
+            (1, C.MAX_EPISODE_SIZE, *self.sac_bak.rnn_state_shape) if self.sac_bak.use_rnn else None
+        ]
+        self._episode_buffer = SharedMemoryManager(C.EPISODE_QUEUE_SIZE,
+                                                   logger=self._logger,
+                                                   counter_get_shm_index_empty_log='Episode shm index is empty',
+                                                   timer_get_shm_index_log='Get an episode shm index',
+                                                   timer_get_data_log='Get an episode',
+                                                   log_repeat=C.ELAPSED_REPEAT)
+        self._episode_buffer.init_from_shapes(episode_shapes, np.float32)
+        self._episode_size_array = mp.Array('i', range(C.EPISODE_QUEUE_SIZE))
+
         self.cmd_pipe_client, cmd_pipe_server = mp.Pipe()
 
         self.learner_trainer_process = mp.Process(target=Trainer, kwargs={
-            'all_variables_avaiable_queue': self.all_variables_avaiable_queue,
-            'all_variables_shms': self.all_variables_shms,
-            'episode_queue': self.episode_queue,
+            'all_variables_buffer': self._all_variables_buffer,
+            'episode_buffer': self._episode_buffer,
+            'episode_size_buffer': self._episode_size_array,
             'cmd_pipe_server': cmd_pipe_server,
 
             'logger_in_file': self.cmd_args.logger_in_file,
@@ -235,17 +252,10 @@ class Learner:
         threading.Thread(target=self._forever_update_sac_bak, daemon=True).start()
 
     def _update_sac_bak(self):
-        self.all_variables_avaiable_queue.get()  # Block, waiting for all variables available
-
-        def _tra(v, shm):
-            if len(v.shape) == 0:
-                return
-            shm_np = np.ndarray(v.shape, dtype=v.dtype, buffer=shm.buf)
-            v[:] = shm_np[:]
-        traverse_lists((self._all_variables_buffer, self.all_variables_shms), _tra)
+        all_variables, _ = self._all_variables_buffer.get()  # Block, waiting for all variables available
 
         with self._sac_bak_lock.write():
-            res = self.sac_bak.update_all_variables(self._all_variables_buffer)
+            res = self.sac_bak.update_all_variables(all_variables)
 
         if not res:
             self._logger.warning('NAN in variables, closing...')
@@ -307,11 +317,17 @@ class Learner:
                      n_dones: np.ndarray,
                      n_mu_probs: np.ndarray,
                      n_rnn_states: np.ndarray = None):
-
-        if self.episode_queue.full():
-            self.episode_queue.get()
-
-        self.episode_queue.put((
+        """
+        Args:
+            n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
+            n_actions: [1, episode_len, action_size]
+            n_rewards: [1, episode_len]
+            next_obs_list: list([1, *obs_shapes_i], ...)
+            n_dones: [1, episode_len]
+            n_mu_probs: [1, episode_len]
+            n_rnn_states: [1, episode_len, *rnn_state_shape]
+        """
+        episode_idx = self._episode_buffer.put([
             n_obses_list,
             n_actions,
             n_rewards,
@@ -319,7 +335,8 @@ class Learner:
             n_dones,
             n_mu_probs,
             n_rnn_states
-        ))
+        ])
+        self._episode_size_array[episode_idx] = n_obses_list[0].shape[1]
 
     def _policy_evaluation(self):
         use_rnn = self.sac_bak.use_rnn
