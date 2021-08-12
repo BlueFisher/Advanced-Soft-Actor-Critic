@@ -3,7 +3,7 @@ import sys
 import time
 from itertools import chain
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -20,12 +20,12 @@ class SAC_DS_Base(SAC_Base):
                  obs_shapes: Tuple,
                  d_action_size: int,
                  c_action_size: int,
-                 model_abs_dir: Union[str, None],
+                 model_abs_dir: Optional[str],
                  model,
-                 device: Union[str, None] = None,
+                 device: Optional[str] = None,
                  summary_path: str = 'log',
                  train_mode: bool = True,
-                 last_ckpt: Union[str, None] = None,
+                 last_ckpt: Optional[str] = None,
 
                  seed=None,
                  write_summary_per_step=1e3,
