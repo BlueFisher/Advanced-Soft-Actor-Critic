@@ -226,7 +226,7 @@ class Learner:
         self.learner_trainer_process = mp.Process(target=Trainer, kwargs={
             'all_variables_buffer': self._all_variables_buffer,
             'episode_buffer': self._episode_buffer,
-            'episode_size_buffer': self._episode_size_array,
+            'episode_size_array': self._episode_size_array,
             'cmd_pipe_server': cmd_pipe_server,
 
             'logger_in_file': self.cmd_args.logger_in_file,
