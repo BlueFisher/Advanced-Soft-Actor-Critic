@@ -48,7 +48,6 @@ class AddTransitionBuffer:
 
     def add_trans(self, episode_trans):
         try:
-            print(self._buffer.qsize())
             self._buffer.put_nowait(episode_trans)
         except Full:
             self._logger.warning('Buffer is full, ignored')
