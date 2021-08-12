@@ -1,7 +1,9 @@
 import inspect
+import logging
 import threading
 import time
 from enum import Enum
+from typing import Optional
 
 import torch
 
@@ -39,7 +41,9 @@ def scale_inverse_h(x, epsilon=0.001):
 
 
 class elapsed_timer:
-    def __init__(self, logger, custom_log, repeat=1):
+    def __init__(self, logger: Optional[logging.Logger] = None,
+                 custom_log: Optional[str] = None,
+                 repeat: int = 1):
         self._logger = logger
         self._custom_log = custom_log
         self._repeat = repeat
@@ -62,7 +66,8 @@ class elapsed_timer:
 
         if self._step == self._repeat:
             avg_time = self._sum_time / self._repeat
-            if abs(avg_time - self._last_avg_time) > 0.01:
+            if self._logger is not None and self._custom_log is not None \
+                    and abs(avg_time - self._last_avg_time) > 0.01:
                 self._logger.info(f'{self._custom_log}: {avg_time:.2f}s')
             self._last_avg_time = avg_time
             self._step = 0
@@ -75,7 +80,7 @@ class elapsed_timer:
 
 
 class elapsed_counter:
-    def __init__(self, logger, custom_log, repeat=1):
+    def __init__(self, logger: Optional[logging.Logger] = None, custom_log: Optional[str] = None, repeat=1):
         self._logger = logger
         self._custom_log = custom_log
         self._repeat = repeat
@@ -88,7 +93,8 @@ class elapsed_counter:
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self._step == self._repeat:
-            if self._counter > 0:
+            if self._logger is not None and self._custom_log is not None \
+                    and self._counter > 0:
                 self._logger.info(f'{self._custom_log}: {self._counter} in {self._repeat}')
             self._step = 0
             self._counter = 0
