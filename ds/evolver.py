@@ -12,9 +12,9 @@ import grpc
 import numpy as np
 
 import algorithm.config_helper as config_helper
-import algorithm.constants as C
 from algorithm.utils import RLock
 
+from .constants import *
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
 from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
@@ -260,7 +260,7 @@ class Evolver:
         self.servicer = EvolverService(self.base_config['name'],
                                        self.base_config['max_actors_each_learner'],
                                        self)
-        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS))
+        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS))
         evolver_pb2_grpc.add_EvolverServiceServicer_to_server(self.servicer, self.server)
         self.server.add_insecure_port(f'[::]:{self.net_config["evolver_port"]}')
         self.server.start()
@@ -277,9 +277,9 @@ class Evolver:
 class LearnerStubController:
     def __init__(self, host, port):
         self._channel = grpc.insecure_channel(f'{host}:{port}', [
-            ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS),
-            ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
-            ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
+            ('grpc.max_reconnect_backoff_ms', MAX_RECONNECT_BACKOFF_MS),
+            ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+            ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH)
         ])
         self._stub = learner_pb2_grpc.LearnerServiceStub(self._channel)
 

@@ -11,9 +11,9 @@ from typing import List
 import numpy as np
 
 import algorithm.config_helper as config_helper
-import algorithm.constants as C
 from algorithm.utils import RLock, elapsed_counter, elapsed_timer
 
+from .constants import *
 from .sac_ds_base import SAC_DS_Base
 from .utils import SharedMemoryManager, traverse_lists
 
@@ -58,7 +58,7 @@ class BatchGenerator:
                           n_rnn_states: np.ndarray = None):
         """
         Args:
-            episode_size: int, Indicates true episode_len, not C.MAX_EPISODE_SIZE
+            episode_size: int, Indicates true episode_len, not MAX_EPISODE_SIZE
             n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
             n_actions: [1, episode_len, action_size]
             n_rewards: [1, episode_len]
@@ -114,7 +114,7 @@ class BatchGenerator:
         rest_batch = None
 
         while True:
-            episode, episode_idx = self._episode_buffer.get(timeout=C.EPISODE_QUEUE_TIMEOUT)
+            episode, episode_idx = self._episode_buffer.get(timeout=EPISODE_QUEUE_TIMEOUT)
             if episode is None:
                 continue
 
@@ -220,15 +220,15 @@ class Trainer:
             (batch_size, N),
             (batch_size, *self.sac.rnn_state_shape) if self.sac.use_rnn else None
         ]
-        self._batch_buffer = SharedMemoryManager(C.BATCH_QUEUE_SIZE,
+        self._batch_buffer = SharedMemoryManager(BATCH_QUEUE_SIZE,
                                                  logger=self._logger,
                                                  counter_get_shm_index_empty_log='Batch shm index is empty',
                                                  timer_get_shm_index_log='Get a batch shm index',
                                                  timer_get_data_log='Get a batch',
-                                                 log_repeat=C.ELAPSED_REPEAT)
+                                                 log_repeat=ELAPSED_REPEAT)
         self._batch_buffer.init_from_shapes(batch_shapes, np.float32)
 
-        for _ in range(C.BATCH_GENERATOR_PROCESS_NUM):
+        for _ in range(BATCH_GENERATOR_PROCESS_NUM):
             mp.Process(target=BatchGenerator, kwargs={
                 'logger_in_file': logger_in_file,
                 'model_abs_dir': model_abs_dir,
@@ -270,12 +270,12 @@ class Trainer:
                     self.sac.save_model()
 
     def run_train(self):
-        timer_train = elapsed_timer(self._logger, 'Train a step', C.ELAPSED_REPEAT)
+        timer_train = elapsed_timer(self._logger, 'Train a step', ELAPSED_REPEAT)
 
         self._logger.info('Start training...')
 
         while True:
-            batch, _ = self._batch_buffer.get(timeout=C.BATCH_QUEUE_TIMEOUT)
+            batch, _ = self._batch_buffer.get(timeout=BATCH_QUEUE_TIMEOUT)
 
             if batch is None:
                 continue

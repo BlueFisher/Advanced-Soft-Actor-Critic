@@ -9,8 +9,9 @@ from typing import List, Optional, Tuple
 import grpc
 import numpy as np
 
-from algorithm.constants import RPC_ERR_RETRY
 from algorithm.utils import elapsed_counter, elapsed_timer
+
+from .constants import *
 
 
 def traverse_lists(data: Tuple, process):
