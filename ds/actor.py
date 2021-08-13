@@ -13,10 +13,10 @@ import grpc
 import numpy as np
 
 import algorithm.config_helper as config_helper
-import algorithm.constants as C
 from algorithm.agent import Agent
 from algorithm.utils import EnvException, ReadWriteLock, elapsed_timer
 
+from .constants import *
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
 from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
@@ -36,8 +36,8 @@ class AddTransitionBuffer:
         threading.Thread(target=self.run).start()
 
     def run(self):
-        timer_waiting_trans = elapsed_timer(self._logger, 'Waiting trans', repeat=C.ELAPSED_REPEAT)
-        timer_add_trans = elapsed_timer(self._logger, 'Add trans', repeat=C.ELAPSED_REPEAT)
+        timer_waiting_trans = elapsed_timer(self._logger, 'Waiting trans', repeat=ELAPSED_REPEAT)
+        timer_add_trans = elapsed_timer(self._logger, 'Add trans', repeat=ELAPSED_REPEAT)
 
         while not self._closed:
             with timer_waiting_trans:
@@ -225,7 +225,7 @@ class Actor(object):
 
         obs_list = self.env.reset(reset_config=self.reset_config)
 
-        agents = [self._agent_class(i, use_rnn=use_rnn, max_return_episode_trans=C.MAX_EPISODE_SIZE)
+        agents = [self._agent_class(i, use_rnn=use_rnn, max_return_episode_trans=MAX_EPISODE_SIZE)
                   for i in range(self.base_config['n_agents'])]
 
         if use_rnn:
@@ -357,7 +357,7 @@ class EvolverStubController:
         self._logger = logging.getLogger('ds.actor.evolver_stub')
 
         self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}', [
-            ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)
+            ('grpc.max_reconnect_backoff_ms', MAX_RECONNECT_BACKOFF_MS)
         ])
         self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
         self._logger.info(f'Starting evolver stub [{evolver_host}:{evolver_port}]')
@@ -375,7 +375,7 @@ class EvolverStubController:
     def register_to_evolver(self):
         self._logger.info('Waiting for evolver connection')
         while not self.connected:
-            time.sleep(C.RECONNECTION_TIME)
+            time.sleep(RECONNECTION_TIME)
             continue
 
         response = None
@@ -388,13 +388,13 @@ class EvolverStubController:
                 return (response.learner_host, response.learner_port)
             else:
                 response = None
-                time.sleep(C.RECONNECTION_TIME)
+                time.sleep(RECONNECTION_TIME)
 
     def _start_persistence(self):
         def request_messages():
             while not self._closed:
                 yield Ping(time=int(time.time() * 1000))
-                time.sleep(C.PING_INTERVAL)
+                time.sleep(PING_INTERVAL)
                 if not self._evolver_connected:
                     break
 
@@ -410,7 +410,7 @@ class EvolverStubController:
                     self._evolver_connected = False
                     self._logger.error('Evolver disconnected')
             finally:
-                time.sleep(C.RECONNECTION_TIME)
+                time.sleep(RECONNECTION_TIME)
 
     def close(self):
         self._closed = True
@@ -423,7 +423,7 @@ class StubController:
         self._logger = logging.getLogger('ds.actor.stub')
 
         self._learner_channel = grpc.insecure_channel(f'{learner_host}:{learner_port}', [
-            ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS)
+            ('grpc.max_reconnect_backoff_ms', MAX_RECONNECT_BACKOFF_MS)
         ])
         self._learner_stub = learner_pb2_grpc.LearnerServiceStub(self._learner_channel)
         self._logger.info(f'Starting learner stub [{learner_host}:{learner_port}]')
@@ -441,7 +441,7 @@ class StubController:
     def register_to_learner(self):
         self._logger.info('Waiting for learner connection')
         while not self.connected:
-            time.sleep(C.RECONNECTION_TIME)
+            time.sleep(RECONNECTION_TIME)
             continue
 
         response = None
@@ -456,7 +456,7 @@ class StubController:
                         json.loads(response.sac_config_json))
             else:
                 response = None
-                time.sleep(C.RECONNECTION_TIME)
+                time.sleep(RECONNECTION_TIME)
 
     @rpc_error_inspector
     def add_transitions(self,
@@ -502,7 +502,7 @@ class StubController:
         def request_messages():
             while not self._closed:
                 yield Ping(time=int(time.time() * 1000))
-                time.sleep(C.PING_INTERVAL)
+                time.sleep(PING_INTERVAL)
                 if not self._learner_connected:
                     break
 
@@ -518,7 +518,7 @@ class StubController:
                     self._learner_connected = False
                     self._logger.error('Learner disconnected')
             finally:
-                time.sleep(C.RECONNECTION_TIME)
+                time.sleep(RECONNECTION_TIME)
 
     def close(self):
         self._closed = True

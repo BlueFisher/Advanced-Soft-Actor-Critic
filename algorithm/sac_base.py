@@ -11,8 +11,6 @@ from torch import autograd, distributions, nn, optim
 from torch.nn import functional
 from torch.utils.tensorboard import SummaryWriter
 
-import algorithm.constants as C
-
 from .replay_buffer import PrioritizedReplayBuffer
 from .utils import *
 
@@ -1351,8 +1349,9 @@ class SAC_Base(object):
 
         td_error_list = []
         all_batch = n_obses_list[0].shape[0]
-        for i in range(math.ceil(all_batch / C.GET_EPISODE_TD_ERROR_SEG)):
-            b_i, b_j = i * C.GET_EPISODE_TD_ERROR_SEG, (i + 1) * C.GET_EPISODE_TD_ERROR_SEG
+        batch_size = self.replay_buffer.batch_size
+        for i in range(math.ceil(all_batch / batch_size)):
+            b_i, b_j = i * batch_size, (i + 1) * batch_size
 
             _n_obses_list = [torch.from_numpy(o[b_i:b_j, :]).to(self.device) for o in n_obses_list]
             _n_actions = torch.from_numpy(n_actions[b_i:b_j, :]).to(self.device)

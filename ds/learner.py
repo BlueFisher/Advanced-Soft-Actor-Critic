@@ -15,11 +15,11 @@ import grpc
 import numpy as np
 
 import algorithm.config_helper as config_helper
-import algorithm.constants as C
 from algorithm.agent import Agent
 from algorithm.utils import (EnvException, ReadWriteLock, RLock,
                              UselessEpisodeException)
 
+from .constants import *
 from .learner_trainer import Trainer
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
 from .proto.ndarray_pb2 import Empty
@@ -204,22 +204,22 @@ class Learner:
         self._all_variables_buffer.init_from_data_buffer(self.sac_bak.get_all_variables())
 
         episode_shapes = [
-            [(1, C.MAX_EPISODE_SIZE, *o) for o in self.obs_shapes],
-            (1, C.MAX_EPISODE_SIZE, self.d_action_size + self.c_action_size),
-            (1, C.MAX_EPISODE_SIZE),
+            [(1, MAX_EPISODE_SIZE, *o) for o in self.obs_shapes],
+            (1, MAX_EPISODE_SIZE, self.d_action_size + self.c_action_size),
+            (1, MAX_EPISODE_SIZE),
             [(1, *o) for o in self.obs_shapes],
-            (1, C.MAX_EPISODE_SIZE),
-            (1, C.MAX_EPISODE_SIZE),
-            (1, C.MAX_EPISODE_SIZE, *self.sac_bak.rnn_state_shape) if self.sac_bak.use_rnn else None
+            (1, MAX_EPISODE_SIZE),
+            (1, MAX_EPISODE_SIZE),
+            (1, MAX_EPISODE_SIZE, *self.sac_bak.rnn_state_shape) if self.sac_bak.use_rnn else None
         ]
-        self._episode_buffer = SharedMemoryManager(C.EPISODE_QUEUE_SIZE,
+        self._episode_buffer = SharedMemoryManager(EPISODE_QUEUE_SIZE,
                                                    logger=self._logger,
                                                    counter_get_shm_index_empty_log='Episode shm index is empty',
                                                    timer_get_shm_index_log='Get an episode shm index',
                                                    timer_get_data_log='Get an episode',
-                                                   log_repeat=C.ELAPSED_REPEAT)
+                                                   log_repeat=ELAPSED_REPEAT)
         self._episode_buffer.init_from_shapes(episode_shapes, np.float32)
-        self._episode_size_array = mp.Array('i', range(C.EPISODE_QUEUE_SIZE))
+        self._episode_size_array = mp.Array('i', range(EPISODE_QUEUE_SIZE))
 
         self.cmd_pipe_client, cmd_pipe_server = mp.Pipe()
 
@@ -461,10 +461,10 @@ class Learner:
 
     def _run_learner_server(self, learner_port):
         servicer = LearnerService(self)
-        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=C.MAX_THREAD_WORKERS),
+        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS),
                                   options=[
-            ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
-            ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
+            ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+            ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH)
         ])
         learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, self.server)
         self.server.add_insecure_port(f'[::]:{learner_port}')
@@ -628,9 +628,9 @@ class EvolverStubController:
         self._logger = logging.getLogger('ds.learner.evolver_stub')
 
         self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}', [
-            ('grpc.max_reconnect_backoff_ms', C.MAX_RECONNECT_BACKOFF_MS),
-            ('grpc.max_send_message_length', C.MAX_MESSAGE_LENGTH),
-            ('grpc.max_receive_message_length', C.MAX_MESSAGE_LENGTH)
+            ('grpc.max_reconnect_backoff_ms', MAX_RECONNECT_BACKOFF_MS),
+            ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+            ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH)
         ])
         self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
         self._logger.info(f'Starting evolver stub [{evolver_host}:{evolver_port}]')
@@ -648,7 +648,7 @@ class EvolverStubController:
     def register_to_evolver(self, learner_host, learner_port):
         self._logger.warning('Waiting for evolver connection')
         while not self.connected:
-            time.sleep(C.RECONNECTION_TIME)
+            time.sleep(RECONNECTION_TIME)
             continue
 
         response = None
@@ -666,7 +666,7 @@ class EvolverStubController:
                         json.loads(response.sac_config_json))
             else:
                 response = None
-                time.sleep(C.RECONNECTION_TIME)
+                time.sleep(RECONNECTION_TIME)
 
     @rpc_error_inspector
     def post_reward(self, reward):
@@ -686,7 +686,7 @@ class EvolverStubController:
         def request_messages():
             while not self._closed:
                 yield Ping(time=int(time.time() * 1000))
-                time.sleep(C.PING_INTERVAL)
+                time.sleep(PING_INTERVAL)
                 if not self._evolver_connected:
                     break
 
@@ -702,7 +702,7 @@ class EvolverStubController:
                     self._evolver_connected = False
                     self._logger.error('Evolver disconnected')
             finally:
-                time.sleep(C.RECONNECTION_TIME)
+                time.sleep(RECONNECTION_TIME)
 
     def close(self):
         self._evolver_channel.close()
