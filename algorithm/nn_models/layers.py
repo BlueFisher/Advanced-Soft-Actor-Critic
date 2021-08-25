@@ -149,7 +149,7 @@ def nature_visual(height, width, channels):
 class ConvLayers(nn.Module):
     def __init__(self, in_height: int, in_width: int, in_channels: int,
                  conv: Union[str, Tuple],
-                 out_dense_n: int=64, out_dense_depth: int=0, output_size: int=None):
+                 out_dense_n: int = 64, out_dense_depth: int = 0, output_size: int = None):
         super().__init__()
 
         if isinstance(conv, str):
@@ -175,12 +175,7 @@ class ConvLayers(nn.Module):
         self.output_size = self.dense.output_size
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if len(x.shape) == 4:
-            x = x.permute([0, 3, 1, 2])
-            hidden = self.conv_layers(x)
-            hidden = hidden.reshape(-1, self.conv_output_size)
-            return self.dense(hidden)
-        elif len(x.shape) >= 5:
+        if len(x.shape) >= 4:
             batch = x.shape[:-3]
             x = x.reshape(-1, *x.shape[-3:])
             x = x.permute([0, 3, 1, 2])
@@ -209,11 +204,7 @@ class ConvTransposeLayers(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.dense(x)
 
-        if len(x.shape) == 2:
-            x = x.reshape(-1, self._channels, self._height, self._width)
-            vis = self.conv_transpose(x)
-            return vis.permute([0, 2, 3, 1])
-        elif len(x.shape) >= 3:
+        if len(x.shape) >= 2:
             batch = x.shape[:-1]
             x = x.reshape(-1, self._channels, self._height, self._width)
             vis = self.conv_transpose(x)
@@ -221,6 +212,23 @@ class ConvTransposeLayers(nn.Module):
             return vis.reshape(*batch, *vis.shape[1:])
         else:
             raise Exception('The dimension of input should be greater than or equal to 2')
+
+
+class Transform(nn.Module):
+    def __init__(self, transform):
+        super().__init__()
+
+        self.transform = transform
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if len(x.shape) >= 4:
+            batch = x.shape[:-3]
+            x = x.reshape(-1, *x.shape[-3:])
+            x = x.permute([0, 3, 1, 2])
+            x = self.transform(x).permute([0, 2, 3, 1])
+            return x.reshape(*batch, *x.shape[1:])
+        else:
+            raise Exception('The dimension of input should be greater than or equal to 4')
 
 
 class GRU(nn.GRU):

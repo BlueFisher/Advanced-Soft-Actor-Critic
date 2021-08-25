@@ -4,6 +4,7 @@ import sys
 import time
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
@@ -99,7 +100,21 @@ class Main(object):
 
         agents = [Agent(i) for i in range(self.base_config['n_agents'])]
 
+        agent_size = len(agents)
+        fig_size = sum([len(s) == 3 for s in self.obs_shapes])
+
         img_save_index = 0
+
+        plt.ion()
+        fig, axes = plt.subplots(nrows=agent_size, ncols=fig_size, squeeze=False, figsize=(3 * fig_size, 3 * agent_size))
+        ims = [[] for _ in range(agent_size)]
+        for i in range(agent_size):
+            j = 0
+            for obs_shape in self.obs_shapes:
+                if len(obs_shape) == 3:
+                    axes[i][j].axis('off')
+                    ims[i].append(axes[i][j].imshow(np.zeros((obs_shape))))
+                    j += 1
 
         iteration = 0
 
@@ -114,29 +129,39 @@ class Main(object):
                 for agent in agents:
                     agent.reset()
 
-            action = np.zeros([len(agents), self.action_size], dtype=np.float32)
+            action = np.zeros([agent_size, self.action_size], dtype=np.float32)
             step = 0
 
             try:
                 while not all([a.done for a in agents]):
+                    j = 0
+                    for obs in obs_list:
+                        if len(obs.shape) > 2:
+                            for i, image in enumerate(obs):
+                                ims[i][j].set_data(image)
+                            j += 1
+
+                    fig.canvas.draw()
+                    fig.canvas.flush_events()
+
                     action = np.random.rand(len(agents), self.action_size)
 
                     with step_timer:
                         next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
-                                                                                    action[..., self.d_action_size:])
+                                                                                       action[..., self.d_action_size:])
 
                     if step == self.base_config['max_step_each_iter']:
                         local_done = [True] * len(agents)
                         max_reached = [True] * len(agents)
 
                     episode_trans_list = [agents[i].add_transition([o[i] for o in obs_list],
-                                                                action[i],
-                                                                reward[i],
-                                                                local_done[i],
-                                                                max_reached[i],
-                                                                [o[i] for o in next_obs_list],
-                                                                None)
-                                        for i in range(len(agents))]
+                                                                   action[i],
+                                                                   reward[i],
+                                                                   local_done[i],
+                                                                   max_reached[i],
+                                                                   [o[i] for o in next_obs_list],
+                                                                   None)
+                                          for i in range(len(agents))]
 
                     if self.save_image:
                         episode_trans_list = [t for t in episode_trans_list if t is not None]
@@ -150,8 +175,8 @@ class Main(object):
                                     img = Image.fromarray(np.uint8(n_obses[0] * 255))
                                     self._logger.info(f'Saved {img_save_index}-{i}')
                                     img.save(self.model_abs_dir.joinpath(f'{img_save_index}-{i}.gif'),
-                                            save_all=True,
-                                            append_images=[Image.fromarray(np.uint8(o * 255)) for o in n_obses[1:]])
+                                             save_all=True,
+                                             append_images=[Image.fromarray(np.uint8(o * 255)) for o in n_obses[1:]])
 
                         img_save_index += 1
 
@@ -165,7 +190,7 @@ class Main(object):
                 self._logger.info(f'Restarting {self.base_config["build_path"]}...')
                 self._init_env()
                 continue
-            
+
             except Exception as e:
                 self._logger.error(e)
                 self._logger.error('Exiting...')
