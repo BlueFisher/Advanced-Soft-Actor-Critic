@@ -42,12 +42,13 @@ class Main(object):
                                                            args.config)
 
         # Initialize config from command line arguments
-        self.device = args.device
         self.train_mode = not args.run
-        self.last_ckpt = args.ckpt
         self.render = args.render
         self.run_in_editor = args.editor
         self.additional_args = args.additional_args
+        self.alway_use_env_nn = args.use_env_nn
+        self.device = args.device
+        self.last_ckpt = args.ckpt
 
         if args.name is not None:
             config['base_config']['name'] = args.name
@@ -114,14 +115,15 @@ class Main(object):
         self._logger.info(f'{self.base_config["build_path"]} initialized')
 
     def _init_sac(self, config_abs_dir: Path):
-        # If model exists, load saved model, or copy a new one
+        # If nn models exists, load saved model, or copy a new one
         nn_model_abs_path = Path(self.model_abs_dir).joinpath('nn_models.py')
-        if nn_model_abs_path.exists():
+        if not self.alway_use_env_nn and nn_model_abs_path.exists():
             spec = importlib.util.spec_from_file_location('nn', str(nn_model_abs_path))
         else:
             nn_abs_path = Path(config_abs_dir).joinpath(f'{self.base_config["nn"]}.py')
             spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
-            shutil.copyfile(nn_abs_path, nn_model_abs_path)
+            if not self.alway_use_env_nn:
+                shutil.copyfile(nn_abs_path, nn_model_abs_path)
 
         custom_nn_model = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(custom_nn_model)
@@ -241,13 +243,14 @@ class Main(object):
 
             self._log_episode_info(iteration, time.time() - iter_time, agents)
 
-            if (p := self.model_abs_dir.joinpath('save_model')).exists():
+            if self.train_mode and (p := self.model_abs_dir.joinpath('save_model')).exists():
                 self.sac.save_model()
                 p.unlink()
 
             iteration += 1
 
-        self.sac.save_model()
+        if self.train_mode:
+            self.sac.save_model()
         self.env.close()
 
     def _log_episode_summaries(self, agents):

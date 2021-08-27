@@ -113,7 +113,7 @@ class Main(object):
             for obs_shape in self.obs_shapes:
                 if len(obs_shape) == 3:
                     axes[i][j].axis('off')
-                    ims[i].append(axes[i][j].imshow(np.zeros((obs_shape))))
+                    ims[i].append(axes[i][j].imshow(np.zeros(obs_shape)))
                     j += 1
 
         iteration = 0
