@@ -77,10 +77,10 @@ class Learner:
                                                            args.config)
 
         # Initialize config from command line arguments
-        self.device = args.device
-        self.last_ckpt = args.ckpt
         self.render = args.render
         self.run_in_editor = args.editor
+        self.device = args.device
+        self.last_ckpt = args.ckpt
 
         if args.evolver_host is not None:
             config['net_config']['evolver_host'] = args.evolver_host
