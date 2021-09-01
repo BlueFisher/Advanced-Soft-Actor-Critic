@@ -2,31 +2,39 @@ import torch
 
 import algorithm.nn_models as m
 
-EXTRA_SIZE = 2
+EXTRA_SIZE = 4
 
 
-class ModelRep(m.ModelBaseSimpleRep):
-    def _bulid_model(self):
+class ModelRep(m.ModelBaseRNNRep):
+    def _build_model(self):
         assert self.obs_shapes[0] == (84, 84, 3)
         assert self.obs_shapes[1] == (84, 84, 3)
         assert self.obs_shapes[2] == (84, 84, 3)
         assert self.obs_shapes[3] == (8,)
 
-        self.conv = m.ConvLayers(84, 84, 9, 'simple',
+        print('build_model')
+
+        self.conv = m.ConvLayers(84, 84, 9, 'nature',
                                  out_dense_n=64, out_dense_depth=2)
 
-        self.dense = m.LinearLayers(self.conv.output_size + 8 - EXTRA_SIZE,
+        self.rnn = m.GRU(self.conv.output_size + self.c_action_size, 64, 1)
+
+        self.dense = m.LinearLayers(64 + 8 - EXTRA_SIZE,
                                     dense_n=64, dense_depth=1)
 
-    def forward(self, obs_list):
+    def forward(self, obs_list, pre_action, rnn_state=None):
         *vis, vec = obs_list
         vec = vec[..., :-EXTRA_SIZE]
 
+        print(self.conv)
+
         vis = self.conv(torch.cat(vis, dim=-1))
 
-        state = self.dense(torch.cat([vis, vec], dim=-1))
+        output, hn = self.rnn(torch.cat([vis, pre_action], dim=-1), rnn_state)
 
-        return state
+        state = self.dense(torch.cat([output, vec], dim=-1))
+
+        return state, hn
 
 
 class ModelQ(m.ModelQ):

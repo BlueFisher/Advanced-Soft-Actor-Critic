@@ -7,9 +7,9 @@ class ModelBaseSimpleRep(nn.Module):
         super().__init__()
         self.obs_shapes = obs_shapes
 
-        self._bulid_model()
+        self._build_model()
 
-    def _bulid_model(self):
+    def _build_model(self):
         pass
 
     def get_output_shape(self, device):

@@ -6,7 +6,7 @@ EXTRA_SIZE = 4
 
 
 class ModelRep(m.ModelBaseSimpleRep):
-    def _bulid_model(self):
+    def _build_model(self):
         assert self.obs_shapes[2] == (11,)
 
     def forward(self, obs_list):
