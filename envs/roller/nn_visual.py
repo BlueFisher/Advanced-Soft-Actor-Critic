@@ -4,7 +4,7 @@ import algorithm.nn_models as m
 
 
 class ModelRep(m.ModelBaseSimpleRep):
-    def _bulid_model(self):
+    def _build_model(self):
         assert self.obs_shapes[0] == (30, 30, 3)
         assert self.obs_shapes[1] == (2,)
 

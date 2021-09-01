@@ -170,13 +170,13 @@ class Learner:
 
         self._logger.info(f'{self.base_config["build_path"]} initialized')
 
-    def _init_sac(self, config_abs_dir):
-        # If model exists, load saved model, or copy a new one
-        nn_model_abs_path = Path(self.model_abs_dir).joinpath('nn_models.py')
+    def _init_sac(self, config_abs_dir: Path):
+        # If nn model exists, load saved model, or copy a new one
+        nn_model_abs_path = self.model_abs_dir.joinpath('nn_models.py')
         if nn_model_abs_path.exists():
             spec = importlib.util.spec_from_file_location('nn', str(nn_model_abs_path))
         else:
-            nn_abs_path = Path(config_abs_dir).joinpath(f'{self.base_config["nn"]}.py')
+            nn_abs_path = config_abs_dir.joinpath(f'{self.base_config["nn"]}.py')
             spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
             shutil.copyfile(nn_abs_path, nn_model_abs_path)
 

@@ -116,11 +116,11 @@ class Main(object):
 
     def _init_sac(self, config_abs_dir: Path):
         # If nn models exists, load saved model, or copy a new one
-        nn_model_abs_path = Path(self.model_abs_dir).joinpath('nn_models.py')
+        nn_model_abs_path = self.model_abs_dir.joinpath('nn_models.py')
         if not self.alway_use_env_nn and nn_model_abs_path.exists():
             spec = importlib.util.spec_from_file_location('nn', str(nn_model_abs_path))
         else:
-            nn_abs_path = Path(config_abs_dir).joinpath(f'{self.base_config["nn"]}.py')
+            nn_abs_path = config_abs_dir.joinpath(f'{self.base_config["nn"]}.py')
             spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
             if not self.alway_use_env_nn:
                 shutil.copyfile(nn_abs_path, nn_model_abs_path)

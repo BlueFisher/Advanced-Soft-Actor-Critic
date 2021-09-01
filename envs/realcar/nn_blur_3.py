@@ -8,8 +8,8 @@ from envs.realcar.nn import *
 
 
 class ModelRep(ModelRep):
-    def _bulid_model(self):
-        super()._bulid_model()
+    def _build_model(self):
+        super()._build_model()
 
         self.blurrer = Transform(transforms.GaussianBlur(3, sigma=3))
 
