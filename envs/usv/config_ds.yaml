@@ -13,9 +13,6 @@ default:
 
     evolver_enabled: false
 
-  replay_config:
-    batch_size: 1024
-
   reset_config:
     force_reset: true
 
@@ -24,8 +21,16 @@ default:
     save_model_per_step: 10000 # Save model every N steps
 
     n_step: 3
+    burn_in_step: 10
+    use_rnn: true
+
     use_rnd: true
     rnd_n_sample: 50
+
+visual:
+  base_config:
+    name: "vis_{time}"
+    nn: nn_visual
 
 visual_nature:
   base_config:

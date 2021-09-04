@@ -10,7 +10,6 @@ default:
 
     n_agents: 10
     reset_on_iteration: false
-    max_iter: 100
 
   reset_config:
     force_reset: true
@@ -20,6 +19,9 @@ default:
     write_summary_per_step: 1000
 
     n_step: 3
+    burn_in_step: 10
+    use_rnn: true
+
     use_rnd: true
     rnd_n_sample: 50
 

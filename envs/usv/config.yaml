@@ -26,100 +26,11 @@ visual:
     name: "vis_{time}"
     nn: nn_visual
 
+  sac_config:
+    burn_in_step: 10
+    use_rnn: true
+
 visual_nature:
   base_config:
     name: "vis_nature_{time}"
     nn: nn_visual_nature
-
-
-ray_rnd50:
-  base_config:
-    name: "ray_rnd50_{time}"
-    nn: nn_ray
-
-  sac_config:
-    use_rnd: true
-
-ray_rnd10:
-  base_config:
-    name: "ray_rnd10_{time}"
-    nn: nn_ray
-
-  sac_config:
-    use_rnd: true
-    rnd_n_sample: 10
-
-ray_rnd20:
-  base_config:
-    name: "ray_rnd20_{time}"
-    nn: nn_ray
-
-  sac_config:
-    use_rnd: true
-    rnd_n_sample: 20
-
-ray_rnd30:
-  base_config:
-    name: "ray_rnd30_{time}"
-    nn: nn_ray
-
-  sac_config:
-    use_rnd: true
-    rnd_n_sample: 30
-
-ray_rnd40:
-  base_config:
-    name: "ray_rnd40_{time}"
-    nn: nn_ray
-
-  sac_config:
-    use_rnd: true
-    rnd_n_sample: 40
-
-ray_nornd:
-  base_config:
-    name: "ray_nornd_{time}"
-    nn: nn_ray
-
-  sac_config:
-    use_rnd: false
-
-ray_rnn:
-  base_config:
-    name: "ray_rnn_{time}"
-    nn: nn_ray_rnn
-
-  sac_config:
-    use_rnn: true
-    burn_in_step: 30
-
-ray_rnn_nornd:
-  base_config:
-    name: "ray_rnn_nornd_{time}"
-    nn: nn_ray_rnn
-
-  sac_config:
-    use_rnn: true
-    burn_in_step: 30
-    use_rnd: false
-
-ray_rnn_pre:
-  base_config:
-    name: "ray_rnn_pre_{time}"
-    nn: nn_ray_rnn
-
-  sac_config:
-    use_rnn: true
-    burn_in_step: 30
-    use_prediction: true
-
-ray_rnn_pre_noextra:
-  base_config:
-    name: "ray_rnn_pre_noextra_{time}"
-    nn: nn_ray_rnn
-
-  sac_config:
-    use_rnn: true
-    burn_in_step: 30
-    use_prediction: true
-    use_extra_data: false

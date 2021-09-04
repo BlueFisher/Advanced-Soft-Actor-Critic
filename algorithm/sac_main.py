@@ -3,6 +3,7 @@ import logging
 import shutil
 import sys
 import time
+import traceback
 from pathlib import Path
 
 import numpy as np
@@ -235,6 +236,7 @@ class Main(object):
 
             except Exception as e:
                 self._logger.error(e)
+                self._logger.error(traceback.format_exc())
                 self._logger.error('Exiting...')
                 break
 

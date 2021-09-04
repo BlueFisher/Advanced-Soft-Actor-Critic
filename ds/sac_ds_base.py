@@ -127,7 +127,7 @@ class SAC_DS_Base(SAC_Base):
         if self.c_action_size:
             c_action = np.tanh(np.arctanh(c_action) + np.random.randn(batch, self.c_action_size) * self.noise)
 
-        return np.concatenate([d_action, c_action], axis=-1)
+        return np.concatenate([d_action, c_action], axis=-1).astype(np.float32)
 
     def choose_action(self, obs_list):
         action = super().choose_action(obs_list)
