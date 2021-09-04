@@ -24,6 +24,7 @@ class LinearLayers(nn.Module):
         """
         super().__init__()
 
+        self.input_size = input_size
         self.output_size = input_size
         dense = []
         for i in range(dense_depth):
@@ -40,6 +41,8 @@ class LinearLayers(nn.Module):
         self.dense = nn.Sequential(*dense)
 
     def forward(self, x):
+        assert x.shape[-1] == self.input_size
+
         return self.dense(x)
 
 
