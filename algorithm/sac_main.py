@@ -59,6 +59,8 @@ class Main(object):
             config['base_config']['nn'] = args.nn
         if args.agents is not None:
             config['base_config']['n_agents'] = args.agents
+        if args.max_iter is not None:
+            config['base_config']['max_iter'] = args.max_iter
 
         config['base_config']['name'] = config_helper.generate_base_name(config['base_config']['name'])
 

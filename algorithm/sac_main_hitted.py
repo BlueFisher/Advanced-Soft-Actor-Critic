@@ -1,3 +1,5 @@
+import socket
+
 import numpy as np
 
 from .agent import Agent
@@ -29,6 +31,24 @@ class AgentHitted(Agent):
 
 class MainHitted(Main):
     _agent_class = AgentHitted
+    evaluation_data = {
+        'episodes': 0,
+        'hitted': 0,
+        'hitted_steps': 0,
+        'failed_steps': 0
+    }
+
+    def _run(self):
+        super()._run()
+
+        if not self.train_mode:
+            result_path = self.model_abs_dir.joinpath('result.txt')
+            result_path.touch(exist_ok=True)
+            hostname = socket.gethostname()
+            log = f'{hostname}, {self.evaluation_data["episodes"]}, {self.evaluation_data["hitted"]}, {self.evaluation_data["hitted_steps"]}, {self.evaluation_data["failed_steps"]}'
+            with open(result_path, 'a') as f:
+                f.write(log + '\n')
+            self._logger.info(log)
 
     def _log_episode_summaries(self, agents):
         rewards = np.array([a.reward for a in agents])
@@ -47,4 +67,14 @@ class MainHitted(Main):
 
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
         steps = [a.steps for a in agents]
+
+        for agent in agents:
+            if agent.steps > 10:
+                self.evaluation_data['episodes'] += 1
+                if agent.hitted:
+                    self.evaluation_data['hitted'] += 1
+                    self.evaluation_data['hitted_steps'] += agent.steps
+                else:
+                    self.evaluation_data['failed_steps'] += agent.steps
+
         self._logger.info(f'{iteration}, T {iter_time:.2f}s, S {max(steps)}, R {rewards}, hitted {hitted}')
