@@ -29,15 +29,15 @@ def initialize_config_from_yaml(default_config_path, config_file_path, config_ca
             continue
         for k, v in config_file[cat].items():
             # `k` is the key like base_config, net_config, sac_config
-            assert k in config.keys(), f'{k} in {cat} is invalid'
+            assert k in config, f'{k} in {cat} is invalid'
             if v is not None:
-                if k == 'reset_config':
+                if cat == 'default' and k == 'reset_config':
                     config[k] = v
                 else:
                     for kk, vv in v.items():
                         # `kk` is the key in `k`
                         if kk != 'random_params':
-                            assert kk in config[k].keys(), f'{kk} is invalid in {k}'
+                            assert kk in config[k], f'{kk} is invalid in {k}'
                         config[k][kk] = vv
 
     # Deal with random_params

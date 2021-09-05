@@ -12,6 +12,7 @@ default:
     reset_on_iteration: false
 
   reset_config:
+    spectrum: 3
     force_reset: true
     bounding_box_random: 0
     semantic_segmentation_random: 0
