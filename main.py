@@ -20,6 +20,7 @@ if __name__ == '__main__':
     parser.add_argument('--additional_args', help='additional args for Unity')
     parser.add_argument('--port', '-p', type=int, default=5005, help='communication port')
     parser.add_argument('--agents', type=int, help='number of agents')
+    parser.add_argument('--max_iter', type=int, help='max iteration')
 
     parser.add_argument('--name', '-n', help='training name')
     parser.add_argument('--nn', help='neural network model')
