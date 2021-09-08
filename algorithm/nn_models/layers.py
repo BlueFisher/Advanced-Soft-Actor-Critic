@@ -236,7 +236,23 @@ class Transform(nn.Module):
 
 class GRU(nn.GRU):
     def forward(self, x: torch.Tensor, h0: torch.Tensor = None):
-        output, hn = super().forward(x.transpose(0, 1).contiguous(),
-                                     h0.transpose(0, 1).contiguous() if h0 is not None else None)
+        if h0 is not None:
+            h0.transpose(0, 1).contiguous()
+
+        output, hn = super().forward(x.transpose(0, 1).contiguous(), h0)
 
         return output.transpose(0, 1), hn.transpose(0, 1)
+
+
+class LSTM(nn.LSTM):
+    def forward(self, x: torch.Tensor, hc_0: torch.Tensor = None):
+        if hc_0 is not None:
+            hc_0 = hc_0.transpose(0, 1)
+            h0, c0 = torch.chunk(hc_0, 2, dim=-1)
+            h0 = h0.contiguous()
+            c0 = c0.contiguous()
+            hc_0 = (h0, c0)
+
+        output, (hn, cn) = super().forward(x.transpose(0, 1).contiguous(), hc_0)
+
+        return output.transpose(0, 1), torch.cat([hn, cn], dim=-1).transpose(0, 1)
