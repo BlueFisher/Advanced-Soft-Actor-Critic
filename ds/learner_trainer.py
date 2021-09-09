@@ -210,7 +210,7 @@ class Trainer:
 
         self._logger.info('SAC started')
 
-        batch_size = config['replay_config']['batch_size']
+        batch_size = config['sac_config']['batch_size']
         N = self.sac.burn_in_step + self.sac.n_step
         batch_shapes = [
             [(batch_size, N, *o) for o in obs_shapes],

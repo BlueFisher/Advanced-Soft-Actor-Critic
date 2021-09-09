@@ -23,9 +23,6 @@ default:
     n_step: 5
     v_lambda: 0.9
 
-  replay_config:
-    batch_size: 16
-
 hard:
   base_config: &hard_base
     scene: Walker2DHard

@@ -45,9 +45,6 @@ net_config:
 
 reset_config: null # Reset parameters sent to Unity
 
-replay_config:
-  batch_size: 256
-
 sac_config:
   seed: null # Random seed
   write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
@@ -59,6 +56,8 @@ sac_config:
   burn_in_step: 0 # Burn-in steps in R2D2
   n_step: 1 # Update Q function by N steps
   use_rnn: false # If use RNN
+
+  batch_size: 256
 
   tau: 0.005 # Coefficient of updating target network
   update_target_per_step: 1 # Update target network every N steps
