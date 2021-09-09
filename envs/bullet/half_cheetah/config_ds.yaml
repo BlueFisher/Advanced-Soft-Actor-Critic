@@ -18,11 +18,9 @@ default:
     write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
     save_model_per_step: 10000 # Save model every N steps
 
+    batch_size: 1024
     n_step: 5
     v_lambda: 0.9
-
-  replay_config:
-    batch_size: 1024
 
 hard:
   base_config: &hard_base

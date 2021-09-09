@@ -40,6 +40,7 @@ class SAC_Base(object):
                  n_step=1,
                  use_rnn=False,
 
+                 batch_size=256,
                  tau=0.005,
                  update_target_per_step=1,
                  init_log_alpha=-2.3,
@@ -123,6 +124,7 @@ class SAC_Base(object):
 
         self.write_summary_per_step = int(write_summary_per_step)
         self.save_model_per_step = int(save_model_per_step)
+        self.batch_size = batch_size
         self.tau = tau
         self.update_target_per_step = update_target_per_step
         self.use_auto_alpha = use_auto_alpha
@@ -160,7 +162,7 @@ class SAC_Base(object):
 
         if self.train_mode:
             replay_config = {} if replay_config is None else replay_config
-            self.replay_buffer = PrioritizedReplayBuffer(**replay_config)
+            self.replay_buffer = PrioritizedReplayBuffer(batch_size=batch_size, **replay_config)
 
         self._build_model(model, init_log_alpha, learning_rate)
         self._init_or_restore(model_abs_dir, int(last_ckpt) if last_ckpt is not None else None)
@@ -1349,7 +1351,7 @@ class SAC_Base(object):
 
         td_error_list = []
         all_batch = n_obses_list[0].shape[0]
-        batch_size = self.replay_buffer.batch_size
+        batch_size = self.batch_size
         for i in range(math.ceil(all_batch / batch_size)):
             b_i, b_j = i * batch_size, (i + 1) * batch_size
 

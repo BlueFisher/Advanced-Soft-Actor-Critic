@@ -38,6 +38,7 @@ class SAC_DS_Base(SAC_Base):
                  n_step=1,
                  use_rnn=False,
 
+                 batch_size=256,
                  tau=0.005,
                  update_target_per_step=1,
                  init_log_alpha=-2.3,
@@ -75,6 +76,7 @@ class SAC_DS_Base(SAC_Base):
 
         self.write_summary_per_step = int(write_summary_per_step)
         self.save_model_per_step = int(save_model_per_step)
+        self.batch_size = batch_size
         self.tau = tau
         self.update_target_per_step = update_target_per_step
         self.use_auto_alpha = use_auto_alpha

@@ -20,10 +20,9 @@ default:
 
     ensemble_q_num: 5
 
-    n_step: 3
-
-  replay_config:
     batch_size: 1024
+
+    n_step: 3
 
 hard:
   base_config: &hard_base

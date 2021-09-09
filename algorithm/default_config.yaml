@@ -27,7 +27,6 @@ base_config:
 reset_config: null # Reset parameters sent to Unity
 
 replay_config:
-  batch_size: 256
   capacity: 524288
   alpha: 0.9 # [0~1] convert the importance of TD error to priority. If 0, PER will reduce to vanilla replay buffer
   beta: 0.4 # Importance-sampling, from initial value increasing to 1
@@ -46,6 +45,8 @@ sac_config:
   burn_in_step: 0 # Burn-in steps in R2D2
   n_step: 1 # Update Q function by N steps
   use_rnn: false # If use RNN
+
+  batch_size: 256
 
   tau: 0.005 # Coefficient of updating target network
   update_target_per_step: 1 # Update target network every N steps

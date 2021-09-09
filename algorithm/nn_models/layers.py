@@ -237,7 +237,7 @@ class Transform(nn.Module):
 class GRU(nn.GRU):
     def forward(self, x: torch.Tensor, h0: torch.Tensor = None):
         if h0 is not None:
-            h0.transpose(0, 1).contiguous()
+            h0 = h0.transpose(0, 1).contiguous()
 
         output, hn = super().forward(x.transpose(0, 1).contiguous(), h0)
 

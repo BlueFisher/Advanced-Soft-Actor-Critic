@@ -10,7 +10,6 @@ default:
     n_agents: 10
 
   replay_config:
-    batch_size: 128
     capacity: 100000
     alpha: 0.
     beta_increment_per_sampling: 0
@@ -19,6 +18,7 @@ default:
     save_model_per_step: 1000 # Save model every N steps
 
     learning_rate: 0.01
+    batch_size: 128
 
     n_step: 3
     clip_epsilon: -1
