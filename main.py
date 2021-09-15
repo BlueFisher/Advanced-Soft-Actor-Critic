@@ -1,6 +1,6 @@
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from algorithm.config_helper import set_logger
 
