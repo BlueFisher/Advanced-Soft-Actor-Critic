@@ -1,7 +1,7 @@
 import argparse
+import multiprocessing as mp
 import sys
 from pathlib import Path
-import multiprocessing as mp
 
 from algorithm.config_helper import set_logger
 

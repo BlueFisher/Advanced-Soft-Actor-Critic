@@ -12,13 +12,12 @@ import yaml
 def initialize_config_from_yaml(default_config_path, config_file_path, config_cat=None, is_evolver=False):
     """
     config_cat: Specific experiment name. 
-                The `config_cat` will override `defult` if it is not None
+                The `config_cat` will override `default` if it is not None
     """
     config = dict()
 
     with open(default_config_path) as f:
-        default_config_file = yaml.load(f, Loader=yaml.FullLoader)
-        config = default_config_file
+        config = yaml.load(f, Loader=yaml.FullLoader)
 
     # Initialize config from config_file_path
     with open(config_file_path) as f:

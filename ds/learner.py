@@ -34,9 +34,6 @@ class Learner:
     _policy_variables_cache = None
 
     def __init__(self, root_dir, config_dir, args):
-        self.root_dir = root_dir
-        self.cmd_args = args
-
         self._closed = False
         self._registered = False
 
@@ -58,7 +55,7 @@ class Learner:
         constant_config['sac_config'] = sac_config
         self._registered = True
 
-        self._init_config(_id, constant_config)
+        self._init_config(_id, root_dir, constant_config, args)
         self._init_env()
         self._init_sac(config_abs_dir)
 
@@ -79,8 +76,10 @@ class Learner:
         # Initialize config from command line arguments
         self.render = args.render
         self.run_in_editor = args.editor
+        self.additional_args = args.additional_args
         self.device = args.device
         self.last_ckpt = args.ckpt
+        self.logger_in_file = args.logger_in_file
 
         if args.evolver_host is not None:
             config['net_config']['evolver_host'] = args.evolver_host
@@ -114,29 +113,29 @@ class Learner:
 
         return _id, name, reset_config, sac_config
 
-    def _init_config(self, _id, config):
-        if self.cmd_args.name is not None:
-            config['base_config']['name'] = self.cmd_args.name
-        if self.cmd_args.build_port is not None:
-            config['base_config']['build_port'] = self.cmd_args.build_port
-        if self.cmd_args.nn is not None:
-            config['base_config']['nn'] = self.cmd_args.nn
-        if self.cmd_args.agents is not None:
-            config['base_config']['n_agents'] = self.cmd_args.agents
+    def _init_config(self, _id, root_dir, config, args):
+        if args.name is not None:
+            config['base_config']['name'] = args.name
+        if args.build_port is not None:
+            config['base_config']['build_port'] = args.build_port
+        if args.nn is not None:
+            config['base_config']['nn'] = args.nn
+        if args.agents is not None:
+            config['base_config']['n_agents'] = args.agents
 
         self.config = config
         self.base_config = config['base_config']
         self.reset_config = config['reset_config']
         self.sac_config = config['sac_config']
 
-        model_abs_dir = Path(self.root_dir).joinpath('models',
+        model_abs_dir = Path(root_dir).joinpath('models',
                                                      self.base_config['scene'],
                                                      self.base_config['name'],
                                                      f'learner{_id}')
         model_abs_dir.mkdir(parents=True, exist_ok=True)
         self.model_abs_dir = model_abs_dir
 
-        if self.cmd_args.logger_in_file:
+        if args.logger_in_file:
             config_helper.set_logger(Path(model_abs_dir).joinpath(f'learner.log'))
 
         config_helper.display_config(config, self._logger)
@@ -153,7 +152,7 @@ class Learner:
                                         base_port=self.base_config['build_port'],
                                         no_graphics=self.base_config['no_graphics'],
                                         scene=self.base_config['scene'],
-                                        additional_args=self.cmd_args.additional_args,
+                                        additional_args=self.additional_args,
                                         n_agents=self.base_config['n_agents'])
 
         elif self.base_config['env_type'] == 'GYM':
@@ -229,7 +228,7 @@ class Learner:
             'episode_size_array': self._episode_size_array,
             'cmd_pipe_server': cmd_pipe_server,
 
-            'logger_in_file': self.cmd_args.logger_in_file,
+            'logger_in_file': self.logger_in_file,
             'obs_shapes': self.obs_shapes,
             'd_action_size': self.d_action_size,
             'c_action_size': self.c_action_size,
