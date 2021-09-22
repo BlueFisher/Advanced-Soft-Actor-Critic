@@ -11,16 +11,16 @@ from .learner import Learner
 class LearnerHitted(Learner):
     _agent_class = AgentHitted
 
-    def _log_episode_summaries(self, agents, iteration):
+    def _log_episode_summaries(self, agents):
         rewards = np.array([a.reward for a in agents])
         hitted = sum([a.hitted for a in agents])
 
-        self.sac_bak.write_constant_summaries([
-            {'tag': 'reward/mean', 'simple_value': rewards.mean()},
-            {'tag': 'reward/max', 'simple_value': rewards.max()},
-            {'tag': 'reward/min', 'simple_value': rewards.min()},
+        self.cmd_pipe_client.send(('LOG_EPISODE_SUMMARIES', [
+            {'tag': 'reward/mean', 'simple_value': float(rewards.mean())},
+            {'tag': 'reward/max', 'simple_value': float(rewards.max())},
+            {'tag': 'reward/min', 'simple_value': float(rewards.min())},
             {'tag': 'reward/hitted', 'simple_value': hitted}
-        ], iteration)
+        ]))
 
     def _log_episode_info(self, iteration, start_time, agents):
         time_elapse = (time.time() - start_time) / 60

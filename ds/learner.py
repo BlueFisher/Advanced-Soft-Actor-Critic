@@ -129,9 +129,9 @@ class Learner:
         self.sac_config = config['sac_config']
 
         model_abs_dir = Path(root_dir).joinpath('models',
-                                                     self.base_config['scene'],
-                                                     self.base_config['name'],
-                                                     f'learner{_id}')
+                                                self.base_config['scene'],
+                                                self.base_config['name'],
+                                                f'learner{_id}')
         model_abs_dir.mkdir(parents=True, exist_ok=True)
         self.model_abs_dir = model_abs_dir
 
@@ -187,10 +187,9 @@ class Learner:
         self.sac_bak = SAC_DS_Base(obs_shapes=self.obs_shapes,
                                    d_action_size=self.d_action_size,
                                    c_action_size=self.c_action_size,
-                                   model_abs_dir=self.model_abs_dir,
+                                   model_abs_dir=None,
                                    model=custom_nn_model,
                                    device=self.device,
-                                   summary_path='log/bak',
                                    train_mode=False,
                                    last_ckpt=self.last_ckpt,
 
@@ -428,7 +427,7 @@ class Learner:
                 self._logger.error('Exiting...')
                 break
 
-            self._log_episode_summaries(agents, iteration)
+            self._log_episode_summaries(agents)
             self._log_episode_info(iteration, start_time, agents)
 
             if (p := self.model_abs_dir.joinpath('save_model')).exists():
@@ -442,13 +441,13 @@ class Learner:
 
         self._logger.warning('Evaluation exits')
 
-    def _log_episode_summaries(self, agents, iteration):
+    def _log_episode_summaries(self, agents):
         rewards = np.array([a.reward for a in agents])
-        self.sac_bak.write_constant_summaries([
-            {'tag': 'reward/mean', 'simple_value': rewards.mean()},
-            {'tag': 'reward/max', 'simple_value': rewards.max()},
-            {'tag': 'reward/min', 'simple_value': rewards.min()}
-        ], iteration)
+        self.cmd_pipe_client.send(('LOG_EPISODE_SUMMARIES', [
+            {'tag': 'reward/mean', 'simple_value': float(rewards.mean())},
+            {'tag': 'reward/max', 'simple_value': float(rewards.max())},
+            {'tag': 'reward/min', 'simple_value': float(rewards.min())}
+        ]))
 
     def _log_episode_info(self, iteration, start_time, agents):
         time_elapse = (time.time() - start_time) / 60
