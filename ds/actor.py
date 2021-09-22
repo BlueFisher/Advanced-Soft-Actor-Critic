@@ -22,7 +22,7 @@ from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
 from .sac_ds_base import SAC_DS_Base
-from .utils import rpc_error_inspector, traverse_lists
+from .utils import rpc_error_inspector
 
 
 class AddTransitionBuffer:

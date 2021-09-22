@@ -266,6 +266,9 @@ class Trainer:
                 with self.sac_lock:
                     self.sac.update_nn_variables(args)
                 self._logger.info('Updated all nn variables')
+            elif cmd == 'LOG_EPISODE_SUMMARIES':
+                with self.sac_lock:
+                    self.sac.write_constant_summaries(args)
             elif cmd == 'SAVE_MODEL':
                 with self.sac_lock:
                     self.sac.save_model()
