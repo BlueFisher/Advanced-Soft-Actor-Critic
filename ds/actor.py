@@ -14,7 +14,7 @@ import numpy as np
 
 import algorithm.config_helper as config_helper
 from algorithm.agent import Agent
-from algorithm.utils import EnvException, ReadWriteLock, elapsed_timer
+from algorithm.utils import EnvException, ReadWriteLock, elapsed_timer, elapsed_counter
 
 from .constants import *
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
@@ -33,6 +33,8 @@ class AddTransitionBuffer:
         self._buffer = Queue(maxsize=10)
         self._logger = logging.getLogger('ds.actor.add_transition_buffer')
 
+        self.add_trans_counter = elapsed_counter(self._logger, 'Buffer is full', ELAPSED_REPEAT)
+
         threading.Thread(target=self.run).start()
 
     def run(self):
@@ -47,10 +49,11 @@ class AddTransitionBuffer:
                 self._add_trans(*episode_trans)
 
     def add_trans(self, episode_trans):
-        try:
-            self._buffer.put_nowait(episode_trans)
-        except Full:
-            self._logger.warning('Buffer is full, ignored')
+        with self.add_trans_counter:
+            try:
+                self._buffer.put_nowait(episode_trans)
+            except Full:
+                self.add_trans_counter.add()
 
     def close(self):
         self._closed = True

@@ -1,6 +1,6 @@
 default:
   base_config:
-    scene: AvoidCar
+    scene: RaspiCar
 
     build_path:
       win32: D:\Unity\win-RL-Envs\RLEnvironments.exe

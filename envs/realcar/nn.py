@@ -2,34 +2,32 @@ import torch
 
 import algorithm.nn_models as m
 
-EXTRA_SIZE = 4
+EXTRA_SIZE = 6
 
 
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (84, 84, 3)
-        assert self.obs_shapes[1] == (84, 84, 3)
-        assert self.obs_shapes[2] == (6,)  # ray
-        assert self.obs_shapes[3] == (84, 84, 3)
-        assert self.obs_shapes[4] == (8,)  # vector
+        assert self.obs_shapes[1] == (2,)  # ray
+        assert self.obs_shapes[2] == (8,)  # vector
 
-        self.conv = m.ConvLayers(84, 84, 3 * 3, 'simple',
+        self.conv = m.ConvLayers(84, 84, 3, 'simple',
                                  out_dense_n=64, out_dense_depth=2)
 
-        self.dense = m.LinearLayers(self.conv.output_size + 6 + 8 - EXTRA_SIZE,
+        self.dense = m.LinearLayers(self.conv.output_size,
                                     dense_n=64, dense_depth=1)
 
         self.rnn = m.GRU(64 + self.c_action_size, 64, 1)
 
     def forward(self, obs_list, pre_action, rnn_state=None):
-        vis_bounding, vis_ori, ray, vis_seg, vec = obs_list
+        vis_cam, ray, vec = obs_list
         vec = vec[..., :-EXTRA_SIZE]
 
-        vis = self.conv(torch.cat([vis_bounding, vis_ori, vis_seg], dim=-1))
+        vis = self.conv(vis_cam)
 
-        state = self.dense(torch.cat([vis, ray, vec], dim=-1))
+        state, hn = self.rnn(torch.cat([self.dense(vis), pre_action], dim=-1), rnn_state)
 
-        state, hn = self.rnn(torch.cat([state, pre_action], dim=-1), rnn_state)
+        state = torch.cat([state, ray, vec], dim=-1)
 
         return state, hn
 
