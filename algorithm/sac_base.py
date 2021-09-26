@@ -156,7 +156,7 @@ class SAC_Base(object):
             torch.cuda.manual_seed_all(seed)
 
         self.summary_writer = None
-        if model_abs_dir:
+        if model_abs_dir and self.train_mode:
             summary_path = Path(model_abs_dir).joinpath(summary_path)
             self.summary_writer = SummaryWriter(str(summary_path))
 
@@ -354,7 +354,7 @@ class SAC_Base(object):
                     assert last_ckpt in ckpts
 
                 ckpt_restore_path = ckpt_dir.joinpath(f'{last_ckpt}.pth')
-                ckpt_restore = torch.load(ckpt_restore_path)
+                ckpt_restore = torch.load(ckpt_restore_path, map_location=self.device)
                 for name, model in ckpt_dict.items():
                     if isinstance(model, torch.Tensor):
                         model.data = ckpt_restore[name]

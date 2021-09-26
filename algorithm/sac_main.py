@@ -122,9 +122,11 @@ class Main(object):
         nn_model_abs_path = self.model_abs_dir.joinpath('nn_models.py')
         if not self.alway_use_env_nn and nn_model_abs_path.exists():
             spec = importlib.util.spec_from_file_location('nn', str(nn_model_abs_path))
+            self._logger.info(f'Loaded nn from existed {nn_model_abs_path}')
         else:
             nn_abs_path = config_abs_dir.joinpath(f'{self.base_config["nn"]}.py')
             spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
+            self._logger.info(f'Loaded nn in env dir: {nn_abs_path}')
             if not self.alway_use_env_nn:
                 shutil.copyfile(nn_abs_path, nn_model_abs_path)
 
