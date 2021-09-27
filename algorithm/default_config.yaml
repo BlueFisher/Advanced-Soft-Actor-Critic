@@ -26,6 +26,8 @@ base_config:
 
 reset_config: null # Reset parameters sent to Unity
 
+model_config: null
+
 replay_config:
   capacity: 524288
   alpha: 0.9 # [0~1] convert the importance of TD error to priority. If 0, PER will reduce to vanilla replay buffer

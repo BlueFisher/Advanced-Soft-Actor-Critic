@@ -4,6 +4,7 @@ import time
 from itertools import chain
 from pathlib import Path
 from typing import List, Optional, Tuple
+from collections import defaultdict
 
 import numpy as np
 import torch
@@ -24,6 +25,7 @@ class SAC_Base(object):
                  c_action_size: int,
                  model_abs_dir: Optional[str],
                  model,
+                 model_config: Optional[dict] = None,
                  device: Optional[str] = None,
                  summary_path: str = 'log',
                  train_mode: bool = True,
@@ -164,13 +166,17 @@ class SAC_Base(object):
             replay_config = {} if replay_config is None else replay_config
             self.replay_buffer = PrioritizedReplayBuffer(batch_size=batch_size, **replay_config)
 
-        self._build_model(model, init_log_alpha, learning_rate)
+        self._build_model(model, model_config, init_log_alpha, learning_rate)
         self._init_or_restore(model_abs_dir, int(last_ckpt) if last_ckpt is not None else None)
 
-    def _build_model(self, model, init_log_alpha, learning_rate):
+    def _build_model(self, model, model_config: Optional[dict], init_log_alpha: float, learning_rate: float):
         """
         Initialize variables, network models and optimizers
         """
+        if model_config is None:
+            model_config = {}
+        model_config = defaultdict(dict, model_config)
+
         self.global_step = torch.tensor(0, dtype=torch.int64, requires_grad=False, device='cpu')
 
         self._gamma_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.gamma, device=self.device)
@@ -207,14 +213,18 @@ class SAC_Base(object):
 
         if self.use_rnn:
             # Get represented state dimension
-            self.model_rep: nn.Module = ModelRep(self.obs_shapes, self.d_action_size, self.c_action_size).to(self.device)
-            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes, self.d_action_size, self.c_action_size).to(self.device)
+            self.model_rep: nn.Module = ModelRep(self.obs_shapes,
+                                                 self.d_action_size, self.c_action_size,
+                                                 **model_config['rep']).to(self.device)
+            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes,
+                                                        self.d_action_size, self.c_action_size,
+                                                        **model_config['rep']).to(self.device)
             # Get state and rnn_state dimension
             state_size, self.rnn_state_shape = self.model_rep.get_output_shape(self.device)
         else:
             # Get represented state dimension
-            self.model_rep: nn.Module = ModelRep(self.obs_shapes).to(self.device)
-            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes).to(self.device)
+            self.model_rep: nn.Module = ModelRep(self.obs_shapes, **model_config['rep']).to(self.device)
+            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes, **model_config['rep']).to(self.device)
             state_size = self.model_rep.get_output_shape(self.device)
 
         for param in self.model_target_rep.parameters():

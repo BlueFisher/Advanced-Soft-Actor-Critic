@@ -45,6 +45,8 @@ net_config:
 
 reset_config: null # Reset parameters sent to Unity
 
+model_config: null
+
 sac_config:
   seed: null # Random seed
   write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps

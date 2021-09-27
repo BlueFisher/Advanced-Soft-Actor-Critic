@@ -22,6 +22,7 @@ class SAC_DS_Base(SAC_Base):
                  c_action_size: int,
                  model_abs_dir: Optional[str],
                  model,
+                 model_config: Optional[dict] = None,
                  device: Optional[str] = None,
                  summary_path: str = 'log',
                  train_mode: bool = True,
@@ -113,7 +114,7 @@ class SAC_DS_Base(SAC_Base):
             summary_path = Path(model_abs_dir).joinpath(summary_path)
             self.summary_writer = SummaryWriter(str(summary_path))
 
-        self._build_model(model, init_log_alpha, learning_rate)
+        self._build_model(model, model_config, init_log_alpha, learning_rate)
         self._init_or_restore(model_abs_dir, int(last_ckpt) if last_ckpt is not None else None)
 
     def _random_action(self, action):

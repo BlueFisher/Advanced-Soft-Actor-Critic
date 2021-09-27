@@ -1,4 +1,5 @@
 import torch
+from torchvision import transforms
 
 import algorithm.nn_models as m
 
@@ -6,10 +7,13 @@ EXTRA_SIZE = 6
 
 
 class ModelRep(m.ModelBaseRNNRep):
-    def _build_model(self):
+    def _build_model(self, blur, brightness, need_ray, need_speed):
         assert self.obs_shapes[0] == (84, 84, 3)
         assert self.obs_shapes[1] == (2,)  # ray
         assert self.obs_shapes[2] == (8,)  # vector
+
+        self.need_ray = need_ray
+        self.need_speed = need_speed
 
         self.conv = m.ConvLayers(84, 84, 3, 'simple',
                                  out_dense_n=64, out_dense_depth=2)
@@ -19,9 +23,27 @@ class ModelRep(m.ModelBaseRNNRep):
 
         self.rnn = m.GRU(64 + self.c_action_size, 64, 1)
 
+        if blur != 0:
+            self.blurrer = m.Transform(transforms.GaussianBlur(blur, sigma=blur))
+        else:
+            self.blurrer = None
+
+        self.brightness = m.Transform(transforms.ColorJitter(brightness=(brightness, brightness)))
+
     def forward(self, obs_list, pre_action, rnn_state=None):
         vis_cam, ray, vec = obs_list
         vec = vec[..., :-EXTRA_SIZE]
+
+        if self.blurrer:
+            vis_cam = self.blurrer(vis_cam)
+ 
+        vis_cam = self.brightness(vis_cam)
+
+        if not self.need_ray:
+            ray = torch.ones_like(ray)
+
+        if not self.need_speed:
+            vec = torch.zeros_like(vec)
 
         vis = self.conv(vis_cam)
 

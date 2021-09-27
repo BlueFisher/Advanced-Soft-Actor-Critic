@@ -13,8 +13,13 @@ default:
 
   reset_config:
     force_reset: true
-    bounding_box_random: 0
-    semantic_segmentation_random: 0
+
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1
+      need_ray: true
+      need_speed: true
 
   sac_config:
     write_summary_per_step: 500 # Write summaries in TensorBoard every N steps
@@ -27,259 +32,563 @@ default:
     use_rnd: true
     rnd_n_sample: 50
 
-br0sr0:
-  reset_config:
-    bounding_box_random: 0
-    semantic_segmentation_random: 0
-br0sr2:
-  reset_config:
-    bounding_box_random: 0
-    semantic_segmentation_random: 2
-br0sr4:
-  reset_config:
-    bounding_box_random: 0
-    semantic_segmentation_random: 4
-br0sr6:
-  reset_config:
-    bounding_box_random: 0
-    semantic_segmentation_random: 6
-br0sr8:
-  reset_config:
-    bounding_box_random: 0
-    semantic_segmentation_random: 8
-br0sr10:
-  reset_config:
-    bounding_box_random: 0
-    semantic_segmentation_random: 10
-br0sr12:
-  reset_config:
-    bounding_box_random: 0
-    semantic_segmentation_random: 12
-br0sr14:
-  reset_config:
-    bounding_box_random: 0
-    semantic_segmentation_random: 14
-br2sr0:
-  reset_config:
-    bounding_box_random: 2
-    semantic_segmentation_random: 0
-br2sr2:
-  reset_config:
-    bounding_box_random: 2
-    semantic_segmentation_random: 2
-br2sr4:
-  reset_config:
-    bounding_box_random: 2
-    semantic_segmentation_random: 4
-br2sr6:
-  reset_config:
-    bounding_box_random: 2
-    semantic_segmentation_random: 6
-br2sr8:
-  reset_config:
-    bounding_box_random: 2
-    semantic_segmentation_random: 8
-br2sr10:
-  reset_config:
-    bounding_box_random: 2
-    semantic_segmentation_random: 10
-br2sr12:
-  reset_config:
-    bounding_box_random: 2
-    semantic_segmentation_random: 12
-br2sr14:
-  reset_config:
-    bounding_box_random: 2
-    semantic_segmentation_random: 14
-br4sr0:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 0
-br4sr2:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 2
-br4sr4:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 4
-br4sr6:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 6
-br4sr8:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 8
-br4sr10:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 10
-br4sr12:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 12
-br4sr14:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 14
-br6sr0:
-  reset_config:
-    bounding_box_random: 6
-    semantic_segmentation_random: 0
-br6sr2:
-  reset_config:
-    bounding_box_random: 6
-    semantic_segmentation_random: 2
-br6sr4:
-  reset_config:
-    bounding_box_random: 6
-    semantic_segmentation_random: 4
-br6sr6:
-  reset_config:
-    bounding_box_random: 6
-    semantic_segmentation_random: 6
-br6sr8:
-  reset_config:
-    bounding_box_random: 6
-    semantic_segmentation_random: 8
-br6sr10:
-  reset_config:
-    bounding_box_random: 6
-    semantic_segmentation_random: 10
-br6sr12:
-  reset_config:
-    bounding_box_random: 6
-    semantic_segmentation_random: 12
-br6sr14:
-  reset_config:
-    bounding_box_random: 6
-    semantic_segmentation_random: 14
-br8sr0:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 0
-br8sr2:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 2
-br8sr4:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 4
-br8sr6:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 6
-br8sr8:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 8
-br8sr10:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 10
-br8sr12:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 12
-br8sr14:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 14
-br10sr0:
-  reset_config:
-    bounding_box_random: 10
-    semantic_segmentation_random: 0
-br10sr2:
-  reset_config:
-    bounding_box_random: 10
-    semantic_segmentation_random: 2
-br10sr4:
-  reset_config:
-    bounding_box_random: 10
-    semantic_segmentation_random: 4
-br10sr6:
-  reset_config:
-    bounding_box_random: 10
-    semantic_segmentation_random: 6
-br10sr8:
-  reset_config:
-    bounding_box_random: 10
-    semantic_segmentation_random: 8
-br10sr10:
-  reset_config:
-    bounding_box_random: 10
-    semantic_segmentation_random: 10
-br10sr12:
-  reset_config:
-    bounding_box_random: 10
-    semantic_segmentation_random: 12
-br10sr14:
-  reset_config:
-    bounding_box_random: 10
-    semantic_segmentation_random: 14
-br12sr0:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 0
-br12sr2:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 2
-br12sr4:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 4
-br12sr6:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 6
-br12sr8:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 8
-br12sr10:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 10
-br12sr12:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 12
-br12sr14:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 14
-br14sr0:
-  reset_config:
-    bounding_box_random: 14
-    semantic_segmentation_random: 0
-br14sr2:
-  reset_config:
-    bounding_box_random: 14
-    semantic_segmentation_random: 2
-br14sr4:
-  reset_config:
-    bounding_box_random: 14
-    semantic_segmentation_random: 4
-br14sr6:
-  reset_config:
-    bounding_box_random: 14
-    semantic_segmentation_random: 6
-br14sr8:
-  reset_config:
-    bounding_box_random: 14
-    semantic_segmentation_random: 8
-br14sr10:
-  reset_config:
-    bounding_box_random: 14
-    semantic_segmentation_random: 10
-br14sr12:
-  reset_config:
-    bounding_box_random: 14
-    semantic_segmentation_random: 12
-br14sr14:
-  reset_config:
-    bounding_box_random: 14
-    semantic_segmentation_random: 14
+bl0br2ray1sp1:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+      need_ray: true
+      need_speed: true
+bl0br2ray1sp0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+      need_ray: true
+      need_speed: false
+bl0br2ray0sp1:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+      need_ray: false
+      need_speed: true
+bl0br2ray0sp0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+      need_ray: false
+      need_speed: false
+bl0br5ray1sp1:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.5
+      need_ray: true
+      need_speed: true
+bl0br5ray1sp0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.5
+      need_ray: true
+      need_speed: false
+bl0br5ray0sp1:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.5
+      need_ray: false
+      need_speed: true
+bl0br5ray0sp0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.5
+      need_ray: false
+      need_speed: false
+bl0br8ray1sp1:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+      need_ray: true
+      need_speed: true
+bl0br8ray1sp0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+      need_ray: true
+      need_speed: false
+bl0br8ray0sp1:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+      need_ray: false
+      need_speed: true
+bl0br8ray0sp0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+      need_ray: false
+      need_speed: false
+bl0br10ray1sp1:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1
+      need_ray: true
+      need_speed: true
+bl0br10ray1sp0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1
+      need_ray: true
+      need_speed: false
+bl0br10ray0sp1:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1
+      need_ray: false
+      need_speed: true
+bl0br10ray0sp0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1
+      need_ray: false
+      need_speed: false
+bl0br12ray1sp1:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.2
+      need_ray: true
+      need_speed: true
+bl0br12ray1sp0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.2
+      need_ray: true
+      need_speed: false
+bl0br12ray0sp1:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.2
+      need_ray: false
+      need_speed: true
+bl0br12ray0sp0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.2
+      need_ray: false
+      need_speed: false
+bl3br2ray1sp1:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+      need_ray: true
+      need_speed: true
+bl3br2ray1sp0:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+      need_ray: true
+      need_speed: false
+bl3br2ray0sp1:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+      need_ray: false
+      need_speed: true
+bl3br2ray0sp0:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+      need_ray: false
+      need_speed: false
+bl3br5ray1sp1:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.5
+      need_ray: true
+      need_speed: true
+bl3br5ray1sp0:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.5
+      need_ray: true
+      need_speed: false
+bl3br5ray0sp1:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.5
+      need_ray: false
+      need_speed: true
+bl3br5ray0sp0:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.5
+      need_ray: false
+      need_speed: false
+bl3br8ray1sp1:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+      need_ray: true
+      need_speed: true
+bl3br8ray1sp0:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+      need_ray: true
+      need_speed: false
+bl3br8ray0sp1:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+      need_ray: false
+      need_speed: true
+bl3br8ray0sp0:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+      need_ray: false
+      need_speed: false
+bl3br10ray1sp1:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1
+      need_ray: true
+      need_speed: true
+bl3br10ray1sp0:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1
+      need_ray: true
+      need_speed: false
+bl3br10ray0sp1:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1
+      need_ray: false
+      need_speed: true
+bl3br10ray0sp0:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1
+      need_ray: false
+      need_speed: false
+bl3br12ray1sp1:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.2
+      need_ray: true
+      need_speed: true
+bl3br12ray1sp0:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.2
+      need_ray: true
+      need_speed: false
+bl3br12ray0sp1:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.2
+      need_ray: false
+      need_speed: true
+bl3br12ray0sp0:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.2
+      need_ray: false
+      need_speed: false
+bl5br2ray1sp1:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+      need_ray: true
+      need_speed: true
+bl5br2ray1sp0:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+      need_ray: true
+      need_speed: false
+bl5br2ray0sp1:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+      need_ray: false
+      need_speed: true
+bl5br2ray0sp0:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+      need_ray: false
+      need_speed: false
+bl5br5ray1sp1:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.5
+      need_ray: true
+      need_speed: true
+bl5br5ray1sp0:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.5
+      need_ray: true
+      need_speed: false
+bl5br5ray0sp1:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.5
+      need_ray: false
+      need_speed: true
+bl5br5ray0sp0:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.5
+      need_ray: false
+      need_speed: false
+bl5br8ray1sp1:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+      need_ray: true
+      need_speed: true
+bl5br8ray1sp0:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+      need_ray: true
+      need_speed: false
+bl5br8ray0sp1:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+      need_ray: false
+      need_speed: true
+bl5br8ray0sp0:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+      need_ray: false
+      need_speed: false
+bl5br10ray1sp1:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1
+      need_ray: true
+      need_speed: true
+bl5br10ray1sp0:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1
+      need_ray: true
+      need_speed: false
+bl5br10ray0sp1:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1
+      need_ray: false
+      need_speed: true
+bl5br10ray0sp0:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1
+      need_ray: false
+      need_speed: false
+bl5br12ray1sp1:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.2
+      need_ray: true
+      need_speed: true
+bl5br12ray1sp0:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.2
+      need_ray: true
+      need_speed: false
+bl5br12ray0sp1:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.2
+      need_ray: false
+      need_speed: true
+bl5br12ray0sp0:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.2
+      need_ray: false
+      need_speed: false
+bl9br2ray1sp1:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 0.2
+      need_ray: true
+      need_speed: true
+bl9br2ray1sp0:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 0.2
+      need_ray: true
+      need_speed: false
+bl9br2ray0sp1:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 0.2
+      need_ray: false
+      need_speed: true
+bl9br2ray0sp0:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 0.2
+      need_ray: false
+      need_speed: false
+bl9br5ray1sp1:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 0.5
+      need_ray: true
+      need_speed: true
+bl9br5ray1sp0:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 0.5
+      need_ray: true
+      need_speed: false
+bl9br5ray0sp1:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 0.5
+      need_ray: false
+      need_speed: true
+bl9br5ray0sp0:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 0.5
+      need_ray: false
+      need_speed: false
+bl9br8ray1sp1:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 0.8
+      need_ray: true
+      need_speed: true
+bl9br8ray1sp0:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 0.8
+      need_ray: true
+      need_speed: false
+bl9br8ray0sp1:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 0.8
+      need_ray: false
+      need_speed: true
+bl9br8ray0sp0:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 0.8
+      need_ray: false
+      need_speed: false
+bl9br10ray1sp1:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 1
+      need_ray: true
+      need_speed: true
+bl9br10ray1sp0:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 1
+      need_ray: true
+      need_speed: false
+bl9br10ray0sp1:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 1
+      need_ray: false
+      need_speed: true
+bl9br10ray0sp0:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 1
+      need_ray: false
+      need_speed: false
+bl9br12ray1sp1:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 1.2
+      need_ray: true
+      need_speed: true
+bl9br12ray1sp0:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 1.2
+      need_ray: true
+      need_speed: false
+bl9br12ray0sp1:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 1.2
+      need_ray: false
+      need_speed: true
+bl9br12ray0sp0:
+  model_config:
+    rep:
+      blur: 9
+      brightness: 1.2
+      need_ray: false
+      need_speed: false

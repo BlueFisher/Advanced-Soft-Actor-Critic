@@ -3,13 +3,13 @@ from torch import nn
 
 
 class ModelBaseSimpleRep(nn.Module):
-    def __init__(self, obs_shapes):
+    def __init__(self, obs_shapes, **kwargs):
         super().__init__()
         self.obs_shapes = obs_shapes
 
-        self._build_model()
+        self._build_model(**kwargs)
 
-    def _build_model(self):
+    def _build_model(self, **kwargs):
         pass
 
     def get_output_shape(self, device):
@@ -29,15 +29,15 @@ class ModelSimpleRep(ModelBaseSimpleRep):
 
 
 class ModelBaseRNNRep(nn.Module):
-    def __init__(self, obs_shapes, d_action_size, c_action_size):
+    def __init__(self, obs_shapes, d_action_size, c_action_size, **kwargs):
         super().__init__()
         self.obs_shapes = obs_shapes
         self.d_action_size = d_action_size
         self.c_action_size = c_action_size
 
-        self._build_model()
+        self._build_model(**kwargs)
 
-    def _build_model(self):
+    def _build_model(self, **kwargs):
         pass
 
     def get_output_shape(self, device):
