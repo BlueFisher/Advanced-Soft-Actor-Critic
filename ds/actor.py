@@ -126,10 +126,12 @@ class Actor(object):
 
         (model_abs_dir, _id,
          reset_config,
+         model_config,
          sac_config) = register_response
         self._logger.info(f'Assigned to id {_id}')
 
         config['reset_config'] = self.reset_config = reset_config
+        config['model_config'] = self.model_config = model_config
         config['sac_config'] = sac_config
 
         self.sac_config = config['sac_config']
@@ -180,6 +182,7 @@ class Actor(object):
                                      c_action_size=self.c_action_size,
                                      model_abs_dir=None,
                                      model=custom_nn_model,
+                                     model_config=self.model_config,
                                      device=self.device,
                                      train_mode=False,
 
@@ -455,6 +458,7 @@ class StubController:
                 self._logger.info('Registered to learner')
                 return (response.model_abs_dir, response.unique_id,
                         json.loads(response.reset_config_json),
+                        json.loads(response.model_config_json),
                         json.loads(response.sac_config_json))
             else:
                 response = None

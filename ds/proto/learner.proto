@@ -24,7 +24,8 @@ message RegisterActorResponse{
   int32 unique_id = 2;
 
   string reset_config_json = 3;
-  string sac_config_json = 4;
+  string model_config_json = 4;
+  string sac_config_json = 5;
 }
 
 message GetActionRequest {

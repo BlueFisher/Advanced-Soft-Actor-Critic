@@ -139,6 +139,7 @@ class Evolver:
     def _get_new_learner_config(self, peer):
         config = self._config_generator.generate(peer)
         return (config['reset_config'],
+                config['model_config'],
                 config['sac_config'])
 
     def _learner_connected(self, peer, connected):
@@ -414,9 +415,11 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
             self._learner_id += 1
 
         (reset_config,
+         model_config,
          sac_config) = self._get_new_learner_config(peer)
         return evolver_pb2.RegisterLearnerResponse(name=self.name, id=learner_id,
                                                    reset_config_json=json.dumps(reset_config),
+                                                   model_config_json=json.dumps(model_config),
                                                    sac_config_json=json.dumps(sac_config))
 
     def RegisterActor(self, request, context):

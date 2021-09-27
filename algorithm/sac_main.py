@@ -81,6 +81,7 @@ class Main(object):
 
         self.base_config = config['base_config']
         self.reset_config = config['reset_config']
+        self.model_config = config['model_config']
         self.replay_config = config['replay_config']
         self.sac_config = config['sac_config']
 
@@ -138,6 +139,7 @@ class Main(object):
                             c_action_size=self.c_action_size,
                             model_abs_dir=self.model_abs_dir,
                             model=custom_nn_model,
+                            model_config=self.model_config,
                             device=self.device,
                             train_mode=self.train_mode,
                             last_ckpt=self.last_ckpt,

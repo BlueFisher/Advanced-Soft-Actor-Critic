@@ -23,21 +23,20 @@ def initialize_config_from_yaml(default_config_path, config_file_path, config_ca
     with open(config_file_path) as f:
         config_file = yaml.load(f, Loader=yaml.FullLoader)
 
+    def _tra_dict(dict_target: dict, dict_ori: dict):
+        for k, v in dict_ori.items():
+            if k not in dict_target:
+                dict_target[k] = v
+            else:
+                if isinstance(dict_target[k], dict) and isinstance(v, dict):
+                    _tra_dict(dict_target[k], v)
+                else:
+                    dict_target[k] = v
+
     for cat in ['default', config_cat]:
         if cat is None:
             continue
-        for k, v in config_file[cat].items():
-            # `k` is the key like base_config, net_config, sac_config
-            assert k in config, f'{k} in {cat} is invalid'
-            if v is not None:
-                if cat == 'default' and k == 'reset_config':
-                    config[k] = v
-                else:
-                    for kk, vv in v.items():
-                        # `kk` is the key in `k`
-                        if kk != 'random_params':
-                            assert kk in config[k], f'{kk} is invalid in {k}'
-                        config[k][kk] = vv
+        _tra_dict(config, config_file[cat])
 
     # Deal with random_params
     for k, v in config.items():

@@ -48,10 +48,11 @@ class Learner:
             constant_config['net_config']['evolver_port']
         )
 
-        _id, name, reset_config, sac_config = self._register_evolver(learner_host,
-                                                                     learner_port)
+        _id, name, reset_config, model_config, sac_config = self._register_evolver(learner_host,
+                                                                                   learner_port)
         constant_config['base_config']['name'] = name
         constant_config['reset_config'] = reset_config
+        constant_config['model_config'] = model_config
         constant_config['sac_config'] = sac_config
         self._registered = True
 
@@ -107,11 +108,11 @@ class Learner:
                                                                    learner_port)
 
         (_id, name,
-         reset_config, sac_config) = register_response
+         reset_config, model_config, sac_config) = register_response
 
         self._logger.info(f'Registered id: {_id}, name: {name}')
 
-        return _id, name, reset_config, sac_config
+        return _id, name, reset_config, model_config, sac_config
 
     def _init_config(self, _id, root_dir, config, args):
         if args.name is not None:
@@ -126,6 +127,7 @@ class Learner:
         self.config = config
         self.base_config = config['base_config']
         self.reset_config = config['reset_config']
+        self.model_config = config['model_config']
         self.sac_config = config['sac_config']
 
         model_abs_dir = Path(root_dir).joinpath('models',
@@ -189,6 +191,7 @@ class Learner:
                                    c_action_size=self.c_action_size,
                                    model_abs_dir=None,
                                    model=custom_nn_model,
+                                   model_config=self.model_config,
                                    device=self.device,
                                    train_mode=False,
                                    last_ckpt=self.last_ckpt,
@@ -277,6 +280,7 @@ class Learner:
 
             return (str(self.model_abs_dir),
                     self.reset_config,
+                    self.model_config,
                     actor_sac_config)
 
     def _get_policy_variables(self):
@@ -547,10 +551,12 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
                 (model_abs_dir,
                  reset_config,
+                 model_config,
                  sac_config) = res
                 return learner_pb2.RegisterActorResponse(model_abs_dir=model_abs_dir,
                                                          unique_id=actor_id,
                                                          reset_config_json=json.dumps(reset_config),
+                                                         model_config_json=json.dumps(model_config),
                                                          sac_config_json=json.dumps(sac_config))
             else:
                 return learner_pb2.RegisterActorResponse(unique_id=-1)
@@ -661,6 +667,7 @@ class EvolverStubController:
 
                 return (response.id, response.name,
                         json.loads(response.reset_config_json),
+                        json.loads(response.model_config_json),
                         json.loads(response.sac_config_json))
             else:
                 response = None

@@ -203,6 +203,7 @@ class Trainer:
                                c_action_size=c_action_size,
                                model_abs_dir=model_abs_dir,
                                model=custom_nn_model,
+                               model_config=config['model_config'],
                                device=device,
                                last_ckpt=last_ckpt,
 
