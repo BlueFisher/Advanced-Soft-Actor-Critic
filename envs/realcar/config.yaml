@@ -29,6 +29,8 @@ default:
     burn_in_step: 10
     use_rnn: true
 
+    use_contrastive: true
+
     use_rnd: true
     rnd_n_sample: 50
 
