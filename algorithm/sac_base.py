@@ -57,6 +57,7 @@ class SAC_Base(object):
                  discrete_dqn_like=False,
                  use_priority=True,
                  use_n_step_is=True,
+                 use_contrastive=False,
                  use_prediction=False,
                  transition_kl=0.8,
                  use_extra_data=True,
@@ -89,6 +90,7 @@ class SAC_Base(object):
         n_step: Update Q function by `n_step` steps
         use_rnn: If use RNN
 
+        batch_size: Batch size for training
         tau: Coefficient of updating target network
         update_target_per_step: Update target network every 'update_target_per_step' steps
         init_log_alpha: The initial log_alpha
@@ -102,6 +104,7 @@ class SAC_Base(object):
 
         use_priority: If use PER importance ratio
         use_n_step_is: If use importance sampling
+        use_contrastive: false # If use contrastive learning
         use_prediction: If train a transition model
         transition_kl: The coefficient of KL of transition and standard normal
         use_extra_data: If use extra data to train prediction model
@@ -139,6 +142,7 @@ class SAC_Base(object):
         self.discrete_dqn_like = discrete_dqn_like
         self.use_priority = use_priority
         self.use_n_step_is = use_n_step_is
+        self.use_contrastive = use_contrastive
         self.use_prediction = use_prediction
         self.transition_kl = transition_kl
         self.use_extra_data = use_extra_data
@@ -212,20 +216,23 @@ class SAC_Base(object):
             ModelRep = model.ModelRep
 
         if self.use_rnn:
-            # Get represented state dimension
             self.model_rep: nn.Module = ModelRep(self.obs_shapes,
                                                  self.d_action_size, self.c_action_size,
                                                  **model_config['rep']).to(self.device)
             self.model_target_rep: nn.Module = ModelRep(self.obs_shapes,
                                                         self.d_action_size, self.c_action_size,
                                                         **model_config['rep']).to(self.device)
-            # Get state and rnn_state dimension
-            state_size, self.rnn_state_shape = self.model_rep.get_output_shape(self.device)
+            # Get represented state and rnn_state dimension
+            tmp_obs_list = [torch.empty(1, 1, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
+            tmp_pre_action = torch.empty(1, 1, self.d_action_size + self.c_action_size, device=self.device)
+            output, next_rnn_state = self.model_rep(tmp_obs_list, tmp_pre_action)
+            state_size, self.rnn_state_shape = output.shape[-1], next_rnn_state.shape[1:]
         else:
-            # Get represented state dimension
             self.model_rep: nn.Module = ModelRep(self.obs_shapes, **model_config['rep']).to(self.device)
             self.model_target_rep: nn.Module = ModelRep(self.obs_shapes, **model_config['rep']).to(self.device)
-            state_size = self.model_rep.get_output_shape(self.device)
+            # Get represented state dimension
+            tmp_obs_list = [torch.empty(1, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
+            state_size = self.model_rep(tmp_obs_list).shape[-1]
 
         for param in self.model_target_rep.parameters():
             param.requires_grad = False
@@ -256,6 +263,13 @@ class SAC_Base(object):
         """ POLICY """
         self.model_policy: nn.Module = model.ModelPolicy(state_size, self.d_action_size, self.c_action_size).to(self.device)
         self.optimizer_policy = adam_optimizer(self.model_policy.parameters())
+
+        """ CONTRASTIVE LEARNING """
+        if self.use_contrastive:
+            c_encoder = self.model_rep.get_contrastive_encoder(tmp_obs_list)
+            assert c_encoder is not None
+            self.contrastive_weight = torch.randn((c_encoder.shape[-1], c_encoder.shape[-1]), requires_grad=True, device=self.device)
+            self.optimizer_contrastive = adam_optimizer([self.contrastive_weight])
 
         """ RECURRENT PREDICTION MODELS """
         if self.use_prediction:
@@ -782,76 +796,116 @@ class SAC_Base(object):
             loss_q_list[i].backward(retain_graph=True)
             self.optimizer_q_list[i].step()
 
+        """ Contrastive Learning """
+        loss_contrastive = None
+        if self.use_contrastive:
+            loss_contrastive = self._train_contrastive_learning(n_obses_list)
+
         """ Recurrent Prediction Model """
-
+        loss_predictions = None
         if self.use_prediction:
-            loss_mse = torch.nn.MSELoss()
-
-            n_obses_list = [m_obs[:, :-1, ...] for m_obs in m_obses_list]
-
-            approx_next_state_dist: torch.distributions.Normal = self.model_transition(
-                [n_obses[:, self.burn_in_step:, ...] for n_obses in n_obses_list],  # May for extra observations
-                n_states[:, self.burn_in_step:, ...],
-                n_actions[:, self.burn_in_step:, ...]
-            )  # [Batch, n_step, action_size]
-
-            loss_transition = -torch.mean(approx_next_state_dist.log_prob(m_target_states[:, self.burn_in_step + 1:, ...]))
-
-            std_normal = distributions.Normal(torch.zeros_like(approx_next_state_dist.loc),
-                                              torch.ones_like(approx_next_state_dist.scale))
-            kl = distributions.kl.kl_divergence(approx_next_state_dist, std_normal)
-            loss_transition += self.transition_kl * torch.mean(kl)
-
-            approx_n_rewards = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])  # [Batch, n_step, 1]
-            loss_reward = loss_mse(approx_n_rewards, torch.unsqueeze(n_rewards[:, self.burn_in_step:], 2))
-            loss_reward /= self.n_step
-
-            loss_obs = self.model_observation.get_loss(m_states[:, self.burn_in_step:, ...],
-                                                       [m_obses[:, self.burn_in_step:, ...] for m_obses in m_obses_list])
-            loss_obs /= self.n_step
-
-            """ Adaptive Weights for Representation Model """
-            with torch.no_grad():
-                grads_rep = [m.grad for m in self.model_rep.parameters()]
-                grads_rep_preds = [autograd.grad(loss_transition, self.model_rep.parameters(), retain_graph=True),
-                                   autograd.grad(loss_reward, self.model_rep.parameters(), retain_graph=True),
-                                   autograd.grad(loss_obs, self.model_rep.parameters(), retain_graph=True)]
-
-                # for i in range(len(grads_rep)):
-                #     grad_rep = grads_rep[i]
-                #     grad_rep_norm = torch.norm(grad_rep)
-                #     for grads_rep_pred in grads_rep_preds:
-                #         grad_rep_pred = grads_rep_pred[i]
-                #         cos = torch.sum(grad_rep * grad_rep_pred) / (grad_rep_norm * torch.norm(grad_rep_pred))
-                #         grads_rep[i] += cos.clamp(min=0) * grad_rep_pred
-
-                _grads_rep_main = torch.cat([g.reshape(1, -1) for g in grads_rep], dim=1)
-                _grads_rep_preds = [torch.cat([g.reshape(1, -1) for g in grads_rep_pred], dim=1)
-                                    for grads_rep_pred in grads_rep_preds]
-
-                coses = [functional.cosine_similarity(_grads_rep_main, grads_rep_pred)
-                         for grads_rep_pred in _grads_rep_preds]
-                coses = [torch.sign(cos).clamp(min=0) for cos in coses]
-
-                for grads_rep_pred, cos in zip(grads_rep_preds, coses):
-                    for param_rep, grad_rep_pred in zip(self.model_rep.parameters(), grads_rep_pred):
-                        param_rep.grad += cos * grad_rep_pred
+            loss_predictions = self._train_rpm(m_obses_list,
+                                               m_states,
+                                               m_target_states,
+                                               n_actions,
+                                               n_rewards)
 
         if self.optimizer_rep:
             self.optimizer_rep.step()
 
-        if self.use_prediction:
-            loss_prediction = loss_transition + loss_reward + loss_obs
-            self.optimizer_prediction.zero_grad()
-            loss_prediction.backward(inputs=list(chain(self.model_transition.parameters(),
-                                                       self.model_reward.parameters(),
-                                                       self.model_observation.parameters())))
-            self.optimizer_prediction.step()
+        return loss_q_list[0], loss_contrastive, loss_predictions
 
-        if self.use_prediction:
-            return loss_q_list[0], torch.mean(approx_next_state_dist.entropy()), loss_reward, loss_obs
-        else:
-            return loss_q_list[0], None
+    def _train_contrastive_learning(self, n_obses_list):
+        query = self.model_rep.get_contrastive_encoder([n_obses[:, self.burn_in_step:, ...]
+                                                        for n_obses in n_obses_list])  # [Batch, n_step, f]
+        key = self.model_target_rep.get_contrastive_encoder([n_obses[:, self.burn_in_step:, ...]
+                                                             for n_obses in n_obses_list])  # [Batch, n_step, f]
+
+        batch = query.shape[0]
+        query = query.view(batch * self.n_step, -1)  # [Batch * n_step, f]
+        key = key.view(batch * self.n_step, -1)  # [Batch * n_step, f]
+        logits = torch.mm(query, self.contrastive_weight)
+        logits = torch.mm(logits, key.t())  # [Batch * n_step, Batch * n_step]
+        if not hasattr(self, '_contrastive_label'):
+            self._contrastive_labels = torch.block_diag(*torch.ones(batch,
+                                                                    self.n_step,
+                                                                    self.n_step, device=self.device))
+
+        loss_contrastive = functional.binary_cross_entropy_with_logits(logits, self._contrastive_labels)
+
+        self.optimizer_contrastive.zero_grad()
+        loss_contrastive.backward(inputs=list(chain(self.model_rep.parameters(),
+                                                    [self.contrastive_weight])), retain_graph=True)
+        self.optimizer_contrastive.step()
+
+        return loss_contrastive
+
+    def _train_rpm(self,
+                   m_obses_list,
+                   m_states,
+                   m_target_states,
+                   n_actions,
+                   n_rewards):
+        n_obses_list = [m_obs[:, :-1, ...] for m_obs in m_obses_list]
+        n_states = m_states[:, :-1, ...]
+
+        approx_next_state_dist: torch.distributions.Normal = self.model_transition(
+            [n_obses[:, self.burn_in_step:, ...] for n_obses in n_obses_list],  # May for extra observations
+            n_states[:, self.burn_in_step:, ...],
+            n_actions[:, self.burn_in_step:, ...]
+        )  # [Batch, n_step, action_size]
+
+        loss_transition = -torch.mean(approx_next_state_dist.log_prob(m_target_states[:, self.burn_in_step + 1:, ...]))
+
+        std_normal = distributions.Normal(torch.zeros_like(approx_next_state_dist.loc),
+                                          torch.ones_like(approx_next_state_dist.scale))
+        kl = distributions.kl.kl_divergence(approx_next_state_dist, std_normal)
+        loss_transition += self.transition_kl * torch.mean(kl)
+
+        approx_n_rewards = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])  # [Batch, n_step, 1]
+        loss_reward = functional.mse_loss(approx_n_rewards, torch.unsqueeze(n_rewards[:, self.burn_in_step:], 2))
+        loss_reward /= self.n_step
+
+        loss_obs = self.model_observation.get_loss(m_states[:, self.burn_in_step:, ...],
+                                                   [m_obses[:, self.burn_in_step:, ...] for m_obses in m_obses_list])
+        loss_obs /= self.n_step
+
+        """ Adaptive Weights for Representation Model """
+
+        with torch.no_grad():
+            grads_rep = [m.grad for m in self.model_rep.parameters()]
+            grads_rep_preds = [autograd.grad(loss_transition, self.model_rep.parameters(), retain_graph=True),
+                               autograd.grad(loss_reward, self.model_rep.parameters(), retain_graph=True),
+                               autograd.grad(loss_obs, self.model_rep.parameters(), retain_graph=True)]
+
+            # for i in range(len(grads_rep)):
+            #     grad_rep = grads_rep[i]
+            #     grad_rep_norm = torch.norm(grad_rep)
+            #     for grads_rep_pred in grads_rep_preds:
+            #         grad_rep_pred = grads_rep_pred[i]
+            #         cos = torch.sum(grad_rep * grad_rep_pred) / (grad_rep_norm * torch.norm(grad_rep_pred))
+            #         grads_rep[i] += cos.clamp(min=0) * grad_rep_pred
+
+            _grads_rep_main = torch.cat([g.reshape(1, -1) for g in grads_rep], dim=1)
+            _grads_rep_preds = [torch.cat([g.reshape(1, -1) for g in grads_rep_pred], dim=1)
+                                for grads_rep_pred in grads_rep_preds]
+
+            coses = [functional.cosine_similarity(_grads_rep_main, grads_rep_pred)
+                     for grads_rep_pred in _grads_rep_preds]
+            coses = [torch.sign(cos).clamp(min=0) for cos in coses]
+
+            for grads_rep_pred, cos in zip(grads_rep_preds, coses):
+                for param_rep, grad_rep_pred in zip(self.model_rep.parameters(), grads_rep_pred):
+                    param_rep.grad += cos * grad_rep_pred
+
+        loss_predictions = loss_transition + loss_reward + loss_obs
+        self.optimizer_prediction.zero_grad()
+        loss_predictions.backward(inputs=list(chain(self.model_transition.parameters(),
+                                                    self.model_reward.parameters(),
+                                                    self.model_observation.parameters())))
+        self.optimizer_prediction.step()
+
+        return torch.mean(approx_next_state_dist.entropy()), loss_reward, loss_obs
 
     def _train_policy(self, state: torch.Tensor, action: torch.Tensor):
         batch = state.shape[0]
@@ -943,13 +997,11 @@ class SAC_Base(object):
         return d_alpha, c_alpha
 
     def _train_curiosity(self, m_states: torch.Tensor, n_actions: torch.Tensor):
-        loss_mse = torch.nn.MSELoss()
-
         n_states = m_states[:, :-1, ...]
         approx_next_n_states = self.model_forward(n_states[:, self.burn_in_step:, ...],
                                                   n_actions[:, self.burn_in_step:, ...])
         next_n_states = m_states[:, self.burn_in_step + 1:, ...]
-        loss_forward = loss_mse(approx_next_n_states, next_n_states)
+        loss_forward = functional.mse_loss(approx_next_n_states, next_n_states)
 
         self.optimizer_forward.zero_grad()
         loss_forward.backward(inputs=list(self.model_forward.parameters()))
@@ -958,13 +1010,11 @@ class SAC_Base(object):
         return loss_forward
 
     def _train_rnd(self, n_states: torch.Tensor, n_actions: torch.Tensor):
-        loss_mse = torch.nn.MSELoss()
-
         approx_f = self.model_rnd(n_states[:, self.burn_in_step:, ...],
                                   n_actions[:, self.burn_in_step:, ...])
         f = self.model_target_rnd(n_states[:, self.burn_in_step:, ...],
                                   n_actions[:, self.burn_in_step:, ...]).detach()
-        loss_rnd = loss_mse(f, approx_f)
+        loss_rnd = functional.mse_loss(f, approx_f)
 
         self.optimizer_rnd.zero_grad()
         loss_rnd.backward(inputs=list(self.model_rnd.parameters()))
@@ -995,13 +1045,13 @@ class SAC_Base(object):
         if self.global_step % self.update_target_per_step == 0:
             self._update_target_variables(tau=self.tau)
 
-        loss_q, *loss_predictions = self._train_rep_q(n_obses_list,
-                                                      n_actions,
-                                                      n_rewards,
-                                                      next_obs_list,
-                                                      n_dones,
-                                                      n_mu_probs, priority_is,
-                                                      initial_rnn_state)
+        loss_q, loss_contrastive, loss_predictions = self._train_rep_q(n_obses_list,
+                                                                       n_actions,
+                                                                       n_rewards,
+                                                                       next_obs_list,
+                                                                       n_dones,
+                                                                       n_mu_probs, priority_is,
+                                                                       initial_rnn_state)
 
         with torch.no_grad():
             m_obses_list = [torch.cat([n_obses, next_obs.view(-1, 1, *next_obs.shape[1:])], dim=1)
@@ -1040,6 +1090,11 @@ class SAC_Base(object):
                     self.summary_writer.add_scalar('loss/c_entropy', c_policy_entropy, self.global_step)
                     if self.use_auto_alpha:
                         self.summary_writer.add_scalar('loss/c_alpha', c_alpha, self.global_step)
+
+                if self.use_contrastive:
+                    self.summary_writer.add_scalar('loss/contrastive',
+                                                   loss_contrastive,
+                                                   self.global_step)
 
                 if self.use_prediction:
                     approx_next_state_dist_entropy, loss_reward, loss_obs = loss_predictions

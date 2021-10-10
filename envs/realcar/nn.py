@@ -1,7 +1,8 @@
 import torch
-from torchvision import transforms
+from torchvision import transforms as T
 
 import algorithm.nn_models as m
+from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
 
 EXTRA_SIZE = 6
 
@@ -24,11 +25,22 @@ class ModelRep(m.ModelBaseRNNRep):
         self.rnn = m.GRU(64 + self.c_action_size, 64, 1)
 
         if blur != 0:
-            self.blurrer = m.Transform(transforms.GaussianBlur(blur, sigma=blur))
+            self.blurrer = m.Transform(T.GaussianBlur(blur, sigma=blur))
         else:
             self.blurrer = None
 
-        self.brightness = m.Transform(transforms.ColorJitter(brightness=(brightness, brightness)))
+        self.brightness = m.Transform(T.ColorJitter(brightness=(brightness, brightness)))
+
+        cropper = torch.nn.Sequential(
+            T.RandomCrop(size=(50, 50)),
+            T.Resize(size=(84, 84))
+        )
+        self.random_transformers = T.RandomChoice([
+            m.Transform(SaltAndPepperNoise(0.2, 0.5)),
+            m.Transform(GaussianNoise()),
+            m.Transform(T.GaussianBlur(9, sigma=9)),
+            m.Transform(cropper)
+        ])
 
     def forward(self, obs_list, pre_action, rnn_state=None):
         vis_cam, ray, vec = obs_list
@@ -36,14 +48,11 @@ class ModelRep(m.ModelBaseRNNRep):
 
         if self.blurrer:
             vis_cam = self.blurrer(vis_cam)
- 
+
         vis_cam = self.brightness(vis_cam)
 
         if not self.need_ray:
             ray = torch.ones_like(ray)
-
-        if not self.need_speed:
-            vec = torch.zeros_like(vec)
 
         vis = self.conv(vis_cam)
 
@@ -52,6 +61,11 @@ class ModelRep(m.ModelBaseRNNRep):
         state = torch.cat([state, ray, vec], dim=-1)
 
         return state, hn
+
+    def get_contrastive_encoder(self, obs_list):
+        vis_cam, *_ = obs_list
+
+        return self.conv(self.random_transformers(vis_cam))
 
 
 class ModelQ(m.ModelQ):

@@ -52,6 +52,7 @@ class SAC_DS_Base(SAC_Base):
                  clip_epsilon=0.2,
 
                  discrete_dqn_like=False,
+                 use_contrastive=False,
                  use_prediction=False,
                  transition_kl=0.8,
                  use_extra_data=True,
@@ -88,6 +89,7 @@ class SAC_DS_Base(SAC_Base):
         self.clip_epsilon = clip_epsilon
 
         self.discrete_dqn_like = discrete_dqn_like
+        self.use_contrastive = use_contrastive
         self.use_prediction = use_prediction
         self.transition_kl = transition_kl
         self.use_extra_data = use_extra_data

@@ -18,6 +18,13 @@ default:
     bounding_box_random: 0
     semantic_segmentation_random: 0
 
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1
+      need_ray: true
+      need_speed: true
+
   sac_config:
     write_summary_per_step: 500 # Write summaries in TensorBoard every N steps
     save_model_per_step: 10000 # Save model every N steps
@@ -25,6 +32,8 @@ default:
     n_step: 3
     burn_in_step: 10
     use_rnn: true
+
+    use_contrastive: true
 
     use_rnd: true
     rnd_n_sample: 50

@@ -151,8 +151,7 @@ class BatchGenerator:
                 rest_batch = None
 
             ori_batch_size = ori_batch[0][0].shape[0]
-            idx = np.arange(ori_batch_size)
-            np.random.shuffle(idx)
+            idx = np.random.permutation(ori_batch_size)
             ori_batch = traverse_lists(ori_batch, lambda b: b[idx])
 
             for i in range(math.ceil(ori_batch_size / self.batch_size)):
