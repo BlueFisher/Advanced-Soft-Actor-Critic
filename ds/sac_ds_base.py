@@ -12,12 +12,10 @@ from torch.utils.tensorboard import SummaryWriter
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from algorithm.sac_base import SAC_Base
 
-logger = logging.getLogger('sac.base.ds')
-
 
 class SAC_DS_Base(SAC_Base):
     def __init__(self,
-                 obs_shapes: Tuple,
+                 obs_shapes: List[Tuple],
                  d_action_size: int,
                  c_action_size: int,
                  model_abs_dir: Optional[str],
@@ -67,6 +65,7 @@ class SAC_DS_Base(SAC_Base):
         self.obs_shapes = obs_shapes
         self.d_action_size = d_action_size
         self.c_action_size = c_action_size
+        self.model_abs_dir = model_abs_dir
         self.train_mode = train_mode
 
         self.ensemble_q_num = ensemble_q_num
@@ -116,8 +115,10 @@ class SAC_DS_Base(SAC_Base):
             summary_path = Path(model_abs_dir).joinpath(summary_path)
             self.summary_writer = SummaryWriter(str(summary_path))
 
+        self._logger = logging.getLogger('sac.base.ds')
+
         self._build_model(model, model_config, init_log_alpha, learning_rate)
-        self._init_or_restore(model_abs_dir, int(last_ckpt) if last_ckpt is not None else None)
+        self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
 
     def _random_action(self, action):
         batch = action.shape[0]

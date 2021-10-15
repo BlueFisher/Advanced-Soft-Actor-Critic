@@ -1,10 +1,10 @@
 import logging
 import math
 import time
+from collections import defaultdict
 from itertools import chain
 from pathlib import Path
 from typing import List, Optional, Tuple
-from collections import defaultdict
 
 import numpy as np
 import torch
@@ -15,12 +15,10 @@ from torch.utils.tensorboard import SummaryWriter
 from .replay_buffer import PrioritizedReplayBuffer
 from .utils import *
 
-logger = logging.getLogger('sac.base')
-
 
 class SAC_Base(object):
     def __init__(self,
-                 obs_shapes: Tuple,
+                 obs_shapes: List[Tuple],
                  d_action_size: int,
                  c_action_size: int,
                  model_abs_dir: Optional[str],
@@ -118,6 +116,7 @@ class SAC_Base(object):
         self.obs_shapes = obs_shapes
         self.d_action_size = d_action_size
         self.c_action_size = c_action_size
+        self.model_abs_dir = model_abs_dir
         self.train_mode = train_mode
 
         self.ensemble_q_num = ensemble_q_num
@@ -170,8 +169,10 @@ class SAC_Base(object):
             replay_config = {} if replay_config is None else replay_config
             self.replay_buffer = PrioritizedReplayBuffer(batch_size=batch_size, **replay_config)
 
+        self._logger = logging.getLogger('sac.base')
+
         self._build_model(model, model_config, init_log_alpha, learning_rate)
-        self._init_or_restore(model_abs_dir, int(last_ckpt) if last_ckpt is not None else None)
+        self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
 
     def _build_model(self, model, model_config: Optional[dict], init_log_alpha: float, learning_rate: float):
         """
@@ -218,26 +219,36 @@ class SAC_Base(object):
         if self.use_rnn:
             self.model_rep: nn.Module = ModelRep(self.obs_shapes,
                                                  self.d_action_size, self.c_action_size,
+                                                 False,
+                                                 self.model_abs_dir,
                                                  **model_config['rep']).to(self.device)
             self.model_target_rep: nn.Module = ModelRep(self.obs_shapes,
                                                         self.d_action_size, self.c_action_size,
+                                                        True,
+                                                        self.model_abs_dir,
                                                         **model_config['rep']).to(self.device)
             # Get represented state and rnn_state dimension
-            tmp_obs_list = [torch.empty(1, 1, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
-            tmp_pre_action = torch.empty(1, 1, self.d_action_size + self.c_action_size, device=self.device)
+            tmp_obs_list = [torch.rand(self.batch_size, 1, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
+            tmp_pre_action = torch.rand(self.batch_size, 1, self.d_action_size + self.c_action_size, device=self.device)
             output, next_rnn_state = self.model_rep(tmp_obs_list, tmp_pre_action)
             state_size, self.rnn_state_shape = output.shape[-1], next_rnn_state.shape[1:]
         else:
-            self.model_rep: nn.Module = ModelRep(self.obs_shapes, **model_config['rep']).to(self.device)
-            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes, **model_config['rep']).to(self.device)
+            self.model_rep: nn.Module = ModelRep(self.obs_shapes,
+                                                 False,
+                                                 self.model_abs_dir,
+                                                 **model_config['rep']).to(self.device)
+            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes,
+                                                        True,
+                                                        self.model_abs_dir,
+                                                        **model_config['rep']).to(self.device)
             # Get represented state dimension
-            tmp_obs_list = [torch.empty(1, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
+            tmp_obs_list = [torch.rand(self.batch_size, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
             state_size = self.model_rep(tmp_obs_list).shape[-1]
 
         for param in self.model_target_rep.parameters():
             param.requires_grad = False
 
-        logger.info(f'State size: {state_size}')
+        self._logger.info(f'State size: {state_size}')
 
         if len(list(self.model_rep.parameters())) > 0:
             self.optimizer_rep = adam_optimizer(self.model_rep.parameters())
@@ -306,7 +317,7 @@ class SAC_Base(object):
                 param.requires_grad = False
             self.optimizer_rnd = adam_optimizer(self.model_rnd.parameters())
 
-    def _init_or_restore(self, model_abs_dir, last_ckpt: int):
+    def _init_or_restore(self, last_ckpt: int):
         """
         Initialize network weights from scratch or restore from model_abs_dir
         """
@@ -360,8 +371,8 @@ class SAC_Base(object):
             ckpt_dict['optimizer_rnd'] = self.optimizer_rnd
 
         self.ckpt_dir = None
-        if model_abs_dir:
-            self.ckpt_dir = ckpt_dir = Path(model_abs_dir).joinpath('model')
+        if self.model_abs_dir:
+            self.ckpt_dir = ckpt_dir = Path(self.model_abs_dir).joinpath('model')
 
             ckpts = []
             if ckpt_dir.exists():
@@ -390,10 +401,10 @@ class SAC_Base(object):
                             else:
                                 model.eval()
 
-                logger.info(f'Restored from {ckpt_restore_path}')
+                self._logger.info(f'Restored from {ckpt_restore_path}')
                 self.init_iteration = int(last_ckpt) + 1
             else:
-                logger.info('Initializing from scratch')
+                self._logger.info('Initializing from scratch')
                 self.init_iteration = 0
                 self._update_target_variables()
 
@@ -406,7 +417,7 @@ class SAC_Base(object):
                 k: v if isinstance(v, torch.Tensor) else v.state_dict()
                 for k, v in self.ckpt_dict.items()
             }, ckpt_path)
-            logger.info(f"Model saved at {ckpt_path}")
+            self._logger.info(f"Model saved at {ckpt_path}")
 
     def write_constant_summaries(self, constant_summaries, iteration=None):
         """

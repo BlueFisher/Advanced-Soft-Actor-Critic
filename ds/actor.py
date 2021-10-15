@@ -14,7 +14,8 @@ import numpy as np
 
 import algorithm.config_helper as config_helper
 from algorithm.agent import Agent
-from algorithm.utils import EnvException, ReadWriteLock, elapsed_timer, elapsed_counter
+from algorithm.utils import (EnvException, ReadWriteLock, elapsed_counter,
+                             elapsed_timer)
 
 from .constants import *
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
