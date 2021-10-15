@@ -6,8 +6,6 @@ import numpy as np
 
 from .utils import ReadWriteLock
 
-logger = logging.getLogger('replay')
-
 
 class DataStorage:
     _size = 0
@@ -203,7 +201,9 @@ class PrioritizedReplayBuffer:
         self._sum_tree = SumTree(self.capacity)
         self._trans_storage = DataStorage(self.capacity)
 
-        self._lock = ReadWriteLock(None, 1, 1, True, logger)
+        self._logger = logging.getLogger('replay_buffer')
+
+        self._lock = ReadWriteLock(None, 1, 1, True, self._logger)
 
     def add(self, transitions: dict, ignore_size=0):
         with self._lock.write():
@@ -229,7 +229,7 @@ class PrioritizedReplayBuffer:
             data_pointers = self._trans_storage.add(transitions)
             clipped_errors = np.clip(td_error, self.td_error_min, self.td_error_max)
             if np.isnan(np.min(clipped_errors)):
-                logger.error('td_error has nan')
+                self._logger.error('td_error has nan')
                 raise Exception('td_error has nan')
 
             probs = np.power(clipped_errors, self.alpha)
@@ -281,7 +281,7 @@ class PrioritizedReplayBuffer:
 
             clipped_errors = np.clip(td_error, self.td_error_min, self.td_error_max)
             if np.isnan(np.min(clipped_errors)):
-                logger.error('td_error has nan')
+                self._logger.error('td_error has nan')
                 raise Exception('td_error has nan')
 
             probs = np.power(clipped_errors, self.alpha)
