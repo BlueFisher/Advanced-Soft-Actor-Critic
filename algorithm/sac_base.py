@@ -470,6 +470,10 @@ class SAC_Base(object):
             target = chain(target, self.model_target_q_list[i].parameters())
             source = chain(source, self.model_q_list[i].parameters())
 
+        if self.siamese == 'BYOL':
+            target = chain(target, self.model_target_rep_projection.parameters())
+            source = chain(source, self.model_rep_projection.parameters())
+
         for target_param, param in zip(target, source):
             target_param.data.copy_(
                 target_param.data * (1. - tau) + param.data * tau
@@ -878,7 +882,7 @@ class SAC_Base(object):
             projection = self.model_rep_projection(encoder)
             prediction = self.model_rep_prediction(projection)
             t_encoder = t_encoder.view(batch * n, -1)  # [Batch * n_step, f]
-            t_projection = self.model_rep_projection(t_encoder)
+            t_projection = self.model_target_rep_projection(t_encoder)
 
             loss = functional.cosine_similarity(prediction, t_projection).mean()
             loss.backward(inputs=list(chain(self.model_rep.parameters(),
