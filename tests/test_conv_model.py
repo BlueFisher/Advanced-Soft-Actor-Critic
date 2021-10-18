@@ -60,11 +60,13 @@ class TestConvModel(unittest.TestCase):
 
 def __gen():
     possible_param_dicts = get_product({
-        'conv': ['simple', 'nature', 'small'],
+        # 'conv': ['simple', 'nature', 'small'],
+        'conv': ['simple'],
         'burn_in_step': [0, 5],
         'n_step': [1, 3],
-        'use_prediction': [True, False],
-        'use_extra_data': [True, False]
+        # 'use_prediction': [True, False],
+        # 'use_extra_data': [True, False],
+        'siamese': ['SIMCLR', 'BYOL', 'SIMSIAM']
     })
 
     for i, param_dict in enumerate(possible_param_dicts):

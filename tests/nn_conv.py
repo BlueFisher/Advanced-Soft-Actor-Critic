@@ -31,6 +31,12 @@ class ModelRep(m.ModelBaseRNNRep):
 
         return state, hn
 
+    def get_augmented_encoder(self, obs_list):
+        obs_vec, obs_vis = obs_list
+        obs_vis_vec = self.conv(obs_vis)
+
+        return obs_vis_vec
+
 
 class ModelTransition(m.ModelTransition):
     def _build_model(self):
@@ -62,3 +68,5 @@ ModelQ = m.ModelQ
 ModelPolicy = m.ModelPolicy
 ModelForward = m.ModelForward
 ModelRND = m.ModelRND
+ModelRepProjection = m.ModelRepProjection
+ModelRepPrediction = m.ModelRepPrediction

@@ -1,5 +1,6 @@
 import logging
 import math
+from os import name
 import time
 from collections import defaultdict
 from itertools import chain
@@ -14,6 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from .replay_buffer import PrioritizedReplayBuffer
 from .utils import *
+from .nn_models import *
 
 
 class SAC_Base(object):
@@ -55,7 +57,7 @@ class SAC_Base(object):
                  discrete_dqn_like=False,
                  use_priority=True,
                  use_n_step_is=True,
-                 use_contrastive=False,
+                 siamese: Optional[str] = None,
                  use_prediction=False,
                  transition_kl=0.8,
                  use_extra_data=True,
@@ -102,7 +104,7 @@ class SAC_Base(object):
 
         use_priority: If use PER importance ratio
         use_n_step_is: If use importance sampling
-        use_contrastive: false # If use contrastive learning
+        siamese: SIMCLR | BYOL | SIMSIAM
         use_prediction: If train a transition model
         transition_kl: The coefficient of KL of transition and standard normal
         use_extra_data: If use extra data to train prediction model
@@ -141,7 +143,7 @@ class SAC_Base(object):
         self.discrete_dqn_like = discrete_dqn_like
         self.use_priority = use_priority
         self.use_n_step_is = use_n_step_is
-        self.use_contrastive = use_contrastive
+        self.siamese = siamese
         self.use_prediction = use_prediction
         self.transition_kl = transition_kl
         self.use_extra_data = use_extra_data
@@ -217,33 +219,34 @@ class SAC_Base(object):
             ModelRep = model.ModelRep
 
         if self.use_rnn:
-            self.model_rep: nn.Module = ModelRep(self.obs_shapes,
-                                                 self.d_action_size, self.c_action_size,
-                                                 False,
-                                                 self.model_abs_dir,
-                                                 **model_config['rep']).to(self.device)
-            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes,
-                                                        self.d_action_size, self.c_action_size,
-                                                        True,
-                                                        self.model_abs_dir,
-                                                        **model_config['rep']).to(self.device)
+            self.model_rep: ModelBaseRNNRep = ModelRep(self.obs_shapes,
+                                                       self.d_action_size, self.c_action_size,
+                                                       False,
+                                                       self.model_abs_dir,
+                                                       **model_config['rep']).to(self.device)
+            self.model_target_rep: ModelBaseRNNRep = ModelRep(self.obs_shapes,
+                                                              self.d_action_size, self.c_action_size,
+                                                              True,
+                                                              self.model_abs_dir,
+                                                              **model_config['rep']).to(self.device)
             # Get represented state and rnn_state dimension
-            tmp_obs_list = [torch.rand(self.batch_size, 1, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
-            tmp_pre_action = torch.rand(self.batch_size, 1, self.d_action_size + self.c_action_size, device=self.device)
-            output, next_rnn_state = self.model_rep(tmp_obs_list, tmp_pre_action)
-            state_size, self.rnn_state_shape = output.shape[-1], next_rnn_state.shape[1:]
+            test_obs_list = [torch.rand(self.batch_size, 1, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
+            test_pre_action = torch.rand(self.batch_size, 1, self.d_action_size + self.c_action_size, device=self.device)
+            test_state, test_next_rnn_state = self.model_rep(test_obs_list, test_pre_action)
+            state_size, self.rnn_state_shape = test_state.shape[-1], test_next_rnn_state.shape[1:]
         else:
-            self.model_rep: nn.Module = ModelRep(self.obs_shapes,
-                                                 False,
-                                                 self.model_abs_dir,
-                                                 **model_config['rep']).to(self.device)
-            self.model_target_rep: nn.Module = ModelRep(self.obs_shapes,
-                                                        True,
-                                                        self.model_abs_dir,
-                                                        **model_config['rep']).to(self.device)
+            self.model_rep: ModelBaseSimpleRep = ModelRep(self.obs_shapes,
+                                                          False,
+                                                          self.model_abs_dir,
+                                                          **model_config['rep']).to(self.device)
+            self.model_target_rep: ModelBaseSimpleRep = ModelRep(self.obs_shapes,
+                                                                 True,
+                                                                 self.model_abs_dir,
+                                                                 **model_config['rep']).to(self.device)
             # Get represented state dimension
-            tmp_obs_list = [torch.rand(self.batch_size, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
-            state_size = self.model_rep(tmp_obs_list).shape[-1]
+            test_obs_list = [torch.rand(self.batch_size, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
+            test_state = self.model_rep(test_obs_list)
+            state_size = test_state.shape[-1]
 
         for param in self.model_target_rep.parameters():
             param.requires_grad = False
@@ -256,15 +259,15 @@ class SAC_Base(object):
             self.optimizer_rep = None
 
         """ Q """
-        self.model_q_list: List[nn.Module] = [model.ModelQ(state_size,
-                                                           self.d_action_size,
-                                                           self.c_action_size).to(self.device)
-                                              for _ in range(self.ensemble_q_num)]
+        self.model_q_list: List[ModelBaseQ] = [model.ModelQ(state_size,
+                                                            self.d_action_size,
+                                                            self.c_action_size).to(self.device)
+                                               for _ in range(self.ensemble_q_num)]
 
-        self.model_target_q_list: List[nn.Module] = [model.ModelQ(state_size,
-                                                                  self.d_action_size,
-                                                                  self.c_action_size).to(self.device)
-                                                     for _ in range(self.ensemble_q_num)]
+        self.model_target_q_list: List[ModelBaseQ] = [model.ModelQ(state_size,
+                                                                   self.d_action_size,
+                                                                   self.c_action_size).to(self.device)
+                                                      for _ in range(self.ensemble_q_num)]
         for model_target_q in self.model_target_q_list:
             for param in model_target_q.parameters():
                 param.requires_grad = False
@@ -272,25 +275,42 @@ class SAC_Base(object):
         self.optimizer_q_list = [adam_optimizer(self.model_q_list[i].parameters()) for i in range(self.ensemble_q_num)]
 
         """ POLICY """
-        self.model_policy: nn.Module = model.ModelPolicy(state_size, self.d_action_size, self.c_action_size).to(self.device)
+        self.model_policy: ModelBasePolicy = model.ModelPolicy(state_size, self.d_action_size, self.c_action_size).to(self.device)
         self.optimizer_policy = adam_optimizer(self.model_policy.parameters())
 
-        """ CONTRASTIVE LEARNING """
-        if self.use_contrastive:
-            c_encoder = self.model_rep.get_contrastive_encoder(tmp_obs_list)
-            assert c_encoder is not None
-            self.contrastive_weight = torch.randn((c_encoder.shape[-1], c_encoder.shape[-1]), requires_grad=True, device=self.device)
-            self.optimizer_contrastive = adam_optimizer([self.contrastive_weight])
+        """ SIAMESE REPRESENTATION LEARNING """
+        assert self.siamese is None or self.siamese in ('SIMCLR', 'BYOL', 'SIMSIAM')
+        if self.siamese in ('SIMCLR', 'BYOL', 'SIMSIAM'):
+            test_encoder = self.model_rep.get_augmented_encoder(test_obs_list)
+
+            if self.siamese == 'SIMCLR':
+                self.contrastive_weight = torch.randn((test_encoder.shape[-1], test_encoder.shape[-1]),
+                                                      requires_grad=True,
+                                                      device=self.device)
+                self.optimizer_siamese = adam_optimizer([self.contrastive_weight])
+
+            elif self.siamese == 'BYOL':
+                self.model_rep_projection: ModelBaseRepProjection = model.ModelRepProjection(test_encoder.shape[-1]).to(self.device)
+                self.model_target_rep_projection: ModelBaseRepProjection = model.ModelRepProjection(test_encoder.shape[-1]).to(self.device)
+                test_projection = self.model_rep_projection(test_encoder)
+
+                self.model_rep_prediction: ModelBaseRepPrediction = model.ModelRepPrediction(test_projection.shape[-1]).to(self.device)
+                self.optimizer_siamese = adam_optimizer(chain(self.model_rep_projection.parameters(),
+                                                              self.model_rep_prediction.parameters()))
+
+            elif self.siamese == 'SIMSIAM':
+                self.model_rep_prediction: ModelBaseRepPrediction = model.ModelRepPrediction(test_encoder.shape[-1]).to(self.device)
+                self.optimizer_siamese = adam_optimizer(self.model_rep_prediction.parameters())
 
         """ RECURRENT PREDICTION MODELS """
         if self.use_prediction:
-            self.model_transition: nn.Module = model.ModelTransition(state_size,
-                                                                     self.d_action_size,
-                                                                     self.c_action_size,
-                                                                     self.use_extra_data).to(self.device)
-            self.model_reward: nn.Module = model.ModelReward(state_size).to(self.device)
-            self.model_observation: nn.Module = model.ModelObservation(state_size, self.obs_shapes,
-                                                                       self.use_extra_data).to(self.device)
+            self.model_transition: ModelBaseTransition = model.ModelTransition(state_size,
+                                                                               self.d_action_size,
+                                                                               self.c_action_size,
+                                                                               self.use_extra_data).to(self.device)
+            self.model_reward: ModelBaseReward = model.ModelReward(state_size).to(self.device)
+            self.model_observation: ModelBaseObservation = model.ModelObservation(state_size, self.obs_shapes,
+                                                                                  self.use_extra_data).to(self.device)
 
             self.optimizer_prediction = adam_optimizer(chain(self.model_transition.parameters(),
                                                              self.model_reward.parameters(),
@@ -305,14 +325,14 @@ class SAC_Base(object):
 
         """ CURIOSITY """
         if self.use_curiosity:
-            self.model_forward: nn.Module = model.ModelForward(state_size,
-                                                               self.d_action_size + self.c_action_size).to(self.device)
+            self.model_forward: ModelBaseForward = model.ModelForward(state_size,
+                                                                      self.d_action_size + self.c_action_size).to(self.device)
             self.optimizer_forward: nn.Module = adam_optimizer(self.model_forward.parameters())
 
         """ RANDOM NETWORK DISTILLATION """
         if self.use_rnd:
-            self.model_rnd: nn.Module = model.ModelRND(state_size, self.d_action_size + self.c_action_size).to(self.device)
-            self.model_target_rnd: nn.Module = model.ModelRND(state_size, self.d_action_size + self.c_action_size).to(self.device)
+            self.model_rnd: ModelBaseRND = model.ModelRND(state_size, self.d_action_size + self.c_action_size).to(self.device)
+            self.model_target_rnd: ModelBaseRND = model.ModelRND(state_size, self.d_action_size + self.c_action_size).to(self.device)
             for param in self.model_target_rnd.parameters():
                 param.requires_grad = False
             self.optimizer_rnd = adam_optimizer(self.model_rnd.parameters())
@@ -807,10 +827,10 @@ class SAC_Base(object):
             loss_q_list[i].backward(retain_graph=True)
             self.optimizer_q_list[i].step()
 
-        """ Contrastive Learning """
-        loss_contrastive = None
-        if self.use_contrastive:
-            loss_contrastive = self._train_contrastive_learning(n_obses_list)
+        """ Siamese Representation Learning """
+        loss_siamese = None
+        if self.siamese is not None:
+            loss_siamese = self._train_siamese_representation_learning(n_obses_list)
 
         """ Recurrent Prediction Model """
         loss_predictions = None
@@ -824,32 +844,66 @@ class SAC_Base(object):
         if self.optimizer_rep:
             self.optimizer_rep.step()
 
-        return loss_q_list[0], loss_contrastive, loss_predictions
+        return loss_q_list[0], loss_siamese, loss_predictions
 
-    def _train_contrastive_learning(self, n_obses_list):
-        query = self.model_rep.get_contrastive_encoder([n_obses[:, self.burn_in_step:, ...]
-                                                        for n_obses in n_obses_list])  # [Batch, n_step, f]
-        key = self.model_target_rep.get_contrastive_encoder([n_obses[:, self.burn_in_step:, ...]
-                                                             for n_obses in n_obses_list])  # [Batch, n_step, f]
+    def _train_siamese_representation_learning(self, n_obses_list):
+        self.optimizer_siamese.zero_grad()
 
-        batch = query.shape[0]
-        query = query.view(batch * self.n_step, -1)  # [Batch * n_step, f]
-        key = key.view(batch * self.n_step, -1)  # [Batch * n_step, f]
-        logits = torch.mm(query, self.contrastive_weight)
-        logits = torch.mm(logits, key.t())  # [Batch * n_step, Batch * n_step]
-        if not hasattr(self, '_contrastive_label'):
-            self._contrastive_labels = torch.block_diag(*torch.ones(batch,
-                                                                    self.n_step,
-                                                                    self.n_step, device=self.device))
+        if self.siamese == 'SIMCLR':
+            query = self.model_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
+                                                          for n_obses in n_obses_list])  # [Batch, n_step, f]
+            key = self.model_target_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
+                                                               for n_obses in n_obses_list])  # [Batch, n_step, f]
 
-        loss_contrastive = functional.binary_cross_entropy_with_logits(logits, self._contrastive_labels)
+            batch, n, *_ = query.shape
+            query = query.view(batch * n, -1)  # [Batch * n_step, f]
+            key = key.view(batch * n, -1)  # [Batch * n_step, f]
+            logits = torch.mm(query, self.contrastive_weight)
+            logits = torch.mm(logits, key.t())  # [Batch * n_step, Batch * n_step]
+            if not hasattr(self, '_contrastive_label'):
+                self._contrastive_labels = torch.block_diag(*torch.ones(batch, n, n, device=self.device))
 
-        self.optimizer_contrastive.zero_grad()
-        loss_contrastive.backward(inputs=list(chain(self.model_rep.parameters(),
-                                                    [self.contrastive_weight])), retain_graph=True)
-        self.optimizer_contrastive.step()
+            loss = functional.binary_cross_entropy_with_logits(logits, self._contrastive_labels)
+            loss.backward(inputs=list(chain(self.model_rep.parameters(),
+                                            [self.contrastive_weight])), retain_graph=True)
 
-        return loss_contrastive
+        elif self.siamese == 'BYOL':
+            encoder = self.model_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
+                                                            for n_obses in n_obses_list])  # [Batch, n_step, f]
+            t_encoder = self.model_target_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
+                                                                     for n_obses in n_obses_list])  # [Batch, n_step, f]
+
+            batch, n, *_ = encoder.shape
+            encoder = encoder.view(batch * n, -1)  # [Batch * n_step, f]
+            projection = self.model_rep_projection(encoder)
+            prediction = self.model_rep_prediction(projection)
+            t_encoder = t_encoder.view(batch * n, -1)  # [Batch * n_step, f]
+            t_projection = self.model_rep_projection(t_encoder)
+
+            loss = functional.cosine_similarity(prediction, t_projection).mean()
+            loss.backward(inputs=list(chain(self.model_rep.parameters(),
+                                            self.model_rep_projection.parameters(),
+                                            self.model_rep_prediction.parameters())), retain_graph=True)
+
+        elif self.siamese == 'SIMSIAM':
+            encoder = self.model_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
+                                                            for n_obses in n_obses_list])  # [Batch, n_step, f]
+            t_encoder = self.model_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
+                                                              for n_obses in n_obses_list])  # [Batch, n_step, f]
+            t_encoder = t_encoder.detach()
+
+            batch, n, *_ = encoder.shape
+            encoder = encoder.view(batch * n, -1)  # [Batch * n_step, f]
+            prediction = self.model_rep_prediction(encoder)
+            t_encoder = t_encoder.view(batch * n, -1)  # [Batch * n_step, f]
+
+            loss = functional.cosine_similarity(prediction, t_encoder).mean()
+            loss.backward(inputs=list(chain(self.model_rep.parameters(),
+                                            self.model_rep_prediction.parameters())), retain_graph=True)
+
+        self.optimizer_siamese.step()
+
+        return loss
 
     def _train_rpm(self,
                    m_obses_list,
@@ -1056,13 +1110,13 @@ class SAC_Base(object):
         if self.global_step % self.update_target_per_step == 0:
             self._update_target_variables(tau=self.tau)
 
-        loss_q, loss_contrastive, loss_predictions = self._train_rep_q(n_obses_list,
-                                                                       n_actions,
-                                                                       n_rewards,
-                                                                       next_obs_list,
-                                                                       n_dones,
-                                                                       n_mu_probs, priority_is,
-                                                                       initial_rnn_state)
+        loss_q, loss_siamese, loss_predictions = self._train_rep_q(n_obses_list,
+                                                                   n_actions,
+                                                                   n_rewards,
+                                                                   next_obs_list,
+                                                                   n_dones,
+                                                                   n_mu_probs, priority_is,
+                                                                   initial_rnn_state)
 
         with torch.no_grad():
             m_obses_list = [torch.cat([n_obses, next_obs.view(-1, 1, *next_obs.shape[1:])], dim=1)
@@ -1102,9 +1156,9 @@ class SAC_Base(object):
                     if self.use_auto_alpha:
                         self.summary_writer.add_scalar('loss/c_alpha', c_alpha, self.global_step)
 
-                if self.use_contrastive:
-                    self.summary_writer.add_scalar('loss/contrastive',
-                                                   loss_contrastive,
+                if self.siamese is not None:
+                    self.summary_writer.add_scalar('loss/siamese',
+                                                   loss_siamese,
                                                    self.global_step)
 
                 if self.use_prediction:

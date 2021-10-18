@@ -76,7 +76,7 @@ sac_config:
   clip_epsilon: 0.2 # Epsilon for q clip
 
   discrete_dqn_like: false # If use policy or only Q network if discrete is in action spaces
-  use_contrastive: false # If use contrastive learning
+  siamese: null # SIMCLR | BYOL | SIMSIAM
   use_prediction: false # If train a transition model
   transition_kl: 0.8 # The coefficient of KL of transition and standard normal
   use_extra_data: true # If use extra data to train prediction model
@@ -85,6 +85,7 @@ sac_config:
   use_rnd: false # If use RND
   rnd_n_sample: 10 # RND sample times
   use_normalization: false # If use observation normalization
+
 
   # random_params:
   #   param_name:

@@ -16,6 +16,7 @@ This project is the algorithm [Soft Actor-Critic](https://arxiv.org/pdf/1812.059
 - Discrete action ([Soft Actor-Critic for Discrete Action Settings](http://arxiv.org/abs/1910.07207))
 - Curiosity mechanism ([Curiosity-driven Exploration by Self-supervised Prediction](http://arxiv.org/abs/1705.05363))
 - *Large-scale Distributed Evolutionary Reinforcement Learning
+- [SimCLR](http://proceedings.mlr.press/v119/chen20j.html), [BYOL](https://proceedings.neurips.cc/paper/2020/hash/f3ada80d5c4ee70142b17b8192b2958e-Abstract.html), [SimSIAM](https://openaccess.thecvf.com/content/CVPR2021/html/Chen\_Exploring\_Simple\_Siamese\_Representation\_Learning\_CVPR\_2021\_paper.html)
 
 \* denotes the features that we implemented.
 
@@ -68,8 +69,9 @@ base_config:
 
 reset_config: null # Reset parameters sent to Unity
 
+model_config: null
+
 replay_config:
-  batch_size: 256
   capacity: 524288
   alpha: 0.9 # [0~1] convert the importance of TD error to priority. If 0, PER will reduce to vanilla replay buffer
   beta: 0.4 # Importance-sampling, from initial value increasing to 1
@@ -89,6 +91,8 @@ sac_config:
   n_step: 1 # Update Q function by N steps
   use_rnn: false # If use RNN
 
+  batch_size: 256
+
   tau: 0.005 # Coefficient of updating target network
   update_target_per_step: 1 # Update target network every N steps
 
@@ -106,6 +110,7 @@ sac_config:
   discrete_dqn_like: false # If use policy or only Q network if discrete is in action spaces
   use_priority: true # If use PER importance ratio
   use_n_step_is: true # If use importance sampling
+  siamese: null # SIMCLR | BYOL | SIMSIAM
   use_prediction: false # If train a transition model
   transition_kl: 0.8 # The coefficient of KL of transition and standard normal
   use_extra_data: true # If use extra data to train prediction model
@@ -114,6 +119,7 @@ sac_config:
   use_rnd: false # If use RND
   rnd_n_sample: 10 # RND sample times
   use_normalization: false # If use observation normalization
+
 ```
 
 All default distributed training configurations are listed below. It can also be found in `ds/default_config.yaml`
@@ -139,8 +145,7 @@ base_config:
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
   nn: nn # Neural network models file
-  update_policy_mode: true # update policy variables each "update_policy_variables_per_step" or get action from learner each step
-  update_policy_variables_per_step: -1 # -1 for policy variables being updated each iteration
+  update_policy_mode: true # Update policy variables at the beginning of each episode if True or get action from learner each step
   update_sac_bak_per_step: 200 # Every N step update sac_bak
   noise_increasing_rate: 0 # Noise = N * number of actors
   noise_max: 0.1 # Max noise for actors
@@ -148,7 +153,7 @@ base_config:
   max_step_each_iter: -1 # Max step in each iteration
   reset_on_iteration: true # If to force reset agent if an episode terminated
 
-  max_actors_each_learner: 10 # The max number of actors of each learner
+  max_actors_each_learner: -1 # The max number of actors of each learner, -1 indicates no limit
 
   evolver_enabled: true
   evolver_cem_length: 50 # Start CEM if all learners have eavluated evolver_cem_length times
@@ -167,8 +172,7 @@ net_config:
 
 reset_config: null # Reset parameters sent to Unity
 
-replay_config:
-  batch_size: 256
+model_config: null
 
 sac_config:
   seed: null # Random seed
@@ -181,6 +185,8 @@ sac_config:
   burn_in_step: 0 # Burn-in steps in R2D2
   n_step: 1 # Update Q function by N steps
   use_rnn: false # If use RNN
+
+  batch_size: 256
 
   tau: 0.005 # Coefficient of updating target network
   update_target_per_step: 1 # Update target network every N steps
@@ -197,6 +203,7 @@ sac_config:
   clip_epsilon: 0.2 # Epsilon for q clip
 
   discrete_dqn_like: false # If use policy or only Q network if discrete is in action spaces
+  siamese: null # SIMCLR | BYOL | SIMSIAM
   use_prediction: false # If train a transition model
   transition_kl: 0.8 # The coefficient of KL of transition and standard normal
   use_extra_data: true # If use extra data to train prediction model
@@ -206,11 +213,13 @@ sac_config:
   rnd_n_sample: 10 # RND sample times
   use_normalization: false # If use observation normalization
 
+
   # random_params:
   #   param_name:
   #     in: [n1, n2, n3]
   #     truncated: [n1 ,n2]
   #     std: n
+
 ```
 
 ## Start Training

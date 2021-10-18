@@ -2,6 +2,7 @@ import torch
 from torchvision import transforms as T
 
 import algorithm.nn_models as m
+from algorithm.nn_models.representation import ModelRepPrediction
 from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
 
 EXTRA_SIZE = 6
@@ -62,10 +63,12 @@ class ModelRep(m.ModelBaseRNNRep):
 
         return state, hn
 
-    def get_contrastive_encoder(self, obs_list):
+    def get_augmented_encoder(self, obs_list):
         vis_cam, *_ = obs_list
+        transformed_vis_cam = self.random_transformers(vis_cam)
+        encoder = self.conv(transformed_vis_cam)
 
-        return self.conv(self.random_transformers(vis_cam))
+        return encoder
 
 
 class ModelQ(m.ModelQ):
@@ -81,3 +84,7 @@ class ModelPolicy(m.ModelPolicy):
 class ModelRND(m.ModelRND):
     def _build_model(self):
         return super()._build_model(dense_n=128, dense_depth=2, output_size=128)
+
+
+ModelRepProjection = m.ModelRepProjection
+ModelRepPrediction = m.ModelRepPrediction

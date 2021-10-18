@@ -29,10 +29,26 @@ default:
     burn_in_step: 10
     use_rnn: true
 
-    use_contrastive: true
-
     use_rnd: true
     rnd_n_sample: 50
+
+simclr:
+  base_config:
+    name: simclr_{time}
+  sac_config:
+    siamese: SIMCLR
+
+byol:
+  base_config:
+    name: byol_{time}
+  sac_config:
+    siamese: BYOL
+
+simsiam:
+  base_config:
+    name: simsiam_{time}
+  sac_config:
+    siamese: SIMSIAM
 
 bl0br2ray1sp1:
   model_config:
