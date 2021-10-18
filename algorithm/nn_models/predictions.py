@@ -90,6 +90,6 @@ class ModelBaseObservation(nn.Module):
         # Could return Tensor or [Tensor, Tensor, ...]
         raise Exception("ModelBaseObservation not implemented")
 
-    def get_loss(self, state, obs_list):
+    def get_loss(self, state, obs_list) -> torch.Tensor:
         # loss(s_t -> \approx{o}_t, o_t)
         raise Exception("ModelBaseObservation.get_loss not implemented")
