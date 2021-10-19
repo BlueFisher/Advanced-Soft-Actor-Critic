@@ -1,7 +1,5 @@
 import logging
 import math
-from os import name
-import time
 from collections import defaultdict
 from itertools import chain
 from pathlib import Path
@@ -13,9 +11,9 @@ from torch import autograd, distributions, nn, optim
 from torch.nn import functional
 from torch.utils.tensorboard import SummaryWriter
 
+from .nn_models import *
 from .replay_buffer import PrioritizedReplayBuffer
 from .utils import *
-from .nn_models import *
 
 
 class SAC_Base(object):
@@ -325,8 +323,8 @@ class SAC_Base(object):
 
         """ CURIOSITY """
         if self.use_curiosity:
-            self.model_forward: ModelBaseForward = model.ModelForward(state_size,
-                                                                      self.d_action_size + self.c_action_size).to(self.device)
+            self.model_forward: ModelBaseForwardDynamic = model.ModelForwardDynamic(state_size,
+                                                                                    self.d_action_size + self.c_action_size).to(self.device)
             self.optimizer_forward: nn.Module = adam_optimizer(self.model_forward.parameters())
 
         """ RANDOM NETWORK DISTILLATION """

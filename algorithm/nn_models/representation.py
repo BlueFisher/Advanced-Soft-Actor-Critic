@@ -2,8 +2,8 @@ from typing import List, Tuple
 
 import torch
 from torch import nn
-from algorithm.nn_models.layers import LinearLayers
 
+from algorithm.nn_models.layers import LinearLayers
 from algorithm.utils.image_visual import ImageVisual
 
 
