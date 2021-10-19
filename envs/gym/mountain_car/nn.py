@@ -13,7 +13,7 @@ class ModelPolicy(m.ModelPolicy):
         super()._build_model(c_dense_n=64, c_dense_depth=2)
 
 
-class ModelForward(m.ModelForward):
+class ModelForwardDynamic(m.ModelForwardDynamic):
     def _build_model(self):
         return super()._build_model(dense_n=self.state_size + self.action_size, dense_depth=1)
 

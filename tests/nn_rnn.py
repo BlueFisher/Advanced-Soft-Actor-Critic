@@ -53,5 +53,5 @@ class ModelObservation(m.ModelBaseObservation):
 
 ModelQ = m.ModelQ
 ModelPolicy = m.ModelPolicy
-ModelForward = m.ModelForward
+ModelForwardDynamic = m.ModelForwardDynamic
 ModelRND = m.ModelRND
