@@ -22,7 +22,7 @@ curiosity:
   base_config:
     name: "curiosity_{time}"
   sac_config:
-    use_curiosity: true
+    curiosity: FORWARD
     curiosity_strength: 500
 
 rnd1:

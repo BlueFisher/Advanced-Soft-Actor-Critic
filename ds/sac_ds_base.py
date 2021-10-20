@@ -54,7 +54,7 @@ class SAC_DS_Base(SAC_Base):
                  use_prediction=False,
                  transition_kl=0.8,
                  use_extra_data=True,
-                 use_curiosity=False,
+                 curiosity: Optional[str] = None,
                  curiosity_strength=1,
                  use_rnd=False,
                  rnd_n_sample=10,
@@ -92,7 +92,7 @@ class SAC_DS_Base(SAC_Base):
         self.use_prediction = use_prediction
         self.transition_kl = transition_kl
         self.use_extra_data = use_extra_data
-        self.use_curiosity = use_curiosity
+        self.curiosity = curiosity
         self.curiosity_strength = curiosity_strength
         self.use_rnd = use_rnd
         self.rnd_n_sample = rnd_n_sample
@@ -177,15 +177,21 @@ class SAC_DS_Base(SAC_Base):
             variables = chain(variables,
                               model_q.parameters())
 
+        if self.siamese == 'BYOL':
+            variables = chain(variables, [self.contrastive_weight])
+
         if self.use_prediction:
             variables = chain(variables,
                               self.model_transition.parameters(),
                               self.model_reward.parameters(),
                               self.model_observation.parameters())
 
-        if self.use_curiosity:
+        if self.curiosity == 'FORWARD':
             variables = chain(variables,
-                              self.model_forward.parameters())
+                              self.model_forward_dynamic.parameters())
+        elif self.curiosity == 'FORWARD':
+            variables = chain(variables,
+                              self.model_inverse_dynamice.parameters())
 
         if self.use_rnd:
             variables = chain(variables,

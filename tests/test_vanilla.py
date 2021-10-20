@@ -42,12 +42,12 @@ def __gen():
         'd_action_size': [0, 10],
         'c_action_size': [0, 4],
         'n_step': [1, 3],
-        'discrete_dqn_like': [True, False],
-        'use_priority': [True, False],
-        'use_n_step_is': [True, False],
-        'use_curiosity': [True, False],
-        'use_rnd': [True, False],
-        'use_normalization': [True, False]
+        # 'discrete_dqn_like': [True, False],
+        # 'use_priority': [True, False],
+        # 'use_n_step_is': [True, False],
+        'curiosity': [None, 'FORWARD', 'INVERSE'],
+        # 'use_rnd': [True, False],
+        # 'use_normalization': [True, False]
     })
 
     for i, param_dict in enumerate(possible_param_dicts):
