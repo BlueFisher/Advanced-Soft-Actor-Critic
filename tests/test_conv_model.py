@@ -66,7 +66,7 @@ def __gen():
         'n_step': [1, 3],
         # 'use_prediction': [True, False],
         # 'use_extra_data': [True, False],
-        'siamese': ['SIMCLR', 'BYOL', 'SIMSIAM']
+        'siamese': [None, 'SIMCLR', 'BYOL', 'SIMSIAM']
     })
 
     for i, param_dict in enumerate(possible_param_dicts):

@@ -59,7 +59,7 @@ class SAC_Base(object):
                  use_prediction=False,
                  transition_kl=0.8,
                  use_extra_data=True,
-                 use_curiosity=False,
+                 curiosity: Optional[str] = None,
                  curiosity_strength=1,
                  use_rnd=False,
                  rnd_n_sample=10,
@@ -106,7 +106,7 @@ class SAC_Base(object):
         use_prediction: If train a transition model
         transition_kl: The coefficient of KL of transition and standard normal
         use_extra_data: If use extra data to train prediction model
-        use_curiosity: If use curiosity
+        curiosity: FORWARD | INVERSE
         curiosity_strength: Curiosity strength if use curiosity
         use_rnd: If use RND
         rnd_n_sample: RND sample times
@@ -145,7 +145,7 @@ class SAC_Base(object):
         self.use_prediction = use_prediction
         self.transition_kl = transition_kl
         self.use_extra_data = use_extra_data
-        self.use_curiosity = use_curiosity
+        self.curiosity = curiosity
         self.curiosity_strength = curiosity_strength
         self.use_rnd = use_rnd
         self.rnd_n_sample = rnd_n_sample
@@ -190,7 +190,7 @@ class SAC_Base(object):
         def adam_optimizer(params):
             return optim.Adam(params, lr=learning_rate)
 
-        """ NORMALIZATION & REPRESENTATION """
+        """ NORMALIZATION """
         if self.use_normalization:
             self.normalizer_step = torch.tensor(0, dtype=torch.int32, device=self.device, requires_grad=False)
             self.running_means = []
@@ -216,6 +216,7 @@ class SAC_Base(object):
         else:
             ModelRep = model.ModelRep
 
+        """ REPRESENTATION """
         if self.use_rnn:
             self.model_rep: ModelBaseRNNRep = ModelRep(self.obs_shapes,
                                                        self.d_action_size, self.c_action_size,
@@ -277,7 +278,7 @@ class SAC_Base(object):
         self.optimizer_policy = adam_optimizer(self.model_policy.parameters())
 
         """ SIAMESE REPRESENTATION LEARNING """
-        assert self.siamese is None or self.siamese in ('SIMCLR', 'BYOL', 'SIMSIAM')
+        assert self.siamese in (None, 'SIMCLR', 'BYOL', 'SIMSIAM')
         if self.siamese in ('SIMCLR', 'BYOL', 'SIMSIAM'):
             test_encoder = self.model_rep.get_augmented_encoder(test_obs_list)
 
@@ -322,10 +323,16 @@ class SAC_Base(object):
             self.optimizer_alpha = adam_optimizer([self.log_d_alpha, self.log_c_alpha])
 
         """ CURIOSITY """
-        if self.use_curiosity:
-            self.model_forward: ModelBaseForwardDynamic = model.ModelForwardDynamic(state_size,
-                                                                                    self.d_action_size + self.c_action_size).to(self.device)
-            self.optimizer_forward: nn.Module = adam_optimizer(self.model_forward.parameters())
+        assert self.curiosity in (None, 'FORWARD', 'INVERSE')
+        if self.curiosity == 'FORWARD':
+            self.model_forward_dynamic: ModelBaseForwardDynamic = model.ModelForwardDynamic(state_size,
+                                                                                            self.d_action_size + self.c_action_size).to(self.device)
+            self.optimizer_curiosity = adam_optimizer(self.model_forward_dynamic.parameters())
+
+        elif self.curiosity == 'INVERSE':
+            self.model_inverse_dynamic: ModelBaseInverseDynamic = model.ModelInverseDynamic(state_size,
+                                                                                            self.d_action_size + self.c_action_size).to(self.device)
+            self.optimizer_curiosity = adam_optimizer(self.model_inverse_dynamic.parameters())
 
         """ RANDOM NETWORK DISTILLATION """
         if self.use_rnd:
@@ -366,6 +373,10 @@ class SAC_Base(object):
         ckpt_dict['model_policy'] = self.model_policy
         ckpt_dict['optimizer_policy'] = self.optimizer_policy
 
+        """ SIAMESE REPRESENTATION LEARNING """
+        if self.siamese == 'SIMCLR':
+            ckpt_dict['contrastive_weight'] = self.contrastive_weight
+
         """ RECURRENT PREDICTION MODELS """
         if self.use_prediction:
             ckpt_dict['model_transition'] = self.model_transition
@@ -380,10 +391,14 @@ class SAC_Base(object):
             ckpt_dict['optimizer_alpha'] = self.optimizer_alpha
 
         """ CURIOSITY """
-        if self.use_curiosity:
-            ckpt_dict['model_forward'] = self.model_forward
-            ckpt_dict['optimizer_forward'] = self.optimizer_forward
+        if self.curiosity is not None:
+            if self.curiosity == 'forward':
+                ckpt_dict['model_forward_dynamic'] = self.model_forward_dynamic
+            elif self.curiosity == 'inverse':
+                ckpt_dict['model_inverse_dynamic'] = self.model_inverse_dynamic
+            ckpt_dict['optimizer_curiosity'] = self.optimizer_curiosity
 
+        """ RANDOM NETWORK DISTILLATION """
         if self.use_rnd:
             ckpt_dict['model_rnd'] = self.model_rnd
             ckpt_dict['optimizer_rnd'] = self.optimizer_rnd
@@ -648,9 +663,15 @@ class SAC_Base(object):
         d_policy, c_policy = self.model_policy(n_states)
         next_d_policy, next_c_policy = self.model_policy(next_n_states)
 
-        if self.use_curiosity:
-            approx_next_n_states = self.model_forward(n_states, n_actions)
-            in_n_rewards = torch.sum(torch.pow(approx_next_n_states - next_n_states, 2), dim=-1) * 0.5
+        if self.curiosity is not None:
+            if self.curiosity == 'FORWARD':
+                approx_next_n_states = self.model_forward_dynamic(n_states, n_actions)
+                in_n_rewards = torch.sum(torch.pow(approx_next_n_states - next_n_states, 2), dim=-1) * 0.5
+
+            elif self.curiosity == 'INVERSE':
+                approx_n_actions = self.model_inverse_dynamic(n_states, next_n_states)
+                in_n_rewards = torch.sum(torch.pow(approx_n_actions - n_actions, 2), dim=-1) * 0.5
+
             in_n_rewards = in_n_rewards * self.curiosity_strength
             n_rewards += in_n_rewards
 
@@ -1064,17 +1085,25 @@ class SAC_Base(object):
         return d_alpha, c_alpha
 
     def _train_curiosity(self, m_states: torch.Tensor, n_actions: torch.Tensor):
-        n_states = m_states[:, :-1, ...]
-        approx_next_n_states = self.model_forward(n_states[:, self.burn_in_step:, ...],
-                                                  n_actions[:, self.burn_in_step:, ...])
+        n_states = m_states[:, self.burn_in_step:-1, ...]
         next_n_states = m_states[:, self.burn_in_step + 1:, ...]
-        loss_forward = functional.mse_loss(approx_next_n_states, next_n_states)
+        n_actions = n_actions[:, self.burn_in_step:, ...]
 
-        self.optimizer_forward.zero_grad()
-        loss_forward.backward(inputs=list(self.model_forward.parameters()))
-        self.optimizer_forward.step()
+        self.optimizer_curiosity.zero_grad()
 
-        return loss_forward
+        if self.curiosity == 'FORWARD':
+            approx_next_n_states = self.model_forward_dynamic(n_states, n_actions)
+            loss_curiosity = functional.mse_loss(approx_next_n_states, next_n_states)
+            loss_curiosity.backward(inputs=list(self.model_forward_dynamic.parameters()))
+
+        elif self.curiosity == 'INVERSE':
+            approx_n_actions = self.model_inverse_dynamic(n_states, next_n_states)
+            loss_curiosity = functional.mse_loss(approx_n_actions, n_actions)
+            loss_curiosity.backward(inputs=list(self.model_inverse_dynamic.parameters()))
+
+        self.optimizer_curiosity.step()
+
+        return loss_curiosity
 
     def _train_rnd(self, n_states: torch.Tensor, n_actions: torch.Tensor):
         approx_f = self.model_rnd(n_states[:, self.burn_in_step:, ...],
@@ -1139,8 +1168,8 @@ class SAC_Base(object):
         if self.use_auto_alpha and ((self.d_action_size and not self.discrete_dqn_like) or self.c_action_size):
             d_alpha, c_alpha = self._train_alpha(state)
 
-        if self.use_curiosity:
-            loss_forward = self._train_curiosity(m_states, n_actions)
+        if self.curiosity is not None:
+            loss_curiosity = self._train_curiosity(m_states, n_actions)
 
         if self.use_rnd:
             n_states = m_states[:, :-1, ...]
@@ -1180,8 +1209,8 @@ class SAC_Base(object):
                                                            approx_obs.permute([0, 3, 1, 2]),
                                                            self.global_step)
 
-                if self.use_curiosity:
-                    self.summary_writer.add_scalar('loss/forward', loss_forward, self.global_step)
+                if self.curiosity is not None:
+                    self.summary_writer.add_scalar('loss/curiosity', loss_curiosity, self.global_step)
 
                 if self.use_rnd:
                     self.summary_writer.add_scalar('loss/rnd', loss_rnd, self.global_step)

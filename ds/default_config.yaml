@@ -80,7 +80,7 @@ sac_config:
   use_prediction: false # If train a transition model
   transition_kl: 0.8 # The coefficient of KL of transition and standard normal
   use_extra_data: true # If use extra data to train prediction model
-  use_curiosity: false # If use curiosity
+  curiosity: null # FORWARD | INVERSE
   curiosity_strength: 1 # Curiosity strength if use curiosity
   use_rnd: false # If use RND
   rnd_n_sample: 10 # RND sample times
