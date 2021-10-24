@@ -1,11 +1,7 @@
-import sys
 import unittest
 
-sys.path.append('..')
-
 from ds.sac_ds_base import SAC_DS_Base
-
-from .get_synthesis_data import *
+from tests.get_synthesis_data import *
 
 OBS_SHAPES = [(10, )]
 D_ACTION_SIZE = 2
@@ -17,7 +13,8 @@ class TestSAC_DS_Base(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        from . import nn_rnn, nn_vanilla
+        import tests.nn_rnn as nn_rnn
+        import tests.nn_vanilla as nn_vanilla
 
         self.sac = SAC_DS_Base(
             obs_shapes=[(10, )],

@@ -1,16 +1,12 @@
-import sys
 import unittest
 
-sys.path.append('..')
-
 from algorithm.sac_base import SAC_Base
-
-from .get_synthesis_data import *
+from tests.get_synthesis_data import *
 
 
 class TestVanilla(unittest.TestCase):
     def _test_vanilla(self, param_dict):
-        from . import nn_vanilla
+        import tests.nn_vanilla as nn_vanilla
 
         obs_shapes = [(10,)]
 
