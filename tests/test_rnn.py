@@ -1,16 +1,12 @@
-import sys
 import unittest
 
-sys.path.append('..')
-
 from algorithm.sac_base import SAC_Base
-
-from .get_synthesis_data import *
+from tests.get_synthesis_data import *
 
 
 class TestRNN(unittest.TestCase):
     def _test_rnn(self, param_dict):
-        from . import nn_rnn
+        import tests.nn_rnn as nn_rnn
 
         obs_shapes = [(10,)]
 

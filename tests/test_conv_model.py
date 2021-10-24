@@ -1,18 +1,13 @@
-import sys
 import unittest
 
-sys.path.append('..')
-
 from algorithm.sac_base import SAC_Base
-
-from .get_synthesis_data import *
+from tests.get_synthesis_data import *
 
 
 class TestConvModel(unittest.TestCase):
     def _test_conv(self, param_dict):
         import algorithm.nn_models as m
-
-        from . import nn_conv
+        import tests.nn_conv as nn_conv
 
         conv_name = param_dict['conv']
         del param_dict['conv']

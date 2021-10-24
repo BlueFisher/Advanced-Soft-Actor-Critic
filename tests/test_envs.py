@@ -1,13 +1,9 @@
 import importlib
-import sys
 import unittest
 from pathlib import Path
 
-sys.path.append('..')
-
 from algorithm.sac_base import SAC_Base
-
-from .get_synthesis_data import *
+from tests.get_synthesis_data import *
 
 
 class TestEnvs(unittest.TestCase):
