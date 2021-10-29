@@ -51,6 +51,7 @@ class SAC_DS_Base(SAC_Base):
 
                  discrete_dqn_like=False,
                  siamese: Optional[str] = None,
+                 siamese_use_adaptive=False,
                  use_prediction=False,
                  transition_kl=0.8,
                  use_extra_data=True,
@@ -89,6 +90,7 @@ class SAC_DS_Base(SAC_Base):
 
         self.discrete_dqn_like = discrete_dqn_like
         self.siamese = siamese
+        self.siamese_use_adaptive = siamese_use_adaptive
         self.use_prediction = use_prediction
         self.transition_kl = transition_kl
         self.use_extra_data = use_extra_data
