@@ -59,9 +59,10 @@ def __gen():
         'conv': ['simple'],
         'burn_in_step': [0, 5],
         'n_step': [1, 3],
-        # 'use_prediction': [True, False],
-        # 'use_extra_data': [True, False],
-        'siamese': [None, 'SIMCLR', 'BYOL', 'SIMSIAM']
+        'use_prediction': [True, False],
+        'use_extra_data': [True, False],
+        'siamese': [None, 'SIMCLR', 'BYOL', 'SIMSIAM'],
+        'siamese_use_adaptive': [False, True]
     })
 
     for i, param_dict in enumerate(possible_param_dicts):

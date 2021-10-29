@@ -56,6 +56,7 @@ class SAC_Base(object):
                  use_priority=True,
                  use_n_step_is=True,
                  siamese: Optional[str] = None,
+                 siamese_use_adaptive=False,
                  use_prediction=False,
                  transition_kl=0.8,
                  use_extra_data=True,
@@ -142,6 +143,7 @@ class SAC_Base(object):
         self.use_priority = use_priority
         self.use_n_step_is = use_n_step_is
         self.siamese = siamese
+        self.siamese_use_adaptive = siamese_use_adaptive
         self.use_prediction = use_prediction
         self.transition_kl = transition_kl
         self.use_extra_data = use_extra_data
@@ -850,15 +852,19 @@ class SAC_Base(object):
             loss_q_list[i].backward(retain_graph=True)
             self.optimizer_q_list[i].step()
 
+        grads_rep_main = [m.grad.detach() for m in self.model_rep.parameters()]
+
         """ Siamese Representation Learning """
         loss_siamese = None
         if self.siamese is not None:
-            loss_siamese = self._train_siamese_representation_learning(n_obses_list)
+            loss_siamese = self._train_siamese_representation_learning(grads_rep_main,
+                                                                       n_obses_list)
 
         """ Recurrent Prediction Model """
         loss_predictions = None
         if self.use_prediction:
-            loss_predictions = self._train_rpm(m_obses_list,
+            loss_predictions = self._train_rpm(grads_rep_main,
+                                               m_obses_list,
                                                m_states,
                                                m_target_states,
                                                n_actions,
@@ -869,7 +875,31 @@ class SAC_Base(object):
 
         return loss_q_list[0], loss_siamese, loss_predictions
 
-    def _train_siamese_representation_learning(self, n_obses_list):
+    @torch.no_grad()
+    def calculate_adaptive_weights(self, grads_rep_main: List[torch.Tensor],
+                                   losses: List[torch.Tensor]):
+        with torch.no_grad():
+            grads_rep_auxes = [autograd.grad(loss, self.model_rep.parameters(),
+                                             allow_unused=True,
+                                             retain_graph=True)
+                               for loss in losses]
+            grads_rep_auxes = [[g_aux if g_aux is not None else torch.zeros_like(g_main)
+                                for g_main, g_aux in zip(grads_rep_main, grads_aux)]
+                               for grads_aux in grads_rep_auxes]
+
+            _grads_rep_main = torch.cat([g.reshape(1, -1) for g in grads_rep_main], dim=1)
+            _grads_rep_auxes = [torch.cat([g.reshape(1, -1) for g in grads_aux], dim=1)
+                                for grads_aux in grads_rep_auxes]
+
+            coses = [functional.cosine_similarity(_grads_rep_main, _grads_aux)
+                     for _grads_aux in _grads_rep_auxes]
+            coses = [torch.sign(cos).clamp(min=0) for cos in coses]
+
+            for grads_aux, cos in zip(grads_rep_auxes, coses):
+                for param_rep, grad_rep_aux in zip(self.model_rep.parameters(), grads_aux):
+                    param_rep.grad += cos * grad_rep_aux
+
+    def _train_siamese_representation_learning(self, grads_rep_main, n_obses_list):
         self.optimizer_siamese.zero_grad()
 
         if self.siamese == 'SIMCLR':
@@ -887,8 +917,12 @@ class SAC_Base(object):
                 self._contrastive_labels = torch.block_diag(*torch.ones(batch, n, n, device=self.device))
 
             loss = functional.binary_cross_entropy_with_logits(logits, self._contrastive_labels)
-            loss.backward(inputs=list(chain(self.model_rep.parameters(),
-                                            [self.contrastive_weight])), retain_graph=True)
+            if self.siamese_use_adaptive:
+                self.calculate_adaptive_weights(grads_rep_main, [loss])
+            else:
+                loss.backward(inputs=list(chain(self.model_rep.parameters())), retain_graph=True)
+
+            loss.backward(inputs=list(chain([self.contrastive_weight])), retain_graph=True)
 
         elif self.siamese == 'BYOL':
             encoder = self.model_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
@@ -904,8 +938,12 @@ class SAC_Base(object):
             t_projection = self.model_target_rep_projection(t_encoder)
 
             loss = functional.cosine_similarity(prediction, t_projection).mean()
-            loss.backward(inputs=list(chain(self.model_rep.parameters(),
-                                            self.model_rep_projection.parameters(),
+            if self.siamese_use_adaptive:
+                self.calculate_adaptive_weights(grads_rep_main, [loss])
+            else:
+                loss.backward(inputs=list(chain(self.model_rep.parameters())), retain_graph=True)
+
+            loss.backward(inputs=list(chain(self.model_rep_projection.parameters(),
                                             self.model_rep_prediction.parameters())), retain_graph=True)
 
         elif self.siamese == 'SIMSIAM':
@@ -921,14 +959,19 @@ class SAC_Base(object):
             t_encoder = t_encoder.view(batch * n, -1)  # [Batch * n_step, f]
 
             loss = functional.cosine_similarity(prediction, t_encoder).mean()
-            loss.backward(inputs=list(chain(self.model_rep.parameters(),
-                                            self.model_rep_prediction.parameters())), retain_graph=True)
+            if self.siamese_use_adaptive:
+                self.calculate_adaptive_weights(grads_rep_main, [loss])
+            else:
+                loss.backward(inputs=list(chain(self.model_rep.parameters())), retain_graph=True)
+
+            loss.backward(inputs=list(chain(self.model_rep_prediction.parameters())), retain_graph=True)
 
         self.optimizer_siamese.step()
 
         return loss
 
     def _train_rpm(self,
+                   grads_rep_main,
                    m_obses_list,
                    m_states,
                    m_target_states,
@@ -958,33 +1001,7 @@ class SAC_Base(object):
                                                    [m_obses[:, self.burn_in_step:, ...] for m_obses in m_obses_list])
         loss_obs /= self.n_step
 
-        """ Adaptive Weights for Representation Model """
-
-        with torch.no_grad():
-            grads_rep = [m.grad for m in self.model_rep.parameters()]
-            grads_rep_preds = [autograd.grad(loss_transition, self.model_rep.parameters(), retain_graph=True),
-                               autograd.grad(loss_reward, self.model_rep.parameters(), retain_graph=True),
-                               autograd.grad(loss_obs, self.model_rep.parameters(), retain_graph=True)]
-
-            # for i in range(len(grads_rep)):
-            #     grad_rep = grads_rep[i]
-            #     grad_rep_norm = torch.norm(grad_rep)
-            #     for grads_rep_pred in grads_rep_preds:
-            #         grad_rep_pred = grads_rep_pred[i]
-            #         cos = torch.sum(grad_rep * grad_rep_pred) / (grad_rep_norm * torch.norm(grad_rep_pred))
-            #         grads_rep[i] += cos.clamp(min=0) * grad_rep_pred
-
-            _grads_rep_main = torch.cat([g.reshape(1, -1) for g in grads_rep], dim=1)
-            _grads_rep_preds = [torch.cat([g.reshape(1, -1) for g in grads_rep_pred], dim=1)
-                                for grads_rep_pred in grads_rep_preds]
-
-            coses = [functional.cosine_similarity(_grads_rep_main, grads_rep_pred)
-                     for grads_rep_pred in _grads_rep_preds]
-            coses = [torch.sign(cos).clamp(min=0) for cos in coses]
-
-            for grads_rep_pred, cos in zip(grads_rep_preds, coses):
-                for param_rep, grad_rep_pred in zip(self.model_rep.parameters(), grads_rep_pred):
-                    param_rep.grad += cos * grad_rep_pred
+        self.calculate_adaptive_weights(grads_rep_main, [loss_transition, loss_reward, loss_obs])
 
         loss_predictions = loss_transition + loss_reward + loss_obs
         self.optimizer_prediction.zero_grad()
