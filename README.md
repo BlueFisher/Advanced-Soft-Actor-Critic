@@ -16,7 +16,7 @@ This project is the algorithm [Soft Actor-Critic](https://arxiv.org/pdf/1812.059
 - Discrete action ([Soft Actor-Critic for Discrete Action Settings](http://arxiv.org/abs/1910.07207))
 - Curiosity mechanism ([Curiosity-driven Exploration by Self-supervised Prediction](http://arxiv.org/abs/1705.05363))
 - *Large-scale Distributed Evolutionary Reinforcement Learning
-- [SimCLR](http://proceedings.mlr.press/v119/chen20j.html), [BYOL](https://proceedings.neurips.cc/paper/2020/hash/f3ada80d5c4ee70142b17b8192b2958e-Abstract.html), [SimSIAM](https://openaccess.thecvf.com/content/CVPR2021/html/Chen\_Exploring\_Simple\_Siamese\_Representation\_Learning\_CVPR\_2021\_paper.html)
+- [ATC](http://proceedings.mlr.press/v139/stooke21a.html), [BYOL](https://proceedings.neurips.cc/paper/2020/hash/f3ada80d5c4ee70142b17b8192b2958e-Abstract.html)
 
 \* denotes the features that we implemented.
 
@@ -110,7 +110,7 @@ sac_config:
   discrete_dqn_like: false # If use policy or only Q network if discrete is in action spaces
   use_priority: true # If use PER importance ratio
   use_n_step_is: true # If use importance sampling
-  siamese: null # SIMCLR | BYOL | SIMSIAM
+  siamese: null # ATC | BYOL
   use_prediction: false # If train a transition model
   transition_kl: 0.8 # The coefficient of KL of transition and standard normal
   use_extra_data: true # If use extra data to train prediction model
@@ -203,7 +203,7 @@ sac_config:
   clip_epsilon: 0.2 # Epsilon for q clip
 
   discrete_dqn_like: false # If use policy or only Q network if discrete is in action spaces
-  siamese: null # SIMCLR | BYOL | SIMSIAM
+  siamese: null # ATC | BYOL
   use_prediction: false # If train a transition model
   transition_kl: 0.8 # The coefficient of KL of transition and standard normal
   use_extra_data: true # If use extra data to train prediction model

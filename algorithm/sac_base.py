@@ -103,7 +103,7 @@ class SAC_Base(object):
 
         use_priority: If use PER importance ratio
         use_n_step_is: If use importance sampling
-        siamese: SIMCLR | BYOL | SIMSIAM
+        siamese: ATC | BYOL
         use_prediction: If train a transition model
         transition_kl: The coefficient of KL of transition and standard normal
         use_extra_data: If use extra data to train prediction model
@@ -280,28 +280,29 @@ class SAC_Base(object):
         self.optimizer_policy = adam_optimizer(self.model_policy.parameters())
 
         """ SIAMESE REPRESENTATION LEARNING """
-        assert self.siamese in (None, 'SIMCLR', 'BYOL', 'SIMSIAM')
-        if self.siamese in ('SIMCLR', 'BYOL', 'SIMSIAM'):
-            test_encoder = self.model_rep.get_augmented_encoder(test_obs_list)
+        assert self.siamese in (None, 'ATC', 'BYOL')
+        if self.siamese in ('ATC', 'BYOL'):
+            test_encoder_list = self.model_rep.get_augmented_encoder(test_obs_list)
+            if not isinstance(test_encoder_list, tuple):
+                test_encoder_list = [test_encoder_list, ]
 
-            if self.siamese == 'SIMCLR':
-                self.contrastive_weight = torch.randn((test_encoder.shape[-1], test_encoder.shape[-1]),
-                                                      requires_grad=True,
-                                                      device=self.device)
-                self.optimizer_siamese = adam_optimizer([self.contrastive_weight])
+            if self.siamese == 'ATC':
+                self.contrastive_weight_list = [torch.randn((test_encoder.shape[-1], test_encoder.shape[-1]),
+                                                            requires_grad=True,
+                                                            device=self.device) for test_encoder in test_encoder_list]
+                self.optimizer_siamese = adam_optimizer(self.contrastive_weight_list)
 
             elif self.siamese == 'BYOL':
-                self.model_rep_projection: ModelBaseRepProjection = model.ModelRepProjection(test_encoder.shape[-1]).to(self.device)
-                self.model_target_rep_projection: ModelBaseRepProjection = model.ModelRepProjection(test_encoder.shape[-1]).to(self.device)
-                test_projection = self.model_rep_projection(test_encoder)
+                self.model_rep_projection_list: List[ModelBaseRepProjection] = [
+                    model.ModelRepProjection(test_encoder.shape[-1]).to(self.device) for test_encoder in test_encoder_list]
+                self.model_target_rep_projection_list: List[ModelBaseRepProjection] = [
+                    model.ModelRepProjection(test_encoder.shape[-1]).to(self.device) for test_encoder in test_encoder_list]
 
-                self.model_rep_prediction: ModelBaseRepPrediction = model.ModelRepPrediction(test_projection.shape[-1]).to(self.device)
-                self.optimizer_siamese = adam_optimizer(chain(self.model_rep_projection.parameters(),
-                                                              self.model_rep_prediction.parameters()))
-
-            elif self.siamese == 'SIMSIAM':
-                self.model_rep_prediction: ModelBaseRepPrediction = model.ModelRepPrediction(test_encoder.shape[-1]).to(self.device)
-                self.optimizer_siamese = adam_optimizer(self.model_rep_prediction.parameters())
+                test_projection_list = [pro(test_encoder) for pro, test_encoder in zip(self.model_rep_projection_list, test_encoder_list)]
+                self.model_rep_prediction_list: List[ModelBaseRepPrediction] = [
+                    model.ModelRepPrediction(test_projection.shape[-1]).to(self.device) for test_projection in test_projection_list]
+                self.optimizer_siamese = adam_optimizer(chain(*[pro.parameters() for pro in self.model_rep_projection_list],
+                                                              *[pre.parameters() for pre in self.model_rep_prediction_list]))
 
         """ RECURRENT PREDICTION MODELS """
         if self.use_prediction:
@@ -376,8 +377,9 @@ class SAC_Base(object):
         ckpt_dict['optimizer_policy'] = self.optimizer_policy
 
         """ SIAMESE REPRESENTATION LEARNING """
-        if self.siamese == 'SIMCLR':
-            ckpt_dict['contrastive_weight'] = self.contrastive_weight
+        if self.siamese == 'ATC':
+            for i, weight in enumerate(self.contrastive_weight_list):
+                ckpt_dict[f'contrastive_weights{i}'] = weight
 
         """ RECURRENT PREDICTION MODELS """
         if self.use_prediction:
@@ -486,8 +488,8 @@ class SAC_Base(object):
             source = chain(source, self.model_q_list[i].parameters())
 
         if self.siamese == 'BYOL':
-            target = chain(target, self.model_target_rep_projection.parameters())
-            source = chain(source, self.model_rep_projection.parameters())
+            target = chain(target, *[t_pro.parameters() for t_pro in self.model_target_rep_projection_list])
+            source = chain(source, *[pro.parameters() for pro in self.model_rep_projection_list])
 
         for target_param, param in zip(target, source):
             target_param.data.copy_(
@@ -902,69 +904,60 @@ class SAC_Base(object):
     def _train_siamese_representation_learning(self, grads_rep_main, n_obses_list):
         self.optimizer_siamese.zero_grad()
 
-        if self.siamese == 'SIMCLR':
-            query = self.model_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
-                                                          for n_obses in n_obses_list])  # [Batch, n_step, f]
-            key = self.model_target_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
-                                                               for n_obses in n_obses_list])  # [Batch, n_step, f]
+        if self.siamese == 'ATC':
+            query_list = self.model_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
+                                                               for n_obses in n_obses_list])  # [Batch, n_step, f], ...
+            key_list = self.model_target_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
+                                                                    for n_obses in n_obses_list])  # [Batch, n_step, f], ...
+            if not isinstance(query_list, tuple):
+                query_list = (query_list, )
+                key_list = (key_list, )
 
-            batch, n, *_ = query.shape
-            query = query.view(batch * n, -1)  # [Batch * n_step, f]
-            key = key.view(batch * n, -1)  # [Batch * n_step, f]
-            logits = torch.mm(query, self.contrastive_weight)
-            logits = torch.mm(logits, key.t())  # [Batch * n_step, Batch * n_step]
-            if not hasattr(self, '_contrastive_label'):
+            batch, n, *_ = query_list[0].shape
+            query_list = [query.view(batch * n, -1) for query in query_list]  # [Batch * n_step, f], ...
+            key_list = [key.view(batch * n, -1) for key in key_list]  # [Batch * n_step, f], ...
+            logits_list = [torch.mm(query, weight) for query, weight in zip(query_list, self.contrastive_weight_list)]
+            logits_list = [torch.mm(logits, key.t()) for logits, key in zip(logits_list, key_list)]  # [Batch * n_step, Batch * n_step], ...
+            if not hasattr(self, '_contrastive_labels'):
                 self._contrastive_labels = torch.block_diag(*torch.ones(batch, n, n, device=self.device))
 
-            loss = functional.binary_cross_entropy_with_logits(logits, self._contrastive_labels)
+            loss_list = [functional.binary_cross_entropy_with_logits(logits, self._contrastive_labels)
+                         for logits in logits_list]
+            loss = sum(loss_list)
             if self.siamese_use_adaptive:
-                self.calculate_adaptive_weights(grads_rep_main, [loss])
+                self.calculate_adaptive_weights(grads_rep_main, loss_list)
             else:
-                loss.backward(inputs=list(chain(self.model_rep.parameters())), retain_graph=True)
+                loss.backward(inputs=list(self.model_rep.parameters()), retain_graph=True)
 
-            loss.backward(inputs=list(chain([self.contrastive_weight])), retain_graph=True)
+            loss.backward(inputs=self.contrastive_weight_list, retain_graph=True)
 
         elif self.siamese == 'BYOL':
-            encoder = self.model_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
-                                                            for n_obses in n_obses_list])  # [Batch, n_step, f]
-            t_encoder = self.model_target_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
-                                                                     for n_obses in n_obses_list])  # [Batch, n_step, f]
+            encoder_list = self.model_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
+                                                                 for n_obses in n_obses_list])  # [Batch, n_step, f], ...
+            t_encoder_list = self.model_target_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
+                                                                          for n_obses in n_obses_list])  # [Batch, n_step, f], ...
 
-            batch, n, *_ = encoder.shape
-            encoder = encoder.view(batch * n, -1)  # [Batch * n_step, f]
-            projection = self.model_rep_projection(encoder)
-            prediction = self.model_rep_prediction(projection)
-            t_encoder = t_encoder.view(batch * n, -1)  # [Batch * n_step, f]
-            t_projection = self.model_target_rep_projection(t_encoder)
+            if not isinstance(encoder_list, tuple):
+                encoder_list = (encoder_list, )
+                t_encoder_list = (t_encoder_list, )
 
-            loss = functional.cosine_similarity(prediction, t_projection).mean()
+            batch, n, *_ = encoder_list[0].shape
+            encoder_list = [encoder.view(batch * n, -1) for encoder in encoder_list]  # [Batch * n_step, f], ...
+            projection_list = [pro(encoder) for pro, encoder in zip(self.model_rep_projection_list, encoder_list)]
+            prediction_list = [pre(projection) for pre, projection in zip(self.model_rep_prediction_list, projection_list)]
+            t_encoder_list = [t_encoder.view(batch * n, -1) for t_encoder in t_encoder_list]  # [Batch * n_step, f], ...
+            t_projection_list = [t_pro(t_encoder) for t_pro, t_encoder in zip(self.model_target_rep_projection_list, t_encoder_list)]
+
+            loss_list = [functional.cosine_similarity(prediction, t_projection).mean()
+                         for prediction, t_projection in zip(prediction_list, t_projection_list)]
+            loss = sum(loss_list)
             if self.siamese_use_adaptive:
-                self.calculate_adaptive_weights(grads_rep_main, [loss])
+                self.calculate_adaptive_weights(grads_rep_main, loss_list)
             else:
-                loss.backward(inputs=list(chain(self.model_rep.parameters())), retain_graph=True)
+                loss.backward(inputs=list(self.model_rep.parameters()), retain_graph=True)
 
-            loss.backward(inputs=list(chain(self.model_rep_projection.parameters(),
-                                            self.model_rep_prediction.parameters())), retain_graph=True)
-
-        elif self.siamese == 'SIMSIAM':
-            encoder = self.model_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
-                                                            for n_obses in n_obses_list])  # [Batch, n_step, f]
-            t_encoder = self.model_rep.get_augmented_encoder([n_obses[:, self.burn_in_step:, ...]
-                                                              for n_obses in n_obses_list])  # [Batch, n_step, f]
-            t_encoder = t_encoder.detach()
-
-            batch, n, *_ = encoder.shape
-            encoder = encoder.view(batch * n, -1)  # [Batch * n_step, f]
-            prediction = self.model_rep_prediction(encoder)
-            t_encoder = t_encoder.view(batch * n, -1)  # [Batch * n_step, f]
-
-            loss = functional.cosine_similarity(prediction, t_encoder).mean()
-            if self.siamese_use_adaptive:
-                self.calculate_adaptive_weights(grads_rep_main, [loss])
-            else:
-                loss.backward(inputs=list(chain(self.model_rep.parameters())), retain_graph=True)
-
-            loss.backward(inputs=list(chain(self.model_rep_prediction.parameters())), retain_graph=True)
+            loss.backward(inputs=list(chain(*[pro.parameters() for pro in self.model_rep_projection_list],
+                                            *[pre.parameters() for pre in self.model_rep_prediction_list])), retain_graph=True)
 
         self.optimizer_siamese.step()
 

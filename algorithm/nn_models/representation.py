@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import torch
 from torch import nn
@@ -24,7 +24,7 @@ class ModelBaseSimpleRep(nn.Module):
     def forward(self, obs_list):
         raise Exception("ModelSimpleRep not implemented")
 
-    def get_augmented_encoder(self, obs_list) -> torch.Tensor:
+    def get_augmented_encoder(self, obs_list) -> Union[torch.Tensor, Tuple[torch.Tensor]]:
         raise Exception("get_augmented_encoder not implemented")
 
 
@@ -52,7 +52,7 @@ class ModelBaseRNNRep(nn.Module):
     def forward(self, obs_list, pre_action, rnn_state=None):
         raise Exception("ModelRNNRep not implemented")
 
-    def get_augmented_encoder(self, obs_list) -> torch.Tensor:
+    def get_augmented_encoder(self, obs_list) -> Union[torch.Tensor, Tuple[torch.Tensor]]:
         raise Exception("get_augmented_encoder not implemented")
 
 
