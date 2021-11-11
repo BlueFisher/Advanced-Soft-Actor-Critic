@@ -5,8 +5,6 @@ import algorithm.nn_models as m
 from algorithm.nn_models.representation import ModelRepPrediction
 from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
 
-EXTRA_SIZE = 6
-
 
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self, blur, brightness, need_ray, need_speed):
@@ -16,13 +14,19 @@ class ModelRep(m.ModelBaseRNNRep):
 
         self.need_ray = need_ray
         self.need_speed = need_speed
+        if blur != 0:
+            self.blurrer = m.Transform(T.GaussianBlur(blur, sigma=blur))
+        else:
+            self.blurrer = None
+
+        self.brightness = m.Transform(T.ColorJitter(brightness=(brightness, brightness)))
 
         self.ray_index = []
         self.ray_size = 720
-        for i in range(360):
+        for i in reversed(range(360)):
             self.ray_index.append((i * 2 + 1) * 2)
             self.ray_index.append((i * 2 + 1) * 2 + 1)
-        for i in reversed(range(360)):
+        for i in range(360):
             self.ray_index.append((i * 2 + 2) * 2)
             self.ray_index.append((i * 2 + 2) * 2 + 1)
 
@@ -32,17 +36,10 @@ class ModelRep(m.ModelBaseRNNRep):
         self.ray_conv = m.Conv1dLayers(720, 2, 'default',
                                        out_dense_n=64, out_dense_depth=2)
 
-        self.dense = m.LinearLayers(self.conv.output_size + self.ray_conv.output_size,
-                                    dense_n=64, dense_depth=1)
+        self.vis_ray_dense = m.LinearLayers(self.conv.output_size + self.ray_conv.output_size,
+                                            dense_n=64, dense_depth=1)
 
         self.rnn = m.GRU(64 + self.c_action_size, 64, 1)
-
-        if blur != 0:
-            self.blurrer = m.Transform(T.GaussianBlur(blur, sigma=blur))
-        else:
-            self.blurrer = None
-
-        self.brightness = m.Transform(T.ColorJitter(brightness=(brightness, brightness)))
 
         cropper = torch.nn.Sequential(
             T.RandomCrop(size=(50, 50)),
@@ -58,7 +55,6 @@ class ModelRep(m.ModelBaseRNNRep):
     def forward(self, obs_list, pre_action, rnn_state=None):
         vis_cam, ray, vec = obs_list
         ray = ray[..., self.ray_index]
-        vec = vec[..., :-EXTRA_SIZE]
 
         if self.blurrer:
             vis_cam = self.blurrer(vis_cam)
@@ -72,19 +68,25 @@ class ModelRep(m.ModelBaseRNNRep):
         ray = ray.view(*ray.shape[:-1], self.ray_size, 2)
         ray = self.ray_conv(ray)
 
-        vis_ray_concat = self.dense(torch.cat([vis, ray], dim=-1))
+        vis_ray_concat = self.vis_ray_dense(torch.cat([vis, ray], dim=-1))
         state, hn = self.rnn(torch.cat([vis_ray_concat, pre_action], dim=-1), rnn_state)
 
-        state = torch.cat([state, ray, vec], dim=-1)
+        state = torch.cat([state, vec], dim=-1)
 
         return state, hn
 
     def get_augmented_encoder(self, obs_list):
-        vis_cam, *_ = obs_list
-        transformed_vis_cam = self.random_transformers(vis_cam)
-        encoder = self.conv(transformed_vis_cam)
+        vis_cam, ray, vec = obs_list
+        ray = ray[..., self.ray_index]
 
-        return encoder
+        transformed_vis_cam = self.random_transformers(vis_cam)
+        vis_encoder = self.conv(transformed_vis_cam)
+
+        ray = ray.view(*ray.shape[:-1], self.ray_size, 2)
+        ray[..., torch.randperm(720)[:72], 1] = 0.03
+        ray_encoder = self.ray_conv(ray)
+
+        return vis_encoder, ray_encoder
 
 
 class ModelQ(m.ModelQ):

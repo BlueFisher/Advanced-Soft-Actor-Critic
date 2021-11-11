@@ -179,15 +179,12 @@ class SAC_DS_Base(SAC_Base):
             variables = chain(variables,
                               model_q.parameters())
 
-        if self.siamese == 'SIMCLR':
-            variables = chain(variables, [self.contrastive_weight])
+        if self.siamese == 'ATC':
+            variables = chain(variables, self.contrastive_weight_list)
         elif self.siamese == 'BYOL':
             variables = chain(variables,
-                              self.model_rep_projection.parameters(),
-                              self.model_rep_prediction.parameters())
-        elif self.siamese == 'SIMSIAM':
-            variables = chain(variables,
-                              self.model_rep_prediction.parameters())
+                              *[pro.parameters() for pro in self.model_rep_projection_list],
+                              *[pre.parameters() for pre in self.model_rep_prediction_list])
 
         if self.use_prediction:
             variables = chain(variables,
@@ -236,9 +233,9 @@ class SAC_DS_Base(SAC_Base):
                               self.running_means,
                               self.running_variances)
 
-        if self.siamese == 'BYOL':
+        if self.siamese == 'BYOL': 
             variables = chain(variables,
-                              self.model_target_rep_projection.parameters())
+                              *[t_pro.parameters() for t_pro in self.model_target_rep_projection_list])
 
         if get_numpy:
             return [v.detach().cpu().numpy() for v in variables]

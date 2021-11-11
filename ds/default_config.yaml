@@ -76,7 +76,7 @@ sac_config:
   clip_epsilon: 0.2 # Epsilon for q clip
 
   discrete_dqn_like: false # If use policy or only Q network if discrete is in action spaces
-  siamese: null # SIMCLR | BYOL | SIMSIAM
+  siamese: null # ATC | BYOL
   siamese_use_adaptive: false
   use_prediction: false # If train a transition model
   transition_kl: 0.8 # The coefficient of KL of transition and standard normal
