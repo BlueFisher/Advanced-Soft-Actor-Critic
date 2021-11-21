@@ -18,7 +18,7 @@ default:
     rep:
       blur: 0
       brightness: 1
-      need_ray: true
+      ray_random: 200
       need_speed: true
 
   sac_config:
@@ -31,3 +31,169 @@ default:
 
     use_rnd: true
     rnd_n_sample: 50
+
+atc:
+  base_config:
+    name: "atc_{time}"
+  sac_config:
+    siamese: ATC
+
+byol:
+  base_config:
+    name: "byol_{time}"
+  sac_config:
+    siamese: BYOL
+
+siamatcray0:
+  model_config:
+    rep:
+      ray_random: 0
+  sac_config:
+    siamese: ATC
+
+siamatcray10:
+  model_config:
+    rep:
+      ray_random: 10
+  sac_config:
+    siamese: ATC
+
+siamatcray20:
+  model_config:
+    rep:
+      ray_random: 20
+  sac_config:
+    siamese: ATC
+
+siamatcray30:
+  model_config:
+    rep:
+      ray_random: 30
+  sac_config:
+    siamese: ATC
+
+siamatcray40:
+  model_config:
+    rep:
+      ray_random: 40
+  sac_config:
+    siamese: ATC
+
+siamatcray50:
+  model_config:
+    rep:
+      ray_random: 50
+  sac_config:
+    siamese: ATC
+
+siamatcray60:
+  model_config:
+    rep:
+      ray_random: 60
+  sac_config:
+    siamese: ATC
+
+siamatcray70:
+  model_config:
+    rep:
+      ray_random: 70
+  sac_config:
+    siamese: ATC
+
+siamatcray80:
+  model_config:
+    rep:
+      ray_random: 80
+  sac_config:
+    siamese: ATC
+
+siamatcray90:
+  model_config:
+    rep:
+      ray_random: 90
+  sac_config:
+    siamese: ATC
+
+siamatcray100:
+  model_config:
+    rep:
+      ray_random: 100
+  sac_config:
+    siamese: ATC
+
+siambyolray0:
+  model_config:
+    rep:
+      ray_random: 0
+  sac_config:
+    siamese: BYOL
+
+siambyolray10:
+  model_config:
+    rep:
+      ray_random: 10
+  sac_config:
+    siamese: BYOL
+
+siambyolray20:
+  model_config:
+    rep:
+      ray_random: 20
+  sac_config:
+    siamese: BYOL
+
+siambyolray30:
+  model_config:
+    rep:
+      ray_random: 30
+  sac_config:
+    siamese: BYOL
+
+siambyolray40:
+  model_config:
+    rep:
+      ray_random: 40
+  sac_config:
+    siamese: BYOL
+
+siambyolray50:
+  model_config:
+    rep:
+      ray_random: 50
+  sac_config:
+    siamese: BYOL
+
+siambyolray60:
+  model_config:
+    rep:
+      ray_random: 60
+  sac_config:
+    siamese: BYOL
+
+siambyolray70:
+  model_config:
+    rep:
+      ray_random: 70
+  sac_config:
+    siamese: BYOL
+
+siambyolray80:
+  model_config:
+    rep:
+      ray_random: 80
+  sac_config:
+    siamese: BYOL
+
+siambyolray90:
+  model_config:
+    rep:
+      ray_random: 90
+  sac_config:
+    siamese: BYOL
+
+siambyolray100:
+  model_config:
+    rep:
+      ray_random: 100
+  sac_config:
+    siamese: BYOL

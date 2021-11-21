@@ -222,12 +222,12 @@ class SAC_Base(object):
         if self.use_rnn:
             self.model_rep: ModelBaseRNNRep = ModelRep(self.obs_shapes,
                                                        self.d_action_size, self.c_action_size,
-                                                       False,
+                                                       False, self.train_mode,
                                                        self.model_abs_dir,
                                                        **model_config['rep']).to(self.device)
             self.model_target_rep: ModelBaseRNNRep = ModelRep(self.obs_shapes,
                                                               self.d_action_size, self.c_action_size,
-                                                              True,
+                                                              True, self.train_mode,
                                                               self.model_abs_dir,
                                                               **model_config['rep']).to(self.device)
             # Get represented state and rnn_state dimension
@@ -237,11 +237,11 @@ class SAC_Base(object):
             state_size, self.rnn_state_shape = test_state.shape[-1], test_next_rnn_state.shape[1:]
         else:
             self.model_rep: ModelBaseSimpleRep = ModelRep(self.obs_shapes,
-                                                          False,
+                                                          False, self.train_mode,
                                                           self.model_abs_dir,
                                                           **model_config['rep']).to(self.device)
             self.model_target_rep: ModelBaseSimpleRep = ModelRep(self.obs_shapes,
-                                                                 True,
+                                                                 True, self.train_mode,
                                                                  self.model_abs_dir,
                                                                  **model_config['rep']).to(self.device)
             # Get represented state dimension

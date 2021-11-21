@@ -15,14 +15,19 @@ class ImageVisual:
         self.fig = None
         self.idx = 0
 
-    def show(self, *images: Union[np.ndarray, torch.Tensor], save_name=None):
+    def __call__(self, *images: Union[np.ndarray, torch.Tensor], save_name=None):
         """
         Args:
             *images: [Batch, H, W, C]
         """
+        if len(images[0].shape) > 4:
+            images = [images[:, 0, ...] for image in images]
         images = [i.detach().cpu().numpy() if isinstance(i, torch.Tensor) else i for i in images]
 
         batch_size = images[0].shape[0]
+        if batch_size >= 5:
+            return
+
         fig_size = len(images)
 
         if self.fig is None:
@@ -53,5 +58,5 @@ if __name__ == '__main__':
     image_visual = ImageVisual()
     while True:
         images = [np.random.rand(2, 84, 84, 3), np.random.rand(2, 84, 84, 3)]
-        image_visual.show(*images)
+        image_visual(*images)
         time.sleep(0.1)
