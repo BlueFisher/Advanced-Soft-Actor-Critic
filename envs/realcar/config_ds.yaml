@@ -22,7 +22,7 @@ default:
     rep:
       blur: 0
       brightness: 1
-      need_ray: true
+      ray_random: 200
       need_speed: true
 
   sac_config:
@@ -33,7 +33,17 @@ default:
     burn_in_step: 10
     use_rnn: true
 
-    siamese: BYOL
-
     use_rnd: true
     rnd_n_sample: 50
+
+atc:
+  base_config:
+    name: "atc_{time}"
+  sac_config:
+    siamese: ATC
+
+byol:
+  base_config:
+    name: "byol_{time}"
+  sac_config:
+    siamese: BYOL
