@@ -13,6 +13,8 @@ default:
 
     evolver_enabled: false
 
+    noise_increasing_rate: 0.005
+
   reset_config:
     force_reset: true
     bounding_box_random: 0

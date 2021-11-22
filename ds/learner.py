@@ -271,10 +271,10 @@ class Learner:
         while True:
             self._update_sac_bak()
 
-    def _get_actor_register_result(self, actors_num):
+    def _get_actor_register_result(self, actor_id):
         if self._registered:
 
-            noise = self.base_config['noise_increasing_rate'] * (actors_num - 1)
+            noise = self.base_config['noise_increasing_rate'] * actor_id
             actor_sac_config = self.sac_config
             actor_sac_config['noise'] = min(noise, self.base_config['noise_max'])
 
@@ -537,7 +537,7 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
         self._logger.info(f'{peer} is registering actor...')
 
         with self._lock:
-            res = self._get_actor_register_result(len(self._peer_set))
+            res = self._get_actor_register_result(self._actor_id)
             if res is not None:
                 actor_id = self._actor_id
 
