@@ -4,15 +4,20 @@ from torchvision import transforms as T
 import algorithm.nn_models as m
 from algorithm.nn_models.representation import ModelRepPrediction
 from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
+from algorithm.utils.ray_visual import RayVisual
+from algorithm.utils.image_visual import ImageVisual
+
+
+RAY_SIZE = 720
 
 
 class ModelRep(m.ModelBaseRNNRep):
-    def _build_model(self, blur, brightness, need_ray, need_speed):
+    def _build_model(self, blur, brightness, ray_random, need_speed):
         assert self.obs_shapes[0] == (84, 84, 3)
         assert self.obs_shapes[1] == (1442,)  # ray (1 + 360 + 360) * 2
         assert self.obs_shapes[2] == (6,)  # vector
 
-        self.need_ray = need_ray
+        self.ray_random = ray_random
         self.need_speed = need_speed
         if blur != 0:
             self.blurrer = m.Transform(T.GaussianBlur(blur, sigma=blur))
@@ -22,11 +27,11 @@ class ModelRep(m.ModelBaseRNNRep):
         self.brightness = m.Transform(T.ColorJitter(brightness=(brightness, brightness)))
 
         self.ray_index = []
-        self.ray_size = 720
-        for i in reversed(range(360)):
+
+        for i in reversed(range(RAY_SIZE // 2)):
             self.ray_index.append((i * 2 + 1) * 2)
             self.ray_index.append((i * 2 + 1) * 2 + 1)
-        for i in range(360):
+        for i in range(RAY_SIZE // 2):
             self.ray_index.append((i * 2 + 2) * 2)
             self.ray_index.append((i * 2 + 2) * 2 + 1)
 
@@ -60,12 +65,13 @@ class ModelRep(m.ModelBaseRNNRep):
             vis_cam = self.blurrer(vis_cam)
         vis_cam = self.brightness(vis_cam)
 
-        if not self.need_ray:
-            ray = torch.ones_like(ray)
-
         vis = self.conv(vis_cam)
 
-        ray = ray.view(*ray.shape[:-1], self.ray_size, 2)
+        ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
+        ray_random = (torch.rand(1) * self.ray_random).int()
+        random_index = torch.randperm(720)[:ray_random]
+        ray[..., random_index, 0] = 0.
+        ray[..., random_index, 1] = 0.03
         ray = self.ray_conv(ray)
 
         vis_ray_concat = self.vis_ray_dense(torch.cat([vis, ray], dim=-1))
@@ -82,8 +88,11 @@ class ModelRep(m.ModelBaseRNNRep):
         transformed_vis_cam = self.random_transformers(vis_cam)
         vis_encoder = self.conv(transformed_vis_cam)
 
-        ray = ray.view(*ray.shape[:-1], self.ray_size, 2)
-        ray[..., torch.randperm(720)[:72], 1] = 0.03
+        ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
+        ray_random = (torch.rand(1) * self.ray_random).int()
+        random_index = torch.randperm(720)[:ray_random]
+        ray[..., random_index, 0] = 0.
+        ray[..., random_index, 1] = 0.03
         ray_encoder = self.ray_conv(ray)
 
         return vis_encoder, ray_encoder

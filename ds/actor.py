@@ -275,9 +275,11 @@ class Actor(object):
                             if use_rnn:
                                 action, next_rnn_state = self.sac_actor.choose_rnn_action([o.astype(np.float32) for o in obs_list],
                                                                                           action,
-                                                                                          rnn_state)
+                                                                                          rnn_state,
+                                                                                          force_rnd_if_avaiable=True)
                             else:
-                                action = self.sac_actor.choose_action([o.astype(np.float32) for o in obs_list])
+                                action = self.sac_actor.choose_action([o.astype(np.float32) for o in obs_list],
+                                                                      force_rnd_if_avaiable=True)
 
                     else:
                         # Get action from learner each step

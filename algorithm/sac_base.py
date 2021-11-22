@@ -1266,7 +1266,7 @@ class SAC_Base(object):
         return actions[torch.tensor(range(batch)), idx]
 
     @torch.no_grad()
-    def _choose_action(self, state: torch.Tensor):
+    def _choose_action(self, state: torch.Tensor, force_rnd_if_avaiable: bool = False):
         """
         Args:
             state: [Batch, state_size]
@@ -1276,7 +1276,7 @@ class SAC_Base(object):
         """
         batch = state.shape[0]
         d_policy, c_policy = self.model_policy(state)
-        if self.use_rnd and self.train_mode:
+        if self.use_rnd and (self.train_mode or force_rnd_if_avaiable):
             return self.rnd_sample(state, d_policy, c_policy)
         else:
             if self.d_action_size:
@@ -1298,7 +1298,7 @@ class SAC_Base(object):
             return torch.cat([d_action, c_action], dim=-1)
 
     @torch.no_grad()
-    def choose_action(self, obs_list: List[np.ndarray]):
+    def choose_action(self, obs_list: List[np.ndarray], force_rnd_if_avaiable: bool = False):
         """
         Args:
             obs_list: list([Batch, *obs_shapes_i], ...)
@@ -1308,12 +1308,13 @@ class SAC_Base(object):
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         state = self.model_rep(obs_list)
-        return self._choose_action(state).detach().cpu().numpy()
+        return self._choose_action(state, force_rnd_if_avaiable).detach().cpu().numpy()
 
     @torch.no_grad()
     def choose_rnn_action(self, obs_list: List[np.ndarray],
                           pre_action: np.ndarray,
-                          rnn_state: np.ndarray):
+                          rnn_state: np.ndarray,
+                          force_rnd_if_avaiable: bool = False):
         """
         Args:
             obs_list: list([Batch, *obs_shapes_i], ...)
@@ -1333,7 +1334,7 @@ class SAC_Base(object):
         state, next_rnn_state = self.model_rep(obs_list, pre_action, rnn_state)
         state = state.view(-1, state.shape[-1])
 
-        action = self._choose_action(state)
+        action = self._choose_action(state, force_rnd_if_avaiable)
 
         return action.detach().cpu().numpy(), next_rnn_state.detach().cpu().numpy()
 

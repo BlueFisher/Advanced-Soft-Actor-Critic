@@ -21,7 +21,7 @@ class ImageVisual:
             *images: [Batch, H, W, C]
         """
         if len(images[0].shape) > 4:
-            images = [images[:, 0, ...] for image in images]
+            images = [image[:, 0, ...] for image in images]
         images = [i.detach().cpu().numpy() if isinstance(i, torch.Tensor) else i for i in images]
 
         batch_size = images[0].shape[0]

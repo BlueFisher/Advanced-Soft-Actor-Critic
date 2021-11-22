@@ -137,13 +137,16 @@ class SAC_DS_Base(SAC_Base):
 
         return np.concatenate([d_action, c_action], axis=-1).astype(np.float32)
 
-    def choose_action(self, obs_list):
-        action = super().choose_action(obs_list)
+    def choose_action(self, obs_list,
+                      force_rnd_if_avaiable: bool = False):
+        action = super().choose_action(obs_list, force_rnd_if_avaiable)
 
         return self._random_action(action)
 
-    def choose_rnn_action(self, obs_list, pre_action, rnn_state):
-        action, next_rnn_state = super().choose_rnn_action(obs_list, pre_action, rnn_state)
+    def choose_rnn_action(self, obs_list, pre_action, rnn_state,
+                          force_rnd_if_avaiable: bool = False):
+        action, next_rnn_state = super().choose_rnn_action(obs_list, pre_action, rnn_state,
+                                                           force_rnd_if_avaiable)
 
         return self._random_action(action), next_rnn_state
 
@@ -152,6 +155,11 @@ class SAC_DS_Base(SAC_Base):
         For learner to send variables to actors
         """
         variables = chain(self.model_rep.parameters(), self.model_policy.parameters())
+
+        if self.use_rnd:
+            variables = chain(variables,
+                              self.model_rnd.parameters(),
+                              self.model_target_rnd.parameters())
 
         if get_numpy:
             return [v.detach().cpu().numpy() for v in variables]
@@ -199,11 +207,6 @@ class SAC_DS_Base(SAC_Base):
             variables = chain(variables,
                               self.model_inverse_dynamice.parameters())
 
-        if self.use_rnd:
-            variables = chain(variables,
-                              self.model_rnd.parameters(),
-                              self.model_target_rnd.parameters())
-
         if get_numpy:
             return [v.detach().cpu().numpy() for v in variables]
         else:
@@ -233,7 +236,7 @@ class SAC_DS_Base(SAC_Base):
                               self.running_means,
                               self.running_variances)
 
-        if self.siamese == 'BYOL': 
+        if self.siamese == 'BYOL':
             variables = chain(variables,
                               *[t_pro.parameters() for t_pro in self.model_target_rep_projection_list])
 
