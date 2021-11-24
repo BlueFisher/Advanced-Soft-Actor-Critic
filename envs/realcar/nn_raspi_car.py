@@ -63,7 +63,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
         return state, hn
 
-    def get_augmented_encoder(self, obs_list):
+    def get_augmented_encoders(self, obs_list):
         vis_cam, *_ = obs_list
         transformed_vis_cam = self.random_transformers(vis_cam)
         encoder = self.conv(transformed_vis_cam)

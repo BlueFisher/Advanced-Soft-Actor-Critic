@@ -50,65 +50,65 @@ class BatchGenerator:
         self.run()
 
     def _episode_to_batch(self, episode_size: int,
-                          n_obses_list: List[np.ndarray],
-                          n_actions: np.ndarray,
-                          n_rewards: np.ndarray,
+                          l_obses_list: List[np.ndarray],
+                          l_actions: np.ndarray,
+                          l_rewards: np.ndarray,
                           next_obs_list: List[np.ndarray],
-                          n_dones: np.ndarray,
-                          n_mu_probs: np.ndarray = None,
-                          n_rnn_states: np.ndarray = None):
+                          l_dones: np.ndarray,
+                          l_mu_probs: np.ndarray = None,
+                          l_rnn_states: np.ndarray = None):
         """
         Args:
             episode_size: int, Indicates true episode_len, not MAX_EPISODE_SIZE
-            n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-            n_actions: [1, episode_len, action_size]
-            n_rewards: [1, episode_len]
+            l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
+            l_actions: [1, episode_len, action_size]
+            l_rewards: [1, episode_len]
             next_obs_list: list([1, *obs_shapes_i], ...)
-            n_dones: [1, episode_len]
-            n_mu_probs: [1, episode_len]
-            n_rnn_states: [1, episode_len, *rnn_state_shape]
+            l_dones: [1, episode_len]
+            l_mu_probs: [1, episode_len]
+            l_rnn_states: [1, episode_len, *rnn_state_shape]
 
         Returns:
-            n_obses_list: list([episode_len - N + 1, N, *obs_shapes_i], ...)
-            n_actions: [episode_len - N + 1, N, action_size]
-            n_rewards: [episode_len - N + 1, N]
+            N_obses_list: list([episode_len - N + 1, N, *obs_shapes_i], ...)
+            N_actions: [episode_len - N + 1, N, action_size]
+            N_rewards: [episode_len - N + 1, N]
             next_obs_list: list([episode_len - N + 1, *obs_shapes_i], ...)
-            n_dones: [episode_len - N + 1, N]
-            n_mu_probs: [episode_len - N + 1, N]
+            N_dones: [episode_len - N + 1, N]
+            N_mu_probs: [episode_len - N + 1, N]
             rnn_state: [episode_len - N + 1, *rnn_state_shape]
         """
         N = self.burn_in_step + self.n_step
 
-        tmp_n_obses_list = [None] * len(n_obses_list)
-        for j, n_obses in enumerate(n_obses_list):
-            tmp_n_obses_list[j] = np.concatenate([n_obses[:, i:i + N]
+        tmp_N_obses_list = [None] * len(l_obses_list)
+        for j, l_obses in enumerate(l_obses_list):
+            tmp_N_obses_list[j] = np.concatenate([l_obses[:, i:i + N]
                                                   for i in range(episode_size - N + 1)], axis=0)
-        n_actions = np.concatenate([n_actions[:, i:i + N]
+        N_actions = np.concatenate([l_actions[:, i:i + N]
                                     for i in range(episode_size - N + 1)], axis=0)
-        n_rewards = np.concatenate([n_rewards[:, i:i + N]
+        N_rewards = np.concatenate([l_rewards[:, i:i + N]
                                     for i in range(episode_size - N + 1)], axis=0)
         tmp_next_obs_list = [None] * len(next_obs_list)
-        for j, n_obses in enumerate(n_obses_list):
-            tmp_next_obs_list[j] = np.concatenate([n_obses[:, i + N]
+        for j, l_obses in enumerate(l_obses_list):
+            tmp_next_obs_list[j] = np.concatenate([l_obses[:, i + N]
                                                    for i in range(episode_size - N)]
                                                   + [next_obs_list[j]],
                                                   axis=0)
-        n_dones = np.concatenate([n_dones[:, i:i + N]
+        N_dones = np.concatenate([l_dones[:, i:i + N]
                                   for i in range(episode_size - N + 1)], axis=0)
 
-        n_mu_probs = np.concatenate([n_mu_probs[:, i:i + N]
+        N_mu_probs = np.concatenate([l_mu_probs[:, i:i + N]
                                      for i in range(episode_size - N + 1)], axis=0)
 
         if self.use_rnn:
-            rnn_state = np.concatenate([n_rnn_states[:, i]
+            rnn_state = np.concatenate([l_rnn_states[:, i]
                                         for i in range(episode_size - N + 1)], axis=0)
 
-        return [tmp_n_obses_list,
-                n_actions,
-                n_rewards,
+        return [tmp_N_obses_list,
+                N_actions,
+                N_rewards,
                 tmp_next_obs_list,
-                n_dones,
-                n_mu_probs,
+                N_dones,
+                N_mu_probs,
                 rnn_state if self.use_rnn else None]
 
     def run(self):
@@ -119,32 +119,32 @@ class BatchGenerator:
             if episode is None:
                 continue
 
-            (n_obses_list,
-             n_actions,
-             n_rewards,
+            (l_obses_list,
+             l_actions,
+             l_rewards,
              next_obs_list,
-             n_dones,
-             n_mu_probs,
-             n_rnn_states) = episode
+             l_dones,
+             l_mu_probs,
+             l_rnn_states) = episode
             episode_size = self._episode_size_array[episode_idx]
 
             """
-            n_obses_list: list([episode_len - N + 1, N, *obs_shapes_i], ...)
-            n_actions: [episode_len - N + 1, N, action_size]
-            n_rewards: [episode_len - N + 1, N]
+            N_obses_list: list([episode_len - N + 1, N, *obs_shapes_i], ...)
+            N_actions: [episode_len - N + 1, N, action_size]
+            N_rewards: [episode_len - N + 1, N]
             next_obs_list: list([episode_len - N + 1, *obs_shapes_i], ...)
-            n_dones: [episode_len - N + 1, N]
-            n_mu_probs: [episode_len - N + 1, N]
+            N_dones: [episode_len - N + 1, N]
+            N_mu_probs: [episode_len - N + 1, N]
             rnn_state: [episode_len - N + 1, *rnn_state_shape]
             """
             ori_batch = self._episode_to_batch(episode_size,
-                                               n_obses_list,
-                                               n_actions,
-                                               n_rewards,
+                                               l_obses_list,
+                                               l_actions,
+                                               l_rewards,
                                                next_obs_list,
-                                               n_dones,
-                                               n_mu_probs,
-                                               n_rnn_states)
+                                               l_dones,
+                                               l_mu_probs,
+                                               l_rnn_states)
 
             if rest_batch is not None:
                 ori_batch = traverse_lists((rest_batch, ori_batch), lambda rb, b: np.concatenate([rb, b]))
@@ -284,23 +284,23 @@ class Trainer:
             if batch is None:
                 continue
 
-            (n_obses_list,
-             n_actions,
-             n_rewards,
+            (N_obses_list,
+             N_actions,
+             N_rewards,
              next_obs_list,
-             n_dones,
-             n_mu_probs,
+             N_dones,
+             N_mu_probs,
              rnn_state) = batch
 
             with timer_train:
                 with self.sac_lock:
                     try:
-                        step = self.sac.train(n_obses_list=n_obses_list,
-                                              n_actions=n_actions,
-                                              n_rewards=n_rewards,
+                        step = self.sac.train(N_obses_list=N_obses_list,
+                                              N_actions=N_actions,
+                                              N_rewards=N_rewards,
                                               next_obs_list=next_obs_list,
-                                              n_dones=n_dones,
-                                              n_mu_probs=n_mu_probs,
+                                              N_dones=N_dones,
+                                              N_mu_probs=N_mu_probs,
                                               rnn_state=rnn_state)
                     except Exception as e:
                         self._logger.error(e)

@@ -38,13 +38,13 @@ message Action {
 }
 
 message AddRequest {
-  repeated NDarray n_obses_list = 1;
-  NDarray n_actions = 2;
-  NDarray n_rewards = 3;
+  repeated NDarray l_obses_list = 1;
+  NDarray l_actions = 2;
+  NDarray l_rewards = 3;
   repeated NDarray next_obs_list = 4;
-  NDarray n_dones = 5;
-  NDarray n_mu_probs = 6;
-  NDarray n_rnn_states = 7;
+  NDarray l_dones = 5;
+  NDarray l_mu_probs = 6;
+  NDarray l_rnn_states = 7;
 }
 
 message NNVariables {

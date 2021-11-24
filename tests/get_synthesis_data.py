@@ -50,18 +50,14 @@ def gen_batch_trans(obs_shapes, d_action_size, c_action_size, n, rnn_shape=None,
         c_action = np.empty((batch, n, 0))
     n_actions = np.concatenate([d_actoin, c_action], axis=-1).astype(np.float32)
 
-    # pointers
     # n_obses_list, n_actions, n_rewards, next_obs_list, n_dones, n_mu_probs,
-    # priority_is
     vanilla_batch_trans = [
-        np.random.randint(0, 100, batch),
         [np.random.randn(batch, n, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
         n_actions,
         np.random.randn(batch, n).astype(np.float32),
         [np.random.randn(batch, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
         np.random.randn(batch, n).astype(np.float32),
         np.random.randn(batch, n).astype(np.float32),
-        np.random.randn(batch, n).astype(np.float32)
     ]
 
     if rnn_shape:

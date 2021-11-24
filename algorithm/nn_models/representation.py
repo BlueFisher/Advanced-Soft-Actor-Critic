@@ -24,8 +24,11 @@ class ModelBaseSimpleRep(nn.Module):
     def forward(self, obs_list):
         raise Exception("ModelSimpleRep not implemented")
 
-    def get_augmented_encoder(self, obs_list) -> Union[torch.Tensor, Tuple[torch.Tensor]]:
-        raise Exception("get_augmented_encoder not implemented")
+    def get_augmented_encoders(self, obs_list) -> Union[torch.Tensor, Tuple[torch.Tensor]]:
+        raise Exception("get_augmented_encoders not implemented")
+
+    def get_state_from_encoders(self, obs_list, encoders) -> torch.Tensor:
+        raise Exception("get_state_from_encoders not implemented")
 
 
 class ModelSimpleRep(ModelBaseSimpleRep):
@@ -53,8 +56,11 @@ class ModelBaseRNNRep(nn.Module):
     def forward(self, obs_list, pre_action, rnn_state=None):
         raise Exception("ModelRNNRep not implemented")
 
-    def get_augmented_encoder(self, obs_list) -> Union[torch.Tensor, Tuple[torch.Tensor]]:
-        raise Exception("get_augmented_encoder not implemented")
+    def get_augmented_encoders(self, obs_list) -> Union[torch.Tensor, Tuple[torch.Tensor]]:
+        raise Exception("get_augmented_encoders not implemented")
+
+    def get_state_from_encoders(self, obs_list, encoders, pre_action, rnn_state=None) -> torch.Tensor:
+        raise Exception("get_state_from_encoders not implemented")
 
 
 class ModelBaseRepProjection(nn.Module):
