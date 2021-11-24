@@ -312,33 +312,33 @@ class Learner:
                 return action
 
     def _add_episode(self,
-                     n_obses_list: List[np.ndarray],
-                     n_actions: np.ndarray,
-                     n_rewards: np.ndarray,
+                     l_obses_list: List[np.ndarray],
+                     l_actions: np.ndarray,
+                     l_rewards: np.ndarray,
                      next_obs_list: List[np.ndarray],
-                     n_dones: np.ndarray,
-                     n_mu_probs: np.ndarray,
-                     n_rnn_states: np.ndarray = None):
+                     l_dones: np.ndarray,
+                     l_mu_probs: np.ndarray,
+                     l_rnn_states: np.ndarray = None):
         """
         Args:
-            n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-            n_actions: [1, episode_len, action_size]
-            n_rewards: [1, episode_len]
+            l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
+            l_actions: [1, episode_len, action_size]
+            l_rewards: [1, episode_len]
             next_obs_list: list([1, *obs_shapes_i], ...)
-            n_dones: [1, episode_len]
-            n_mu_probs: [1, episode_len]
-            n_rnn_states: [1, episode_len, *rnn_state_shape]
+            l_dones: [1, episode_len]
+            l_mu_probs: [1, episode_len]
+            l_rnn_states: [1, episode_len, *rnn_state_shape]
         """
         episode_idx = self._episode_buffer.put([
-            n_obses_list,
-            n_actions,
-            n_rewards,
+            l_obses_list,
+            l_actions,
+            l_rewards,
             next_obs_list,
-            n_dones,
-            n_mu_probs,
-            n_rnn_states
+            l_dones,
+            l_mu_probs,
+            l_rnn_states
         ])
-        self._episode_size_array[episode_idx] = n_obses_list[0].shape[1]
+        self._episode_size_array[episode_idx] = l_obses_list[0].shape[1]
 
     def _policy_evaluation(self):
         use_rnn = self.sac_bak.use_rnn
@@ -598,13 +598,13 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
     # From actor
     def Add(self, request, context):
-        self._add_episode([proto_to_ndarray(n_obses) for n_obses in request.n_obses_list],
-                          proto_to_ndarray(request.n_actions),
-                          proto_to_ndarray(request.n_rewards),
+        self._add_episode([proto_to_ndarray(l_obses) for l_obses in request.l_obses_list],
+                          proto_to_ndarray(request.l_actions),
+                          proto_to_ndarray(request.l_rewards),
                           [proto_to_ndarray(obs) for obs in request.next_obs_list],
-                          proto_to_ndarray(request.n_dones),
-                          proto_to_ndarray(request.n_mu_probs),
-                          proto_to_ndarray(request.n_rnn_states))
+                          proto_to_ndarray(request.l_dones),
+                          proto_to_ndarray(request.l_mu_probs),
+                          proto_to_ndarray(request.l_rnn_states))
 
         return Empty()
 

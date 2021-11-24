@@ -51,6 +51,7 @@ class SAC_DS_Base(SAC_Base):
 
                  discrete_dqn_like=False,
                  siamese: Optional[str] = None,
+                 siamese_use_q=False,
                  siamese_use_adaptive=False,
                  use_prediction=False,
                  transition_kl=0.8,
@@ -90,6 +91,7 @@ class SAC_DS_Base(SAC_Base):
 
         self.discrete_dqn_like = discrete_dqn_like
         self.siamese = siamese
+        self.siamese_use_q = siamese_use_q
         self.siamese_use_adaptive = siamese_use_adaptive
         self.use_prediction = use_prediction
         self.transition_kl = transition_kl
@@ -257,29 +259,29 @@ class SAC_DS_Base(SAC_Base):
         return True
 
     def train(self,
-              n_obses_list,
-              n_actions,
-              n_rewards,
+              N_obses_list,
+              N_actions,
+              N_rewards,
               next_obs_list,
-              n_dones,
-              n_mu_probs,
+              N_dones,
+              N_mu_probs,
               rnn_state=None):
 
-        n_obses_list = [torch.from_numpy(t).to(self.device) for t in n_obses_list]
-        n_actions = torch.from_numpy(n_actions).to(self.device)
-        n_rewards = torch.from_numpy(n_rewards).to(self.device)
+        N_obses_list = [torch.from_numpy(t).to(self.device) for t in N_obses_list]
+        N_actions = torch.from_numpy(N_actions).to(self.device)
+        N_rewards = torch.from_numpy(N_rewards).to(self.device)
         next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
-        n_dones = torch.from_numpy(n_dones).to(self.device)
-        n_mu_probs = torch.from_numpy(n_mu_probs).to(self.device)
+        N_dones = torch.from_numpy(N_dones).to(self.device)
+        N_mu_probs = torch.from_numpy(N_mu_probs).to(self.device)
         if self.use_rnn:
             rnn_state = torch.from_numpy(rnn_state).to(self.device)
 
-        self._train(n_obses_list=n_obses_list,
-                    n_actions=n_actions,
-                    n_rewards=n_rewards,
+        self._train(N_obses_list=N_obses_list,
+                    N_actions=N_actions,
+                    N_rewards=N_rewards,
                     next_obs_list=next_obs_list,
-                    n_dones=n_dones,
-                    n_mu_probs=n_mu_probs,
+                    N_dones=N_dones,
+                    N_mu_probs=N_mu_probs,
                     priority_is=None,
                     initial_rnn_state=rnn_state if self.use_rnn else None)
 

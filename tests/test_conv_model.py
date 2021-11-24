@@ -58,10 +58,11 @@ def __gen():
         # 'conv': ['simple', 'nature', 'small'],
         'conv': ['simple'],
         'burn_in_step': [0, 5],
-        'n_step': [1, 3],
+        'n_step': [3],
         'use_prediction': [True, False],
         'use_extra_data': [True, False],
         'siamese': [None, 'ATC', 'BYOL'],
+        'siamese_use_q': [False, True],
         'siamese_use_adaptive': [False, True]
     })
 

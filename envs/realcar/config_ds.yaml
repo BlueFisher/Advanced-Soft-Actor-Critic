@@ -49,3 +49,17 @@ byol:
     name: "byol_{time}"
   sac_config:
     siamese: BYOL
+
+atc_q:
+  base_config:
+    name: "atc_q_{time}"
+  sac_config:
+    siamese: ATC
+    siamese_use_q: true
+
+byol_q:
+  base_config:
+    name: "byol_q_{time}"
+  sac_config:
+    siamese: BYOL
+    siamese_use_q: true

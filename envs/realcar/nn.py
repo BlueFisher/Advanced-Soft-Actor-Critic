@@ -81,12 +81,24 @@ class ModelRep(m.ModelBaseRNNRep):
 
         return state, hn
 
-    def get_augmented_encoder(self, obs_list):
+    def get_state_from_encoders(self, obs_list, encoders, pre_action, rnn_state=None):
+        vis_cam, ray, vec = obs_list
+        vis_cam_encoder, ray_encoder = encoders
+
+        vis_ray_concat = self.vis_ray_dense(torch.cat([vis_cam_encoder, ray_encoder], dim=-1))
+        state, _ = self.rnn(torch.cat([vis_ray_concat, pre_action], dim=-1), rnn_state)
+
+        state = torch.cat([state, vec], dim=-1)
+
+        return state
+
+
+    def get_augmented_encoders(self, obs_list):
         vis_cam, ray, vec = obs_list
         ray = ray[..., self.ray_index]
 
-        transformed_vis_cam = self.random_transformers(vis_cam)
-        vis_encoder = self.conv(transformed_vis_cam)
+        aug_vis_cam = self.random_transformers(vis_cam)
+        vis_cam_encoder = self.conv(aug_vis_cam)
 
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
         ray_random = (torch.rand(1) * self.ray_random).int()
@@ -95,7 +107,7 @@ class ModelRep(m.ModelBaseRNNRep):
         ray[..., random_index, 1] = 0.03
         ray_encoder = self.ray_conv(ray)
 
-        return vis_encoder, ray_encoder
+        return vis_cam_encoder, ray_encoder
 
 
 class ModelQ(m.ModelQ):

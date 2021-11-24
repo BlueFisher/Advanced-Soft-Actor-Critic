@@ -24,18 +24,29 @@ class ModelRep(m.ModelBaseRNNRep):
         obs_vec, obs_vis = obs_list
         obs_vec = obs_vec[..., EXTRA_SIZE:]
 
-        obs_vis_vec = self.conv(obs_vis)
-        output, hn = self.rnn(torch.cat([obs_vec, obs_vis_vec, pre_action], dim=-1), rnn_state)
+        vis = self.conv(obs_vis)
+        state, hn = self.rnn(torch.cat([obs_vec, vis, pre_action], dim=-1), rnn_state)
 
-        state = self.dense(torch.cat([obs_vec, output], dim=-1))
+        state = self.dense(torch.cat([obs_vec, state], dim=-1))
 
         return state, hn
 
-    def get_augmented_encoder(self, obs_list):
+    def get_augmented_encoders(self, obs_list):
         obs_vec, obs_vis = obs_list
-        obs_vis_vec = self.conv(obs_vis)
+        vis_encoder = self.conv(obs_vis)
 
-        return obs_vis_vec
+        return vis_encoder
+
+    def get_state_from_encoders(self, obs_list, encoders, pre_action, rnn_state=None):
+        obs_vec, obs_vis = obs_list
+        obs_vec = obs_vec[..., EXTRA_SIZE:]
+
+        vis_encoder = encoders
+        state, _ = self.rnn(torch.cat([obs_vec, vis_encoder, pre_action], dim=-1), rnn_state)
+
+        state = self.dense(torch.cat([obs_vec, state], dim=-1))
+
+        return state
 
 
 class ModelTransition(m.ModelTransition):

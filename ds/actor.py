@@ -202,29 +202,29 @@ class Actor(object):
                 self._logger.warning('NAN in variables, skip updating')
 
     def _add_trans(self,
-                   n_obses_list,
-                   n_actions,
-                   n_rewards,
+                   l_obses_list,
+                   l_actions,
+                   l_rewards,
                    next_obs_list,
-                   n_dones,
-                   n_rnn_states=None):
+                   l_dones,
+                   l_rnn_states=None):
 
-        if n_obses_list[0].shape[1] < self.sac_actor.burn_in_step + self.sac_actor.n_step:
+        if l_obses_list[0].shape[1] < self.sac_actor.burn_in_step + self.sac_actor.n_step:
             return
 
-        # TODO if not update_policy_mode, do not need get_n_probs
+        # TODO if not update_policy_mode, do not need get_l_probs
         with self._sac_actor_lock.read():
-            n_mu_probs = self.sac_actor.get_n_probs_np(n_obses_list,
-                                                       n_actions,
-                                                       n_rnn_states[:, 0, ...] if self.sac_actor.use_rnn else None)
+            l_mu_probs = self.sac_actor.get_l_probs_np(l_obses_list,
+                                                       l_actions,
+                                                       l_rnn_states[:, 0, ...] if self.sac_actor.use_rnn else None)
 
-        self._stub.add_transitions(n_obses_list,
-                                   n_actions,
-                                   n_rewards,
+        self._stub.add_transitions(l_obses_list,
+                                   l_actions,
+                                   l_rewards,
                                    next_obs_list,
-                                   n_dones,
-                                   n_mu_probs,
-                                   n_rnn_states if self.sac_actor.use_rnn else None)
+                                   l_dones,
+                                   l_mu_probs,
+                                   l_rnn_states if self.sac_actor.use_rnn else None)
 
     def _run(self):
         use_rnn = self.sac_actor.use_rnn
@@ -469,22 +469,22 @@ class StubController:
 
     @rpc_error_inspector
     def add_transitions(self,
-                        n_obses_list,
-                        n_actions,
-                        n_rewards,
+                        l_obses_list,
+                        l_actions,
+                        l_rewards,
                         next_obs_list,
-                        n_dones,
-                        n_mu_probs,
-                        n_rnn_states=None):
-        self._learner_stub.Add(learner_pb2.AddRequest(n_obses_list=[ndarray_to_proto(n_obses)
-                                                                    for n_obses in n_obses_list],
-                                                      n_actions=ndarray_to_proto(n_actions),
-                                                      n_rewards=ndarray_to_proto(n_rewards),
+                        l_dones,
+                        l_mu_probs,
+                        l_rnn_states=None):
+        self._learner_stub.Add(learner_pb2.AddRequest(l_obses_list=[ndarray_to_proto(l_obses)
+                                                                    for l_obses in l_obses_list],
+                                                      l_actions=ndarray_to_proto(l_actions),
+                                                      l_rewards=ndarray_to_proto(l_rewards),
                                                       next_obs_list=[ndarray_to_proto(next_obs)
                                                                      for next_obs in next_obs_list],
-                                                      n_dones=ndarray_to_proto(n_dones),
-                                                      n_mu_probs=ndarray_to_proto(n_mu_probs),
-                                                      n_rnn_states=ndarray_to_proto(n_rnn_states)))
+                                                      l_dones=ndarray_to_proto(l_dones),
+                                                      l_mu_probs=ndarray_to_proto(l_mu_probs),
+                                                      l_rnn_states=ndarray_to_proto(l_rnn_states)))
 
     @rpc_error_inspector
     def get_action(self, obs_list, rnn_state=None):
