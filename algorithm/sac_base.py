@@ -875,10 +875,9 @@ class SAC_Base(object):
         if self.optimizer_rep:
             self.optimizer_rep.zero_grad()
 
-        for i in range(self.ensemble_q_num):
-            self.optimizer_q_list[i].zero_grad()
-            loss_q_list[i].backward(retain_graph=True)
-            self.optimizer_q_list[i].step()
+        for loss_q, opt_q in zip(loss_q_list, self.optimizer_q_list):
+            opt_q.zero_grad()
+            loss_q.backward(retain_graph=True)
 
         grads_rep_main = [m.grad.detach() for m in self.model_rep.parameters()]
 
@@ -889,6 +888,9 @@ class SAC_Base(object):
                                                                        N_obses_list,
                                                                        N_actions,
                                                                        initial_rnn_state)
+
+        for opt_q in self.optimizer_q_list:
+            opt_q.step()
 
         """ Recurrent Prediction Model """
         loss_predictions = None
@@ -935,33 +937,39 @@ class SAC_Base(object):
                                                N_actions: torch.Tensor,
                                                initial_rnn_state: torch.Tensor = None):
 
-        if self.siamese_use_q:
-            encoder_list = self.model_rep.get_augmented_encoders(N_obses_list)  # [Batch, N, f], ...
-            target_encoder_list = self.model_target_rep.get_augmented_encoders(N_obses_list)  # [Batch, N, f], ...
-
-            N_states = self.model_rep.get_state_from_encoders(N_obses_list,
-                                                              encoder_list,
-                                                              gen_pre_n_actions(N_actions),
-                                                              initial_rnn_state)
-            N_target_states = self.model_target_rep.get_state_from_encoders(N_obses_list,
-                                                                            target_encoder_list,
-                                                                            gen_pre_n_actions(N_actions),
-                                                                            initial_rnn_state)
-
-        else:
-            n_obses_list = [N_obses[:, self.burn_in_step:, ...] for N_obses in N_obses_list]
-            encoder_list = self.model_rep.get_augmented_encoders(n_obses_list)  # [Batch, n, f], ...
-            target_encoder_list = self.model_target_rep.get_augmented_encoders(n_obses_list)  # [Batch, n, f], ...
+        n_obses_list = [N_obses[:, self.burn_in_step:, ...] for N_obses in N_obses_list]
+        encoder_list = self.model_rep.get_augmented_encoders(n_obses_list)  # [Batch, n, f], ...
+        target_encoder_list = self.model_target_rep.get_augmented_encoders(n_obses_list)  # [Batch, n, f], ...
 
         if not isinstance(encoder_list, tuple):
             encoder_list = (encoder_list, )
             target_encoder_list = (target_encoder_list, )
 
-        if self.siamese_use_q:
-            encoder_list = [e[:, self.burn_in_step:, ...] for e in encoder_list]  # [Batch, n, f], ...
-            target_encoder_list = [t_e[:, self.burn_in_step:, ...] for t_e in target_encoder_list]  # [Batch, n, f], ...
-
         batch, n, *_ = encoder_list[0].shape
+
+        if self.siamese_use_q:
+            if self.use_rnn:
+                _encoder = [e[:, 0:1, ...] for e in encoder_list]
+                _target_encoder = [t_e[:, 0:1, ...] for t_e in target_encoder_list]
+
+                state = self.model_rep.get_state_from_encoders([n_obses[:, 0:1, ...] for n_obses in n_obses_list],
+                                                               _encoder if len(_encoder) > 1 else _encoder[0],
+                                                               N_actions[:, self.burn_in_step - 1:self.burn_in_step, ...],
+                                                               torch.zeros_like(initial_rnn_state))
+                target_state = self.model_target_rep.get_state_from_encoders([n_obses[:, 0:1, ...] for n_obses in n_obses_list],
+                                                                             _target_encoder if len(_target_encoder) > 1 else _target_encoder[0],
+                                                                             N_actions[:, self.burn_in_step - 1:self.burn_in_step, ...],
+                                                                             torch.zeros_like(initial_rnn_state))
+                state = state[:, 0, ...]
+                target_state = target_state[:, 0, ...]
+            else:
+                _encoder = [e[:, 0, ...] for e in encoder_list]
+                _target_encoder = [t_e[:, 0, ...] for t_e in target_encoder_list]
+
+                state = self.model_rep.get_state_from_encoders([n_obses[:, 0, ...] for n_obses in n_obses_list],
+                                                               _encoder if len(_encoder) > 1 else _encoder[0])
+                target_state = self.model_target_rep.get_state_from_encoders([n_obses[:, 0, ...] for n_obses in n_obses_list],
+                                                                             _target_encoder if len(_target_encoder) > 1 else _target_encoder[0])
 
         if self.siamese == 'ATC':
             encoder_list = [e.reshape(batch * n, -1) for e in encoder_list]  # [Batch * n, f], ...
@@ -984,33 +992,6 @@ class SAC_Base(object):
             loss_list = [functional.cosine_similarity(prediction, t_projection).mean()  # [Batch * n, ] -> [1, ]
                          for prediction, t_projection in zip(prediction_list, t_projection_list)]
 
-        if self.siamese_use_q:
-            n_d_actions = N_actions[:, self.burn_in_step:, :self.d_action_size]
-            n_c_actions = N_actions[:, self.burn_in_step:, self.d_action_size:]
-
-            n_q_list = [q(N_states[:, self.burn_in_step:, ...], n_c_actions)
-                        for q in self.model_q_list]  # [Batch, n, 1], ...
-            target_n_q_list = [q(N_target_states[:, self.burn_in_step:, ...], n_c_actions)
-                               for q in self.model_target_q_list]  # [Batch, n, 1], ...
-
-            if self.d_action_size:
-                q_single_list = [torch.sum(n_d_actions * n_q[0], dim=-1)
-                                 for n_q in n_q_list]
-                # [Batch, n, d_action_size], ... -> [Batch, n], ...
-                target_q_single_list = [torch.sum(n_d_actions * t_n_q[0], dim=-1)
-                                        for t_n_q in target_n_q_list]
-                # [Batch, n, d_action_size], ... -> [Batch, n], ...
-
-                loss_list += [functional.mse_loss(q, t_q)
-                              for q, t_q in zip(q_single_list, target_q_single_list)]
-
-            if self.c_action_size:
-                c_q_list = [n_q[1] for n_q in n_q_list]  # [Batch, n, 1], ...
-                target_c_q_list = [t_q[1] for t_q in target_n_q_list]  # [Batch, n, 1], ...
-
-                loss_list += [functional.mse_loss(q, t_q)
-                              for q, t_q in zip(c_q_list, target_c_q_list)]
-
         loss = sum(loss_list)
 
         if self.siamese_use_adaptive:
@@ -1027,6 +1008,38 @@ class SAC_Base(object):
                                             *[pre.parameters() for pre in self.model_rep_prediction_list])), retain_graph=True)
 
         self.optimizer_siamese.step()
+
+        if self.siamese_use_q:
+            q_loss_list = []
+
+            d_actions = N_actions[:, self.burn_in_step, :self.d_action_size]
+            c_actions = N_actions[:, self.burn_in_step, self.d_action_size:]
+
+            q_list = [q(state, c_actions)
+                      for q in self.model_q_list]  # [Batch, 1], ...
+            target_q_list = [q(target_state, c_actions)
+                             for q in self.model_target_q_list]  # [Batch, 1], ...
+
+            if self.d_action_size:
+                q_single_list = [torch.sum(d_actions * q[0], dim=-1)
+                                 for q in q_list]
+                # [Batch, d_action_size], ... -> [Batch, ], ...
+                target_q_single_list = [torch.sum(d_actions * t_q[0], dim=-1)
+                                        for t_q in target_q_list]
+                # [Batch, d_action_size], ... -> [Batch, ], ...
+
+                q_loss_list += [functional.mse_loss(q, t_q)
+                                for q, t_q in zip(q_single_list, target_q_single_list)]
+
+            if self.c_action_size:
+                c_q_list = [q[1] for q in q_list]  # [Batch, 1], ...
+                target_c_q_list = [t_q[1] for t_q in target_q_list]  # [Batch, 1], ...
+
+                q_loss_list += [functional.mse_loss(q, t_q)
+                                for q, t_q in zip(c_q_list, target_c_q_list)]
+
+            for q_loss, q in zip(q_loss_list, self.model_q_list):
+                q_loss.backward(inputs=list(q.parameters()), retain_graph=True)
 
         return loss
 
