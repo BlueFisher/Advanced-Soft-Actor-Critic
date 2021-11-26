@@ -3,9 +3,9 @@ import unittest
 from ds.sac_ds_base import SAC_DS_Base
 from tests.get_synthesis_data import *
 
-OBS_SHAPES = [(10, )]
+OBS_SHAPES = [(10,), (30, 30, 3)]
 D_ACTION_SIZE = 2
-C_ACTION_SIZE = 3
+C_ACTION_SIZE = 2
 N_STEP = 3
 
 
@@ -13,24 +13,24 @@ class TestSAC_DS_Base(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        import tests.nn_rnn as nn_rnn
-        import tests.nn_vanilla as nn_vanilla
+        import tests.nn_conv_rnn as nn_conv_rnn
+        import tests.nn_conv_vanilla as nn_vanilla
 
         self.sac = SAC_DS_Base(
-            obs_shapes=[(10, )],
-            d_action_size=2,
-            c_action_size=3,
+            obs_shapes=OBS_SHAPES,
+            d_action_size=D_ACTION_SIZE,
+            c_action_size=C_ACTION_SIZE,
             model_abs_dir=None,
             model=nn_vanilla,
             n_step=N_STEP
         )
 
         self.sac_rnn = SAC_DS_Base(
-            obs_shapes=[(10, )],
-            d_action_size=2,
-            c_action_size=3,
+            obs_shapes=OBS_SHAPES,
+            d_action_size=D_ACTION_SIZE,
+            c_action_size=C_ACTION_SIZE,
             model_abs_dir=None,
-            model=nn_rnn,
+            model=nn_conv_rnn,
             use_rnn=True,
             n_step=N_STEP
         )

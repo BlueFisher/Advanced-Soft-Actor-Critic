@@ -5,7 +5,7 @@ from tests.get_synthesis_data import *
 
 
 class TestNNModel(unittest.TestCase):
-    def _test_model(self, param_dict, is_q_model):
+    def _test(self, param_dict, is_q_model):
         import algorithm.nn_models as m
         import tests.nn_vanilla as nn_vanilla
 
@@ -37,9 +37,9 @@ class TestNNModel(unittest.TestCase):
             step = sac.train()
 
     @staticmethod
-    def gen_test_model(param_dict, is_q_model):
+    def gen(param_dict, is_q_model):
         def func(self):
-            self._test_model(param_dict, is_q_model)
+            self._test(param_dict, is_q_model)
         return func
 
 
@@ -55,7 +55,7 @@ def __gen():
             func_name += f', {k}={v}'
 
         setattr(TestNNModel, func_name,
-                TestNNModel.gen_test_model(param_dict, True))
+                TestNNModel.gen(param_dict, True))
 
     policy_params = ['dense', 'd_dense', 'c_dense', 'mean', 'logstd']
     possible_param_dicts = get_product({
@@ -68,7 +68,7 @@ def __gen():
             func_name += f', {k}={v}'
 
         setattr(TestNNModel, func_name,
-                TestNNModel.gen_test_model(param_dict, False))
+                TestNNModel.gen(param_dict, False))
 
 
 __gen()

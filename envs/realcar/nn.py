@@ -92,7 +92,6 @@ class ModelRep(m.ModelBaseRNNRep):
 
         return state
 
-
     def get_augmented_encoders(self, obs_list):
         vis_cam, ray, vec = obs_list
         ray = ray[..., self.ray_index]
