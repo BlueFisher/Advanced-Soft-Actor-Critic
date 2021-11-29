@@ -40,7 +40,7 @@ class RayVisual:
                 for j, ray in enumerate(rays):
                     self.axes[i][j].set_theta_offset(np.pi / 2)
                     self.axes[i][j].set_rlim(0, 1)
-                    self.scs[i].append(self.axes[i][j].scatter([], [], s=5))
+                    self.scs[i].append(self.axes[i][j].scatter([], [], s=1))
 
             self.fig.canvas.draw()
 

@@ -88,13 +88,13 @@ class SAC_Base(object):
 
         burn_in_step: Burn-in steps in R2D2
         n_step: Update Q function by `n_step` steps
-        use_rnn: If use RNN
+        use_rnn: If using RNN
 
         batch_size: Batch size for training
         tau: Coefficient of updating target network
         update_target_per_step: Update target network every 'update_target_per_step' steps
         init_log_alpha: The initial log_alpha
-        use_auto_alpha: If use automating entropy adjustment
+        use_auto_alpha: If using automating entropy adjustment
         learning_rate: Learning rate of all optimizers
         gamma: Discount factor
         v_lambda: Discount factor for V-trace
@@ -102,19 +102,19 @@ class SAC_Base(object):
         v_c: C for V-trace
         clip_epsilon: Epsilon for q clip
 
-        use_priority: If use PER importance ratio
-        use_n_step_is: If use importance sampling
+        use_priority: If using PER importance ratio
+        use_n_step_is: If using importance sampling
         siamese: ATC | BYOL
-        siamese_use_q:
-        siamese_use_adaptive:
+        siamese_use_q: If using contrastive q
+        siamese_use_adaptive: If using adaptive weights
         use_prediction: If train a transition model
         transition_kl: The coefficient of KL of transition and standard normal
-        use_extra_data: If use extra data to train prediction model
+        use_extra_data: If using extra data to train prediction model
         curiosity: FORWARD | INVERSE
-        curiosity_strength: Curiosity strength if use curiosity
-        use_rnd: If use RND
+        curiosity_strength: Curiosity strength if using curiosity
+        use_rnd: If using RND
         rnd_n_sample: RND sample times
-        use_normalization: If use observation normalization
+        use_normalization: If using observation normalization
         use_add_with_td: If add transitions in replay buffer with td-error
         """
         self.obs_shapes = obs_shapes
@@ -384,6 +384,14 @@ class SAC_Base(object):
         if self.siamese == 'ATC':
             for i, weight in enumerate(self.contrastive_weight_list):
                 ckpt_dict[f'contrastive_weights{i}'] = weight
+        elif self.siamese == 'BYOL':
+            for i, model_rep_projection in enumerate(self.model_rep_projection_list):
+                ckpt_dict[f'model_rep_projection_{i}'] = model_rep_projection
+            for i, model_target_rep_projection in enumerate(self.model_target_rep_projection_list):
+                ckpt_dict[f'model_target_rep_projection_{i}'] = model_target_rep_projection
+            for i, model_rep_prediction in enumerate(self.model_rep_prediction_list):
+                ckpt_dict[f'model_rep_prediction_{i}'] = model_rep_prediction
+            ckpt_dict['optimizer_siamese'] = self.optimizer_siamese
 
         """ RECURRENT PREDICTION MODELS """
         if self.use_prediction:
@@ -432,6 +440,10 @@ class SAC_Base(object):
                 ckpt_restore_path = ckpt_dir.joinpath(f'{last_ckpt}.pth')
                 ckpt_restore = torch.load(ckpt_restore_path, map_location=self.device)
                 for name, model in ckpt_dict.items():
+                    if name not in ckpt_restore:
+                        self._logger.warning(f'{name} not in {last_ckpt}.pth')
+                        continue
+
                     if isinstance(model, torch.Tensor):
                         model.data = ckpt_restore[name]
                     else:
@@ -443,10 +455,8 @@ class SAC_Base(object):
                                 model.eval()
 
                 self._logger.info(f'Restored from {ckpt_restore_path}')
-                self.init_iteration = int(last_ckpt) + 1
             else:
                 self._logger.info('Initializing from scratch')
-                self.init_iteration = 0
                 self._update_target_variables()
 
     def save_model(self):
@@ -482,7 +492,7 @@ class SAC_Base(object):
     @torch.no_grad()
     def _update_target_variables(self, tau=1.):
         """
-        soft update target networks (default hard)
+        Soft (momentum) update target networks (default hard)
         """
         target = self.model_target_rep.parameters()
         source = self.model_rep.parameters()
@@ -521,16 +531,26 @@ class SAC_Base(object):
     def get_l_probs(self, l_obses_list: List[torch.Tensor],
                     l_actions: torch.Tensor,
                     rnn_state: torch.Tensor = None):
+        """
+        Args:
+            l_obses_list: list([Batch, l, *obs_shapes_i], ...)
+            l_actions: [Batch, l, action_size]
+            rnn_state: [Batch, *rnn_state_shape]
+
+        Returns:
+            n_rnn_states: [Batch, l]
+        """
+
         if self.use_rnn:
-            n_states, _ = self.model_rep(l_obses_list,
+            l_states, _ = self.model_rep(l_obses_list,
                                          gen_pre_n_actions(l_actions),
-                                         rnn_state)
+                                         rnn_state)  # [Batch, l, state_size]
         else:
-            n_states = self.model_rep(l_obses_list)
+            l_states = self.model_rep(l_obses_list)  # [Batch, l, state_size]
 
-        d_policy, c_policy = self.model_policy(n_states)
+        d_policy, c_policy = self.model_policy(l_states)
 
-        policy_prob = torch.ones((n_states.shape[:2]), device=self.device)  # [Batch, l]
+        policy_prob = torch.ones((l_states.shape[:2]), device=self.device)  # [Batch, l]
 
         if self.d_action_size:
             n_selected_d_actions = l_actions[..., :self.d_action_size]
@@ -547,6 +567,16 @@ class SAC_Base(object):
     def get_l_probs_np(self, l_obses_list: List[np.ndarray],
                        l_actions: np.ndarray,
                        rnn_state: np.ndarray = None):
+        """
+        Args:
+            l_obses_list: list([Batch, l, *obs_shapes_i], ...)
+            l_actions: [Batch, l, action_size]
+            rnn_state: [Batch, *rnn_state_shape]
+
+        Returns:
+            n_rnn_states: [Batch, l]
+        """
+
         probs = self.get_l_probs([torch.from_numpy(l_obses).to(self.device) for l_obses in l_obses_list],
                                  torch.from_numpy(l_actions).to(self.device),
                                  torch.from_numpy(rnn_state).to(self.device) if self.use_rnn else None)
@@ -578,8 +608,10 @@ class SAC_Base(object):
         return torch.stack(n_rnn_states, dim=1)
 
     @torch.no_grad()
-    def get_dqn_like_d_y(self, n_rewards: torch.Tensor, n_dones: torch.Tensor,
-                         stacked_next_q: torch.Tensor, stacked_next_target_q: torch.Tensor):
+    def get_dqn_like_d_y(self, n_rewards: torch.Tensor,
+                         n_dones: torch.Tensor,
+                         stacked_next_q: torch.Tensor,
+                         stacked_next_target_q: torch.Tensor):
         """
         Args:
             n_rewards: [Batch, n]
@@ -629,6 +661,7 @@ class SAC_Base(object):
         Returns:
             y: [Batch, 1]
         """
+
         td_error = n_rewards + self.gamma * (1 - n_dones) * next_v - v  # [Batch, n]
         td_error = self._gamma_ratio * td_error
 
@@ -672,31 +705,34 @@ class SAC_Base(object):
             state_: [Batch, state_size]
             n_dones: [Batch, n]
             n_mu_probs: [Batch, n]
+
+        Returns:
+            y: [Batch, 1]
         """
 
         d_alpha = torch.exp(self.log_d_alpha)
         c_alpha = torch.exp(self.log_c_alpha)
 
-        next_n_states = torch.cat([n_states[:, 1:, ...], state_.view((-1, 1, state_.shape[-1]))], dim=1)
+        next_n_states = torch.cat([n_states[:, 1:, ...], state_.view((-1, 1, state_.shape[-1]))], dim=1)  # [Batch, n, state_size]
 
         d_policy, c_policy = self.model_policy(n_states)
         next_d_policy, next_c_policy = self.model_policy(next_n_states)
 
         if self.curiosity is not None:
             if self.curiosity == 'FORWARD':
-                approx_next_n_states = self.model_forward_dynamic(n_states, n_actions)
-                in_n_rewards = torch.sum(torch.pow(approx_next_n_states - next_n_states, 2), dim=-1) * 0.5
+                approx_next_n_states = self.model_forward_dynamic(n_states, n_actions)  # [Batch, n, state_size]
+                in_n_rewards = torch.sum(torch.pow(approx_next_n_states - next_n_states, 2), dim=-1) * 0.5  # [Batch, n]
 
             elif self.curiosity == 'INVERSE':
-                approx_n_actions = self.model_inverse_dynamic(n_states, next_n_states)
-                in_n_rewards = torch.sum(torch.pow(approx_n_actions - n_actions, 2), dim=-1) * 0.5
+                approx_n_actions = self.model_inverse_dynamic(n_states, next_n_states)  # [Batch, n, action_size]
+                in_n_rewards = torch.sum(torch.pow(approx_n_actions - n_actions, 2), dim=-1) * 0.5  # [Batch, n]
 
-            in_n_rewards = in_n_rewards * self.curiosity_strength
-            n_rewards += in_n_rewards
+            in_n_rewards = in_n_rewards * self.curiosity_strength  # [Batch, n]
+            n_rewards += in_n_rewards  # [Batch, n]
 
         if self.c_action_size:
             n_c_actions_sampled = c_policy.rsample()  # [Batch, n, action_size]
-            next_n_c_actions_sampled = next_c_policy.rsample()
+            next_n_c_actions_sampled = next_c_policy.rsample()  # [Batch, n, action_size]
         else:
             n_c_actions_sampled = torch.empty(0, device=self.device)
             next_n_c_actions_sampled = torch.empty(0, device=self.device)
@@ -1441,8 +1477,8 @@ class SAC_Base(object):
         Returns:
             The td-error of observations, [Batch, 1]
         """
-        m_obses_list = [torch.cat([n_obses, next_obs.view(-1, 1, *next_obs.shape[1:])], dim=1)
-                        for n_obses, next_obs in zip(N_obses_list, next_obs_list)]
+        m_obses_list = [torch.cat([N_obses, next_obs.view(-1, 1, *next_obs.shape[1:])], dim=1)
+                        for N_obses, next_obs in zip(N_obses_list, next_obs_list)]
         if self.use_rnn:
             tmp_states, _ = self.model_rep([m_obses[:, :self.burn_in_step + 1, ...] for m_obses in m_obses_list],
                                            gen_pre_n_actions(N_actions[:, :self.burn_in_step + 1, ...]),
@@ -1520,9 +1556,9 @@ class SAC_Base(object):
         ignore_size = self.burn_in_step + self.n_step
 
         tmp_N_obses_list = [None] * len(l_obses_list)
-        for j, n_obses in enumerate(l_obses_list):
-            tmp_N_obses_list[j] = np.concatenate([n_obses[:, i:i + ignore_size]
-                                                  for i in range(n_obses.shape[1] - ignore_size + 1)], axis=0)
+        for j, l_obses in enumerate(l_obses_list):
+            tmp_N_obses_list[j] = np.concatenate([l_obses[:, i:i + ignore_size]
+                                                  for i in range(l_obses.shape[1] - ignore_size + 1)], axis=0)
         N_actions = np.concatenate([l_actions[:, i:i + ignore_size]
                                     for i in range(l_actions.shape[1] - ignore_size + 1)], axis=0)
         N_rewards = np.concatenate([l_rewards[:, i:i + ignore_size]
