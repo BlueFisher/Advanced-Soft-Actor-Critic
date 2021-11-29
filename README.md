@@ -89,7 +89,7 @@ sac_config:
 
   burn_in_step: 0 # Burn-in steps in R2D2
   n_step: 1 # Update Q function by N steps
-  use_rnn: false # If use RNN
+  use_rnn: false # If using RNN
 
   batch_size: 256
 
@@ -97,7 +97,7 @@ sac_config:
   update_target_per_step: 1 # Update target network every N steps
 
   init_log_alpha: -2.3 # The initial log_alpha
-  use_auto_alpha: true # If use automating entropy adjustment
+  use_auto_alpha: true # If using automating entropy adjustment
 
   learning_rate: 0.0003 # Learning rate of all optimizers
 
@@ -107,18 +107,20 @@ sac_config:
   v_c: 1.0 # C for V-trace
   clip_epsilon: 0.2 # Epsilon for q clip
 
-  discrete_dqn_like: false # If use policy or only Q network if discrete is in action spaces
-  use_priority: true # If use PER importance ratio
-  use_n_step_is: true # If use importance sampling
+  discrete_dqn_like: false # If using policy or only Q network if discrete is in action spaces
+  use_priority: true # If using PER importance ratio
+  use_n_step_is: true # If using importance sampling
   siamese: null # ATC | BYOL
+  siamese_use_q: false # If using contrastive q
+  siamese_use_adaptive: false # If using adaptive weights
   use_prediction: false # If train a transition model
   transition_kl: 0.8 # The coefficient of KL of transition and standard normal
-  use_extra_data: true # If use extra data to train prediction model
-  use_curiosity: false # If use curiosity
-  curiosity_strength: 1 # Curiosity strength if use curiosity
-  use_rnd: false # If use RND
+  use_extra_data: true # If using extra data to train prediction model
+  curiosity: null # FORWARD | INVERSE
+  curiosity_strength: 1 # Curiosity strength if using curiosity
+  use_rnd: false # If using RND
   rnd_n_sample: 10 # RND sample times
-  use_normalization: false # If use observation normalization
+  use_normalization: false # If using observation normalization
 
 ```
 
@@ -184,7 +186,7 @@ sac_config:
 
   burn_in_step: 0 # Burn-in steps in R2D2
   n_step: 1 # Update Q function by N steps
-  use_rnn: false # If use RNN
+  use_rnn: false # If using RNN
 
   batch_size: 256
 
@@ -192,7 +194,7 @@ sac_config:
   update_target_per_step: 1 # Update target network every N steps
 
   init_log_alpha: -2.3 # The initial log_alpha
-  use_auto_alpha: true # If use automating entropy adjustment
+  use_auto_alpha: true # If using automating entropy adjustment
 
   learning_rate: 0.0003 # Learning rate of all optimizers
 
@@ -202,16 +204,18 @@ sac_config:
   v_c: 1.0 # C for V-trace
   clip_epsilon: 0.2 # Epsilon for q clip
 
-  discrete_dqn_like: false # If use policy or only Q network if discrete is in action spaces
+  discrete_dqn_like: false # If using policy or only Q network if discrete is in action spaces
   siamese: null # ATC | BYOL
+  siamese_use_q: false # If using contrastive q
+  siamese_use_adaptive: false # If using adaptive weights
   use_prediction: false # If train a transition model
   transition_kl: 0.8 # The coefficient of KL of transition and standard normal
-  use_extra_data: true # If use extra data to train prediction model
-  use_curiosity: false # If use curiosity
-  curiosity_strength: 1 # Curiosity strength if use curiosity
-  use_rnd: false # If use RND
+  use_extra_data: true # If using extra data to train prediction model
+  curiosity: null # FORWARD | INVERSE
+  curiosity_strength: 1 # Curiosity strength if using curiosity
+  use_rnd: false # If using RND
   rnd_n_sample: 10 # RND sample times
-  use_normalization: false # If use observation normalization
+  use_normalization: false # If using observation normalization
 
 
   # random_params:
@@ -219,15 +223,14 @@ sac_config:
   #     in: [n1, n2, n3]
   #     truncated: [n1 ,n2]
   #     std: n
-
 ```
 
 ## Start Training
 
 ```
 usage: main.py [-h] [--config CONFIG] [--run] [--logger_in_file] [--render] [--editor]
-               [--additional_args ADDITIONAL_ARGS] [--port PORT] [--agents AGENTS] [--name NAME] [--nn NN]
-               [--device DEVICE] [--ckpt CKPT] [--repeat REPEAT]
+               [--additional_args ADDITIONAL_ARGS] [--port PORT] [--agents AGENTS] [--max_iter MAX_ITER] [--name NAME]
+               [--nn NN] [--use_env_nn] [--device DEVICE] [--ckpt CKPT] [--repeat REPEAT]
                env
 
 positional arguments:
@@ -245,8 +248,10 @@ optional arguments:
                         additional args for Unity
   --port PORT, -p PORT  communication port
   --agents AGENTS       number of agents
+  --max_iter MAX_ITER   max iteration
   --name NAME, -n NAME  training name
   --nn NN               neural network model
+  --use_env_nn          always use nn.py in env, or use saved nn_models.py if existed
   --device DEVICE       cpu or gpu
   --ckpt CKPT           ckeckpoint to restore
   --repeat REPEAT       number of repeated experiments
@@ -266,7 +271,7 @@ python main.py roller -c vanilla -n nowall_202003251644192jWy --run --agents=1
 usage: main_ds.py [-h] [--config CONFIG] [--run] [--logger_in_file] [--evolver_host EVOLVER_HOST]
                   [--evolver_port EVOLVER_PORT] [--learner_host LEARNER_HOST] [--learner_port LEARNER_PORT] [--render]
                   [--editor] [--additional_args ADDITIONAL_ARGS] [--build_port BUILD_PORT] [--agents AGENTS]
-                  [--name NAME] [--nn NN] [--device DEVICE] [--ckpt CKPT] [--noise NOISE]
+                  [--name NAME] [--nn NN] [--device DEVICE] [--ckpt CKPT]
                   env {learner,l,actor,a,evolver,e}
 
 positional arguments:
@@ -298,7 +303,6 @@ optional arguments:
   --nn NN               neural network model
   --device DEVICE       cpu or gpu
   --ckpt CKPT           ckeckpoint to restore
-  --noise NOISE         additional noise for actor
 
 examples:
 python main_ds.py bullet/walker evolver --evolver_host=127.0.0.1 --logger_in_file

@@ -63,3 +63,19 @@ byol_q:
   sac_config:
     siamese: BYOL
     siamese_use_q: true
+
+atc_q_ada:
+  base_config:
+    name: "atc_q_ada_{time}"
+  sac_config:
+    siamese: ATC
+    siamese_use_q: true
+    siamese_use_adaptive: true
+
+byol_q_ada:
+  base_config:
+    name: "byol_q_ada_{time}"
+  sac_config:
+    siamese: BYOL
+    siamese_use_q: true
+    siamese_use_adaptive: true

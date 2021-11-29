@@ -2,11 +2,9 @@ import torch
 from torchvision import transforms as T
 
 import algorithm.nn_models as m
-from algorithm.nn_models.representation import ModelRepPrediction
-from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
-from algorithm.utils.ray_visual import RayVisual
 from algorithm.utils.image_visual import ImageVisual
-
+from algorithm.utils.ray_visual import RayVisual
+from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
 
 RAY_SIZE = 720
 
