@@ -266,12 +266,18 @@ class SAC_Base(object):
         """ Q """
         self.model_q_list: List[ModelBaseQ] = [model.ModelQ(state_size,
                                                             self.d_action_size,
-                                                            self.c_action_size).to(self.device)
+                                                            self.c_action_size,
+                                                            False,
+                                                            self.train_mode,
+                                                            self.model_abs_dir).to(self.device)
                                                for _ in range(self.ensemble_q_num)]
 
         self.model_target_q_list: List[ModelBaseQ] = [model.ModelQ(state_size,
                                                                    self.d_action_size,
-                                                                   self.c_action_size).to(self.device)
+                                                                   self.c_action_size,
+                                                                   True,
+                                                                   self.train_mode,
+                                                                   self.model_abs_dir).to(self.device)
                                                       for _ in range(self.ensemble_q_num)]
         for model_target_q in self.model_target_q_list:
             for param in model_target_q.parameters():
@@ -280,7 +286,9 @@ class SAC_Base(object):
         self.optimizer_q_list = [adam_optimizer(self.model_q_list[i].parameters()) for i in range(self.ensemble_q_num)]
 
         """ POLICY """
-        self.model_policy: ModelBasePolicy = model.ModelPolicy(state_size, self.d_action_size, self.c_action_size).to(self.device)
+        self.model_policy: ModelBasePolicy = model.ModelPolicy(state_size, self.d_action_size, self.c_action_size,
+                                                               self.train_mode,
+                                                               self.model_abs_dir).to(self.device)
         self.optimizer_policy = adam_optimizer(self.model_policy.parameters())
 
         """ SIAMESE REPRESENTATION LEARNING """
@@ -1383,7 +1391,7 @@ class SAC_Base(object):
         return actions[torch.tensor(range(batch)), idx]
 
     @torch.no_grad()
-    def _choose_action(self, state: torch.Tensor, force_rnd_if_avaiable: bool = False):
+    def _choose_action(self, state: torch.Tensor, disable_sample: bool = False, force_rnd_if_avaiable: bool = False):
         """
         Args:
             state: [Batch, state_size]
@@ -1398,7 +1406,7 @@ class SAC_Base(object):
         else:
             if self.d_action_size:
                 if self.discrete_dqn_like:
-                    if torch.rand(1) < 0.2:
+                    if torch.rand(1) < 0.2 and self.train_mode:
                         d_action = distributions.OneHotCategorical(
                             logits=torch.ones(batch, self.d_action_size)).sample().to(self.device)
                     else:
@@ -1406,16 +1414,22 @@ class SAC_Base(object):
                         d_action = torch.argmax(d_q, axis=-1)
                         d_action = functional.one_hot(d_action, self.d_action_size)
                 else:
-                    d_action = d_policy.sample()
+                    d_action = d_policy.sample()  # TODO: disable_sample
             else:
                 d_action = torch.empty(0, device=self.device)
 
-            c_action = torch.tanh(c_policy.sample()) if self.c_action_size else torch.empty(0, device=self.device)
+            if self.c_action_size:
+                if disable_sample:
+                    c_action = c_policy.mean
+                else:
+                    c_action = torch.tanh(c_policy.sample())
+            else:
+                c_action = torch.empty(0, device=self.device)
 
             return torch.cat([d_action, c_action], dim=-1)
 
     @torch.no_grad()
-    def choose_action(self, obs_list: List[np.ndarray], force_rnd_if_avaiable: bool = False):
+    def choose_action(self, obs_list: List[np.ndarray], disable_sample: bool = False, force_rnd_if_avaiable: bool = False):
         """
         Args:
             obs_list: list([Batch, *obs_shapes_i], ...)
@@ -1425,12 +1439,13 @@ class SAC_Base(object):
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         state = self.model_rep(obs_list)
-        return self._choose_action(state, force_rnd_if_avaiable).detach().cpu().numpy()
+        return self._choose_action(state, disable_sample, force_rnd_if_avaiable).detach().cpu().numpy()
 
     @torch.no_grad()
     def choose_rnn_action(self, obs_list: List[np.ndarray],
                           pre_action: np.ndarray,
                           rnn_state: np.ndarray,
+                          disable_sample: bool = False,
                           force_rnd_if_avaiable: bool = False):
         """
         Args:
@@ -1451,7 +1466,7 @@ class SAC_Base(object):
         state, next_rnn_state = self.model_rep(obs_list, pre_action, rnn_state)
         state = state.view(-1, state.shape[-1])
 
-        action = self._choose_action(state, force_rnd_if_avaiable)
+        action = self._choose_action(state, disable_sample, force_rnd_if_avaiable)
 
         return action.detach().cpu().numpy(), next_rnn_state.detach().cpu().numpy()
 

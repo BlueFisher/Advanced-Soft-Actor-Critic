@@ -47,6 +47,7 @@ class Main(object):
         self.render = args.render
         self.run_in_editor = args.editor
         self.additional_args = args.additional_args
+        self.disable_sample = args.disable_sample
         self.alway_use_env_nn = args.use_env_nn
         self.device = args.device
         self.last_ckpt = args.ckpt
@@ -196,9 +197,11 @@ class Main(object):
 
                         action, next_rnn_state = self.sac.choose_rnn_action([o.astype(np.float32) for o in obs_list],
                                                                             action,
-                                                                            rnn_state)
+                                                                            rnn_state,
+                                                                            disable_sample=self.disable_sample)
                     else:
-                        action = self.sac.choose_action([o.astype(np.float32) for o in obs_list])
+                        action = self.sac.choose_action([o.astype(np.float32) for o in obs_list],
+                                                        disable_sample=self.disable_sample)
 
                     next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
                                                                                    action[..., self.d_action_size:])

@@ -44,156 +44,67 @@ byol:
   sac_config:
     siamese: BYOL
 
-siamatcray0:
+ray0:
   model_config:
     rep:
       ray_random: 0
-  sac_config:
-    siamese: ATC
 
-siamatcray10:
-  model_config:
-    rep:
-      ray_random: 10
-  sac_config:
-    siamese: ATC
-
-siamatcray20:
-  model_config:
-    rep:
-      ray_random: 20
-  sac_config:
-    siamese: ATC
-
-siamatcray30:
-  model_config:
-    rep:
-      ray_random: 30
-  sac_config:
-    siamese: ATC
-
-siamatcray40:
-  model_config:
-    rep:
-      ray_random: 40
-  sac_config:
-    siamese: ATC
-
-siamatcray50:
+ray50:
   model_config:
     rep:
       ray_random: 50
-  sac_config:
-    siamese: ATC
 
-siamatcray60:
-  model_config:
-    rep:
-      ray_random: 60
-  sac_config:
-    siamese: ATC
-
-siamatcray70:
-  model_config:
-    rep:
-      ray_random: 70
-  sac_config:
-    siamese: ATC
-
-siamatcray80:
-  model_config:
-    rep:
-      ray_random: 80
-  sac_config:
-    siamese: ATC
-
-siamatcray90:
-  model_config:
-    rep:
-      ray_random: 90
-  sac_config:
-    siamese: ATC
-
-siamatcray100:
+ray100:
   model_config:
     rep:
       ray_random: 100
-  sac_config:
-    siamese: ATC
 
-siambyolray0:
+ray150:
   model_config:
     rep:
-      ray_random: 0
-  sac_config:
-    siamese: BYOL
+      ray_random: 150
 
-siambyolray10:
+ray200:
   model_config:
     rep:
-      ray_random: 10
-  sac_config:
-    siamese: BYOL
+      ray_random: 200
 
-siambyolray20:
+ray250:
   model_config:
     rep:
-      ray_random: 20
-  sac_config:
-    siamese: BYOL
+      ray_random: 250
 
-siambyolray30:
+ray300:
   model_config:
     rep:
-      ray_random: 30
-  sac_config:
-    siamese: BYOL
+      ray_random: 300
 
-siambyolray40:
+ray350:
   model_config:
     rep:
-      ray_random: 40
-  sac_config:
-    siamese: BYOL
+      ray_random: 350
 
-siambyolray50:
+ray400:
   model_config:
     rep:
-      ray_random: 50
-  sac_config:
-    siamese: BYOL
+      ray_random: 400
 
-siambyolray60:
+ray450:
   model_config:
     rep:
-      ray_random: 60
-  sac_config:
-    siamese: BYOL
+      ray_random: 450
 
-siambyolray70:
+ray500:
   model_config:
     rep:
-      ray_random: 70
-  sac_config:
-    siamese: BYOL
+      ray_random: 500
 
-siambyolray80:
+ray550:
   model_config:
     rep:
-      ray_random: 80
-  sac_config:
-    siamese: BYOL
+      ray_random: 550
 
-siambyolray90:
+ray600:
   model_config:
     rep:
-      ray_random: 90
-  sac_config:
-    siamese: BYOL
-
-siambyolray100:
-  model_config:
-    rep:
-      ray_random: 100
-  sac_config:
-    siamese: BYOL
+      ray_random: 600
