@@ -24,6 +24,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--name', '-n', help='training name')
     parser.add_argument('--nn', help='neural network model')
+    parser.add_argument('--disable_sample', action='store_true', help='disable sampling when choosing actions')
     parser.add_argument('--use_env_nn', action='store_true', help='always use nn.py in env, or use saved nn_models.py if existed')
     parser.add_argument('--device', help='cpu or gpu')
     parser.add_argument('--ckpt', help='ckeckpoint to restore')

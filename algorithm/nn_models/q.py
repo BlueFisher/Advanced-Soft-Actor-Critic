@@ -5,11 +5,16 @@ from .layers import LinearLayers
 
 
 class ModelBaseQ(nn.Module):
-    def __init__(self, state_size, d_action_size, c_action_size):
+    def __init__(self, state_size, d_action_size, c_action_size,
+                 is_target: bool, train_mode: bool,
+                 model_abs_dir=None):
         super().__init__()
         self.state_size = state_size
         self.d_action_size = d_action_size
         self.c_action_size = c_action_size
+        self.is_target = is_target
+        self.train_mode = train_mode
+        self.model_abs_dir = model_abs_dir
 
         self._build_model()
 

@@ -36,7 +36,7 @@ class ModelRep(m.ModelBaseRNNRep):
         self.conv = m.ConvLayers(84, 84, 3, 'simple',
                                  out_dense_n=64, out_dense_depth=2)
 
-        self.ray_conv = m.Conv1dLayers(720, 2, 'default',
+        self.ray_conv = m.Conv1dLayers(RAY_SIZE, 2, 'default',
                                        out_dense_n=64, out_dense_depth=2)
 
         self.vis_ray_dense = m.LinearLayers(self.conv.output_size + self.ray_conv.output_size,
@@ -66,8 +66,8 @@ class ModelRep(m.ModelBaseRNNRep):
         vis = self.conv(vis_cam)
 
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
-        ray_random = (torch.rand(1) * self.ray_random).int()
-        random_index = torch.randperm(720)[:ray_random]
+        # ray_random = (torch.rand(1) * self.ray_random).int()
+        random_index = torch.randperm(RAY_SIZE)[:self.ray_random]
         ray[..., random_index, 0] = 0.
         ray[..., random_index, 1] = 0.03
         ray = self.ray_conv(ray)
@@ -99,7 +99,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
         ray_random = (torch.rand(1) * self.ray_random).int()
-        random_index = torch.randperm(720)[:ray_random]
+        random_index = torch.randperm(RAY_SIZE)[:ray_random]
         ray[..., random_index, 0] = 0.
         ray[..., random_index, 1] = 0.03
         ray_encoder = self.ray_conv(ray)

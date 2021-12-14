@@ -10,10 +10,10 @@ class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (6, )
 
-        self.rnn = m.GRU(self.obs_shapes[0][0] - EXTRA_SIZE + self.c_action_size, 64, 1)
+        self.rnn = m.GRU(self.obs_shapes[0][0] - EXTRA_SIZE + self.c_action_size, 32, 1)
 
         self.dense = nn.Sequential(
-            nn.Linear(self.obs_shapes[0][0] - EXTRA_SIZE + 64, 64),
+            nn.Linear(32, 32),
             nn.Tanh()
         )
 
@@ -22,7 +22,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
         output, hn = self.rnn(torch.cat([obs, pre_action], dim=-1), rnn_state)
 
-        state = self.dense(torch.cat([obs, output], dim=-1))
+        state = self.dense(output)
 
         return state, hn
 

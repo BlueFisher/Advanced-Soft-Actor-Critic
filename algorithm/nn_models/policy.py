@@ -1,3 +1,4 @@
+from typing import Tuple
 import torch
 from torch import nn
 
@@ -5,18 +6,22 @@ from .layers import LinearLayers
 
 
 class ModelBasePolicy(nn.Module):
-    def __init__(self, state_size, d_action_size, c_action_size):
+    def __init__(self, state_size, d_action_size, c_action_size,
+                 train_mode: bool,
+                 model_abs_dir=None):
         super().__init__()
         self.state_size = state_size
         self.d_action_size = d_action_size
         self.c_action_size = c_action_size
+        self.train_mode = train_mode
+        self.model_abs_dir = model_abs_dir
 
         self._build_model()
 
     def _build_model(self):
         pass
 
-    def forward(self, state):
+    def forward(self, state) -> Tuple[torch.distributions.OneHotCategorical, torch.distributions.Normal]:
         raise Exception("ModelPolicy not implemented")
 
 
