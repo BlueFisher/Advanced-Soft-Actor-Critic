@@ -45,7 +45,9 @@ net_config:
 
 reset_config: null # Reset parameters sent to Unity
 
-model_config: null
+model_config:
+  rep: null
+  policy: null
 
 sac_config:
   seed: null # Random seed

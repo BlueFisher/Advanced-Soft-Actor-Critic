@@ -23,15 +23,15 @@ def initialize_config_from_yaml(default_config_path, config_file_path, config_ca
     with open(config_file_path) as f:
         config_file = yaml.load(f, Loader=yaml.FullLoader)
 
-    def _tra_dict(dict_target: dict, dict_ori: dict):
-        for k, v in dict_ori.items():
-            if k not in dict_target:
-                dict_target[k] = v
+    def _tra_dict(dict_ori: dict, dict_new: dict):
+        for k, v in dict_new.items():
+            if k not in dict_ori:
+                dict_ori[k] = v
             else:
-                if isinstance(dict_target[k], dict) and isinstance(v, dict):
-                    _tra_dict(dict_target[k], v)
+                if isinstance(dict_ori[k], dict) and isinstance(v, dict):
+                    _tra_dict(dict_ori[k], v)
                 else:
-                    dict_target[k] = v
+                    dict_ori[k] = v
 
     for cat in ['default', config_cat]:
         if cat is None:
