@@ -1,4 +1,5 @@
-from typing import List, Tuple, Union
+from pathlib import Path
+from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -9,7 +10,7 @@ from algorithm.nn_models.layers import LinearLayers
 class ModelBaseSimpleRep(nn.Module):
     def __init__(self, obs_shapes,
                  is_target: bool, train_mode: bool,
-                 model_abs_dir=None, **kwargs):
+                 model_abs_dir: Optional[Path] = None, **kwargs):
         super().__init__()
         self.obs_shapes = obs_shapes
         self.is_target = is_target

@@ -1,4 +1,6 @@
-from typing import Tuple
+from pathlib import Path
+from typing import Optional, Tuple
+
 import torch
 from torch import nn
 
@@ -8,7 +10,7 @@ from .layers import LinearLayers
 class ModelBasePolicy(nn.Module):
     def __init__(self, state_size, d_action_size, c_action_size,
                  train_mode: bool,
-                 model_abs_dir=None):
+                 model_abs_dir: Optional[Path] = None, **kwargs):
         super().__init__()
         self.state_size = state_size
         self.d_action_size = d_action_size
@@ -16,9 +18,9 @@ class ModelBasePolicy(nn.Module):
         self.train_mode = train_mode
         self.model_abs_dir = model_abs_dir
 
-        self._build_model()
+        self._build_model(**kwargs)
 
-    def _build_model(self):
+    def _build_model(self, **kwargs):
         pass
 
     def forward(self, state) -> Tuple[torch.distributions.OneHotCategorical, torch.distributions.Normal]:

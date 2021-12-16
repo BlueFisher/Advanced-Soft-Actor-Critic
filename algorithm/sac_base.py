@@ -21,7 +21,7 @@ class SAC_Base(object):
                  obs_shapes: List[Tuple],
                  d_action_size: int,
                  c_action_size: int,
-                 model_abs_dir: Optional[str],
+                 model_abs_dir: Optional[Path],
                  model,
                  model_config: Optional[dict] = None,
                  device: Optional[str] = None,
@@ -288,7 +288,8 @@ class SAC_Base(object):
         """ POLICY """
         self.model_policy: ModelBasePolicy = model.ModelPolicy(state_size, self.d_action_size, self.c_action_size,
                                                                self.train_mode,
-                                                               self.model_abs_dir).to(self.device)
+                                                               self.model_abs_dir,
+                                                               **model_config['policy']).to(self.device)
         self.optimizer_policy = adam_optimizer(self.model_policy.parameters())
 
         """ SIAMESE REPRESENTATION LEARNING """
@@ -429,7 +430,7 @@ class SAC_Base(object):
 
         self.ckpt_dir = None
         if self.model_abs_dir:
-            self.ckpt_dir = ckpt_dir = Path(self.model_abs_dir).joinpath('model')
+            self.ckpt_dir = ckpt_dir = self.model_abs_dir.joinpath('model')
 
             ckpts = []
             if ckpt_dir.exists():
