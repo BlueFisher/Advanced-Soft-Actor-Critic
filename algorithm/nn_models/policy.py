@@ -23,7 +23,7 @@ class ModelBasePolicy(nn.Module):
     def _build_model(self, **kwargs):
         pass
 
-    def forward(self, state) -> Tuple[torch.distributions.OneHotCategorical, torch.distributions.Normal]:
+    def forward(self, state, obs_list) -> Tuple[torch.distributions.OneHotCategorical, torch.distributions.Normal]:
         raise Exception("ModelPolicy not implemented")
 
 
@@ -61,7 +61,7 @@ class ModelPolicy(ModelBasePolicy):
             self.mean_dense = LinearLayers(self.c_dense.output_size, mean_n, mean_depth, self.c_action_size)
             self.logstd_dense = LinearLayers(self.c_dense.output_size, logstd_n, logstd_depth, self.c_action_size)
 
-    def forward(self, state):
+    def forward(self, state, obs_list):
         state = self.dense(state)
 
         if self.d_action_size:

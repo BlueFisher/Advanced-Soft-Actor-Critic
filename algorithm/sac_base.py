@@ -537,7 +537,8 @@ class SAC_Base(object):
         self.running_variances = new_variance
 
     @torch.no_grad()
-    def get_l_probs(self, l_obses_list: List[torch.Tensor],
+    def get_l_probs(self,
+                    l_obses_list: List[torch.Tensor],
                     l_actions: torch.Tensor,
                     rnn_state: torch.Tensor = None):
         """
@@ -557,7 +558,7 @@ class SAC_Base(object):
         else:
             l_states = self.model_rep(l_obses_list)  # [Batch, l, state_size]
 
-        d_policy, c_policy = self.model_policy(l_states)
+        d_policy, c_policy = self.model_policy(l_states, l_obses_list)
 
         policy_prob = torch.ones((l_states.shape[:2]), device=self.device)  # [Batch, l]
 
@@ -700,10 +701,12 @@ class SAC_Base(object):
 
     @torch.no_grad()
     def _get_y(self,
+               n_obses_list: List[torch.Tensor],
                n_states: torch.Tensor,
                n_actions: torch.Tensor,
                n_rewards: torch.Tensor,
-               state_: torch.Tensor,
+               next_obs_list: List[torch.Tensor],
+               next_state: torch.Tensor,
                n_dones: torch.Tensor,
                n_mu_probs: torch.Tensor = None):
         """
@@ -722,10 +725,12 @@ class SAC_Base(object):
         d_alpha = torch.exp(self.log_d_alpha)
         c_alpha = torch.exp(self.log_c_alpha)
 
-        next_n_states = torch.cat([n_states[:, 1:, ...], state_.view((-1, 1, state_.shape[-1]))], dim=1)  # [Batch, n, state_size]
+        next_n_obses_list = [torch.cat([n_obses[:, 1:, ...], next_obs.unsqueeze(1)], dim=1)
+                             for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
+        next_n_states = torch.cat([n_states[:, 1:, ...], next_state.unsqueeze(1)], dim=1)  # [Batch, n, state_size]
 
-        d_policy, c_policy = self.model_policy(n_states)
-        next_d_policy, next_c_policy = self.model_policy(next_n_states)
+        d_policy, c_policy = self.model_policy(n_states, n_obses_list)
+        next_d_policy, next_c_policy = self.model_policy(next_n_states, next_n_obses_list)
 
         if self.curiosity is not None:
             if self.curiosity == 'FORWARD':
@@ -877,9 +882,11 @@ class SAC_Base(object):
         d_q_list = [q[0] for q in q_list]  # [Batch, action_size]
         c_q_list = [q[1] for q in q_list]  # [Batch, 1]
 
-        d_y, c_y = self._get_y(m_target_states[:, self.burn_in_step:-1, ...],
+        d_y, c_y = self._get_y([m_obses[:, self.burn_in_step:-1, ...] for m_obses in m_obses_list],
+                               m_target_states[:, self.burn_in_step:-1, ...],
                                N_actions[:, self.burn_in_step:, ...],
                                N_rewards[:, self.burn_in_step:],
+                               [m_obses[:, -1, ...] for m_obses in m_obses_list],
                                m_target_states[:, -1, ...],
                                N_dones[:, self.burn_in_step:],
                                N_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
@@ -1130,10 +1137,13 @@ class SAC_Base(object):
 
         return torch.mean(approx_next_state_dist.entropy()), loss_reward, loss_obs
 
-    def _train_policy(self, state: torch.Tensor, action: torch.Tensor):
+    def _train_policy(self,
+                      obs_list: List[torch.Tensor],
+                      state: torch.Tensor,
+                      action: torch.Tensor):
         batch = state.shape[0]
 
-        d_policy, c_policy = self.model_policy(state)
+        d_policy, c_policy = self.model_policy(state, obs_list)
 
         loss_d_policy = torch.zeros((batch, 1), device=self.device)
         loss_c_policy = torch.zeros((batch, 1), device=self.device)
@@ -1186,10 +1196,12 @@ class SAC_Base(object):
         return (torch.mean(d_policy.entropy()) if self.d_action_size else None,
                 torch.mean(c_policy.entropy()) if self.c_action_size else None)
 
-    def _train_alpha(self, state: torch.Tensor):
+    def _train_alpha(self,
+                     obs_list: torch.Tensor,
+                     state: torch.Tensor):
         batch = state.shape[0]
 
-        d_policy, c_policy = self.model_policy(state)
+        d_policy, c_policy = self.model_policy(state, obs_list)
 
         d_alpha = torch.exp(self.log_d_alpha)
         c_alpha = torch.exp(self.log_c_alpha)
@@ -1296,13 +1308,14 @@ class SAC_Base(object):
             else:
                 m_states = self.model_rep(m_obses_list)
 
+        obs_list = [m_obses[:, self.burn_in_step, ...] for m_obses in m_obses_list]
         state = m_states[:, self.burn_in_step, ...]
         action = N_actions[:, self.burn_in_step, ...]
 
-        d_policy_entropy, c_policy_entropy = self._train_policy(state, action)
+        d_policy_entropy, c_policy_entropy = self._train_policy(obs_list, state, action)
 
         if self.use_auto_alpha and ((self.d_action_size and not self.discrete_dqn_like) or self.c_action_size):
-            d_alpha, c_alpha = self._train_alpha(state)
+            d_alpha, c_alpha = self._train_alpha(obs_list, state)
 
         if self.curiosity is not None:
             loss_curiosity = self._train_curiosity(m_states, N_actions)
@@ -1392,7 +1405,11 @@ class SAC_Base(object):
         return actions[torch.tensor(range(batch)), idx]
 
     @torch.no_grad()
-    def _choose_action(self, state: torch.Tensor, disable_sample: bool = False, force_rnd_if_avaiable: bool = False):
+    def _choose_action(self,
+                       obs_list: List[torch.Tensor],
+                       state: torch.Tensor,
+                       disable_sample: bool = False,
+                       force_rnd_if_avaiable: bool = False):
         """
         Args:
             state: [Batch, state_size]
@@ -1401,7 +1418,7 @@ class SAC_Base(object):
             action: [Batch, d_action_size + c_action_size]
         """
         batch = state.shape[0]
-        d_policy, c_policy = self.model_policy(state)
+        d_policy, c_policy = self.model_policy(state, obs_list)
         if self.use_rnd and (self.train_mode or force_rnd_if_avaiable):
             return self.rnd_sample(state, d_policy, c_policy)
         else:
@@ -1440,7 +1457,7 @@ class SAC_Base(object):
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         state = self.model_rep(obs_list)
-        return self._choose_action(state, disable_sample, force_rnd_if_avaiable).detach().cpu().numpy()
+        return self._choose_action(obs_list, state, disable_sample, force_rnd_if_avaiable).detach().cpu().numpy()
 
     @torch.no_grad()
     def choose_rnn_action(self, obs_list: List[np.ndarray],
@@ -1462,12 +1479,13 @@ class SAC_Base(object):
         pre_action = torch.from_numpy(pre_action).to(self.device)
         rnn_state = torch.from_numpy(rnn_state).to(self.device)
 
-        obs_list = [obs.view(-1, 1, *obs.shape[1:]) for obs in obs_list]
-        pre_action = pre_action.view(-1, 1, *pre_action.shape[1:])
+        obs_list = [obs.unsqueeze(1) for obs in obs_list]
+        pre_action = pre_action.unsqueeze(1)
         state, next_rnn_state = self.model_rep(obs_list, pre_action, rnn_state)
-        state = state.view(-1, state.shape[-1])
+        state = state.squeeze(1)
+        obs_list = [obs.squeeze(1) for obs in obs_list]
 
-        action = self._choose_action(state, disable_sample, force_rnd_if_avaiable)
+        action = self._choose_action(obs_list, state, disable_sample, force_rnd_if_avaiable)
 
         return action.detach().cpu().numpy(), next_rnn_state.detach().cpu().numpy()
 
@@ -1521,9 +1539,11 @@ class SAC_Base(object):
             d_q_list = [torch.sum(d_action * q, dim=-1, keepdim=True) for q in d_q_list]
             # [Batch, 1]
 
-        d_y, c_y = self._get_y(m_target_states[:, self.burn_in_step:-1, ...],
+        d_y, c_y = self._get_y([m_obses[:, self.burn_in_step:-1, ...] for m_obses in m_obses_list],
+                               m_target_states[:, self.burn_in_step:-1, ...],
                                N_actions[:, self.burn_in_step:, ...],
                                N_rewards[:, self.burn_in_step:],
+                               [m_obses[:, -1, ...] for m_obses in m_obses_list],
                                m_target_states[:, -1, ...],
                                N_dones[:, self.burn_in_step:],
                                N_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
