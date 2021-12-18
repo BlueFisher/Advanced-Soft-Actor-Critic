@@ -1,6 +1,5 @@
 import logging
 import math
-from collections import defaultdict
 from itertools import chain
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -184,9 +183,10 @@ class SAC_Base(object):
         """
         Initialize variables, network models and optimizers
         """
-        if model_config is None:
-            model_config = {}
-        model_config = defaultdict(dict, model_config)
+        if model_config['rep'] is None:
+            model_config['rep'] = {}
+        if model_config['policy'] is None:
+            model_config['policy'] = {}
 
         self.global_step = torch.tensor(0, dtype=torch.int64, requires_grad=False, device='cpu')
 
