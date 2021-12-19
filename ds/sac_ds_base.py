@@ -259,29 +259,29 @@ class SAC_DS_Base(SAC_Base):
         return True
 
     def train(self,
-              N_obses_list,
-              N_actions,
-              N_rewards,
+              bn_obses_list,
+              bn_actions,
+              bn_rewards,
               next_obs_list,
-              N_dones,
-              N_mu_probs,
+              bn_dones,
+              bn_mu_probs,
               rnn_state=None):
 
-        N_obses_list = [torch.from_numpy(t).to(self.device) for t in N_obses_list]
-        N_actions = torch.from_numpy(N_actions).to(self.device)
-        N_rewards = torch.from_numpy(N_rewards).to(self.device)
+        bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
+        bn_actions = torch.from_numpy(bn_actions).to(self.device)
+        bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
         next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
-        N_dones = torch.from_numpy(N_dones).to(self.device)
-        N_mu_probs = torch.from_numpy(N_mu_probs).to(self.device)
+        bn_dones = torch.from_numpy(bn_dones).to(self.device)
+        bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
         if self.use_rnn:
             rnn_state = torch.from_numpy(rnn_state).to(self.device)
 
-        self._train(N_obses_list=N_obses_list,
-                    N_actions=N_actions,
-                    N_rewards=N_rewards,
+        self._train(bn_obses_list=bn_obses_list,
+                    bn_actions=bn_actions,
+                    bn_rewards=bn_rewards,
                     next_obs_list=next_obs_list,
-                    N_dones=N_dones,
-                    N_mu_probs=N_mu_probs,
+                    bn_dones=bn_dones,
+                    bn_mu_probs=bn_mu_probs,
                     priority_is=None,
                     initial_rnn_state=rnn_state if self.use_rnn else None)
 
