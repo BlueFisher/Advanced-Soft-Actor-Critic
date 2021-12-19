@@ -1438,10 +1438,14 @@ class SAC_Base(object):
                             logits=torch.ones(batch, self.d_action_size)).sample().to(self.device)
                     else:
                         d_q, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None)
-                        d_action = torch.argmax(d_q, axis=-1)
+                        d_action = torch.argmax(d_q, dim=-1)
                         d_action = functional.one_hot(d_action, self.d_action_size)
                 else:
-                    d_action = d_policy.sample()  # TODO: disable_sample
+                    if disable_sample:
+                        d_action = functional.one_hot(d_policy.logits.argmax(dim=-1),
+                                                      self.d_action_size)
+                    else:
+                        d_action = d_policy.sample()
             else:
                 d_action = torch.empty(0, device=self.device)
 
