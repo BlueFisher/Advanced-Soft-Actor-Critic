@@ -1447,7 +1447,7 @@ class SAC_Base(object):
 
             if self.c_action_size:
                 if disable_sample:
-                    c_action = c_policy.mean
+                    c_action = torch.tanh(c_policy.mean)
                 else:
                     c_action = torch.tanh(c_policy.sample())
             else:

@@ -140,8 +140,11 @@ class SAC_DS_Base(SAC_Base):
         return np.concatenate([d_action, c_action], axis=-1).astype(np.float32)
 
     def choose_action(self, obs_list,
+                      disable_sample: bool = False,
                       force_rnd_if_avaiable: bool = False):
-        action = super().choose_action(obs_list, force_rnd_if_avaiable)
+        action = super().choose_action(obs_list,
+                                       disable_sample,
+                                       force_rnd_if_avaiable)
 
         return self._random_action(action)
 
