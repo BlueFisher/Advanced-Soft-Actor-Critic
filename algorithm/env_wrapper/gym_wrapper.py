@@ -6,13 +6,10 @@ import time
 import gym
 import numpy as np
 
-logger = logging.getLogger('GymWrapper')
-logger.setLevel(level=logging.INFO)
-
 try:
     import pybullet_envs
 except:
-    logger.warning('No PyBullet environments')
+    pass
 
 
 VANILLA_ENVS = ['CartPole-v1', 'Pendulum-v0', 'MountainCarContinuous-v0']
@@ -22,7 +19,15 @@ STEP = 1
 CLOSE = 2
 
 
-def start_gym(env_name, render, conn):
+def start_gym_process(env_name, render, conn):
+    try:
+        from algorithm import config_helper
+        config_helper.set_logger()
+    except:
+        pass
+
+    logger = logging.getLogger('GymWrapper.Process')
+
     logger.info(f'Process {os.getpid()} created')
 
     env = gym.make(env_name)
@@ -68,10 +73,12 @@ class GymWrapper:
 
         if self._seq_envs:
             # All environments are executed sequentially
-            self._envs = list()
+            self._envs = []
         else:
             # All environments are executed in parallel
-            self._conns = list()
+            self._conns = []
+
+        self._logger = logging.getLogger('GymWrapper')
 
     def init(self):
         if self._seq_envs:
@@ -87,8 +94,8 @@ class GymWrapper:
         else:
             env = gym.make(self.env_name)
 
-        logger.info(f'Observation shapes: {env.observation_space}')
-        logger.info(f'Action size: {env.action_space}')
+        self._logger.info(f'Observation shapes: {env.observation_space}')
+        self._logger.info(f'Action size: {env.action_space}')
 
         self._state_dim = env.observation_space.shape[0]
         self.is_discrete = isinstance(env.action_space, gym.spaces.Discrete)
@@ -106,7 +113,7 @@ class GymWrapper:
             for i in range(self.n_agents):
                 parent_conn, child_conn = multiprocessing.Pipe()
                 self._conns.append(parent_conn)
-                p = multiprocessing.Process(target=start_gym,
+                p = multiprocessing.Process(target=start_gym_process,
                                             args=(self.env_name,
                                                   (self.render or not self.train_mode) and i == 0,
                                                   child_conn),
