@@ -125,6 +125,9 @@ class SAC_DS_Base(SAC_Base):
         self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
 
     def _random_action(self, action):
+        if self.noise == 0.:
+            return action
+
         batch = action.shape[0]
         d_action = action[..., :self.d_action_size]
         c_action = action[..., self.d_action_size:]
@@ -139,19 +142,25 @@ class SAC_DS_Base(SAC_Base):
 
         return np.concatenate([d_action, c_action], axis=-1).astype(np.float32)
 
-    def choose_action(self, obs_list,
+    def choose_action(self,
+                      obs_list: List[np.ndarray],
                       disable_sample: bool = False,
                       force_rnd_if_avaiable: bool = False):
         action = super().choose_action(obs_list,
-                                       disable_sample,
-                                       force_rnd_if_avaiable)
+                                       disable_sample=disable_sample,
+                                       force_rnd_if_avaiable=force_rnd_if_avaiable)
 
         return self._random_action(action)
 
-    def choose_rnn_action(self, obs_list, pre_action, rnn_state,
+    def choose_rnn_action(self,
+                          obs_list: List[np.ndarray],
+                          pre_action: np.ndarray,
+                          rnn_state: np.ndarray,
+                          disable_sample: bool = False,
                           force_rnd_if_avaiable: bool = False):
         action, next_rnn_state = super().choose_rnn_action(obs_list, pre_action, rnn_state,
-                                                           force_rnd_if_avaiable)
+                                                           disable_sample=disable_sample,
+                                                           force_rnd_if_avaiable=force_rnd_if_avaiable)
 
         return self._random_action(action), next_rnn_state
 

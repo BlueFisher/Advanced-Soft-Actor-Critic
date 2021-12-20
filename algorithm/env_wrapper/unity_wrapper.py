@@ -27,13 +27,14 @@ class UnityWrapper:
                  additional_args=None,
                  n_agents=1):
         """
-        train_mode: If in train mode, Unity will run in the highest quality
-        file_name: The executable path. The UnityEnvironment will run in editor if None
-        base_port: The port that communicate to Unity. It will be set to 5004 automatically if in editor.
-        no_graphics: If Unity runs in no graphic mode. It must be set to False if Unity has camera sensor.
-        seed: Random seed
-        scene: The scene name
-        n_agents: The agents count
+        Args:
+            train_mode: If in train mode, Unity will run in the highest quality
+            file_name: The executable path. The UnityEnvironment will run in editor if None
+            base_port: The port that communicate to Unity. It will be set to 5004 automatically if in editor.
+            no_graphics: If Unity runs in no graphic mode. It must be set to False if Unity has camera sensor.
+            seed: Random seed
+            scene: The scene name
+            n_agents: The agents count
         """
         self.scene = scene
 
@@ -64,7 +65,7 @@ class UnityWrapper:
 
     def init(self):
         """
-        return:
+        Returns:
             observation shapes: tuple[(o1, ), (o2, ), (o3_1, o3_2, o3_3), ...]
             discrete action size: int, sum of all action branches
             continuous action size: int
@@ -118,10 +119,11 @@ class UnityWrapper:
 
     def step(self, d_action, c_action):
         """
-        d_action: (NAgents, discrete_action_size), one hot like action
-        c_action: (NAgents, continuous_action_size)
+        Args:
+            d_action: (NAgents, discrete_action_size), one hot like action
+            c_action: (NAgents, continuous_action_size)
 
-        returns:
+        Returns:
             observations: list[(NAgents, o1), (NAgents, o2), (NAgents, o3_1, o3_2, o3_3)]
             rewards: (NAgents, )
             done: (NAgents, ), np.bool
