@@ -1460,7 +1460,10 @@ class SAC_Base(object):
             return torch.cat([d_action, c_action], dim=-1)
 
     @torch.no_grad()
-    def choose_action(self, obs_list: List[np.ndarray], disable_sample: bool = False, force_rnd_if_avaiable: bool = False):
+    def choose_action(self,
+                      obs_list: List[np.ndarray],
+                      disable_sample: bool = False,
+                      force_rnd_if_avaiable: bool = False):
         """
         Args:
             obs_list: list([Batch, *obs_shapes_i], ...)
@@ -1473,7 +1476,8 @@ class SAC_Base(object):
         return self._choose_action(obs_list, state, disable_sample, force_rnd_if_avaiable).detach().cpu().numpy()
 
     @torch.no_grad()
-    def choose_rnn_action(self, obs_list: List[np.ndarray],
+    def choose_rnn_action(self,
+                          obs_list: List[np.ndarray],
                           pre_action: np.ndarray,
                           rnn_state: np.ndarray,
                           disable_sample: bool = False,
