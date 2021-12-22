@@ -377,14 +377,14 @@ class Learner:
                 while not all([a.done for a in agents]) and not self._closed:
                     with self._sac_bak_lock.read('choose_action'):
                         if use_rnn:
-                            action, next_rnn_state = self.sac_bak.choose_rnn_action([o.astype(np.float32) for o in obs_list],
-                                                                                    action,
-                                                                                    rnn_state)
+                            action, prob, next_rnn_state = self.sac_bak.choose_rnn_action([o.astype(np.float32) for o in obs_list],
+                                                                                          action,
+                                                                                          rnn_state)
 
                             if np.isnan(np.min(next_rnn_state)):
                                 raise UselessEpisodeException()
                         else:
-                            action = self.sac_bak.choose_action([o.astype(np.float32) for o in obs_list])
+                            action, prob = self.sac_bak.choose_action([o.astype(np.float32) for o in obs_list])
 
                     next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
                                                                                    action[..., self.d_action_size:])
@@ -394,13 +394,16 @@ class Learner:
                         max_reached = [True] * len(agents)
 
                     for i, agent in enumerate(agents):
-                        agent.add_transition([o[i] for o in obs_list],
-                                             action[i],
-                                             reward[i],
-                                             local_done[i],
-                                             max_reached[i],
-                                             [o[i] for o in next_obs_list],
-                                             rnn_state[i] if use_rnn else None)
+                        agent.add_transition(
+                            obs_list=[o[i] for o in obs_list],
+                            action=action[i],
+                            reward=reward[i],
+                            local_done=local_done[i],
+                            max_reached=max_reached[i],
+                            next_obs_list=[o[i] for o in next_obs_list],
+                            prob=prob[i],
+                            rnn_state=rnn_state[i] if use_rnn else None
+                        )
 
                     obs_list = next_obs_list
                     action[local_done] = np.zeros(self.action_size)

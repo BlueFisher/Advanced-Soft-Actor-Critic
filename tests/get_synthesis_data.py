@@ -85,12 +85,13 @@ def gen_episode_trans(obs_shapes, d_action_size, c_action_size, rnn_shape=None, 
         c_action = np.empty((1, episode_len, 0))
     n_actions = np.concatenate([d_actoin, c_action], axis=-1).astype(np.float32)
 
-    # n_obses_list, n_actions, n_rewards, next_obs_list, n_dones
+    # n_obses_list, n_actions, n_rewards, next_obs_list, n_probs, n_dones
     vanilla_episode_trans = [
         [np.random.randn(1, episode_len, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
         n_actions,
         np.random.randn(1, episode_len).astype(np.float32),
         [np.random.randn(1, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
+        np.random.randn(1, episode_len).astype(np.float32),
         np.random.randn(1, episode_len).astype(np.float32)
     ]
     if rnn_shape:
