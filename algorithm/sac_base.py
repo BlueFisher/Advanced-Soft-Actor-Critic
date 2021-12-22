@@ -1425,11 +1425,15 @@ class SAC_Base(object):
 
         Returns:
             action: [Batch, d_action_size + c_action_size]
+            prob: [Batch, ]
         """
         batch = state.shape[0]
         d_policy, c_policy = self.model_policy(state, obs_list)
+
         if self.use_rnd and (self.train_mode or force_rnd_if_avaiable):
-            return self.rnd_sample(state, d_policy, c_policy)
+            action = self.rnd_sample(state, d_policy, c_policy)
+            d_action = action[..., :self.d_action_size]
+            c_action = action[..., self.d_action_size:]
         else:
             if self.d_action_size:
                 if self.discrete_dqn_like:
@@ -1457,7 +1461,15 @@ class SAC_Base(object):
             else:
                 c_action = torch.empty(0, device=self.device)
 
-            return torch.cat([d_action, c_action], dim=-1)
+        policy_prob = torch.ones((state.shape[:1]), device=self.device)  # [Batch, ]
+        if self.d_action_size:
+            policy_prob *= torch.exp(d_policy.log_prob(d_action))  # [Batch, ]
+        if self.c_action_size:
+            c_policy_prob = squash_correction_prob(c_policy, torch.atanh(c_action))
+            # [Batch, action_size]
+            policy_prob *= torch.prod(c_policy_prob, dim=-1)  # [Batch, ]
+
+        return torch.cat([d_action, c_action], dim=-1), policy_prob
 
     @torch.no_grad()
     def choose_action(self,
@@ -1473,7 +1485,9 @@ class SAC_Base(object):
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         state = self.model_rep(obs_list)
-        return self._choose_action(obs_list, state, disable_sample, force_rnd_if_avaiable).detach().cpu().numpy()
+
+        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_avaiable)
+        return action.detach().cpu().numpy(), prob.detach().cpu().numpy()
 
     @torch.no_grad()
     def choose_rnn_action(self,
@@ -1502,9 +1516,9 @@ class SAC_Base(object):
         state = state.squeeze(1)
         obs_list = [obs.squeeze(1) for obs in obs_list]
 
-        action = self._choose_action(obs_list, state, disable_sample, force_rnd_if_avaiable)
+        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_avaiable)
 
-        return action.detach().cpu().numpy(), next_rnn_state.detach().cpu().numpy()
+        return action.detach().cpu().numpy(), prob.detach().cpu().numpy(), next_rnn_state.detach().cpu().numpy()
 
     @torch.no_grad()
     def _get_td_error(self,
@@ -1724,6 +1738,7 @@ class SAC_Base(object):
                            l_rewards: np.ndarray,
                            next_obs_list: List[np.ndarray],
                            l_dones: np.ndarray,
+                           l_probs: List[np.ndarray],
                            l_rnn_states: np.ndarray = None):
         """
         Args:
@@ -1732,6 +1747,7 @@ class SAC_Base(object):
             l_rewards: [1, episode_len]
             next_obs_list: list([1, *obs_shapes_i], ...)
             l_dones: [1, episode_len]
+            l_probs: [1, episode_len]
             l_rnn_states: [1, episode_len, *rnn_state_shape]
         """
 
@@ -1765,12 +1781,7 @@ class SAC_Base(object):
         }
 
         if self.use_n_step_is:
-            l_mu_probs = self.get_l_probs_np(
-                l_obses_list,
-                l_actions,
-                l_rnn_states[:, 0, ...] if self.use_rnn else None
-            )
-
+            l_mu_probs = l_probs
             mu_prob = l_mu_probs.squeeze(0)
             mu_prob = np.concatenate([mu_prob,
                                       np.empty([1], dtype=np.float32)])

@@ -25,6 +25,7 @@ class Agent(object):
                        local_done,
                        max_reached,
                        next_obs_list,
+                       prob,
                        rnn_state=None):
 
         transition = {
@@ -34,6 +35,7 @@ class Agent(object):
             'local_done': local_done,
             'max_reached': max_reached,
             'next_obs_list': next_obs_list,
+            'prob': prob,
             'rnn_state': rnn_state
         }
         self._tmp_episode_trans.append(transition)
@@ -49,7 +51,8 @@ class Agent(object):
                         reward,
                         local_done,
                         max_reached,
-                        next_obs_list)
+                        next_obs_list,
+                        prob)
 
         if local_done:
             self.done = True
@@ -69,7 +72,8 @@ class Agent(object):
                    reward,
                    local_done,
                    max_reached,
-                   next_obs_list):
+                   next_obs_list,
+                   prob):
         pass
 
     def _get_episode_trans(self):
@@ -92,7 +96,10 @@ class Agent(object):
                         axis=0)
         done = np.expand_dims(done, 0).astype(np.float32)  # [1, ep_len]
 
-        episode_trans = [obs_list, action, reward, next_obs_list, done]
+        prob = np.stack([t['prob'] for t in self._tmp_episode_trans], axis=0)
+        prob = np.expand_dims(prob, 0).astype(np.float32)  # [1, ep_len]
+
+        episode_trans = [obs_list, action, reward, next_obs_list, done, prob]
 
         if self.use_rnn:
             rnn_state = np.stack([t['rnn_state'] for t in self._tmp_episode_trans], axis=0)

@@ -146,11 +146,11 @@ class SAC_DS_Base(SAC_Base):
                       obs_list: List[np.ndarray],
                       disable_sample: bool = False,
                       force_rnd_if_avaiable: bool = False):
-        action = super().choose_action(obs_list,
+        action, prob = super().choose_action(obs_list,
                                        disable_sample=disable_sample,
                                        force_rnd_if_avaiable=force_rnd_if_avaiable)
 
-        return self._random_action(action)
+        return self._random_action(action), prob
 
     def choose_rnn_action(self,
                           obs_list: List[np.ndarray],
@@ -158,11 +158,11 @@ class SAC_DS_Base(SAC_Base):
                           rnn_state: np.ndarray,
                           disable_sample: bool = False,
                           force_rnd_if_avaiable: bool = False):
-        action, next_rnn_state = super().choose_rnn_action(obs_list, pre_action, rnn_state,
+        action, prob, next_rnn_state = super().choose_rnn_action(obs_list, pre_action, rnn_state,
                                                            disable_sample=disable_sample,
                                                            force_rnd_if_avaiable=force_rnd_if_avaiable)
 
-        return self._random_action(action), next_rnn_state
+        return self._random_action(action), prob, next_rnn_state
 
     def get_policy_variables(self, get_numpy=True):
         """

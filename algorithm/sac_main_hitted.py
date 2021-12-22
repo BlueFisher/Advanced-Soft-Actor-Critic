@@ -15,7 +15,8 @@ class AgentHitted(Agent):
                    reward,
                    local_done,
                    max_reached,
-                   next_obs_list):
+                   next_obs_list,
+                   prob):
 
         if not self.done and reward >= 1:
             self.hitted += 1

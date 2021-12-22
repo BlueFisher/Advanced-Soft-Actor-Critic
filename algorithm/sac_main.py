@@ -189,19 +189,24 @@ class Main(object):
                         # burn-in padding
                         for agent in [a for a in agents if a.is_empty()]:
                             for _ in range(self.sac.burn_in_step):
-                                agent.add_transition([np.zeros(t) for t in self.obs_shapes],
-                                                     np.zeros(self.action_size),
-                                                     0, False, False,
-                                                     [np.zeros(t) for t in self.obs_shapes],
-                                                     initial_rnn_state[0])
+                                agent.add_transition(
+                                    obs_list=[np.zeros(t) for t in self.obs_shapes],
+                                    action=np.zeros(self.action_size),
+                                    reward=0.,
+                                    local_done=False,
+                                    max_reached=False,
+                                    next_obs_list=[np.zeros(t) for t in self.obs_shapes],
+                                    prob=0.,
+                                    rnn_state=initial_rnn_state[0]
+                                )
 
-                        action, next_rnn_state = self.sac.choose_rnn_action([o.astype(np.float32) for o in obs_list],
-                                                                            action,
-                                                                            rnn_state,
-                                                                            disable_sample=self.disable_sample)
+                        action, prob, next_rnn_state = self.sac.choose_rnn_action([o.astype(np.float32) for o in obs_list],
+                                                                                  action,
+                                                                                  rnn_state,
+                                                                                  disable_sample=self.disable_sample)
                     else:
-                        action = self.sac.choose_action([o.astype(np.float32) for o in obs_list],
-                                                        disable_sample=self.disable_sample)
+                        action, prob = self.sac.choose_action([o.astype(np.float32) for o in obs_list],
+                                                              disable_sample=self.disable_sample)
 
                     next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
                                                                                    action[..., self.d_action_size:])
@@ -210,20 +215,25 @@ class Main(object):
                         local_done = [True] * len(agents)
                         max_reached = [True] * len(agents)
 
-                    episode_trans_list = [agents[i].add_transition([o[i] for o in obs_list],
-                                                                   action[i],
-                                                                   reward[i],
-                                                                   local_done[i],
-                                                                   max_reached[i],
-                                                                   [o[i] for o in next_obs_list],
-                                                                   rnn_state[i] if use_rnn else None)
-                                          for i in range(len(agents))]
+                    episode_trans_list = [
+                        agents[i].add_transition(
+                            obs_list=[o[i] for o in obs_list],
+                            action=action[i],
+                            reward=reward[i],
+                            local_done=local_done[i],
+                            max_reached=max_reached[i],
+                            next_obs_list=[o[i] for o in next_obs_list],
+                            prob=prob[i],
+                            rnn_state=rnn_state[i] if use_rnn else None
+                        )
+                        for i in range(len(agents))
+                    ]
 
                     if self.train_mode:
                         episode_trans_list = [t for t in episode_trans_list if t is not None]
                         if len(episode_trans_list) != 0:
-                            # n_obses_list, n_actions, n_rewards, next_obs_list, n_dones,
-                            # n_rnn_states
+                            # ep_obses_list, ep_actions, ep_rewards, next_obs_list, ep_dones, ep_probs,
+                            # ep_rnn_states
                             for episode_trans in episode_trans_list:
                                 self.sac.fill_replay_buffer(*episode_trans)
                         trained_steps = self.sac.train()
