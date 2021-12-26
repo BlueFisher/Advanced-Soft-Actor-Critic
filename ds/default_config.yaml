@@ -20,13 +20,9 @@ base_config:
   nn: nn # Neural network models file
   update_policy_mode: true # Update policy variables at the beginning of each episode if True or get action from learner each step
   update_sac_bak_per_step: 200 # Every N step update sac_bak
-  noise_increasing_rate: 0 # Noise = N * number of actors
-  noise_max: 0.1 # Max noise for actors
   n_agents: 1 # N agents running in parallel
   max_step_each_iter: -1 # Max step in each iteration
   reset_on_iteration: true # If to force reset agent if an episode terminated
-
-  max_actors_each_learner: -1 # The max number of actors of each learner, -1 indicates no limit
 
   evolver_enabled: true
   evolver_cem_length: 50 # Start CEM if all learners have eavluated evolver_cem_length times
@@ -36,6 +32,15 @@ base_config:
     # and it has been more than `evolver_cem_time` minutes since the last update
   evolver_cem_time: 3
   evolver_remove_worst: 4
+
+  max_actors_each_learner: -1 # The max number of actors of each learner, -1 indicates no limit
+  noise_increasing_rate: 0 # Noise = N * number of actors
+  noise_max: 0.1 # Max noise for actors
+  max_episode_size: 500
+  episode_queue_size: 5
+  episode_sender_process_num: 5
+  batch_queue_size: 5
+  batch_generator_process_num: 5
 
 net_config:
   evolver_host: null

@@ -48,8 +48,13 @@ class Learner:
             constant_config['net_config']['evolver_port']
         )
 
-        _id, name, reset_config, model_config, sac_config = self._register_evolver(learner_host,
-                                                                                   learner_port)
+        (_id, name,
+         reset_config,
+         model_config,
+         sac_config) = self._evolver_stub.register_to_evolver(learner_host, learner_port)
+
+        self._logger.info(f'Registered id: {_id}, name: {name}')
+
         constant_config['base_config']['name'] = name
         constant_config['reset_config'] = reset_config
         constant_config['model_config'] = model_config
@@ -101,18 +106,6 @@ class Learner:
             config['net_config']['learner_host'] = ip
 
         return config, config_abs_dir
-
-    def _register_evolver(self, learner_host, learner_port):
-        # Get name from evolver registry
-        register_response = self._evolver_stub.register_to_evolver(learner_host,
-                                                                   learner_port)
-
-        (_id, name,
-         reset_config, model_config, sac_config) = register_response
-
-        self._logger.info(f'Registered id: {_id}, name: {name}')
-
-        return _id, name, reset_config, model_config, sac_config
 
     def _init_config(self, _id, root_dir, config, args):
         if args.name is not None:
@@ -204,23 +197,24 @@ class Learner:
         self._all_variables_buffer = SharedMemoryManager(1)
         self._all_variables_buffer.init_from_data_buffer(self.sac_bak.get_all_variables())
 
+        max_episode_size = self.base_config['max_episode_size']
         episode_shapes = [
-            [(1, MAX_EPISODE_SIZE, *o) for o in self.obs_shapes],
-            (1, MAX_EPISODE_SIZE, self.d_action_size + self.c_action_size),
-            (1, MAX_EPISODE_SIZE),
+            [(1, max_episode_size, *o) for o in self.obs_shapes],
+            (1, max_episode_size, self.d_action_size + self.c_action_size),
+            (1, max_episode_size),
             [(1, *o) for o in self.obs_shapes],
-            (1, MAX_EPISODE_SIZE),
-            (1, MAX_EPISODE_SIZE),
-            (1, MAX_EPISODE_SIZE, *self.sac_bak.rnn_state_shape) if self.sac_bak.use_rnn else None
+            (1, max_episode_size),
+            (1, max_episode_size),
+            (1, max_episode_size, *self.sac_bak.rnn_state_shape) if self.sac_bak.use_rnn else None
         ]
-        self._episode_buffer = SharedMemoryManager(EPISODE_QUEUE_SIZE,
+        self._episode_buffer = SharedMemoryManager(self.base_config['episode_queue_size'],
                                                    logger=self._logger,
                                                    counter_get_shm_index_empty_log='Episode shm index is empty',
                                                    timer_get_shm_index_log='Get an episode shm index',
                                                    timer_get_data_log='Get an episode',
                                                    log_repeat=ELAPSED_REPEAT)
         self._episode_buffer.init_from_shapes(episode_shapes, np.float32)
-        self._episode_size_array = mp.Array('i', range(EPISODE_QUEUE_SIZE))
+        self._episode_size_array = mp.Array('i', range(self.base_config['episode_queue_size']))
 
         self.cmd_pipe_client, cmd_pipe_server = mp.Pipe()
 
