@@ -221,7 +221,7 @@ class Trainer:
             (batch_size, bn),
             (batch_size, *self.sac.rnn_state_shape) if self.sac.use_rnn else None
         ]
-        self._batch_buffer = SharedMemoryManager(BATCH_QUEUE_SIZE,
+        self._batch_buffer = SharedMemoryManager(self.base_config['batch_queue_size'],
                                                  logger=self._logger,
                                                  counter_get_shm_index_empty_log='Batch shm index is empty',
                                                  timer_get_shm_index_log='Get a batch shm index',
@@ -229,7 +229,7 @@ class Trainer:
                                                  log_repeat=ELAPSED_REPEAT)
         self._batch_buffer.init_from_shapes(batch_shapes, np.float32)
 
-        for _ in range(BATCH_GENERATOR_PROCESS_NUM):
+        for _ in range(self.base_config['batch_generator_process_num']):
             mp.Process(target=BatchGenerator, kwargs={
                 'logger_in_file': logger_in_file,
                 'model_abs_dir': model_abs_dir,
