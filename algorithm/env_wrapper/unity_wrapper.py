@@ -170,7 +170,7 @@ class UnityWrapperProcess:
         if self.d_action_size:
             d_action = np.argmax(d_action, axis=1)
             d_action = self.action_product[d_action]
-        1 / 0
+
         self._env.set_actions(self.bahavior_name,
                               ActionTuple(continuous=c_action, discrete=d_action))
         self._env.step()
