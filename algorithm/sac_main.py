@@ -9,7 +9,6 @@ from pathlib import Path
 import numpy as np
 
 import algorithm.config_helper as config_helper
-from algorithm.utils import EnvException
 
 from .agent import Agent
 from .sac_base import SAC_Base
@@ -246,15 +245,7 @@ class Main(object):
 
                     step += 1
 
-            except EnvException as e:
-                self._logger.error(e)
-                self.env.close()
-                self._logger.info(f'Restarting {self.base_config["build_path"]}...')
-                self._init_env()
-                continue
-
-            except Exception as e:
-                self._logger.error(e)
+            except:
                 self._logger.error(traceback.format_exc())
                 self._logger.error('Exiting...')
                 break

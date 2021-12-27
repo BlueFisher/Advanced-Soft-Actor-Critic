@@ -866,12 +866,31 @@ class SAC_Base(object):
                         for n_obses, next_obs in zip(bn_obses_list, next_obs_list)]
 
         if self.use_rnn:
-            m_states, _ = self.model_rep(m_obses_list,
-                                         gen_pre_n_actions(bn_actions, keep_last_action=True),
-                                         initial_rnn_state)
-            m_target_states, _ = self.model_target_rep(m_obses_list,
-                                                       gen_pre_n_actions(bn_actions, keep_last_action=True),
-                                                       initial_rnn_state)
+            m_pre_actions = gen_pre_n_actions(bn_actions, keep_last_action=True)
+            if self.siamese is not None and self.siamese_use_q:
+                b_states, rnn_state_at_n = self.model_rep([o[:, :self.burn_in_step, ...] for o in m_obses_list],
+                                                          m_pre_actions[:, :self.burn_in_step, ...],
+                                                          initial_rnn_state)
+                b_target_states, target_rnn_state_at_n = self.model_target_rep([o[:, :self.burn_in_step, ...] for o in m_obses_list],
+                                                                               m_pre_actions[:, :self.burn_in_step, ...],
+                                                                               initial_rnn_state)
+
+                n1_states, _ = self.model_rep([o[:, self.burn_in_step:, ...] for o in m_obses_list],
+                                              m_pre_actions[:, self.burn_in_step:, ...],
+                                              rnn_state_at_n)
+                n1_target_states, _ = self.model_target_rep([o[:, self.burn_in_step:, ...] for o in m_obses_list],
+                                                            m_pre_actions[:, self.burn_in_step:, ...],
+                                                            target_rnn_state_at_n)
+
+                m_states = torch.cat([b_states, n1_states], dim=1)
+                m_target_states = torch.cat([b_target_states, n1_target_states], dim=1)
+            else:
+                m_states, _ = self.model_rep(m_obses_list,
+                                             m_pre_actions,
+                                             initial_rnn_state)
+                m_target_states, _ = self.model_target_rep(m_obses_list,
+                                                           m_pre_actions,
+                                                           initial_rnn_state)
         else:
             m_states = self.model_rep(m_obses_list)
             m_target_states = self.model_target_rep(m_obses_list)
@@ -944,10 +963,12 @@ class SAC_Base(object):
         """ Siamese Representation Learning """
         loss_siamese = None
         if self.siamese is not None:
-            loss_siamese = self._train_siamese_representation_learning(grads_rep_main,
-                                                                       bn_obses_list,
-                                                                       bn_actions,
-                                                                       initial_rnn_state)
+            loss_siamese = self._train_siamese_representation_learning(
+                grads_rep_main,
+                bn_obses_list,
+                bn_actions,
+                rnn_state_at_n if self.use_rnn and self.siamese_use_q else None,
+                target_rnn_state_at_n if self.use_rnn and self.siamese_use_q else None)
 
         for opt_q in self.optimizer_q_list:
             opt_q.step()
@@ -995,7 +1016,8 @@ class SAC_Base(object):
                                                grads_rep_main,
                                                bn_obses_list: List[torch.Tensor],
                                                bn_actions: torch.Tensor,
-                                               initial_rnn_state: torch.Tensor = None):
+                                               rnn_state_at_n: torch.Tensor = None,
+                                               target_rnn_state_at_n: torch.Tensor = None):
 
         n_obses_list = [bn_obses[:, self.burn_in_step:, ...] for bn_obses in bn_obses_list]
         encoder_list = self.model_rep.get_augmented_encoders(n_obses_list)  # [Batch, n, f], ...
@@ -1015,11 +1037,11 @@ class SAC_Base(object):
                 state = self.model_rep.get_state_from_encoders([n_obses[:, 0:1, ...] for n_obses in n_obses_list],
                                                                _encoder if len(_encoder) > 1 else _encoder[0],
                                                                bn_actions[:, self.burn_in_step - 1:self.burn_in_step, ...],
-                                                               torch.zeros_like(initial_rnn_state))
+                                                               rnn_state_at_n)
                 target_state = self.model_target_rep.get_state_from_encoders([n_obses[:, 0:1, ...] for n_obses in n_obses_list],
                                                                              _target_encoder if len(_target_encoder) > 1 else _target_encoder[0],
                                                                              bn_actions[:, self.burn_in_step - 1:self.burn_in_step, ...],
-                                                                             torch.zeros_like(initial_rnn_state))
+                                                                             target_rnn_state_at_n)
                 state = state[:, 0, ...]
                 target_state = target_state[:, 0, ...]
             else:
