@@ -7,6 +7,7 @@ import os
 import sys
 import threading
 import time
+import traceback
 from pathlib import Path
 
 import grpc
@@ -14,8 +15,7 @@ import numpy as np
 
 import algorithm.config_helper as config_helper
 from algorithm.agent import Agent
-from algorithm.utils import (EnvException, ReadWriteLock, elapsed_counter,
-                             elapsed_timer)
+from algorithm.utils import ReadWriteLock, elapsed_counter, elapsed_timer
 
 from .constants import *
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
@@ -396,15 +396,8 @@ class Actor(object):
 
                     step += 1
 
-            except EnvException as e:
-                self._logger.error(e)
-                self.env.close()
-                self._logger.info(f'Restarting {self.base_config["build_path"]}...')
-                self._init_env()
-                continue
-
-            except Exception as e:
-                self._logger.error(e)
+            except:
+                self._logger.error(traceback.format_exc())
                 self._logger.error('Exiting...')
                 break
 

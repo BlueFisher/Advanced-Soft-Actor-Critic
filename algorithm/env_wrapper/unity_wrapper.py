@@ -4,6 +4,7 @@ import math
 import multiprocessing
 import multiprocessing.connection
 import os
+import traceback
 from typing import List
 
 import numpy as np
@@ -13,8 +14,6 @@ from mlagents_envs.side_channel.engine_configuration_channel import (
     EngineConfig, EngineConfigurationChannel)
 from mlagents_envs.side_channel.environment_parameters_channel import \
     EnvironmentParametersChannel
-
-from algorithm.utils import EnvException
 
 INIT = 0
 RESET = 1
@@ -98,10 +97,8 @@ class UnityWrapperProcess:
                         conn.send(self.step(*data))
                     elif cmd == CLOSE:
                         self.close()
-            except KeyboardInterrupt:
-                pass
-            except Exception as e:
-                self._logger.error(e)
+            except:
+                self._logger.error(traceback.format_exc())
 
     def init(self):
         """
@@ -170,31 +167,28 @@ class UnityWrapperProcess:
             max_step: (NAgents, ), np.bool
         """
 
-        try:
-            if self.d_action_size:
-                d_action = np.argmax(d_action, axis=1)
-                d_action = self.action_product[d_action]
+        if self.d_action_size:
+            d_action = np.argmax(d_action, axis=1)
+            d_action = self.action_product[d_action]
+        1 / 0
+        self._env.set_actions(self.bahavior_name,
+                              ActionTuple(continuous=c_action, discrete=d_action))
+        self._env.step()
 
-            self._env.set_actions(self.bahavior_name,
-                                  ActionTuple(continuous=c_action, discrete=d_action))
+        decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
+
+        tmp_terminal_steps = terminal_steps
+
+        while len(decision_steps) == 0:
+            self._env.set_actions(self.bahavior_name, self._empty_action(0))
             self._env.step()
-
             decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
-
-            tmp_terminal_steps = terminal_steps
-
-            while len(decision_steps) == 0:
-                self._env.set_actions(self.bahavior_name, self._empty_action(0))
-                self._env.step()
-                decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
-                tmp_terminal_steps.agent_id = np.concatenate([tmp_terminal_steps.agent_id,
-                                                              terminal_steps.agent_id])
-                tmp_terminal_steps.reward = np.concatenate([tmp_terminal_steps.reward,
-                                                            terminal_steps.reward])
-                tmp_terminal_steps.interrupted = np.concatenate([tmp_terminal_steps.interrupted,
-                                                                terminal_steps.interrupted])
-        except UnityTimeOutException as e:
-            raise EnvException(*e.args)
+            tmp_terminal_steps.agent_id = np.concatenate([tmp_terminal_steps.agent_id,
+                                                          terminal_steps.agent_id])
+            tmp_terminal_steps.reward = np.concatenate([tmp_terminal_steps.reward,
+                                                        terminal_steps.reward])
+            tmp_terminal_steps.interrupted = np.concatenate([tmp_terminal_steps.interrupted,
+                                                            terminal_steps.interrupted])
 
         reward = decision_steps.reward
         reward[tmp_terminal_steps.agent_id] = tmp_terminal_steps.reward
@@ -374,7 +368,10 @@ class UnityWrapper:
                 env.close()
         else:
             for conn in self._conns:
-                conn.send((CLOSE, None))
+                try:
+                    conn.send((CLOSE, None))
+                except:
+                    pass
 
 
 if __name__ == "__main__":

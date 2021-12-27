@@ -16,8 +16,7 @@ import numpy as np
 
 import algorithm.config_helper as config_helper
 from algorithm.agent import Agent
-from algorithm.utils import (EnvException, ReadWriteLock, RLock,
-                             UselessEpisodeException)
+from algorithm.utils import ReadWriteLock, RLock, UselessEpisodeException
 
 from .constants import *
 from .learner_trainer import Trainer
@@ -406,13 +405,6 @@ class Learner:
                         rnn_state[local_done] = initial_rnn_state[local_done]
 
                     step += 1
-
-            except EnvException as e:
-                self._logger.error(e)
-                self.env.close()
-                self._logger.info(f'Restarting {self.base_config["build_path"]}...')
-                self._init_env()
-                continue
 
             except UselessEpisodeException:
                 self._logger.warning('Useless episode')

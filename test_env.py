@@ -11,7 +11,7 @@ from PIL import Image
 import algorithm.config_helper as config_helper
 from algorithm.agent import Agent
 from algorithm.config_helper import set_logger
-from algorithm.utils import EnvException, elapsed_timer
+from algorithm.utils import elapsed_timer
 
 
 class Main(object):
@@ -183,13 +183,6 @@ class Main(object):
                     obs_list = next_obs_list
 
                     step += 1
-
-            except EnvException as e:
-                self._logger.error(e)
-                self.env.close()
-                self._logger.info(f'Restarting {self.base_config["build_path"]}...')
-                self._init_env()
-                continue
 
             except Exception as e:
                 self._logger.error(e)
