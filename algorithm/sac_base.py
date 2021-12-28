@@ -475,7 +475,7 @@ class SAC_Base(object):
 
     def save_model(self):
         if self.ckpt_dir:
-            global_step = self.global_step.item()
+            global_step = self.get_global_step()
             ckpt_path = self.ckpt_dir.joinpath(f'{global_step}.pth')
 
             torch.save({
@@ -491,12 +491,15 @@ class SAC_Base(object):
         if self.summary_writer is not None:
             for s in constant_summaries:
                 self.summary_writer.add_scalar(s['tag'], s['simple_value'],
-                                               self.global_step.item() if iteration is None else iteration)
+                                               self.get_global_step() if iteration is None else iteration)
 
         self.summary_writer.flush()
 
     def _increase_global_step(self):
         self.global_step.add_(1)
+
+    def get_global_step(self):
+        return self.global_step.item()
 
     def get_initial_rnn_state(self, batch_size):
         assert self.use_rnn
@@ -1949,7 +1952,7 @@ class SAC_Base(object):
                     priority_is=priority_is if self.use_priority else None,
                     initial_rnn_state=rnn_state if self.use_rnn else None)
 
-        step = self.global_step.item()
+        step = self.get_global_step()
 
         if step % self.save_model_per_step == 0:
             self.save_model()

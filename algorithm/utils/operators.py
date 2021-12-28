@@ -23,3 +23,17 @@ def scale_h(x, epsilon=0.001):
 def scale_inverse_h(x, epsilon=0.001):
     t = 1 + 4 * epsilon * (torch.abs(x) + 1 + epsilon)
     return torch.sign(x) * ((torch.sqrt(t) - 1) / (2 * epsilon) - 1)
+
+
+def format_global_step(num):
+    magnitude = 0
+    while abs(num) >= 1000:
+        magnitude += 1
+        num /= 1000.0
+
+    if magnitude > 0:
+        num = f'{num:.1f}'
+    else:
+        num = str(num)
+
+    return '%s%s' % (num, ['', 'k', 'm', 'g', 't', 'p'][magnitude])

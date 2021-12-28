@@ -25,11 +25,10 @@ class LearnerHitted(Learner):
     def _log_episode_info(self, iteration, start_time, agents):
         time_elapse = (time.time() - start_time) / 60
         rewards = [a.reward for a in agents]
-        hitted = sum([a.hitted for a in agents])
-
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        steps = [a.steps for a in agents]
-        self._logger.info(f'{iteration}, {time_elapse:.2f}m, S {max(steps)}, R {rewards}, hitted {hitted}')
+        hitted = sum([a.hitted for a in agents])
+        max_step = max([a.steps for a in agents])
+        self._logger.info(f'{iteration}, {time_elapse:.2f}m, S {max_step}, R {rewards}, hitted {hitted}')
 
 
 class ActorHitted(Actor):
@@ -37,8 +36,7 @@ class ActorHitted(Actor):
 
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]
-        hitted = sum([a.hitted for a in agents])
-
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        steps = [a.steps for a in agents]
-        self._logger.info(f'{iteration}, S {max(steps)}, R {rewards}, hitted {hitted}')
+        hitted = sum([a.hitted for a in agents])
+        max_step = max([a.steps for a in agents])
+        self._logger.info(f'{iteration}, S {max_step}, R {rewards}, hitted {hitted}')

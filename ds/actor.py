@@ -409,8 +409,8 @@ class Actor(object):
     def _log_episode_info(self, iteration, agents):
         rewards = [a.reward for a in agents]
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        steps = [a.steps for a in agents]
-        self._logger.info(f'{iteration}, S {max(steps)}, R {rewards}')
+        max_step = max([a.steps for a in agents])
+        self._logger.info(f'{iteration}, S {max_step}, R {rewards}')
 
     def close(self):
         if hasattr(self, 'env'):

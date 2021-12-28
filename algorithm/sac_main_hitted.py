@@ -2,6 +2,8 @@ import socket
 
 import numpy as np
 
+from algorithm.utils import format_global_step
+
 from .agent import Agent
 from .sac_main import Main
 
@@ -63,19 +65,20 @@ class MainHitted(Main):
         ])
 
     def _log_episode_info(self, iteration, iter_time, agents):
+        global_step = format_global_step(self.sac.get_global_step())
         rewards = [a.reward for a in agents]
-        hitted = sum([a.hitted for a in agents])
-
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        steps = [a.steps for a in agents]
+        hitted = sum([a.hitted for a in agents])
+        max_step = max([a.steps for a in agents])
 
-        for agent in agents:
-            if agent.steps > 10:
-                self.evaluation_data['episodes'] += 1
-                if agent.hitted:
-                    self.evaluation_data['hitted'] += 1
-                    self.evaluation_data['hitted_steps'] += agent.steps
-                else:
-                    self.evaluation_data['failed_steps'] += agent.steps
+        if not self.train_mode:
+            for agent in agents:
+                if agent.steps > 10:
+                    self.evaluation_data['episodes'] += 1
+                    if agent.hitted:
+                        self.evaluation_data['hitted'] += 1
+                        self.evaluation_data['hitted_steps'] += agent.steps
+                    else:
+                        self.evaluation_data['failed_steps'] += agent.steps
 
-        self._logger.info(f'{iteration}, T {iter_time:.2f}s, S {max(steps)}, R {rewards}, hitted {hitted}')
+        self._logger.info(f'{iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}, hitted {hitted}')

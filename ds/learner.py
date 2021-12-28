@@ -445,10 +445,9 @@ class Learner:
     def _log_episode_info(self, iteration, start_time, agents):
         time_elapse = (time.time() - start_time) / 60
         rewards = [a.reward for a in agents]
-
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        steps = [a.steps for a in agents]
-        self._logger.info(f'{iteration}, {time_elapse:.2f}m, S {max(steps)}, R {rewards}')
+        max_step = max([a.steps for a in agents])
+        self._logger.info(f'{iteration}, {time_elapse:.2f}m, S {max_step}, R {rewards}')
 
     def _run_learner_server(self, learner_port):
         servicer = LearnerService(self)
