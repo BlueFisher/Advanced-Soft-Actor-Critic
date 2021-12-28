@@ -12,6 +12,7 @@ import algorithm.config_helper as config_helper
 
 from .agent import Agent
 from .sac_base import SAC_Base
+from .utils import format_global_step
 
 
 class Main(object):
@@ -274,7 +275,8 @@ class Main(object):
         ])
 
     def _log_episode_info(self, iteration, iter_time, agents):
+        global_step = format_global_step(self.sac.get_global_step())
         rewards = [a.reward for a in agents]
         rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        steps = [a.steps for a in agents]
-        self._logger.info(f'{iteration}, T {iter_time:.2f}s, S {max(steps)}, R {rewards}')
+        max_step = max([a.steps for a in agents])
+        self._logger.info(f'{iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}')
