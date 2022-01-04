@@ -62,9 +62,9 @@ class SharedMemoryManager:
         self._timer_get_free_shm_index = elapsed_timer(logger, self.timer_get_free_shm_index_log, self.log_repeat)
         self._timer_put_data = elapsed_timer(logger, self.timer_put_data_log, self.log_repeat)
 
-    def init_from_shapes(self, data_shapes, dtype):
-        self.buffer = traverse_lists(data_shapes,
-                                     lambda shape: np.empty(shape, dtype=dtype))
+    def init_from_shapes(self, data_shapes, data_dtypes):
+        self.buffer = traverse_lists((data_shapes, data_dtypes),
+                                     lambda shape, dtype: np.empty(shape, dtype=dtype))
 
         self.shms = traverse_lists(self.buffer,
                                    lambda b: [SharedMemory(create=True, size=b.nbytes) for _ in range(self.queue_size)])

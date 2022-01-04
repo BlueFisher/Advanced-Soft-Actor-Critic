@@ -634,7 +634,7 @@ class SAC_Base(object):
         """
         Args:
             n_rewards: [Batch, n]
-            n_dones: [Batch, n]
+            n_dones: [Batch, n], dtype=torch.bool
             stacked_next_q: [ensemble_q_sample, Batch, n, d_action_size]
             stacked_next_target_q: [ensemble_q_sample, Batch, n, d_action_size]
 
@@ -660,7 +660,7 @@ class SAC_Base(object):
         # [Batch, 1]
 
         g = torch.sum(self._gamma_ratio * n_rewards, dim=-1, keepdim=True)  # [Batch, 1]
-        y = g + self.gamma**self.n_step * next_q * (1 - done)  # [Batch, 1]
+        y = g + self.gamma**self.n_step * next_q * ~done  # [Batch, 1]
 
         return y
 
@@ -671,7 +671,7 @@ class SAC_Base(object):
         """
         Args:
             n_rewards: [Batch, n]
-            n_dones: [Batch, n]
+            n_dones: [Batch, n], dtype=torch.bool
             n_mu_probs: [Batch, n]
             n_pi_probs: [Batch, n]
             v: [Batch, n]
@@ -681,7 +681,7 @@ class SAC_Base(object):
             y: [Batch, 1]
         """
 
-        td_error = n_rewards + self.gamma * (1 - n_dones) * next_v - v  # [Batch, n]
+        td_error = n_rewards + self.gamma * ~n_dones * next_v - v  # [Batch, n]
         td_error = self._gamma_ratio * td_error
 
         if self.use_n_step_is:
@@ -725,7 +725,7 @@ class SAC_Base(object):
             n_actions: [Batch, n, action_size]
             n_rewards: [Batch, n]
             state_: [Batch, state_size]
-            n_dones: [Batch, n]
+            n_dones: [Batch, n], dtype=torch.bool
             n_mu_probs: [Batch, n]
 
         Returns:
@@ -859,7 +859,7 @@ class SAC_Base(object):
             bn_actions: [Batch, b + n, action_size]
             bn_rewards: [Batch, b + n]
             next_obs_list: list([Batch, *obs_shapes_i], ...)
-            bn_dones: [Batch, b + n]
+            bn_dones: [Batch, b + n], dtype=torch.bool
             bn_mu_probs: [Batch, b + n]
             priority_is: [Batch, 1]
             initial_rnn_state: [Batch, *rnn_state_shape]
@@ -1314,7 +1314,7 @@ class SAC_Base(object):
             bn_actions: [Batch, b + n, action_size]
             bn_rewards: [Batch, b + n]
             next_obs_list: list([Batch, *obs_shapes_i], ...)
-            bn_dones: [Batch, b + n]
+            bn_dones: [Batch, b + n], dtype=torch.bool
             bn_mu_probs: [Batch, b + n]
             priority_is: [Batch, 1]
             initial_rnn_state: [Batch, *rnn_state_shape]
@@ -1795,7 +1795,7 @@ class SAC_Base(object):
         reward = np.concatenate([reward,
                                  np.zeros([1], dtype=np.float32)])
         done = np.concatenate([done,
-                               np.zeros([1], dtype=np.float32)])
+                               np.zeros([1], dtype=bool)])
 
         storage_data = {f'obs_{i}': obs for i, obs in enumerate(obs_list)}
         storage_data = {

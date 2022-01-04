@@ -128,6 +128,8 @@ class BatchGenerator:
              l_rnn_states) = episode
             episode_size = self._episode_size_array[episode_idx]
 
+            print(l_dones.dtype)
+
             """
             bn_obses_list: list([episode_len - b + n + 1, b + n, *obs_shapes_i], ...)
             bn_actions: [episode_len - b + n + 1, b + n, action_size]
@@ -221,13 +223,22 @@ class Trainer:
             (batch_size, bn),
             (batch_size, *self.sac.rnn_state_shape) if self.sac.use_rnn else None
         ]
+        batch_dtypes = [
+            [np.float32 for _ in obs_shapes],
+            np.float32,
+            np.float32,
+            [np.float32 for _ in obs_shapes],
+            bool,
+            np.float32,
+            np.float32 if self.sac.use_rnn else None
+        ]
         self._batch_buffer = SharedMemoryManager(self.base_config['batch_queue_size'],
                                                  logger=self._logger,
                                                  counter_get_shm_index_empty_log='Batch shm index is empty',
                                                  timer_get_shm_index_log='Get a batch shm index',
                                                  timer_get_data_log='Get a batch',
                                                  log_repeat=ELAPSED_REPEAT)
-        self._batch_buffer.init_from_shapes(batch_shapes, np.float32)
+        self._batch_buffer.init_from_shapes(batch_shapes, batch_dtypes)
 
         for _ in range(self.base_config['batch_generator_process_num']):
             mp.Process(target=BatchGenerator, kwargs={

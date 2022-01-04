@@ -206,13 +206,22 @@ class Learner:
             (1, max_episode_size),
             (1, max_episode_size, *self.sac_bak.rnn_state_shape) if self.sac_bak.use_rnn else None
         ]
+        episode_dtypes = [
+            [np.float32 for _ in self.obs_shapes],
+            np.float32,
+            np.float32,
+            [np.float32 for _ in self.obs_shapes],
+            bool,
+            np.float32,
+            np.float32 if self.sac_bak.use_rnn else None
+        ]
         self._episode_buffer = SharedMemoryManager(self.base_config['episode_queue_size'],
                                                    logger=self._logger,
                                                    counter_get_shm_index_empty_log='Episode shm index is empty',
                                                    timer_get_shm_index_log='Get an episode shm index',
                                                    timer_get_data_log='Get an episode',
                                                    log_repeat=ELAPSED_REPEAT)
-        self._episode_buffer.init_from_shapes(episode_shapes, np.float32)
+        self._episode_buffer.init_from_shapes(episode_shapes, episode_dtypes)
         self._episode_size_array = mp.Array('i', range(self.base_config['episode_queue_size']))
 
         self.cmd_pipe_client, cmd_pipe_server = mp.Pipe()
