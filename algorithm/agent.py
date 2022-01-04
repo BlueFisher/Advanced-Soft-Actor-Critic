@@ -94,7 +94,7 @@ class Agent(object):
 
         done = np.stack([t['local_done'] and not t['max_reached'] for t in self._tmp_episode_trans],
                         axis=0)
-        done = np.expand_dims(done, 0).astype(np.float32)  # [1, ep_len]
+        done = np.expand_dims(done, 0).astype(bool)  # [1, ep_len]
 
         prob = np.stack([t['prob'] for t in self._tmp_episode_trans], axis=0)
         prob = np.expand_dims(prob, 0).astype(np.float32)  # [1, ep_len]

@@ -28,7 +28,7 @@ class DataStorage:
             self._buffer['id'] = np.empty(self.capacity, dtype=np.uint64)
             for k, v in data.items():
                 # Store uint8 if data is image
-                dtype = np.uint8 if len(v.shape[1:]) == 3 else np.float32
+                dtype = np.uint8 if len(v.shape[1:]) == 3 else v.dtype
                 self._buffer[k] = np.empty([self.capacity] + list(v.shape[1:]), dtype=dtype)
 
         ids = (np.arange(tmp_len) + self._id) % self.max_id
