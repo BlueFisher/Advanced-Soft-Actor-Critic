@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 def squash_correction_log_prob(dist, x):
@@ -10,10 +11,16 @@ def squash_correction_prob(dist, x):
 
 
 def gen_pre_n_actions(n_actions, keep_last_action=False):
-    return torch.cat([
-        torch.zeros_like(n_actions[:, 0:1, ...]),
-        n_actions if keep_last_action else n_actions[:, :-1, ...]
-    ], dim=1)
+    if isinstance(n_actions, torch.Tensor):
+        return torch.cat([
+            torch.zeros_like(n_actions[:, 0:1, ...]),
+            n_actions if keep_last_action else n_actions[:, :-1, ...]
+        ], dim=1)
+    else:
+        return np.concatenate([
+            np.zeros_like(n_actions[:, 0:1, ...]),
+            n_actions if keep_last_action else n_actions[:, :-1, ...]
+        ], axis=1)
 
 
 def scale_h(x, epsilon=0.001):

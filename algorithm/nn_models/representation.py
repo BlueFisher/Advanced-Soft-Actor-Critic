@@ -64,6 +64,15 @@ class ModelBaseRNNRep(nn.Module):
         raise Exception("get_state_from_encoders not implemented")
 
 
+class ModelBaseAttentionRep(ModelBaseRNNRep):
+    def forward(self, index, obs_list, pre_action,
+                query_length=1,
+                hidden_state=None,
+                is_prev_hidden_state=False,
+                padding_mask=None):
+        raise Exception('ModelAttentionRep not implemented')
+
+
 class ModelBaseRepProjection(nn.Module):
     def __init__(self, encoder_size):
         super().__init__()

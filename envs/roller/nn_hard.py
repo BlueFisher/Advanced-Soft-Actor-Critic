@@ -1,58 +1,37 @@
 import torch
 from torch import nn
-
+import math
 import algorithm.nn_models as m
 
 EXTRA_SIZE = 2
 
 
-class ModelRep(m.ModelBaseRNNRep):
+class ModelRep(m.ModelBaseAttentionRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (6, )
 
-        self.rnn = m.GRU(self.obs_shapes[0][0] - EXTRA_SIZE + self.c_action_size, 32, 1)
+        self.attn = m.EpisodeMultiheadAttention(6 - EXTRA_SIZE + 2, 2, 3)
+        self.pos = PositionalEncoding(6 - EXTRA_SIZE + 2)
 
-        self.dense = nn.Sequential(
-            nn.Linear(32, 32),
-            nn.Tanh()
-        )
-
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, index, obs_list, pre_action,
+                query_length=1,
+                hidden_state=None,
+                is_prev_hidden_state=False,
+                padding_mask=None):
         obs = obs_list[0][..., :-EXTRA_SIZE]
 
-        output, hn = self.rnn(torch.cat([obs, pre_action], dim=-1), rnn_state)
+        # i = self.pos(torch.concat([obs, pre_action], dim=-1))
+        i = torch.concat([obs, pre_action], dim=-1)
+        output, hn, attn_weights_list = self.attn(i,
+                                                  query_length,
+                                                  hidden_state,
+                                                  is_prev_hidden_state,
+                                                  padding_mask)
 
-        state = self.dense(output)
-
-        return state, hn
-
-
-class ModelTransition(m.ModelTransition):
-    def _build_model(self):
-        return super()._build_model(dense_depth=2, extra_size=EXTRA_SIZE)
-
-    def extra_obs(self, obs_list):
-        return obs_list[0][..., -EXTRA_SIZE:]
-
-
-class ModelReward(m.ModelReward):
-    def _build_model(self):
-        return super()._build_model(dense_depth=1)
-
-
-class ModelObservation(m.ModelBaseObservation):
-    def _build_model(self):
-        self.dense = m.LinearLayers(self.state_size,
-                                    64, 1,
-                                    self.obs_shapes[0][0] if self.use_extra_data else self.obs_shapes[0][0] - EXTRA_SIZE)
-
-    def forward(self, state):
-        return self.dense(state)
-
-    def get_loss(self, state, obs_list):
-        mse = nn.MSELoss()
-
-        return mse(self(state), obs_list[0] if self.use_extra_data else obs_list[0][..., :-EXTRA_SIZE])
+        # print(index[0])
+        # for w in attn_weights_list:
+        #     print(w[0])
+        return output, hn
 
 
 class ModelQ(m.ModelQ):
@@ -63,3 +42,24 @@ class ModelQ(m.ModelQ):
 class ModelPolicy(m.ModelPolicy):
     def _build_model(self):
         return super()._build_model(c_dense_n=64, c_dense_depth=2)
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        """
+        Args:
+            x: Tensor, shape [seq_len, batch_size, embedding_dim]
+        """
+        x = x + self.pe[:x.size(0)]
+        return self.dropout(x)

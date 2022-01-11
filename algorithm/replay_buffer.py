@@ -25,7 +25,7 @@ class DataStorage:
 
         if self._buffer is None:
             self._buffer = dict()
-            self._buffer['id'] = np.empty(self.capacity, dtype=np.uint64)
+            self._buffer['_id'] = np.empty(self.capacity, dtype=np.uint64)
             for k, v in data.items():
                 # Store uint8 if data is image
                 dtype = np.uint8 if len(v.shape[1:]) == 3 else v.dtype
@@ -34,7 +34,7 @@ class DataStorage:
         ids = (np.arange(tmp_len) + self._id) % self.max_id
         pointers = ids % self.capacity
 
-        self._buffer['id'][pointers] = ids
+        self._buffer['_id'][pointers] = ids
         for k, v in data.items():
             # Store uint8 [0, 255] if data is image
             if len(self._buffer[k].shape[1:]) == 3:
@@ -56,7 +56,7 @@ class DataStorage:
         """
         Get data from buffer without verifying whether ids in buffer
         """
-        data = {k: v[ids % self.capacity] for k, v in self._buffer.items() if k != 'id'}
+        data = {k: v[ids % self.capacity] for k, v in self._buffer.items() if k != '_id'}
 
         for k in data:
             # Restore float [0, 1] if data is image
@@ -69,7 +69,7 @@ class DataStorage:
         """
         Get true data ids
         """
-        return self._buffer['id'][ids % self.capacity]
+        return self._buffer['_id'][ids % self.capacity]
 
     def copy(self, src):
         src: DataStorage = src
