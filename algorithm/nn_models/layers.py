@@ -1,4 +1,4 @@
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -324,3 +324,234 @@ class LSTM(nn.LSTM):
         output, (hn, cn) = super().forward(x.transpose(0, 1).contiguous(), hc_0)
 
         return output.transpose(0, 1), torch.cat([hn, cn], dim=-1).transpose(0, 1)
+
+
+class MultiheadAttention(nn.MultiheadAttention):
+    def __init__(self, embed_dim, num_heads,
+                 dropout=0,
+                 bias=True,
+                 add_bias_kv=False,
+                 add_zero_attn=False,
+                 kdim=None,
+                 vdim=None,
+                 device=None,
+                 dtype=None) -> None:
+        super().__init__(embed_dim, num_heads,
+                         dropout=dropout,
+                         bias=bias,
+                         add_bias_kv=add_bias_kv,
+                         add_zero_attn=add_zero_attn,
+                         kdim=kdim,
+                         vdim=vdim,
+                         batch_first=True,
+                         device=device,
+                         dtype=dtype)
+
+
+class EpisodeMultiheadAttentionBlock(nn.Module):
+    def __init__(self, embed_dim: int, num_heads: int):
+        super().__init__()
+
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+
+        self.attn = MultiheadAttention(embed_dim, num_heads)
+        self.layer_norm_1 = nn.LayerNorm(embed_dim)
+        self.dense = LinearLayers(embed_dim, embed_dim, 1, embed_dim)
+        self.layer_norm_2 = nn.LayerNorm(embed_dim)
+
+    def get_attn_mask(self,
+                      key_length: int,
+                      query_length: int,
+                      key_padding_mask=None,
+                      device='cpu'):
+        """
+        Args:
+            key_length: int
+            query_length: int
+            key_padding_mask: [Batch, key_length]
+        """
+        triu = torch.triu(torch.ones(key_length, key_length, dtype=bool, device=device), diagonal=1)
+        attn_mask = triu[-query_length:]  # [query_length, key_length]
+
+        if key_padding_mask is not None:
+            batch_size = key_padding_mask.shape[0]
+
+            attn_mask = attn_mask.repeat(batch_size * self.num_heads, 1, 1)  # [Batch * num_heads, query_length, key_length]
+            key_padding_mask = key_padding_mask.repeat(self.num_heads, 1)  # [Batch * num_heads, key_length]
+            key_padding_mask = key_padding_mask.unsqueeze(1)  # [Batch * num_heads, 1, key_length]
+            attn_mask = torch.logical_or(attn_mask, key_padding_mask)  # [Batch * num_heads, query_length, key_length]
+            eye = torch.eye(key_length, dtype=bool, device=device)
+            eye = ~eye[-query_length:]  # [query_length, key_length]
+            eye = eye.repeat(batch_size * self.num_heads, 1, 1)  # [Batch * num_heads, query_length, key_length]
+            attn_mask = torch.logical_and(attn_mask, eye)
+
+        return attn_mask
+
+    def forward(self,
+                key: torch.Tensor,
+                query_length: int = 1,
+                key_padding_mask: Optional[torch.Tensor] = None):
+        """
+        Args:
+            key: [Batch, key_length, embed_dim]
+            query_length: int
+            key_padding_mask: [Batch, key_padding_mask_length]
+        """
+        key_length = key.shape[1]
+
+        if key_padding_mask is not None:
+            key_padding_mask_length = key_padding_mask.shape[1]
+            assert key_padding_mask_length <= key_length
+
+            key_padding_mask = torch.concat([
+                key_padding_mask[:, :1].repeat(1, key_length - key_padding_mask_length),
+                key_padding_mask
+            ], dim=1)
+
+        attn_mask = self.get_attn_mask(key_length,
+                                       query_length,
+                                       key_padding_mask=key_padding_mask,
+                                       device=key.device)
+
+        query = key[:, -query_length:]
+        output, attn_weights = self.attn(query, key, key,
+                                         attn_mask=attn_mask)
+        output += query
+        output = _t = self.layer_norm_1(output)
+        output = self.dense(output)
+        output += _t
+        output = self.layer_norm_2(output)
+
+        return output, attn_weights
+
+
+class EpisodeMultiheadAttention(nn.Module):
+    def __init__(self, embed_dim: int, num_heads: int,
+                 num_layers: int = 2):
+        super().__init__()
+
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.num_layers = num_layers
+
+        self._attn_list = nn.ModuleList(
+            [EpisodeMultiheadAttentionBlock(embed_dim, num_heads) for _ in range(num_layers)]
+        )
+
+    def forward(self,
+                key: torch.Tensor,
+                query_length: int = 1,
+                hidden_state: Optional[torch.Tensor] = None,
+                is_prev_hidden_state: bool = False,
+                key_padding_mask: Optional[torch.Tensor] = None):
+        """
+        Args:
+            [Batch, key_length, embed_dim],
+            query_length: int
+            hidden_state: [Batch, hidden_state_length, embed_dim]
+            is_prev_hidden_state: bool
+            key_padding_mask: [Batch, key_length]
+        Returns:
+            encoded_query: [Batch, query_length, embed_dim]
+            next_hidden_state: [Batch, query_length, embed_dim * num_layers]
+            attn_weights: List[[Batch, num_layers, query_length, key_length_i], ...]
+        """
+        key_length = key.shape[1]
+        assert query_length <= key_length
+
+        next_hidden_state_list = []
+        attn_weights_list = []
+
+        if hidden_state is None:
+            _k = key
+            for attn in self._attn_list[:-1]:
+                output, attn_weights = attn(_k, key_length,
+                                            key_padding_mask=key_padding_mask)
+                _k = output
+                _q = _k[:, -query_length:]
+                next_hidden_state_list.append(_q)
+                attn_weights_list.append(attn_weights[:, -query_length:])
+
+            output, attn_weights = self._attn_list[-1](_k, query_length,
+                                                       key_padding_mask=key_padding_mask)
+            attn_weights_list.append(attn_weights)
+            _q = output[0]
+
+        elif not is_prev_hidden_state:
+            output, attn_weights = self._attn_list[0](key, query_length,
+                                                      key_padding_mask=key_padding_mask)
+            attn_weights_list.append(attn_weights)
+
+            hidden_state_list = hidden_state.chunk(self.num_layers - 1, dim=-1)
+
+            for i, attn in enumerate(self._attn_list[1:]):
+                next_hidden_state_list.append(output)
+
+                _k = torch.concat([hidden_state_list[i], output], dim=1)
+
+                output, attn_weights = attn(_k, query_length,
+                                            key_padding_mask=key_padding_mask)
+                attn_weights_list.append(attn_weights)
+
+            _q = output
+
+        elif is_prev_hidden_state:
+            output, attn_weights = self._attn_list[0](key, key_length,
+                                                      key_padding_mask=key_padding_mask)
+            next_hidden_state_list.append(output[:, -query_length:])
+            attn_weights_list.append(attn_weights[:, -query_length:])
+
+            hidden_state_list = hidden_state.chunk(self.num_layers - 1, dim=-1)
+
+            for i, attn in enumerate(self._attn_list[1:-1]):
+                _k = output[:, -key_length:]
+                _k = torch.concat([hidden_state_list[i], _k], dim=1)
+
+                output, _ = attn(_k, key_length,
+                                 key_padding_mask=key_padding_mask)
+                next_hidden_state_list.append(output[:, -query_length:])
+                attn_weights_list.append(attn_weights[:, -query_length:])
+
+            _k = output[:, -key_length:]
+            _k = torch.concat([hidden_state_list[-1], _k], dim=1)
+
+            output, attn_weights = self._attn_list[-1](_k, query_length,
+                                                       key_padding_mask=key_padding_mask)
+            attn_weights_list.append(attn_weights)
+
+            _q = output
+
+        return _q, torch.concat(next_hidden_state_list, dim=-1), attn_weights_list
+
+
+if __name__ == '__main__':
+    import time
+
+    batch_size = 16
+    embed_dim = 4
+    query_length = 2
+    key_length = 4
+
+    num_layers = 4
+
+    m = EpisodeMultiheadAttention(embed_dim, 2, num_layers).to('cuda')
+
+    key_padding_mask = torch.randint(0, 2, (batch_size, key_length), dtype=torch.bool).to('cuda')
+
+    key = torch.rand((batch_size, key_length, embed_dim)).to('cuda')
+    hidden_state = torch.rand((batch_size, 5, embed_dim * (num_layers - 1))).to('cuda')
+
+    t = time.time()
+
+    o, hn, attn_weights = m(key, query_length, None, False, key_padding_mask=key_padding_mask)
+    print(o.shape, hn.shape, attn_weights.shape)
+    o, hn, attn_weights = m(key, query_length, hidden_state, False, key_padding_mask=key_padding_mask)
+    print(o.shape, hn.shape, attn_weights.shape)
+    o, hn, attn_weights = m(key, query_length, hidden_state, True, key_padding_mask=key_padding_mask)
+    print(o.shape, hn.shape, attn_weights.shape)
+
+    print(time.time() - t)
+
+    o.mean().backward()
+    print([p.grad is not None for p in m.parameters()])

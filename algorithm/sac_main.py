@@ -12,7 +12,7 @@ import algorithm.config_helper as config_helper
 
 from .agent import Agent
 from .sac_base import SAC_Base
-from .utils import format_global_step
+from .utils import format_global_step, gen_pre_n_actions
 
 
 class Main(object):
@@ -154,12 +154,12 @@ class Main(object):
 
         obs_list = self.env.reset(reset_config=self.reset_config)
 
-        agents = [self._agent_class(i, use_rnn=self.sac.use_rnn)
-                  for i in range(self.base_config['n_agents'])]
-
         if use_rnn:
-            initial_rnn_state = self.sac.get_initial_rnn_state(len(agents))
-            rnn_state = initial_rnn_state
+            initial_attn_state = self.sac.get_initial_attn_hidden_state(self.base_config['n_agents'])  # [n_agents, attn_state_size]
+            attn_state = initial_attn_state
+
+        agents = [self._agent_class(i, self.obs_shapes, self.action_size, initial_attn_state.shape[-1] if use_rnn else None)
+                  for i in range(self.base_config['n_agents'])]
 
         iteration = 0
         trained_steps = 0
@@ -172,14 +172,10 @@ class Main(object):
                 obs_list = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
-
-                if use_rnn:
-                    rnn_state = initial_rnn_state
             else:
                 for agent in agents:
                     agent.reset()
 
-            action = np.zeros([len(agents), self.action_size], dtype=np.float32)
             step = 0
             iter_time = time.time()
 
@@ -197,12 +193,41 @@ class Main(object):
                                     max_reached=False,
                                     next_obs_list=[np.zeros(t) for t in self.obs_shapes],
                                     prob=0.,
-                                    rnn_state=initial_rnn_state[0]
+                                    rnn_state=initial_attn_state[0],
+                                    is_padding=True
                                 )
 
-                        action, prob, next_rnn_state = self.sac.choose_rnn_action([o.astype(np.float32) for o in obs_list],
-                                                                                  action,
-                                                                                  rnn_state,
+                        ep_length = max(1, max([a.episode_length for a in agents]))
+
+                        all_episode_trans = [a.get_episode_trans(ep_length) for a in agents]
+                        (all_ep_indexes,
+                         all_ep_padding_masks,
+                         all_ep_obses_list,
+                         all_ep_actions,
+                         all_all_ep_rewards,
+                         all_next_obs_list,
+                         all_ep_dones,
+                         all_ep_probs,
+                         all_ep_rnn_states) = zip(*all_episode_trans)
+
+                        ep_indexes = np.concatenate(all_ep_indexes)
+                        ep_padding_masks = np.concatenate(all_ep_padding_masks)
+                        ep_obses_list = [np.concatenate(o) for o in zip(*all_ep_obses_list)]
+                        ep_actions = np.concatenate(all_ep_actions)
+                        ep_rnn_states = np.concatenate(all_ep_rnn_states)
+
+                        ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
+                        ep_padding_masks = np.concatenate([ep_padding_masks,
+                                                           np.zeros_like(ep_padding_masks[:, -1:], dtype=bool)], axis=1)
+                        ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
+                                         for o, t_o in zip(ep_obses_list, obs_list)]
+                        ep_actions = gen_pre_n_actions(ep_actions, True)
+
+                        action, prob, next_rnn_state = self.sac.choose_rnn_action(ep_indexes,
+                                                                                  ep_padding_masks,
+                                                                                  ep_obses_list,
+                                                                                  ep_actions,
+                                                                                  ep_rnn_states,
                                                                                   disable_sample=self.disable_sample)
                     else:
                         action, prob = self.sac.choose_action([o.astype(np.float32) for o in obs_list],
@@ -224,7 +249,8 @@ class Main(object):
                             max_reached=max_reached[i],
                             next_obs_list=[o[i] for o in next_obs_list],
                             prob=prob[i],
-                            rnn_state=rnn_state[i] if use_rnn else None
+                            rnn_state=attn_state[i] if use_rnn else None,
+                            is_padding=False
                         )
                         for i in range(len(agents))
                     ]
@@ -232,6 +258,7 @@ class Main(object):
                     if self.train_mode:
                         episode_trans_list = [t for t in episode_trans_list if t is not None]
                         if len(episode_trans_list) != 0:
+                            # ep_indexes, ep_padding_masks,
                             # ep_obses_list, ep_actions, ep_rewards, next_obs_list, ep_dones, ep_probs,
                             # ep_rnn_states
                             for episode_trans in episode_trans_list:
@@ -239,10 +266,9 @@ class Main(object):
                         trained_steps = self.sac.train()
 
                     obs_list = next_obs_list
-                    action[local_done] = np.zeros(self.action_size)
                     if use_rnn:
-                        rnn_state = next_rnn_state
-                        rnn_state[local_done] = initial_rnn_state[local_done]
+                        attn_state = next_rnn_state
+                        attn_state[local_done] = initial_attn_state[local_done]
 
                     step += 1
 
