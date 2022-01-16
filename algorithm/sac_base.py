@@ -170,6 +170,7 @@ class SAC_Base(object):
         if model_abs_dir and self.train_mode:
             summary_path = Path(model_abs_dir).joinpath(summary_path)
             self.summary_writer = SummaryWriter(str(summary_path))
+            self.summary_available = True
 
         if self.train_mode:
             replay_config = {} if replay_config is None else replay_config
@@ -242,9 +243,9 @@ class SAC_Base(object):
             test_index = torch.randint(1, (self.batch_size, 1), dtype=torch.int32)
             test_obs_list = [torch.rand(self.batch_size, 1, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
             test_pre_action = torch.rand(self.batch_size, 1, self.d_action_size + self.c_action_size, device=self.device)
-            test_state, test_next_rnn_state = self.model_rep(test_index,
-                                                             test_obs_list,
-                                                             test_pre_action)
+            test_state, test_next_rnn_state, _ = self.model_rep(test_index,
+                                                                test_obs_list,
+                                                                test_pre_action)
             state_size = test_state.shape[-1]
             self.attn_state_size = test_next_rnn_state.shape[-1]
             # state_size, self.rnn_state_shape = test_state.shape[-1], test_next_rnn_state.shape[1:]
@@ -576,13 +577,13 @@ class SAC_Base(object):
         """
 
         if self.use_rnn:
-            l_states, _ = self.model_rep(l_indexes,
-                                         l_obses_list,
-                                         gen_pre_n_actions(l_actions),
-                                         query_length=l_obses_list[0].shape[1],
-                                         hidden_state=f_rnn_states,
-                                         is_prev_hidden_state=True,
-                                         padding_mask=l_padding_masks)  # [Batch, l, state_size]
+            l_states, *_ = self.model_rep(l_indexes,
+                                          l_obses_list,
+                                          gen_pre_n_actions(l_actions),
+                                          query_length=l_obses_list[0].shape[1],
+                                          hidden_state=f_rnn_states,
+                                          is_prev_hidden_state=True,
+                                          padding_mask=l_padding_masks)  # [Batch, l, state_size]
         else:
             l_states = self.model_rep(l_obses_list)  # [Batch, l, state_size]
 
@@ -647,13 +648,13 @@ class SAC_Base(object):
             n_rnn_states: [Batch, n, *rnn_state_shape]
         """
 
-        _, n_rnn_states = self.model_rep(n_indexes,
-                                         n_obses_list,
-                                         gen_pre_n_actions(n_actions),
-                                         query_length=n_obses_list[0].shape[1],
-                                         hidden_state=f_rnn_states,
-                                         is_prev_hidden_state=True,
-                                         padding_mask=n_padding_masks)
+        _, n_rnn_states, _ = self.model_rep(n_indexes,
+                                            n_obses_list,
+                                            gen_pre_n_actions(n_actions),
+                                            query_length=n_obses_list[0].shape[1],
+                                            hidden_state=f_rnn_states,
+                                            is_prev_hidden_state=True,
+                                            padding_mask=n_padding_masks)
 
         return n_rnn_states
 
@@ -906,38 +907,38 @@ class SAC_Base(object):
         if self.use_rnn:
             m_pre_actions = gen_pre_n_actions(bn_actions, keep_last_action=True)
             if self.siamese is not None and self.siamese_use_q:
-                b_states, rnn_state_at_n = self.model_rep([o[:, :self.burn_in_step, ...] for o in m_obses_list],
-                                                          m_pre_actions[:, :self.burn_in_step, ...],
-                                                          initial_rnn_state)
-                b_target_states, target_rnn_state_at_n = self.model_target_rep([o[:, :self.burn_in_step, ...] for o in m_obses_list],
-                                                                               m_pre_actions[:, :self.burn_in_step, ...],
-                                                                               initial_rnn_state)
+                b_states, rnn_state_at_n, _ = self.model_rep([o[:, :self.burn_in_step, ...] for o in m_obses_list],
+                                                             m_pre_actions[:, :self.burn_in_step, ...],
+                                                             initial_rnn_state)
+                b_target_states, target_rnn_state_at_n, _ = self.model_target_rep([o[:, :self.burn_in_step, ...] for o in m_obses_list],
+                                                                                  m_pre_actions[:, :self.burn_in_step, ...],
+                                                                                  initial_rnn_state)
 
-                n1_states, _ = self.model_rep([o[:, self.burn_in_step:, ...] for o in m_obses_list],
-                                              m_pre_actions[:, self.burn_in_step:, ...],
-                                              rnn_state_at_n)
-                n1_target_states, _ = self.model_target_rep([o[:, self.burn_in_step:, ...] for o in m_obses_list],
-                                                            m_pre_actions[:, self.burn_in_step:, ...],
-                                                            target_rnn_state_at_n)
+                n1_states, *_ = self.model_rep([o[:, self.burn_in_step:, ...] for o in m_obses_list],
+                                               m_pre_actions[:, self.burn_in_step:, ...],
+                                               rnn_state_at_n)
+                n1_target_states, *_ = self.model_target_rep([o[:, self.burn_in_step:, ...] for o in m_obses_list],
+                                                             m_pre_actions[:, self.burn_in_step:, ...],
+                                                             target_rnn_state_at_n)
 
                 m_states = torch.cat([b_states, n1_states], dim=1)
                 m_target_states = torch.cat([b_target_states, n1_target_states], dim=1)
             else:
-                m_states, _ = self.model_rep(torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1),
-                                             m_obses_list,
-                                             m_pre_actions,
-                                             query_length=bn_indexes.shape[1] + 1,
-                                             hidden_state=bn_rnn_states[:, :1, ...],
-                                             is_prev_hidden_state=True,
-                                             padding_mask=torch.concat([bn_padding_masks,
+                m_states, *_ = self.model_rep(torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1),
+                                              m_obses_list,
+                                              m_pre_actions,
+                                              query_length=bn_indexes.shape[1] + 1,
+                                              hidden_state=bn_rnn_states[:, :1, ...],
+                                              is_prev_hidden_state=True,
+                                              padding_mask=torch.concat([bn_padding_masks,
                                                                         torch.zeros_like(bn_padding_masks[:, -1:], dtype=torch.bool)], dim=1))
-                m_target_states, _ = self.model_target_rep(torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1),
-                                                           m_obses_list,
-                                                           m_pre_actions,
-                                                           query_length=bn_indexes.shape[1] + 1,
-                                                           hidden_state=bn_rnn_states[:, :1, ...],
-                                                           is_prev_hidden_state=True,
-                                                           padding_mask=torch.concat([bn_padding_masks,
+                m_target_states, *_ = self.model_target_rep(torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1),
+                                                            m_obses_list,
+                                                            m_pre_actions,
+                                                            query_length=bn_indexes.shape[1] + 1,
+                                                            hidden_state=bn_rnn_states[:, :1, ...],
+                                                            is_prev_hidden_state=True,
+                                                            padding_mask=torch.concat([bn_padding_masks,
                                                                                       torch.zeros_like(bn_padding_masks[:, -1:], dtype=torch.bool)], dim=1))
         else:
             m_states = self.model_rep(m_obses_list)
@@ -1387,13 +1388,13 @@ class SAC_Base(object):
                             for bn_obses, next_obs in zip(bn_obses_list, next_obs_list)]
 
             if self.use_rnn:
-                m_states, _ = self.model_rep(torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1),
-                                             m_obses_list,
-                                             gen_pre_n_actions(bn_actions, keep_last_action=True),
-                                             query_length=bn_indexes.shape[1] + 1,
-                                             hidden_state=bn_rnn_states[:, :1, ...],
-                                             is_prev_hidden_state=True,
-                                             padding_mask=torch.concat([bn_padding_masks,
+                m_states, *_ = self.model_rep(torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1),
+                                              m_obses_list,
+                                              gen_pre_n_actions(bn_actions, keep_last_action=True),
+                                              query_length=bn_indexes.shape[1] + 1,
+                                              hidden_state=bn_rnn_states[:, :1, ...],
+                                              is_prev_hidden_state=True,
+                                              padding_mask=torch.concat([bn_padding_masks,
                                                                         torch.zeros_like(bn_padding_masks[:, -1:], dtype=torch.bool)], dim=1))
             else:
                 m_states = self.model_rep(m_obses_list)
@@ -1415,6 +1416,7 @@ class SAC_Base(object):
             loss_rnd = self._train_rnd(bn_states, bn_actions)
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
+            self.summary_available = True
             with torch.no_grad():
                 self.summary_writer.add_scalar('loss/q', loss_q, self.global_step)
                 if self.d_action_size:
@@ -1598,7 +1600,7 @@ class SAC_Base(object):
         ep_pre_actions = torch.from_numpy(ep_pre_actions).to(self.device)
         ep_rnn_states = torch.from_numpy(ep_rnn_states).to(self.device)
 
-        state, next_rnn_state = self.model_rep(
+        state, next_rnn_state, _ = self.model_rep(
             ep_indexes,
             ep_obses_list, ep_pre_actions,
             query_length=1,
@@ -1647,13 +1649,13 @@ class SAC_Base(object):
         m_obses_list = [torch.cat([bn_obses, next_obs.unsqueeze(1)], dim=1)
                         for bn_obses, next_obs in zip(bn_obses_list, next_obs_list)]
         if self.use_rnn:
-            tmp_states, _ = self.model_rep(bn_indexes[:, :self.burn_in_step + 1],
-                                           [m_obses[:, :self.burn_in_step + 1, ...] for m_obses in m_obses_list],
-                                           gen_pre_n_actions(bn_actions[:, :self.burn_in_step + 1, ...]),
-                                           query_length=self.burn_in_step + 1,
-                                           hidden_state=f_rnn_states,
-                                           is_prev_hidden_state=True,
-                                           padding_mask=bn_padding_masks[:, :self.burn_in_step + 1])
+            tmp_states, *_ = self.model_rep(bn_indexes[:, :self.burn_in_step + 1],
+                                            [m_obses[:, :self.burn_in_step + 1, ...] for m_obses in m_obses_list],
+                                            gen_pre_n_actions(bn_actions[:, :self.burn_in_step + 1, ...]),
+                                            query_length=self.burn_in_step + 1,
+                                            hidden_state=f_rnn_states,
+                                            is_prev_hidden_state=True,
+                                            padding_mask=bn_padding_masks[:, :self.burn_in_step + 1])
             state = tmp_states[:, self.burn_in_step, ...]
             m_target_states, *_ = self.model_target_rep(torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1),
                                                         m_obses_list,
@@ -1929,6 +1931,23 @@ class SAC_Base(object):
         else:
             self.replay_buffer.add(storage_data,
                                    ignore_size=self.burn_in_step + self.n_step)
+
+        if self.use_rnn and self.summary_writer is not None and self.summary_available:
+            self.summary_available = False
+            with torch.no_grad():
+                l_indexes = l_indexes[:, self.burn_in_step:]
+                l_obses_list = [o[:, self.burn_in_step:] for o in l_obses_list]
+                l_pre_l_actions = gen_pre_n_actions(l_actions[:, self.burn_in_step:])
+                l_padding_masks = l_padding_masks[:, self.burn_in_step:]
+                *_, attn_weights_list = self.model_rep(torch.from_numpy(l_indexes).to(self.device),
+                                                       [torch.from_numpy(o).to(self.device) for o in l_obses_list],
+                                                       torch.from_numpy(l_pre_l_actions).to(self.device),
+                                                       query_length=l_indexes.shape[1],
+                                                       padding_mask=torch.from_numpy(l_padding_masks).to(self.device))
+
+                for i, attn_weight in enumerate(attn_weights_list):
+                    image = plot_attn_weight(attn_weight[0].cpu().numpy())
+                    self.summary_writer.add_images(f'attn_weight/{i}', image, self.global_step)
 
     def _sample(self):
         """
