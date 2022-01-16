@@ -396,7 +396,7 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
         Args:
             key: [Batch, key_length, embed_dim]
             query_length: int
-            key_padding_mask: [Batch, key_padding_mask_length]
+            key_padding_mask: [Batch, key_padding_mask_length], key_padding_mask_length could be shorter than key_length
         """
         key_length = key.shape[1]
 
@@ -455,7 +455,7 @@ class EpisodeMultiheadAttention(nn.Module):
         Returns:
             encoded_query: [Batch, query_length, embed_dim]
             next_hidden_state: [Batch, query_length, embed_dim * num_layers]
-            attn_weights: List[[Batch, num_layers, query_length, key_length_i], ...]
+            attn_weights_list: List[[Batch, query_length, key_length_i], ...]
         """
         key_length = key.shape[1]
         assert query_length <= key_length
@@ -466,22 +466,22 @@ class EpisodeMultiheadAttention(nn.Module):
         if hidden_state is None:
             _k = key
             for attn in self._attn_list[:-1]:
-                output, attn_weights = attn(_k, key_length,
-                                            key_padding_mask=key_padding_mask)
+                output, attn_weight = attn(_k, key_length,
+                                           key_padding_mask=key_padding_mask)
                 _k = output
                 _q = _k[:, -query_length:]
                 next_hidden_state_list.append(_q)
-                attn_weights_list.append(attn_weights[:, -query_length:])
+                attn_weights_list.append(attn_weight[:, -query_length:])
 
-            output, attn_weights = self._attn_list[-1](_k, query_length,
-                                                       key_padding_mask=key_padding_mask)
-            attn_weights_list.append(attn_weights)
-            _q = output[0]
+            output, attn_weight = self._attn_list[-1](_k, query_length,
+                                                      key_padding_mask=key_padding_mask)
+            attn_weights_list.append(attn_weight)
+            _q = output
 
         elif not is_prev_hidden_state:
-            output, attn_weights = self._attn_list[0](key, query_length,
-                                                      key_padding_mask=key_padding_mask)
-            attn_weights_list.append(attn_weights)
+            output, attn_weight = self._attn_list[0](key, query_length,
+                                                     key_padding_mask=key_padding_mask)
+            attn_weights_list.append(attn_weight)
 
             hidden_state_list = hidden_state.chunk(self.num_layers - 1, dim=-1)
 
@@ -490,17 +490,17 @@ class EpisodeMultiheadAttention(nn.Module):
 
                 _k = torch.concat([hidden_state_list[i], output], dim=1)
 
-                output, attn_weights = attn(_k, query_length,
-                                            key_padding_mask=key_padding_mask)
-                attn_weights_list.append(attn_weights)
+                output, attn_weight = attn(_k, query_length,
+                                           key_padding_mask=key_padding_mask)
+                attn_weights_list.append(attn_weight)
 
             _q = output
 
         elif is_prev_hidden_state:
-            output, attn_weights = self._attn_list[0](key, key_length,
-                                                      key_padding_mask=key_padding_mask)
+            output, attn_weight = self._attn_list[0](key, key_length,
+                                                     key_padding_mask=key_padding_mask)
             next_hidden_state_list.append(output[:, -query_length:])
-            attn_weights_list.append(attn_weights[:, -query_length:])
+            attn_weights_list.append(attn_weight[:, -query_length:])
 
             hidden_state_list = hidden_state.chunk(self.num_layers - 1, dim=-1)
 
@@ -508,17 +508,17 @@ class EpisodeMultiheadAttention(nn.Module):
                 _k = output[:, -key_length:]
                 _k = torch.concat([hidden_state_list[i], _k], dim=1)
 
-                output, _ = attn(_k, key_length,
-                                 key_padding_mask=key_padding_mask)
+                output, attn_weight = attn(_k, key_length,
+                                           key_padding_mask=key_padding_mask)
                 next_hidden_state_list.append(output[:, -query_length:])
-                attn_weights_list.append(attn_weights[:, -query_length:])
+                attn_weights_list.append(attn_weight[:, -query_length:])
 
             _k = output[:, -key_length:]
             _k = torch.concat([hidden_state_list[-1], _k], dim=1)
 
-            output, attn_weights = self._attn_list[-1](_k, query_length,
-                                                       key_padding_mask=key_padding_mask)
-            attn_weights_list.append(attn_weights)
+            output, attn_weight = self._attn_list[-1](_k, query_length,
+                                                      key_padding_mask=key_padding_mask)
+            attn_weights_list.append(attn_weight)
 
             _q = output
 

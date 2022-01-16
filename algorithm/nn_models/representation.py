@@ -40,7 +40,7 @@ class ModelSimpleRep(ModelBaseSimpleRep):
 class ModelBaseRNNRep(nn.Module):
     def __init__(self, obs_shapes: List[Tuple], d_action_size: int, c_action_size: int,
                  is_target: bool, train_mode: bool,
-                 model_abs_dir: str, **kwargs):
+                 model_abs_dir: Optional[Path] = None, **kwargs):
         super().__init__()
         self.obs_shapes = obs_shapes
         self.d_action_size = d_action_size
