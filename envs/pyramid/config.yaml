@@ -5,54 +5,54 @@ default:
       linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
     n_agents: 10
-    max_step: 100000
+    max_step: -1
     reset_on_iteration: false
 
   reset_config:
     force_reset: true
 
   sac_config:
+    save_model_per_step: 10000
+
     burn_in_step: 30
     n_step: 3
     v_lambda: 0.99
     use_rnn: true
 
-ray:
-  base_config: &ray_base
+    use_rnd: true
+    rnd_n_sample: 50
+
+ray_nornn:
+  base_config:
     scene: RayPyramid
-    nn: nn_ray
-    name: "ray20_nopre_{time}"
-  reset_config: &ray_reset
+    nn: nn_nornn
+    name: "ray20_nornn_{time}"
+  reset_config:
+    ray_length: 20
+  sac_config:
+    burn_in_step: 0
+    use_rnn: false
+
+ray_nope:
+  base_config:
+    scene: RayPyramid
+    nn: nn_nope
+    name: "ray20_nope_{time}"
+  reset_config:
     ray_length: 20
 
-ray_pre:
+ray_peadd:
   base_config:
-    <<: *ray_base
-    name: "ray20_pre_{time}"
-  reset_config: *ray_reset
-  sac_config:
-    use_prediction: true
+    scene: RayPyramid
+    nn: nn_peadd
+    name: "ray20_peadd_{time}"
+  reset_config:
+    ray_length: 20
 
-ray_noextra:
+ray_pecat:
   base_config:
-    <<: *ray_base
-    name: "ray20_pre_noextra_{time}"
-  reset_config: *ray_reset
-  sac_config:
-    use_prediction: true
-    use_extra_data: false
-
-visual:
-  base_config: &visual_base
-    scene: VisualPyramid
-    no_graphics: false
-    name: "nopre_{time}"
-    nn: nn_visual
-    max_step: -1
-
-visual_pre:
-  base_config:
-    <<: *visual_base
-    name: "pre_{time}"
-  sac_config:
-    use_prediction: true
+    scene: RayPyramid
+    nn: nn_pecat
+    name: "ray20_pecat_{time}"
+  reset_config:
+    ray_length: 20

@@ -72,6 +72,13 @@ class ModelBaseAttentionRep(ModelBaseRNNRep):
                 padding_mask=None):
         raise Exception('ModelAttentionRep not implemented')
 
+    def get_state_from_encoders(self, index, obs_list, encoders, pre_action,
+                                query_length=1,
+                                hidden_state=None,
+                                is_prev_hidden_state=False,
+                                padding_mask=None) -> torch.Tensor:
+        raise Exception("get_state_from_encoders not implemented")
+
 
 class ModelBaseRepProjection(nn.Module):
     def __init__(self, encoder_size):

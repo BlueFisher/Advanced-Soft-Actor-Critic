@@ -48,7 +48,7 @@ sac_config:
 
   burn_in_step: 0 # Burn-in steps in R2D2
   n_step: 1 # Update Q function by N steps
-  use_rnn: false # If using RNN
+  seq_encoder: null # RNN | ATTN
 
   batch_size: 256
 
