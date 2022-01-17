@@ -525,6 +525,9 @@ class SAC_Base(object):
     def get_global_step(self):
         return self.global_step.item()
 
+    def get_initial_action(self, batch_size):
+        return np.zeros([batch_size, self.d_action_size + self.c_action_size], dtype=np.float32)
+
     def get_initial_seq_hidden_state(self, batch_size):
         assert self.seq_encoder in ('RNN', 'ATTN')
 
@@ -726,7 +729,7 @@ class SAC_Base(object):
 
             n_step_is = n_pi_probs / n_mu_probs.clamp(min=1e-8)
 
-            # ρ_t, t \in [s, s+n-1]
+            # \rho_t, t \in [s, s+n-1]
             rho = torch.minimum(n_step_is, torch.tensor(self.v_rho, device=self.device))  # [Batch, n]
 
             # \prod{c_i}, i \in [s, t-1]
@@ -734,7 +737,7 @@ class SAC_Base(object):
             c = torch.cat([torch.ones((n_step_is.shape[0], 1), device=self.device), c[..., :-1]], dim=-1)
             c = torch.cumprod(c, dim=1)
 
-            # \prod{c_i} * ρ_t * td_error
+            # \prod{c_i} * \rho_t * td_error
             td_error = c * rho * td_error
 
         # \sum{td_error}

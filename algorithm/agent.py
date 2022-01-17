@@ -15,12 +15,12 @@ class Agent(object):
     def __init__(self, agent_id: int,
                  obs_shapes: List[Tuple],
                  action_size: int,
-                 rnn_state_size=None,
+                 seq_hidden_state_shape=None,
                  max_return_episode_trans=-1):
         self.agent_id = agent_id
         self.obs_shapes = obs_shapes
         self.action_size = action_size
-        self.rnn_state_size = rnn_state_size
+        self.seq_hidden_state_shape = seq_hidden_state_shape
         self.max_return_episode_trans = max_return_episode_trans
 
         self._tmp_episode_trans = self._generate_empty_episode_trans()
@@ -36,7 +36,7 @@ class Agent(object):
             'max_reached': np.zeros((episode_length, ), dtype=bool),
             'next_obs_list': [np.zeros(s, dtype=np.float32) for s in self.obs_shapes],
             'prob': np.zeros((episode_length, ), dtype=np.float32),
-            'rnn_state': np.zeros((episode_length, self.rnn_state_size), dtype=np.float32) if self.rnn_state_size is not None else None,
+            'seq_hidden_state': np.zeros((episode_length, *self.seq_hidden_state_shape), dtype=np.float32) if self.seq_hidden_state_shape is not None else None,
         }
 
     def add_transition(self,
@@ -48,7 +48,7 @@ class Agent(object):
                        next_obs_list: List[np.ndarray],
                        prob: float,
                        is_padding: bool = False,
-                       rnn_state: Optional[np.ndarray] = None):
+                       seq_hidden_state: Optional[np.ndarray] = None):
         """
         Args:
             obs_list: List([*obs_shapes_i], ...)
@@ -58,7 +58,7 @@ class Agent(object):
             max_reached: bool
             next_obs_list: List([*obs_shapes_i], ...)
             prob: float
-            rnn_state: [rnn_state_size, ]
+            seq_hidden_state: [*seq_hidden_state_shape]
 
         Returns:
             ep_indexes: [1, episode_len], int
@@ -69,7 +69,7 @@ class Agent(object):
             next_obs_list: List([1, *obs_shapes_i], ...), np.float32
             ep_dones: [1, episode_len], bool
             ep_probs: [1, episode_len], np.float32
-            ep_rnn_states: [1, episode_len, rnn_state_size], np.float32
+            ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape], np.float32
         """
         expaned_transition = {
             'index': np.expand_dims(self._last_steps if not is_padding else -1, 0),
@@ -82,7 +82,7 @@ class Agent(object):
             'max_reached': np.expand_dims(max_reached, 0).astype(bool),
             'next_obs_list': [o.astype(np.float32) for o in next_obs_list],
             'prob': np.expand_dims(prob, 0).astype(np.float32),
-            'rnn_state': np.expand_dims(rnn_state, 0).astype(np.float32) if rnn_state is not None else None,
+            'seq_hidden_state': np.expand_dims(seq_hidden_state, 0).astype(np.float32) if seq_hidden_state is not None else None,
         }
 
         for k in self._tmp_episode_trans:
@@ -140,6 +140,18 @@ class Agent(object):
         pass
 
     def get_episode_trans(self, force_length: int = None):
+        """
+        Returns:
+            ep_indexes: [1, episode_len], int
+            ep_padding_masks: [1, episode_len], bool
+            ep_obses_list: List([1, episode_len, *obs_shapes_i], ...), np.float32
+            ep_actions: [1, episode_len, action_size], np.float32
+            ep_rewards: [1, episode_len], np.float32
+            next_obs_list: List([1, *obs_shapes_i], ...), np.float32
+            ep_dones: [1, episode_len], bool
+            ep_probs: [1, episode_len], np.float32
+            ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape], np.float32
+        """
         tmp = self._tmp_episode_trans.copy()
 
         if force_length is not None:
@@ -176,8 +188,8 @@ class Agent(object):
                                                  ~tmp['max_reached']),
                                   0)  # [1, episode_len]
         ep_probs = np.expand_dims(tmp['prob'], 0)  # [1, episode_len]
-        ep_rnn_states = np.expand_dims(tmp['rnn_state'], 0) if tmp['rnn_state'] is not None else None
-        # [1, episode_len, rnn_state_size]
+        ep_seq_hidden_states = np.expand_dims(tmp['seq_hidden_state'], 0) if tmp['seq_hidden_state'] is not None else None
+        # [1, episode_len, *seq_hidden_state_shape]
 
         return (ep_indexes,
                 ep_padding_masks,
@@ -187,7 +199,7 @@ class Agent(object):
                 next_obs_list,
                 ep_dones,
                 ep_probs,
-                ep_rnn_states)
+                ep_seq_hidden_states)
 
     def is_empty(self):
         return self.episode_length == 0

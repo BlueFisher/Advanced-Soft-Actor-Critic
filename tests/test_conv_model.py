@@ -3,7 +3,6 @@ import unittest
 from algorithm.sac_base import SAC_Base
 from tests.get_synthesis_data import *
 
-
 OBS_SHAPES = [(10,), (84, 84, 3)]
 
 
