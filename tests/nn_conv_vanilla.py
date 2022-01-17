@@ -6,9 +6,6 @@ import algorithm.nn_models as m
 
 class ModelRep(m.ModelBaseSimpleRep):
     def _build_model(self):
-        assert self.obs_shapes[0] == (10, )
-        assert self.obs_shapes[1] == (30, 30, 3)
-
         self.conv = m.ConvLayers(30, 30, 3, 'simple', out_dense_depth=2, output_size=8)
 
         self.dense = nn.Sequential(
