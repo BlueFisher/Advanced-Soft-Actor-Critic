@@ -1,6 +1,7 @@
+import math
+
 import torch
 from torch import nn
-import math
 
 import algorithm.nn_models as m
 

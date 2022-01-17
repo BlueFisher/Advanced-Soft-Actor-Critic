@@ -1,7 +1,8 @@
+import math
 from turtle import forward
+
 import torch
 from torch import nn
-import math
 
 import algorithm.nn_models as m
 

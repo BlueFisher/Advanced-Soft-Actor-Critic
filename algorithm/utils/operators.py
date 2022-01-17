@@ -1,5 +1,5 @@
-import torch
 import numpy as np
+import torch
 
 
 def squash_correction_log_prob(dist, x):
