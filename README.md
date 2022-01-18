@@ -69,7 +69,9 @@ base_config:
 
 reset_config: null # Reset parameters sent to Unity
 
-model_config: null
+model_config:
+  rep: null
+  policy: null
 
 replay_config:
   capacity: 524288
@@ -89,7 +91,7 @@ sac_config:
 
   burn_in_step: 0 # Burn-in steps in R2D2
   n_step: 1 # Update Q function by N steps
-  use_rnn: false # If using RNN
+  seq_encoder: null # RNN | ATTN
 
   batch_size: 256
 
@@ -121,7 +123,7 @@ sac_config:
   use_rnd: false # If using RND
   rnd_n_sample: 10 # RND sample times
   use_normalization: false # If using observation normalization
-
+  use_add_with_td: false
 ```
 
 All default distributed training configurations are listed below. It can also be found in `ds/default_config.yaml`
@@ -147,15 +149,10 @@ base_config:
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
   nn: nn # Neural network models file
-  update_policy_mode: true # Update policy variables at the beginning of each episode if True or get action from learner each step
   update_sac_bak_per_step: 200 # Every N step update sac_bak
-  noise_increasing_rate: 0 # Noise = N * number of actors
-  noise_max: 0.1 # Max noise for actors
   n_agents: 1 # N agents running in parallel
   max_step_each_iter: -1 # Max step in each iteration
   reset_on_iteration: true # If to force reset agent if an episode terminated
-
-  max_actors_each_learner: -1 # The max number of actors of each learner, -1 indicates no limit
 
   evolver_enabled: true
   evolver_cem_length: 50 # Start CEM if all learners have eavluated evolver_cem_length times
@@ -166,6 +163,15 @@ base_config:
   evolver_cem_time: 3
   evolver_remove_worst: 4
 
+  max_actors_each_learner: -1 # The max number of actors of each learner, -1 indicates no limit
+  noise_increasing_rate: 0 # Noise = N * number of actors
+  noise_max: 0.1 # Max noise for actors
+  max_episode_length: 500
+  episode_queue_size: 5
+  episode_sender_process_num: 5
+  batch_queue_size: 5
+  batch_generator_process_num: 5
+
 net_config:
   evolver_host: null
   evolver_port: 61000
@@ -174,7 +180,9 @@ net_config:
 
 reset_config: null # Reset parameters sent to Unity
 
-model_config: null
+model_config:
+  rep: null
+  policy: null
 
 sac_config:
   seed: null # Random seed
@@ -186,7 +194,7 @@ sac_config:
 
   burn_in_step: 0 # Burn-in steps in R2D2
   n_step: 1 # Update Q function by N steps
-  use_rnn: false # If using RNN
+  seq_encoder: null # RNN | ATTN
 
   batch_size: 256
 
