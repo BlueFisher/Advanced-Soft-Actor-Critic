@@ -35,7 +35,7 @@ class SAC_DS_Base(SAC_Base):
 
                  burn_in_step=0,
                  n_step=1,
-                 use_rnn=False,
+                 seq_encoder=None,
 
                  batch_size=256,
                  tau=0.005,
@@ -75,7 +75,7 @@ class SAC_DS_Base(SAC_Base):
 
         self.burn_in_step = burn_in_step
         self.n_step = n_step
-        self.use_rnn = use_rnn
+        self.seq_encoder = seq_encoder
 
         self.write_summary_per_step = int(write_summary_per_step)
         self.save_model_per_step = int(save_model_per_step)
@@ -147,8 +147,8 @@ class SAC_DS_Base(SAC_Base):
                       disable_sample: bool = False,
                       force_rnd_if_avaiable: bool = False):
         action, prob = super().choose_action(obs_list,
-                                       disable_sample=disable_sample,
-                                       force_rnd_if_avaiable=force_rnd_if_avaiable)
+                                             disable_sample=disable_sample,
+                                             force_rnd_if_avaiable=force_rnd_if_avaiable)
 
         return self._random_action(action), prob
 
@@ -159,8 +159,8 @@ class SAC_DS_Base(SAC_Base):
                           disable_sample: bool = False,
                           force_rnd_if_avaiable: bool = False):
         action, prob, next_rnn_state = super().choose_rnn_action(obs_list, pre_action, rnn_state,
-                                                           disable_sample=disable_sample,
-                                                           force_rnd_if_avaiable=force_rnd_if_avaiable)
+                                                                 disable_sample=disable_sample,
+                                                                 force_rnd_if_avaiable=force_rnd_if_avaiable)
 
         return self._random_action(action), prob, next_rnn_state
 
@@ -271,31 +271,37 @@ class SAC_DS_Base(SAC_Base):
         return True
 
     def train(self,
+              bn_indexes,
+              bn_padding_masks,
               bn_obses_list,
               bn_actions,
               bn_rewards,
               next_obs_list,
               bn_dones,
               bn_mu_probs,
-              rnn_state=None):
+              f_seq_hidden_states=None):
 
+        bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
+        bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
         bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
         bn_actions = torch.from_numpy(bn_actions).to(self.device)
         bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
         next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
         bn_dones = torch.from_numpy(bn_dones).to(self.device)
         bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
-        if self.use_rnn:
-            rnn_state = torch.from_numpy(rnn_state).to(self.device)
+        if self.seq_encoder is not None:
+            f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states).to(self.device)
 
-        self._train(bn_obses_list=bn_obses_list,
+        self._train(bn_indexes=bn_indexes,
+                    bn_padding_masks=bn_padding_masks,
+                    bn_obses_list=bn_obses_list,
                     bn_actions=bn_actions,
                     bn_rewards=bn_rewards,
                     next_obs_list=next_obs_list,
                     bn_dones=bn_dones,
                     bn_mu_probs=bn_mu_probs,
                     priority_is=None,
-                    initial_rnn_state=rnn_state if self.use_rnn else None)
+                    f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None)
 
         step = self.global_step.item()
 

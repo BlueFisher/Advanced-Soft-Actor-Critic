@@ -2,14 +2,14 @@ import logging
 import multiprocessing as mp
 from multiprocessing.shared_memory import SharedMemory
 from queue import Empty
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 
 from algorithm.utils import elapsed_counter, elapsed_timer
 
 
-def traverse_lists(data: Tuple, process):
+def traverse_lists(data: Union[Any, Tuple], process):
     if not isinstance(data, tuple):
         data = (data, )
 

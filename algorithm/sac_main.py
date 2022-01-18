@@ -184,61 +184,60 @@ class Main(object):
 
             try:
                 while not all([a.done for a in agents]):
-                    if seq_encoder is not None:
-                        # burn-in padding
-                        for agent in [a for a in agents if a.is_empty()]:
-                            for _ in range(self.sac.burn_in_step):
-                                agent.add_transition(
-                                    obs_list=[np.zeros(t, dtype=np.float32) for t in self.obs_shapes],
-                                    action=initial_pre_action[0],
-                                    reward=0.,
-                                    local_done=False,
-                                    max_reached=False,
-                                    next_obs_list=[np.zeros(t, dtype=np.float32) for t in self.obs_shapes],
-                                    prob=0.,
-                                    is_padding=True,
-                                    seq_hidden_state=initial_seq_hidden_state[0]
-                                )
+                    # burn-in padding
+                    for agent in [a for a in agents if a.is_empty()]:
+                        for _ in range(self.sac.burn_in_step):
+                            agent.add_transition(
+                                obs_list=[np.zeros(t, dtype=np.float32) for t in self.obs_shapes],
+                                action=initial_pre_action[0],
+                                reward=0.,
+                                local_done=False,
+                                max_reached=False,
+                                next_obs_list=[np.zeros(t, dtype=np.float32) for t in self.obs_shapes],
+                                prob=0.,
+                                is_padding=True,
+                                seq_hidden_state=initial_seq_hidden_state[0]
+                            )
 
-                        if seq_encoder == 'RNN':
-                            action, prob, next_seq_hidden_state = self.sac.choose_rnn_action(obs_list,
-                                                                                             pre_action,
-                                                                                             seq_hidden_state,
-                                                                                             disable_sample=self.disable_sample)
+                    if seq_encoder == 'RNN':
+                        action, prob, next_seq_hidden_state = self.sac.choose_rnn_action(obs_list,
+                                                                                         pre_action,
+                                                                                         seq_hidden_state,
+                                                                                         disable_sample=self.disable_sample)
 
-                        elif seq_encoder == 'ATTN':
-                            ep_length = max(1, max([a.episode_length for a in agents]))
+                    elif seq_encoder == 'ATTN':
+                        ep_length = max(1, max([a.episode_length for a in agents]))
 
-                            all_episode_trans = [a.get_episode_trans(ep_length) for a in agents]
-                            (all_ep_indexes,
-                             all_ep_padding_masks,
-                             all_ep_obses_list,
-                             all_ep_actions,
-                             all_all_ep_rewards,
-                             all_next_obs_list,
-                             all_ep_dones,
-                             all_ep_probs,
-                             all_ep_attn_states) = zip(*all_episode_trans)
+                        all_episode_trans = [a.get_episode_trans(ep_length) for a in agents]
+                        (all_ep_indexes,
+                            all_ep_padding_masks,
+                            all_ep_obses_list,
+                            all_ep_actions,
+                            all_all_ep_rewards,
+                            all_next_obs_list,
+                            all_ep_dones,
+                            all_ep_probs,
+                            all_ep_attn_states) = zip(*all_episode_trans)
 
-                            ep_indexes = np.concatenate(all_ep_indexes)
-                            ep_padding_masks = np.concatenate(all_ep_padding_masks)
-                            ep_obses_list = [np.concatenate(o) for o in zip(*all_ep_obses_list)]
-                            ep_actions = np.concatenate(all_ep_actions)
-                            ep_attn_states = np.concatenate(all_ep_attn_states)
+                        ep_indexes = np.concatenate(all_ep_indexes)
+                        ep_padding_masks = np.concatenate(all_ep_padding_masks)
+                        ep_obses_list = [np.concatenate(o) for o in zip(*all_ep_obses_list)]
+                        ep_actions = np.concatenate(all_ep_actions)
+                        ep_attn_states = np.concatenate(all_ep_attn_states)
 
-                            ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
-                            ep_padding_masks = np.concatenate([ep_padding_masks,
-                                                               np.zeros_like(ep_padding_masks[:, -1:], dtype=bool)], axis=1)
-                            ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
-                                             for o, t_o in zip(ep_obses_list, obs_list)]
-                            ep_pre_actions = gen_pre_n_actions(ep_actions, True)
+                        ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
+                        ep_padding_masks = np.concatenate([ep_padding_masks,
+                                                           np.zeros_like(ep_padding_masks[:, -1:], dtype=bool)], axis=1)
+                        ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
+                                         for o, t_o in zip(ep_obses_list, obs_list)]
+                        ep_pre_actions = gen_pre_n_actions(ep_actions, True)
 
-                            action, prob, next_seq_hidden_state = self.sac.choose_attn_action(ep_indexes,
-                                                                                              ep_padding_masks,
-                                                                                              ep_obses_list,
-                                                                                              ep_pre_actions,
-                                                                                              ep_attn_states,
-                                                                                              disable_sample=self.disable_sample)
+                        action, prob, next_seq_hidden_state = self.sac.choose_attn_action(ep_indexes,
+                                                                                          ep_padding_masks,
+                                                                                          ep_obses_list,
+                                                                                          ep_pre_actions,
+                                                                                          ep_attn_states,
+                                                                                          disable_sample=self.disable_sample)
                     else:
                         action, prob = self.sac.choose_action(obs_list,
                                                               disable_sample=self.disable_sample)

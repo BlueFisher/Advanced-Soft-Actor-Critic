@@ -1814,71 +1814,9 @@ class SAC_Base(object):
                               dim=-1, keepdim=True)
         return td_error
 
-    def episode_to_batch(self,
-                         l_obses_list: List[np.ndarray],
-                         l_actions: np.ndarray,
-                         l_rewards: np.ndarray,
-                         next_obs_list: List[np.ndarray],
-                         l_dones: np.ndarray,
-                         l_mu_probs: Optional[np.ndarray] = None,
-                         l_seq_hidden_states: Optional[np.ndarray] = None):
-        """
-        Args:
-            l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-            l_actions: [1, episode_len, action_size]
-            l_rewards: [1, episode_len]
-            next_obs_list: list([1, *obs_shapes_i], ...)
-            l_dones: [1, episode_len]
-            l_mu_probs: [1, episode_len]
-            l_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
-
-        Returns:
-            bn_obses_list: list([episode_len - ignore + 1, b + n, *obs_shapes_i], ...)
-            bn_actions: [episode_len - ignore + 1, b + n, action_size]
-            bn_rewards: [episode_len - ignore + 1, b + n]
-            next_obs_list: list([episode_len - ignore + 1, *obs_shapes_i], ...)
-            bn_dones: [episode_len - ignore + 1, b + n]
-            bn_mu_probs: [episode_len - ignore + 1, b + n]
-            f_seq_hidden_states: [episode_len - ignore + 1, 1, *seq_hidden_state_shape]
-        """
-        ignore_size = self.burn_in_step + self.n_step
-
-        tmp_bn_obses_list = [None] * len(l_obses_list)
-        for j, l_obses in enumerate(l_obses_list):
-            tmp_bn_obses_list[j] = np.concatenate([l_obses[:, i:i + ignore_size]
-                                                  for i in range(l_obses.shape[1] - ignore_size + 1)], axis=0)
-        bn_actions = np.concatenate([l_actions[:, i:i + ignore_size]
-                                    for i in range(l_actions.shape[1] - ignore_size + 1)], axis=0)
-        bn_rewards = np.concatenate([l_rewards[:, i:i + ignore_size]
-                                    for i in range(l_rewards.shape[1] - ignore_size + 1)], axis=0)
-        tmp_next_obs_list = [None] * len(next_obs_list)
-        for j, l_obses in enumerate(l_obses_list):
-            tmp_next_obs_list[j] = np.concatenate([l_obses[:, i + ignore_size]
-                                                   for i in range(l_obses.shape[1] - ignore_size)]
-                                                  + [next_obs_list[j]],
-                                                  axis=0)
-        bn_dones = np.concatenate([l_dones[:, i:i + ignore_size]
-                                  for i in range(l_dones.shape[1] - ignore_size + 1)], axis=0)
-
-        if self.use_n_step_is:
-            bn_mu_probs = np.concatenate([l_mu_probs[:, i:i + ignore_size]
-                                         for i in range(l_mu_probs.shape[1] - ignore_size + 1)], axis=0)
-
-        if self.seq_encoder is not None:
-            f_seq_hidden_states = np.concatenate([l_seq_hidden_states[:, i:i + 1]
-                                                  for i in range(l_seq_hidden_states.shape[1] - ignore_size + 1)], axis=0)
-
-        return (
-            tmp_bn_obses_list,
-            bn_actions,
-            bn_rewards,
-            tmp_next_obs_list,
-            bn_dones,
-            bn_mu_probs if self.use_n_step_is else None,
-            f_seq_hidden_states if self.seq_encoder is not None else None
-        )
-
     def get_episode_td_error(self,
+                             l_indexes: np.ndarray,
+                             l_padding_masks: np.ndarray,
                              l_obses_list: List[np.ndarray],
                              l_actions: np.ndarray,
                              l_rewards: np.ndarray,
@@ -1888,6 +1826,8 @@ class SAC_Base(object):
                              l_seq_hidden_states: np.ndarray = None):
         """
         Args:
+            l_indexes: [1, episode_len]
+            l_padding_masks: [1, episode_len]
             l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
             l_actions: [1, episode_len, action_size]
             l_rewards: [1, episode_len]
@@ -1902,28 +1842,36 @@ class SAC_Base(object):
         """
         ignore_size = self.burn_in_step + self.n_step
 
-        (bn_obses_list,
+        (bn_indexes,
+         bn_padding_masks,
+         bn_obses_list,
          bn_actions,
          bn_rewards,
          next_obs_list,
          bn_dones,
          bn_mu_probs,
-         f_seq_hidden_states) = self.episode_to_batch(l_obses_list,
-                                                      l_actions,
-                                                      l_rewards,
-                                                      next_obs_list,
-                                                      l_dones,
-                                                      l_mu_probs,
-                                                      l_seq_hidden_states)
+         f_seq_hidden_states) = episode_to_batch(self.burn_in_step + self.n_step,
+                                                 l_indexes.shape[1],
+                                                 l_indexes,
+                                                 l_padding_masks,
+                                                 l_obses_list,
+                                                 l_actions,
+                                                 l_rewards,
+                                                 next_obs_list,
+                                                 l_dones,
+                                                 l_probs=l_mu_probs,
+                                                 l_seq_hidden_states=l_seq_hidden_states)
 
         """
-        bn_obses_list: list([episode_len - ignore + 1, b + n, *obs_shapes_i], ...)
-        bn_actions: [episode_len - ignore + 1, b + n, action_size]
-        bn_rewards: [episode_len - ignore + 1, b + n]
-        next_obs_list: list([episode_len - ignore + 1, *obs_shapes_i], ...)
-        bn_dones: [episode_len - ignore + 1, b + n]
-        bn_mu_probs: [episode_len - ignore + 1, b + n]
-        f_seq_hidden_states: [episode_len - ignore + 1, 1, *seq_hidden_state_shape]
+        bn_indexes: [episode_len - bn + 1, bn]
+        bn_padding_masks: [episode_len - bn + 1, bn]
+        bn_obses_list: list([episode_len - bn + 1, bn, *obs_shapes_i], ...)
+        bn_actions: [episode_len - bn + 1, bn, action_size]
+        bn_rewards: [episode_len - bn + 1, bn]
+        next_obs_list: list([episode_len - bn + 1, *obs_shapes_i], ...)
+        bn_dones: [episode_len - bn + 1, bn]
+        bn_mu_probs: [episode_len - bn + 1, bn]
+        f_seq_hidden_states: [episode_len - bn + 1, 1, *seq_hidden_state_shape]
         """
 
         td_error_list = []
@@ -1932,15 +1880,19 @@ class SAC_Base(object):
         for i in range(math.ceil(all_batch / batch_size)):
             b_i, b_j = i * batch_size, (i + 1) * batch_size
 
-            _bn_obses_list = [torch.from_numpy(o[b_i:b_j, :]).to(self.device) for o in bn_obses_list]
-            _bn_actions = torch.from_numpy(bn_actions[b_i:b_j, :]).to(self.device)
-            _bn_rewards = torch.from_numpy(bn_rewards[b_i:b_j, :]).to(self.device)
-            _next_obs_list = [torch.from_numpy(o[b_i:b_j, :]).to(self.device) for o in next_obs_list]
-            _bn_dones = torch.from_numpy(bn_dones[b_i:b_j, :]).to(self.device)
-            _bn_mu_probs = torch.from_numpy(bn_mu_probs[b_i:b_j, :]).to(self.device) if self.use_n_step_is else None
-            _f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states[b_i:b_j, :]).to(self.device) if self.seq_encoder is not None else None
+            _bn_indexes = torch.from_numpy(bn_indexes[b_i:b_j]).to(self.device)
+            _bn_padding_masks = torch.from_numpy(bn_padding_masks[b_i:b_j]).to(self.device)
+            _bn_obses_list = [torch.from_numpy(o[b_i:b_j]).to(self.device) for o in bn_obses_list]
+            _bn_actions = torch.from_numpy(bn_actions[b_i:b_j]).to(self.device)
+            _bn_rewards = torch.from_numpy(bn_rewards[b_i:b_j]).to(self.device)
+            _next_obs_list = [torch.from_numpy(o[b_i:b_j]).to(self.device) for o in next_obs_list]
+            _bn_dones = torch.from_numpy(bn_dones[b_i:b_j]).to(self.device)
+            _bn_mu_probs = torch.from_numpy(bn_mu_probs[b_i:b_j]).to(self.device) if self.use_n_step_is else None
+            _f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states[b_i:b_j]).to(self.device) if self.seq_encoder is not None else None
 
-            td_error = self._get_td_error(bn_obses_list=_bn_obses_list,
+            td_error = self._get_td_error(bn_indexes=_bn_indexes,
+                                          bn_padding_masks=_bn_padding_masks,
+                                          bn_obses_list=_bn_obses_list,
                                           bn_actions=_bn_actions,
                                           bn_rewards=_bn_rewards,
                                           next_obs_list=_next_obs_list,
@@ -2027,7 +1979,9 @@ class SAC_Base(object):
 
         # n_step transitions except the first one and the last obs_, n_step - 1 + 1
         if self.use_add_with_td:
-            td_error = self.get_episode_td_error(l_obses_list=l_obses_list,
+            td_error = self.get_episode_td_error(l_indexes=l_indexes,
+                                                 l_padding_masks=l_padding_masks,
+                                                 l_obses_list=l_obses_list,
                                                  l_actions=l_actions,
                                                  l_rewards=l_rewards,
                                                  next_obs_list=next_obs_list,

@@ -22,7 +22,7 @@ default:
 
     n_step: 3
     burn_in_step: 10
-    use_rnn: true
+    seq_encoder: RNN
     use_rnd: true
     rnd_n_sample: 50
 

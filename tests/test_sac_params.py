@@ -82,7 +82,8 @@ def __gen_vanilla():
         'n_step': [3],
         'siamese': [None, 'ATC', 'BYOL'],
         'siamese_use_q': [False, True],
-        'siamese_use_adaptive': [False, True]
+        'siamese_use_adaptive': [False, True],
+        'use_add_with_td': [False, True]
     }
     possible_param_dicts = get_product(param_dict_candidates)
 
@@ -113,7 +114,8 @@ def __gen_seq_encoder():
         'use_extra_data': [True, False],
         'siamese': [None, 'ATC', 'BYOL'],
         'siamese_use_q': [False, True],
-        'siamese_use_adaptive': [False, True]
+        'siamese_use_adaptive': [False, True],
+        'use_add_with_td': [False, True]
     }
 
     possible_param_dicts = get_product(param_dict_candidates)

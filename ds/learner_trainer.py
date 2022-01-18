@@ -12,30 +12,28 @@ from typing import List
 import numpy as np
 
 import algorithm.config_helper as config_helper
-from algorithm.utils import RLock, elapsed_counter, elapsed_timer
+from algorithm.utils import RLock, elapsed_counter, elapsed_timer, episode_to_batch
 
 from .constants import *
 from .sac_ds_base import SAC_DS_Base
-from .utils import SharedMemoryManager, traverse_lists
+from .utils import SharedMemoryManager, traverse_lists, get_batch_shapes_dtype
 
 
 class BatchGenerator:
     def __init__(self,
                  logger_in_file: bool,
                  model_abs_dir: str,
-                 use_rnn: bool,
                  burn_in_step: int,
                  n_step: int,
                  batch_size: int,
                  episode_buffer: SharedMemoryManager,
-                 episode_size_array: mp.Array,
+                 episode_length_array: mp.Array,
                  batch_buffer: SharedMemoryManager):
-        self.use_rnn = use_rnn
         self.burn_in_step = burn_in_step
         self.n_step = n_step
         self.batch_size = batch_size
         self._episode_buffer = episode_buffer
-        self._episode_size_array = episode_size_array
+        self._episode_length_array = episode_length_array
         self._batch_buffer = batch_buffer
 
         # Since no set_logger() in main.py
@@ -49,68 +47,6 @@ class BatchGenerator:
 
         self.run()
 
-    def _episode_to_batch(self, episode_size: int,
-                          l_obses_list: List[np.ndarray],
-                          l_actions: np.ndarray,
-                          l_rewards: np.ndarray,
-                          next_obs_list: List[np.ndarray],
-                          l_dones: np.ndarray,
-                          l_mu_probs: np.ndarray = None,
-                          l_rnn_states: np.ndarray = None):
-        """
-        Args:
-            episode_size: int, Indicates true episode_len, not MAX_EPISODE_SIZE
-            l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-            l_actions: [1, episode_len, action_size]
-            l_rewards: [1, episode_len]
-            next_obs_list: list([1, *obs_shapes_i], ...)
-            l_dones: [1, episode_len]
-            l_mu_probs: [1, episode_len]
-            l_rnn_states: [1, episode_len, *rnn_state_shape]
-
-        Returns:
-            bn_obses_list: list([episode_len - b + n + 1, b + n, *obs_shapes_i], ...)
-            bn_actions: [episode_len - b + n + 1, b + n, action_size]
-            bn_rewards: [episode_len - b + n + 1, b + n]
-            next_obs_list: list([episode_len - b + n + 1, *obs_shapes_i], ...)
-            bn_dones: [episode_len - b + n + 1, b + n]
-            bn_mu_probs: [episode_len - b + n + 1, b + n]
-            rnn_state: [episode_len - b + n + 1, *rnn_state_shape]
-        """
-        bn = self.burn_in_step + self.n_step
-
-        tmp_bn_obses_list = [None] * len(l_obses_list)
-        for j, l_obses in enumerate(l_obses_list):
-            tmp_bn_obses_list[j] = np.concatenate([l_obses[:, i:i + bn]
-                                                  for i in range(episode_size - bn + 1)], axis=0)
-        bn_actions = np.concatenate([l_actions[:, i:i + bn]
-                                    for i in range(episode_size - bn + 1)], axis=0)
-        bn_rewards = np.concatenate([l_rewards[:, i:i + bn]
-                                    for i in range(episode_size - bn + 1)], axis=0)
-        tmp_next_obs_list = [None] * len(next_obs_list)
-        for j, l_obses in enumerate(l_obses_list):
-            tmp_next_obs_list[j] = np.concatenate([l_obses[:, i + bn]
-                                                   for i in range(episode_size - bn)]
-                                                  + [next_obs_list[j]],
-                                                  axis=0)
-        bn_dones = np.concatenate([l_dones[:, i:i + bn]
-                                  for i in range(episode_size - bn + 1)], axis=0)
-
-        bn_mu_probs = np.concatenate([l_mu_probs[:, i:i + bn]
-                                     for i in range(episode_size - bn + 1)], axis=0)
-
-        if self.use_rnn:
-            rnn_state = np.concatenate([l_rnn_states[:, i]
-                                        for i in range(episode_size - bn + 1)], axis=0)
-
-        return [tmp_bn_obses_list,
-                bn_actions,
-                bn_rewards,
-                tmp_next_obs_list,
-                bn_dones,
-                bn_mu_probs,
-                rnn_state if self.use_rnn else None]
-
     def run(self):
         rest_batch = None
 
@@ -119,40 +55,45 @@ class BatchGenerator:
             if episode is None:
                 continue
 
-            (l_obses_list,
+            (l_indexes,
+             l_padding_masks,
+             l_obses_list,
              l_actions,
              l_rewards,
              next_obs_list,
              l_dones,
              l_mu_probs,
-             l_rnn_states) = episode
-            episode_size = self._episode_size_array[episode_idx]
-
-            print(l_dones.dtype)
+             l_seq_hidden_states) = episode
+            episode_length = self._episode_length_array[episode_idx]
 
             """
-            bn_obses_list: list([episode_len - b + n + 1, b + n, *obs_shapes_i], ...)
-            bn_actions: [episode_len - b + n + 1, b + n, action_size]
-            bn_rewards: [episode_len - b + n + 1, b + n]
-            next_obs_list: list([episode_len - b + n + 1, *obs_shapes_i], ...)
-            bn_dones: [episode_len - b + n + 1, b + n]
-            bn_mu_probs: [episode_len - b + n + 1, b + n]
-            rnn_state: [episode_len - b + n + 1, *rnn_state_shape]
+            bn_indexes: [episode_len - bn + 1, bn]
+            bn_padding_masks: [episode_len - bn + 1, bn]
+            bn_obses_list: list([episode_len - bn + 1, bn, *obs_shapes_i], ...)
+            bn_actions: [episode_len - bn + 1, bn, action_size]
+            bn_rewards: [episode_len - bn + 1, bn]
+            next_obs_list: list([episode_len - bn + 1, *obs_shapes_i], ...)
+            bn_dones: [episode_len - bn + 1, bn]
+            bn_mu_probs: [episode_len - bn + 1, bn]
+            f_seq_hidden_states: [episode_len - bn + 1, 1, *seq_hidden_state_shape]
             """
-            ori_batch = self._episode_to_batch(episode_size,
-                                               l_obses_list,
-                                               l_actions,
-                                               l_rewards,
-                                               next_obs_list,
-                                               l_dones,
-                                               l_mu_probs,
-                                               l_rnn_states)
+            ori_batch = episode_to_batch(self.burn_in_step + self.n_step,
+                                         episode_length,
+                                         l_indexes,
+                                         l_padding_masks,
+                                         l_obses_list,
+                                         l_actions,
+                                         l_rewards,
+                                         next_obs_list,
+                                         l_dones,
+                                         l_probs=l_mu_probs,
+                                         l_seq_hidden_states=l_seq_hidden_states)
 
             if rest_batch is not None:
                 ori_batch = traverse_lists((rest_batch, ori_batch), lambda rb, b: np.concatenate([rb, b]))
                 rest_batch = None
 
-            ori_batch_size = ori_batch[0][0].shape[0]
+            ori_batch_size = ori_batch[0].shape[0]
             idx = np.random.permutation(ori_batch_size)
             ori_batch = traverse_lists(ori_batch, lambda b: b[idx])
 
@@ -171,7 +112,7 @@ class Trainer:
     def __init__(self,
                  all_variables_buffer: SharedMemoryManager,
                  episode_buffer: SharedMemoryManager,
-                 episode_size_array: mp.Array,
+                 episode_length_array: mp.Array,
                  cmd_pipe_server: Connection,
 
                  logger_in_file,
@@ -213,25 +154,13 @@ class Trainer:
         self._logger.info('SAC started')
 
         batch_size = config['sac_config']['batch_size']
-        bn = self.sac.burn_in_step + self.sac.n_step
-        batch_shapes = [
-            [(batch_size, bn, *o) for o in obs_shapes],
-            (batch_size, bn, d_action_size + c_action_size),
-            (batch_size, bn),
-            [(batch_size, *o) for o in obs_shapes],
-            (batch_size, bn),
-            (batch_size, bn),
-            (batch_size, *self.sac.rnn_state_shape) if self.sac.use_rnn else None
-        ]
-        batch_dtypes = [
-            [np.float32 for _ in obs_shapes],
-            np.float32,
-            np.float32,
-            [np.float32 for _ in obs_shapes],
-            bool,
-            np.float32,
-            np.float32 if self.sac.use_rnn else None
-        ]
+        batch_shapes, batch_dtypes = get_batch_shapes_dtype(
+            batch_size,
+            self.sac.burn_in_step + self.sac.n_step,
+            obs_shapes,
+            d_action_size + c_action_size,
+            self.sac.seq_hidden_state_shape if self.sac.seq_encoder is not None else None)
+
         self._batch_buffer = SharedMemoryManager(self.base_config['batch_queue_size'],
                                                  logger=self._logger,
                                                  counter_get_shm_index_empty_log='Batch shm index is empty',
@@ -244,12 +173,11 @@ class Trainer:
             mp.Process(target=BatchGenerator, kwargs={
                 'logger_in_file': logger_in_file,
                 'model_abs_dir': model_abs_dir,
-                'use_rnn': self.sac.use_rnn,
                 'burn_in_step': self.sac.burn_in_step,
                 'n_step': self.sac.n_step,
                 'batch_size': batch_size,
                 'episode_buffer': episode_buffer,
-                'episode_size_array': episode_size_array,
+                'episode_length_array': episode_length_array,
                 'batch_buffer': self._batch_buffer
             }).start()
 
@@ -295,24 +223,28 @@ class Trainer:
             if batch is None:
                 continue
 
-            (bn_obses_list,
+            (bn_indexes,
+             bn_padding_masks,
+             bn_obses_list,
              bn_actions,
              bn_rewards,
              next_obs_list,
              bn_dones,
              bn_mu_probs,
-             rnn_state) = batch
+             f_seq_hidden_states) = batch
 
             with timer_train:
                 with self.sac_lock:
                     try:
-                        step = self.sac.train(bn_obses_list=bn_obses_list,
+                        step = self.sac.train(bn_indexes=bn_indexes,
+                                              bn_padding_masks=bn_padding_masks,
+                                              bn_obses_list=bn_obses_list,
                                               bn_actions=bn_actions,
                                               bn_rewards=bn_rewards,
                                               next_obs_list=next_obs_list,
                                               bn_dones=bn_dones,
                                               bn_mu_probs=bn_mu_probs,
-                                              rnn_state=rnn_state)
+                                              f_seq_hidden_states=f_seq_hidden_states)
                     except Exception as e:
                         self._logger.error(e)
                         self._logger.error(traceback.format_exc())
