@@ -26,11 +26,6 @@ class LearnerServiceStub(object):
                 request_serializer=ndarray__pb2.Empty.SerializeToString,
                 response_deserializer=learner__pb2.RegisterActorResponse.FromString,
                 )
-        self.GetAction = channel.unary_unary(
-                '/learner.LearnerService/GetAction',
-                request_serializer=learner__pb2.GetActionRequest.SerializeToString,
-                response_deserializer=learner__pb2.Action.FromString,
-                )
         self.GetPolicyVariables = channel.unary_unary(
                 '/learner.LearnerService/GetPolicyVariables',
                 request_serializer=ndarray__pb2.Empty.SerializeToString,
@@ -68,12 +63,6 @@ class LearnerServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def RegisterActor(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetAction(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -122,11 +111,6 @@ def add_LearnerServiceServicer_to_server(servicer, server):
                     servicer.RegisterActor,
                     request_deserializer=ndarray__pb2.Empty.FromString,
                     response_serializer=learner__pb2.RegisterActorResponse.SerializeToString,
-            ),
-            'GetAction': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetAction,
-                    request_deserializer=learner__pb2.GetActionRequest.FromString,
-                    response_serializer=learner__pb2.Action.SerializeToString,
             ),
             'GetPolicyVariables': grpc.unary_unary_rpc_method_handler(
                     servicer.GetPolicyVariables,
@@ -194,23 +178,6 @@ class LearnerService(object):
         return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/RegisterActor',
             ndarray__pb2.Empty.SerializeToString,
             learner__pb2.RegisterActorResponse.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def GetAction(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/GetAction',
-            learner__pb2.GetActionRequest.SerializeToString,
-            learner__pb2.Action.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 

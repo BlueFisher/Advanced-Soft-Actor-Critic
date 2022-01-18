@@ -23,7 +23,7 @@ hard:
     nn: nn_hard
     name: "hard_nopre_{time}"
   sac_config: &hard_sac
-    use_rnn: true
+    seq_encoder: RNN
     burn_in_step: 10
 
 hard_nopre:

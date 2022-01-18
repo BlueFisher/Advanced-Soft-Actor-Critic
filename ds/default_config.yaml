@@ -18,7 +18,6 @@ base_config:
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
   nn: nn # Neural network models file
-  update_policy_mode: true # Update policy variables at the beginning of each episode if True or get action from learner each step
   update_sac_bak_per_step: 200 # Every N step update sac_bak
   n_agents: 1 # N agents running in parallel
   max_step_each_iter: -1 # Max step in each iteration
@@ -36,7 +35,7 @@ base_config:
   max_actors_each_learner: -1 # The max number of actors of each learner, -1 indicates no limit
   noise_increasing_rate: 0 # Noise = N * number of actors
   noise_max: 0.1 # Max noise for actors
-  max_episode_size: 500
+  max_episode_length: 500
   episode_queue_size: 5
   episode_sender_process_num: 5
   batch_queue_size: 5
@@ -64,7 +63,7 @@ sac_config:
 
   burn_in_step: 0 # Burn-in steps in R2D2
   n_step: 1 # Update Q function by N steps
-  use_rnn: false # If using RNN
+  seq_encoder: null # RNN | ATTN
 
   batch_size: 256
 

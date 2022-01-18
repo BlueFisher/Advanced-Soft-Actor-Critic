@@ -36,7 +36,7 @@ visual_hard:
     evolver_host: visual-roller-hard-ds-evolver
   sac_config: &visual_hard_sac
     burn_in_step: 40
-    use_rnn: true
+    seq_encoder: RNN
 
 visual_hard_pre:
   base_config:

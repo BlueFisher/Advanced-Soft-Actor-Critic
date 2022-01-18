@@ -9,13 +9,14 @@ import threading
 import time
 import traceback
 from pathlib import Path
+from typing import List
 
 import grpc
 import numpy as np
 
 import algorithm.config_helper as config_helper
 from algorithm.agent import Agent
-from algorithm.utils import ReadWriteLock, elapsed_counter, elapsed_timer
+from algorithm.utils import ReadWriteLock, elapsed_timer, gen_pre_n_actions
 
 from .constants import *
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
@@ -23,7 +24,7 @@ from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
 from .sac_ds_base import SAC_DS_Base
-from .utils import SharedMemoryManager, rpc_error_inspector
+from .utils import SharedMemoryManager, rpc_error_inspector, traverse_lists, get_episode_shapes_dtypes
 
 
 class EpisodeSender:
@@ -33,9 +34,9 @@ class EpisodeSender:
                  learner_host: str,
                  learner_port: int,
                  episode_buffer: SharedMemoryManager,
-                 episode_size_array: mp.Array):
+                 episode_length_array: mp.Array):
         self._episode_buffer = episode_buffer
-        self._episode_size_array = episode_size_array
+        self._episode_length_array = episode_length_array
 
         config_helper.set_logger(Path(model_abs_dir).joinpath(f'actor_episode_sender_{os.getpid()}.log') if logger_in_file else None)
         self._logger = logging.getLogger(f'ds.actor.episode_sender_{os.getpid()}')
@@ -56,22 +57,9 @@ class EpisodeSender:
             if episode is None:
                 continue
 
-            (l_obses_list,
-             l_actions,
-             l_rewards,
-             next_obs_list,
-             l_dones,
-             l_mu_probs,
-             l_rnn_states) = episode
-            episode_size = self._episode_size_array[episode_idx]
+            episode_length = self._episode_length_array[episode_idx]
 
-            episode = ([o[:, :episode_size, ...] for o in l_obses_list],
-                       l_actions[:, :episode_size, ...],
-                       l_rewards[:, :episode_size, ...],
-                       [o[:, :episode_size, ...] for o in next_obs_list],
-                       l_dones[:, :episode_size, ...],
-                       l_mu_probs[:, :episode_size, ...],
-                       l_rnn_states[:, :episode_size, ...] if l_rnn_states is not None else None)
+            episode = traverse_lists(episode, lambda e: e[:, :episode_length])
 
             with timer_add_trans:
                 self._stub.add_transitions(*episode)
@@ -209,25 +197,13 @@ class Actor(object):
         self._logger.info(f'SAC_ACTOR started')
 
     def _init_episode_sender(self, learner_host, learner_port):
-        max_episode_size = self.base_config['max_episode_size']
-        episode_shapes = [
-            [(1, max_episode_size, *o) for o in self.obs_shapes],
-            (1, max_episode_size, self.d_action_size + self.c_action_size),
-            (1, max_episode_size),
-            [(1, *o) for o in self.obs_shapes],
-            (1, max_episode_size),
-            (1, max_episode_size),
-            (1, max_episode_size, *self.sac_actor.rnn_state_shape) if self.sac_actor.use_rnn else None
-        ]
-        episode_dtypes = [
-            [np.float32 for _ in self.obs_shapes],
-            np.float32,
-            np.float32,
-            [np.float32 for _ in self.obs_shapes],
-            bool,
-            np.float32,
-            np.float32 if self.sac_actor.use_rnn else None
-        ]
+        max_episode_length = self.base_config['max_episode_length']
+
+        episode_shapes, episode_dtypes = get_episode_shapes_dtypes(
+            max_episode_length,
+            self.obs_shapes,
+            self.action_size,
+            self.sac_actor.seq_hidden_state_shape if self.sac_actor.seq_encoder is not None else None)
 
         self._episode_buffer = SharedMemoryManager(self.base_config['episode_queue_size'],
                                                    logger=self._logger,
@@ -237,7 +213,7 @@ class Actor(object):
                                                    log_repeat=ELAPSED_REPEAT)
 
         self._episode_buffer.init_from_shapes(episode_shapes, episode_dtypes)
-        self._episode_size_array = mp.Array('i', range(self.base_config['episode_queue_size']))
+        self._episode_length_array = mp.Array('i', range(self.base_config['episode_queue_size']))
 
         for _ in range(self.base_config['episode_sender_process_num']):
             mp.Process(target=EpisodeSender, kwargs={
@@ -246,7 +222,7 @@ class Actor(object):
                 'learner_host': learner_host,
                 'learner_port': learner_port,
                 'episode_buffer': self._episode_buffer,
-                'episode_size_array': self._episode_size_array
+                'episode_length_array': self._episode_length_array
             }).start()
 
     def _update_policy_variables(self):
@@ -260,51 +236,59 @@ class Actor(object):
                 self._logger.warning('NAN in variables, skip updating')
 
     def _add_trans(self,
-                   l_obses_list,
-                   l_actions,
-                   l_rewards,
-                   next_obs_list,
-                   l_dones,
-                   l_probs,
-                   l_rnn_states=None):
+                   l_indexes: np.ndarray,
+                   l_padding_masks: np.ndarray,
+                   l_obses_list: List[np.ndarray],
+                   l_actions: np.ndarray,
+                   l_rewards: np.ndarray,
+                   next_obs_list: List[np.ndarray],
+                   l_dones: np.ndarray,
+                   l_probs: List[np.ndarray],
+                   l_seq_hidden_states: np.ndarray = None):
 
-        if l_obses_list[0].shape[1] < self.sac_actor.burn_in_step + self.sac_actor.n_step:
+        if l_indexes.shape[1] < self.sac_actor.burn_in_step + self.sac_actor.n_step:
             return
 
         """
         Args:
+            l_indexes: [1, episode_len]
+            l_padding_masks: [1, episode_len]
             l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
             l_actions: [1, episode_len, action_size]
             l_rewards: [1, episode_len]
             next_obs_list: list([1, *obs_shapes_i], ...)
             l_dones: [1, episode_len]
             l_probs: [1, episode_len]
-            l_rnn_states: [1, episode_len, *rnn_state_shape]
+            l_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
         episode_idx = self._episode_buffer.put([
+            l_indexes,
+            l_padding_masks,
             l_obses_list,
             l_actions,
             l_rewards,
             next_obs_list,
             l_dones,
             l_probs,
-            l_rnn_states
+            l_seq_hidden_states
         ])
-        self._episode_size_array[episode_idx] = l_obses_list[0].shape[1]
+        self._episode_length_array[episode_idx] = l_indexes.shape[1]
 
     def _run(self):
-        use_rnn = self.sac_actor.use_rnn
+        num_agents = self.base_config['n_agents']
+        seq_encoder = self.sac_actor.seq_encoder
 
         obs_list = self.env.reset(reset_config=self.reset_config)
+        initial_pre_action = self.sac_actor.get_initial_action(num_agents)  # [n_agents, action_size]
+        pre_action = initial_pre_action
+        if seq_encoder is not None:
+            initial_seq_hidden_state = self.sac_actor.get_initial_seq_hidden_state(num_agents)  # [n_agents, *seq_hidden_state_shape]
+            seq_hidden_state = initial_seq_hidden_state
 
-        agents = [self._agent_class(i,
-                                    use_rnn=use_rnn,
-                                    max_return_episode_trans=self.base_config['max_episode_size'])
-                  for i in range(self.base_config['n_agents'])]
-
-        if use_rnn:
-            initial_rnn_state = self.sac_actor.get_initial_rnn_state(len(agents))
-            rnn_state = initial_rnn_state
+        agents = [self._agent_class(i, self.obs_shapes, self.action_size,
+                                    seq_hidden_state_shape=self.sac_actor.seq_hidden_state_shape if seq_encoder is not None else None,
+                                    max_return_episode_trans=self.base_config['max_episode_length'])
+                  for i in range(num_agents)]
 
         iteration = 0
 
@@ -313,9 +297,6 @@ class Actor(object):
                 obs_list = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
-
-                if use_rnn:
-                    rnn_state = initial_rnn_state
             else:
                 for agent in agents:
                     agent.reset()
@@ -323,51 +304,68 @@ class Actor(object):
             action = np.zeros([len(agents), self.action_size], dtype=np.float32)
             step = 0
 
-            if self.base_config['update_policy_mode']:
-                self._update_policy_variables()
+            self._update_policy_variables()
 
             try:
                 while not all([a.done for a in agents]) and self._stub.connected:
                     # burn in padding
-                    for agent in agents:
-                        if agent.is_empty():
-                            for _ in range(self.sac_actor.burn_in_step):
-                                agent.add_transition(
-                                    obs_list=[np.zeros(t) for t in self.obs_shapes],
-                                    action=np.zeros(self.action_size),
-                                    reward=0.,
-                                    local_done=False,
-                                    max_reached=False,
-                                    next_obs_list=[np.zeros(t) for t in self.obs_shapes],
-                                    prob=0.,
-                                    rnn_state=initial_rnn_state[0]
-                                )
+                    for agent in [a for a in agents if a.is_empty()]:
+                        for _ in range(self.sac_actor.burn_in_step):
+                            agent.add_transition(
+                                obs_list=[np.zeros(t, dtype=np.float32) for t in self.obs_shapes],
+                                action=np.zeros(self.action_size),
+                                reward=0.,
+                                local_done=False,
+                                max_reached=False,
+                                next_obs_list=[np.zeros(t, dtype=np.float32) for t in self.obs_shapes],
+                                prob=0.,
+                                is_padding=True,
+                                seq_hidden_state=initial_seq_hidden_state[0]
+                            )
 
-                    if self.base_config['update_policy_mode']:
-                        with self._sac_actor_lock.read():
-                            if use_rnn:
-                                action, prob, next_rnn_state = self.sac_actor.choose_rnn_action([o.astype(np.float32) for o in obs_list],
-                                                                                                action,
-                                                                                                rnn_state,
-                                                                                                force_rnd_if_avaiable=True)
-                            else:
-                                action, prob = self.sac_actor.choose_action([o.astype(np.float32) for o in obs_list],
-                                                                            force_rnd_if_avaiable=True)
+                    with self._sac_actor_lock.read():
+                        if seq_encoder == 'RNN':
+                            action, prob, next_seq_hidden_state = self.sac_actor.choose_rnn_action(obs_list,
+                                                                                                   pre_action,
+                                                                                                   seq_hidden_state,
+                                                                                                   force_rnd_if_avaiable=True)
 
-                    else:
-                        # Get action from learner each step
-                        # TODO need prob
-                        raise Exception('TODO need prob')
-                        if use_rnn:
-                            action_rnn_state = self._stub.get_action([o.astype(np.float32) for o in obs_list],
-                                                                     rnn_state)
-                            if action_rnn_state is None:
-                                break
-                            action, next_rnn_state = action_rnn_state
+                        elif seq_encoder == 'ATTN':
+                            ep_length = max(1, max([a.episode_length for a in agents]))
+
+                            all_episode_trans = [a.get_episode_trans(ep_length) for a in agents]
+                            (all_ep_indexes,
+                                all_ep_padding_masks,
+                                all_ep_obses_list,
+                                all_ep_actions,
+                                all_all_ep_rewards,
+                                all_next_obs_list,
+                                all_ep_dones,
+                                all_ep_probs,
+                                all_ep_attn_states) = zip(*all_episode_trans)
+
+                            ep_indexes = np.concatenate(all_ep_indexes)
+                            ep_padding_masks = np.concatenate(all_ep_padding_masks)
+                            ep_obses_list = [np.concatenate(o) for o in zip(*all_ep_obses_list)]
+                            ep_actions = np.concatenate(all_ep_actions)
+                            ep_attn_states = np.concatenate(all_ep_attn_states)
+
+                            ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
+                            ep_padding_masks = np.concatenate([ep_padding_masks,
+                                                               np.zeros_like(ep_padding_masks[:, -1:], dtype=bool)], axis=1)
+                            ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
+                                             for o, t_o in zip(ep_obses_list, obs_list)]
+                            ep_pre_actions = gen_pre_n_actions(ep_actions, True)
+
+                            action, prob, next_seq_hidden_state = self.sac_actor.choose_attn_action(ep_indexes,
+                                                                                                    ep_padding_masks,
+                                                                                                    ep_obses_list,
+                                                                                                    ep_pre_actions,
+                                                                                                    ep_attn_states,
+                                                                                                    force_rnd_if_avaiable=True)
                         else:
-                            action = self._stub.get_action([o.astype(np.float32) for o in obs_list])
-                            if action is None:
-                                break
+                            action, prob = self.sac_actor.choose_action(obs_list,
+                                                                        force_rnd_if_avaiable=True)
 
                     next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
                                                                                    action[..., self.d_action_size:])
@@ -385,23 +383,26 @@ class Actor(object):
                             max_reached=max_reached[i],
                             next_obs_list=[o[i] for o in next_obs_list],
                             prob=prob[i],
-                            rnn_state=rnn_state[i] if use_rnn else None
+                            is_padding=False,
+                            seq_hidden_state=seq_hidden_state[i] if seq_encoder is not None else None,
                         )
                         for i in range(len(agents))
                     ]
 
                     episode_trans_list = [t for t in episode_trans_list if t is not None]
                     if len(episode_trans_list) != 0:
+                        # ep_indexes, ep_padding_masks,
                         # ep_obses_list, ep_actions, ep_rewards, next_obs_list, ep_dones, ep_probs,
-                        # ep_rnn_states
+                        # ep_seq_hidden_states
                         for episode_trans in episode_trans_list:
                             self._add_trans(*episode_trans)
 
                     obs_list = next_obs_list
-                    action[local_done] = np.zeros(self.action_size)
-                    if use_rnn:
-                        rnn_state = next_rnn_state
-                        rnn_state[local_done] = initial_rnn_state[local_done]
+                    pre_action = action
+                    pre_action[local_done] = initial_pre_action[local_done]
+                    if seq_encoder is not None:
+                        seq_hidden_state = next_seq_hidden_state
+                        seq_hidden_state[local_done] = initial_seq_hidden_state[local_done]
 
                     step += 1
 
@@ -542,25 +543,6 @@ class StubController:
                 time.sleep(RECONNECTION_TIME)
 
     @rpc_error_inspector
-    def add_transitions(self,
-                        l_obses_list,
-                        l_actions,
-                        l_rewards,
-                        next_obs_list,
-                        l_dones,
-                        l_mu_probs,
-                        l_rnn_states=None):
-        self._learner_stub.Add(learner_pb2.AddRequest(l_obses_list=[ndarray_to_proto(l_obses)
-                                                                    for l_obses in l_obses_list],
-                                                      l_actions=ndarray_to_proto(l_actions),
-                                                      l_rewards=ndarray_to_proto(l_rewards),
-                                                      next_obs_list=[ndarray_to_proto(next_obs)
-                                                                     for next_obs in next_obs_list],
-                                                      l_dones=ndarray_to_proto(l_dones),
-                                                      l_mu_probs=ndarray_to_proto(l_mu_probs),
-                                                      l_rnn_states=ndarray_to_proto(l_rnn_states)))
-
-    @rpc_error_inspector
     def get_action(self, obs_list, rnn_state=None):
         request = learner_pb2.GetActionRequest(obs_list=[ndarray_to_proto(obs)
                                                          for obs in obs_list],
@@ -616,14 +598,18 @@ class StubEpisodeSenderController:
 
     @rpc_error_inspector
     def add_transitions(self,
+                        l_indexes,
+                        l_padding_masks,
                         l_obses_list,
                         l_actions,
                         l_rewards,
                         next_obs_list,
                         l_dones,
                         l_mu_probs,
-                        l_rnn_states=None):
-        self._learner_stub.Add(learner_pb2.AddRequest(l_obses_list=[ndarray_to_proto(l_obses)
+                        l_seq_hidden_states=None):
+        self._learner_stub.Add(learner_pb2.AddRequest(l_indexes=ndarray_to_proto(l_indexes),
+                                                      l_padding_masks=ndarray_to_proto(l_padding_masks),
+                                                      l_obses_list=[ndarray_to_proto(l_obses)
                                                                     for l_obses in l_obses_list],
                                                       l_actions=ndarray_to_proto(l_actions),
                                                       l_rewards=ndarray_to_proto(l_rewards),
@@ -631,4 +617,4 @@ class StubEpisodeSenderController:
                                                                      for next_obs in next_obs_list],
                                                       l_dones=ndarray_to_proto(l_dones),
                                                       l_mu_probs=ndarray_to_proto(l_mu_probs),
-                                                      l_rnn_states=ndarray_to_proto(l_rnn_states)))
+                                                      l_seq_hidden_states=ndarray_to_proto(l_seq_hidden_states)))
