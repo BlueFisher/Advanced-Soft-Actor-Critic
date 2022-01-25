@@ -8,7 +8,7 @@ EXTRA_SIZE = 3
 
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):
-        assert self.obs_shapes[0] == (6, )
+        assert self.obs_shapes[0] == (8, )
 
         self.rnn = m.GRU(self.obs_shapes[0][0] - EXTRA_SIZE + self.c_action_size, 64, 1)
 

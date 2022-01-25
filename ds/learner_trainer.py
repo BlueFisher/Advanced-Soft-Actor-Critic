@@ -12,11 +12,12 @@ from typing import List
 import numpy as np
 
 import algorithm.config_helper as config_helper
-from algorithm.utils import RLock, elapsed_counter, elapsed_timer, episode_to_batch
+from algorithm.utils import (RLock, elapsed_counter, elapsed_timer,
+                             episode_to_batch)
 
 from .constants import *
 from .sac_ds_base import SAC_DS_Base
-from .utils import SharedMemoryManager, traverse_lists, get_batch_shapes_dtype
+from .utils import SharedMemoryManager, get_batch_shapes_dtype, traverse_lists
 
 
 class BatchGenerator:

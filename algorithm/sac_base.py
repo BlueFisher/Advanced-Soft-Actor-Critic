@@ -3,7 +3,6 @@ import math
 from collections import defaultdict
 from itertools import chain
 from pathlib import Path
-from sqlite3 import sqlite_version
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -30,44 +29,44 @@ class SAC_Base(object):
                  train_mode: bool = True,
                  last_ckpt: Optional[str] = None,
 
-                 seed=None,
-                 write_summary_per_step=1e3,
-                 save_model_per_step=1e5,
+                 seed: Optional[float] = None,
+                 write_summary_per_step: float = 1e3,
+                 save_model_per_step: float = 1e5,
 
-                 ensemble_q_num=2,
-                 ensemble_q_sample=2,
+                 ensemble_q_num: int = 2,
+                 ensemble_q_sample: int = 2,
 
-                 burn_in_step=0,
-                 n_step=1,
+                 burn_in_step: int = 0,
+                 n_step: int = 1,
                  seq_encoder: Optional[str] = None,
 
-                 batch_size=256,
-                 tau=0.005,
-                 update_target_per_step=1,
-                 init_log_alpha=-2.3,
-                 use_auto_alpha=True,
-                 learning_rate=3e-4,
-                 gamma=0.99,
-                 v_lambda=0.9,
-                 v_rho=1.,
-                 v_c=1.,
-                 clip_epsilon=0.2,
+                 batch_size: int = 256,
+                 tau: float = 0.005,
+                 update_target_per_step: int = 1,
+                 init_log_alpha: float = -2.3,
+                 use_auto_alpha: bool = True,
+                 learning_rate: float = 3e-4,
+                 gamma: float = 0.99,
+                 v_lambda: float = 0.9,
+                 v_rho: float = 1.,
+                 v_c: float = 1.,
+                 clip_epsilon: float = 0.2,
 
-                 discrete_dqn_like=False,
-                 use_priority=True,
-                 use_n_step_is=True,
+                 discrete_dqn_like: bool = False,
+                 use_priority: bool = True,
+                 use_n_step_is: bool = True,
                  siamese: Optional[str] = None,
-                 siamese_use_q=False,
-                 siamese_use_adaptive=False,
-                 use_prediction=False,
-                 transition_kl=0.8,
-                 use_extra_data=True,
+                 siamese_use_q: bool = False,
+                 siamese_use_adaptive: bool = False,
+                 use_prediction: bool = False,
+                 transition_kl: float = 0.8,
+                 use_extra_data: bool = True,
                  curiosity: Optional[str] = None,
-                 curiosity_strength=1,
-                 use_rnd=False,
-                 rnd_n_sample=10,
-                 use_normalization=False,
-                 use_add_with_td=False,
+                 curiosity_strength: float = 1.,
+                 use_rnd: bool = False,
+                 rnd_n_sample: int = 10,
+                 use_normalization: bool = False,
+                 use_add_with_td: bool = False,
 
                  replay_config=None):
         """
@@ -259,7 +258,7 @@ class SAC_Base(object):
                                                                     self.model_abs_dir,
                                                                     **model_config['rep']).to(self.device)
             # Get represented state and seq_hidden_state_shape
-            test_index = torch.randint(1, (self.batch_size, 1), dtype=torch.int32)
+            test_index = torch.zeros((self.batch_size, 1), dtype=torch.int32)
             test_obs_list = [torch.rand(self.batch_size, 1, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
             test_pre_action = torch.rand(self.batch_size, 1, self.d_action_size + self.c_action_size, device=self.device)
             test_state, test_attn_state, _ = self.model_rep(test_index,
@@ -1038,7 +1037,7 @@ class SAC_Base(object):
             opt_q.zero_grad()
             loss_q.backward(retain_graph=True)
 
-        grads_rep_main = [m.grad.detach() for m in self.model_rep.parameters()]
+        grads_rep_main = [m.grad.detach() if m.grad is not None else None for m in self.model_rep.parameters()]
 
         """ Siamese Representation Learning """
         loss_siamese = None

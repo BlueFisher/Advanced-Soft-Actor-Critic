@@ -206,7 +206,7 @@ class Main(object):
                                                                                          disable_sample=self.disable_sample)
 
                     elif seq_encoder == 'ATTN':
-                        ep_length = max(1, max([a.episode_length for a in agents]))
+                        ep_length = min(512, max([a.episode_length for a in agents]))
 
                         all_episode_trans = [a.get_episode_trans(ep_length) for a in agents]
                         (all_ep_indexes,
