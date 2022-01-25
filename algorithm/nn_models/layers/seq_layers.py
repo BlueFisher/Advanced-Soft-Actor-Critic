@@ -1,3 +1,4 @@
+import math
 from typing import Optional, Tuple, Union
 
 import torch
@@ -227,3 +228,19 @@ class EpisodeMultiheadAttention(nn.Module):
             _q = output
 
         return _q, torch.concat(next_hidden_state_list, dim=-1), attn_weights_list
+
+
+class AbsolutePositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_seq_len=5000):
+        super().__init__()
+        self.d_model = d_model
+        pe = torch.zeros(max_seq_len, d_model)
+        for pos in range(max_seq_len):
+            for i in range(0, d_model, 2):
+                pe[pos, i] = math.sin(pos / (10000 ** ((2 * i) / d_model)))
+                pe[pos, i + 1] = math.cos(pos / (10000 ** ((2 * (i + 1)) / d_model)))
+        self.register_buffer('pe', pe)
+
+    def forward(self, indexes):
+        with torch.no_grad():
+            return self.pe[indexes.type(torch.int64)]

@@ -1,20 +1,18 @@
-import math
-
 import torch
 from torch import nn
 
 import algorithm.nn_models as m
 
-EXTRA_SIZE = 2
+EXTRA_SIZE = 3
 
 
 class ModelRep(m.ModelBaseAttentionRep):
     def _build_model(self):
-        assert self.obs_shapes[0] == (6, )
+        assert self.obs_shapes[0] == (8, )
 
-        embed_dim = 6 - EXTRA_SIZE + 2
-        self.attn = m.EpisodeMultiheadAttention(embed_dim * 2, 1, num_layers=2)
-        self.pos = m.AbsolutePositionalEncoding(embed_dim)
+        embed_dim = 8 - EXTRA_SIZE + 2
+        self.attn = m.EpisodeMultiheadAttention(embed_dim + 8, 5, num_layers=2)
+        self.pos = m.AbsolutePositionalEncoding(8)
 
     def forward(self, index, obs_list, pre_action,
                 query_length=1,

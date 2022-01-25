@@ -1,7 +1,7 @@
 default:
   base_config:
     scene: 3DBall
-    
+
     build_path:
       win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
       linux: /data/linux-RL-Envs/RLEnvironments.x86_64
@@ -18,18 +18,18 @@ default:
 
     init_log_alpha: -4.6
 
-hard:
-  base_config: &hard_base
-    nn: nn_hard
-    name: "hard_nopre_{time}"
-  sac_config: &hard_sac
+hard_rnn:
+  base_config:
+    nn: nn_hard_rnn
+    name: "hard_rnn_{time}"
+  sac_config:
     seq_encoder: RNN
     burn_in_step: 10
 
-hard_nopre:
+hard_attn:
   base_config:
-    <<: *hard_base
-    name: "hard_pre_{time}"
+    nn: nn_hard_attn
+    name: "hard_attn_{time}"
   sac_config:
-    <<: *hard_sac
-    use_prediction: true
+    seq_encoder: ATTN
+    burn_in_step: 10

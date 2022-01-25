@@ -16,7 +16,8 @@ import numpy as np
 
 import algorithm.config_helper as config_helper
 from algorithm.agent import Agent
-from algorithm.utils import ReadWriteLock, RLock, UselessEpisodeException, gen_pre_n_actions
+from algorithm.utils import (ReadWriteLock, RLock, UselessEpisodeException,
+                             gen_pre_n_actions)
 
 from .constants import *
 from .learner_trainer import Trainer
@@ -25,7 +26,8 @@ from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
 from .sac_ds_base import SAC_DS_Base
-from .utils import PeerSet, SharedMemoryManager, rpc_error_inspector, get_episode_shapes_dtypes
+from .utils import (PeerSet, SharedMemoryManager, get_episode_shapes_dtypes,
+                    rpc_error_inspector)
 
 
 class Learner:
