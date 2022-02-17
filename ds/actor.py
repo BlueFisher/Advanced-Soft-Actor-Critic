@@ -17,6 +17,7 @@ import numpy as np
 import algorithm.config_helper as config_helper
 from algorithm.agent import Agent
 from algorithm.utils import ReadWriteLock, elapsed_timer, gen_pre_n_actions
+from algorithm.utils.enums import *
 
 from .constants import *
 from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
@@ -136,11 +137,10 @@ class Actor(object):
          sac_config) = register_response
         self._logger.info(f'Assigned to id {_id}')
 
-        config['reset_config'] = self.reset_config = reset_config
-        config['model_config'] = self.model_config = model_config
+        config['reset_config'] = reset_config
+        config['model_config'] = model_config
         config['sac_config'] = sac_config
 
-        self.sac_config = config['sac_config']
         self.model_abs_dir = model_abs_dir
 
         # Set logger file if available
@@ -150,6 +150,12 @@ class Actor(object):
             self._logger.info(f'Set to logger {logger_file}')
 
         config_helper.display_config(config, self._logger)
+
+        convert_config_to_enum(config['sac_config'])
+
+        self.reset_config = config['reset_config']
+        self.model_config = config['model_config']
+        self.sac_config = config['sac_config']
 
     def _init_env(self):
         if self.base_config['env_type'] == 'UNITY':
@@ -325,13 +331,13 @@ class Actor(object):
                             )
 
                     with self._sac_actor_lock.read():
-                        if seq_encoder == 'RNN':
+                        if seq_encoder == SEQ_ENCODER.RNN:
                             action, prob, next_seq_hidden_state = self.sac_actor.choose_rnn_action(obs_list,
                                                                                                    pre_action,
                                                                                                    seq_hidden_state,
                                                                                                    force_rnd_if_avaiable=True)
 
-                        elif seq_encoder == 'ATTN':
+                        elif seq_encoder == SEQ_ENCODER.ATTN:
                             ep_length = max(1, max([a.episode_length for a in agents]))
 
                             all_episode_trans = [a.get_episode_trans(ep_length) for a in agents]

@@ -3,16 +3,16 @@ from torchvision import transforms as T
 
 import algorithm.nn_models as m
 from algorithm.utils.image_visual import ImageVisual
-from algorithm.utils.ray_visual import RayVisual
+from algorithm.utils.ray import RayVisual, generate_unity_to_nn_ray_index
 from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
 
-RAY_SIZE = 720
+RAY_SIZE = 400
 
 
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self, blur, brightness, ray_random, need_speed):
         assert self.obs_shapes[0] == (84, 84, 3)
-        assert self.obs_shapes[1] == (1442,)  # ray (1 + 360 + 360) * 2
+        assert self.obs_shapes[1] == (802,)  # ray (1 + 200 + 200) * 2
         assert self.obs_shapes[2] == (6,)  # vector
 
         self.ray_random = ray_random
@@ -24,14 +24,8 @@ class ModelRep(m.ModelBaseRNNRep):
 
         self.brightness = m.Transform(T.ColorJitter(brightness=(brightness, brightness)))
 
-        self.ray_index = []
-
-        for i in reversed(range(RAY_SIZE // 2)):
-            self.ray_index.append((i * 2 + 1) * 2)
-            self.ray_index.append((i * 2 + 1) * 2 + 1)
-        for i in range(RAY_SIZE // 2):
-            self.ray_index.append((i * 2 + 2) * 2)
-            self.ray_index.append((i * 2 + 2) * 2 + 1)
+        self.ray_index = generate_unity_to_nn_ray_index(RAY_SIZE)
+        self._ray_visual = RayVisual()
 
         self.conv = m.ConvLayers(84, 84, 3, 'simple',
                                  out_dense_n=64, out_dense_depth=2)
@@ -66,6 +60,7 @@ class ModelRep(m.ModelBaseRNNRep):
         vis = self.conv(vis_cam)
 
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
+        self._ray_visual(ray)
         # ray_random = (torch.rand(1) * self.ray_random).int()
         random_index = torch.randperm(RAY_SIZE)[:self.ray_random]
         ray[..., random_index, 0] = 0.

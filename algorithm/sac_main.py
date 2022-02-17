@@ -13,6 +13,7 @@ import algorithm.config_helper as config_helper
 from .agent import Agent
 from .sac_base import SAC_Base
 from .utils import format_global_step, gen_pre_n_actions
+from .utils.enums import *
 
 
 class Main(object):
@@ -79,6 +80,8 @@ class Main(object):
             config_helper.save_config(config, model_abs_dir, 'config.yaml')
 
         config_helper.display_config(config, self._logger)
+
+        convert_config_to_enum(config['sac_config'])
 
         self.base_config = config['base_config']
         self.reset_config = config['reset_config']
@@ -199,13 +202,13 @@ class Main(object):
                                 seq_hidden_state=initial_seq_hidden_state[0]
                             )
 
-                    if seq_encoder == 'RNN':
+                    if seq_encoder == SEQ_ENCODER.RNN:
                         action, prob, next_seq_hidden_state = self.sac.choose_rnn_action(obs_list,
                                                                                          pre_action,
                                                                                          seq_hidden_state,
                                                                                          disable_sample=self.disable_sample)
 
-                    elif seq_encoder == 'ATTN':
+                    elif seq_encoder == SEQ_ENCODER.ATTN:
                         ep_length = min(512, max([a.episode_length for a in agents]))
 
                         all_episode_trans = [a.get_episode_trans(ep_length) for a in agents]

@@ -11,7 +11,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         assert self.obs_shapes[0] == (8, )
 
         embed_dim = 8 - EXTRA_SIZE + 2
-        self.attn = m.EpisodeMultiheadAttention(embed_dim + 8, 5, num_layers=2)
+        self.attn = m.EpisodeMultiheadAttention(embed_dim + 8, 3, num_layers=2)
         self.pos = m.AbsolutePositionalEncoding(8)
 
     def forward(self, index, obs_list, pre_action,
@@ -36,9 +36,9 @@ class ModelRep(m.ModelBaseAttentionRep):
 
 class ModelQ(m.ModelQ):
     def _build_model(self):
-        return super()._build_model(c_dense_n=64, c_dense_depth=2)
+        return super()._build_model(c_dense_n=64, c_dense_depth=1)
 
 
 class ModelPolicy(m.ModelPolicy):
     def _build_model(self):
-        return super()._build_model(c_dense_n=64, c_dense_depth=2)
+        return super()._build_model(c_dense_n=64, c_dense_depth=1)

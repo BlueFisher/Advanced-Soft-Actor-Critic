@@ -11,7 +11,7 @@ def plot_attn_weight(attn_weight):
         attn_weight: [query_length, key_length]
     """
     fig, ax = plt.subplots(figsize=(2, 2))
-    attn_weight /= attn_weight.max(axis=1, keepdims=True)
+    attn_weight = attn_weight / attn_weight.max(axis=1, keepdims=True)
 
     im = ax.imshow(attn_weight)
     ax.axis('off')

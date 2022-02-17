@@ -10,49 +10,57 @@ default:
 
   reset_config:
     force_reset: true
+    ray_length: 20
+
+  model_config:
+    rep:
+      pe: cat
 
   sac_config:
     save_model_per_step: 10000
 
-    burn_in_step: 30
+    burn_in_step: 128
     n_step: 3
     v_lambda: 0.99
-    seq_encoder: RNN
+    seq_encoder: ATTN
 
     use_rnd: true
     rnd_n_sample: 50
-
-ray_nornn:
-  base_config:
-    scene: RayPyramid
-    nn: nn_nornn
-    name: "ray20_nornn_{time}"
-  reset_config:
-    ray_length: 20
-  sac_config:
-    burn_in_step: 0
-    use_rnn: false
 
 ray_nope:
   base_config:
     scene: RayPyramid
     nn: nn_nope
-    name: "ray20_nope_{time}"
-  reset_config:
-    ray_length: 20
+    name: "attn_nope_{time}"
+  model_config:
+    rep:
+      pe: nope
 
 ray_peadd:
   base_config:
     scene: RayPyramid
-    nn: nn_peadd
-    name: "ray20_peadd_{time}"
-  reset_config:
-    ray_length: 20
+    nn: nn_attn
+    name: "attn_peadd_{time}"
+  model_config:
+    rep:
+      pe: add
 
 ray_pecat:
   base_config:
     scene: RayPyramid
-    nn: nn_pecat
-    name: "ray20_pecat_{time}"
+    nn: nn_attn
+    name: "attn_pecat_{time}"
+  model_config:
+    rep:
+      pe: cat
+
+ray_nornn:
+  base_config:
+    scene: RayPyramid
+    nn: nn_nornn
+    name: "nornn_{time}"
   reset_config:
     ray_length: 20
+  sac_config:
+    burn_in_step: 0
+    seq_encoder: NONE

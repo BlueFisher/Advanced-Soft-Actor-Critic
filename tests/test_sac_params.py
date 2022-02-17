@@ -1,6 +1,7 @@
 import unittest
 
 from algorithm.sac_base import SAC_Base
+from algorithm.utils.enums import *
 from tests.get_synthesis_data import *
 
 OBS_SHAPES = [(10,), (30, 30, 3)]
@@ -35,9 +36,9 @@ class TestVanillaModel(unittest.TestCase):
 
 class TestSeqEncoderModel(unittest.TestCase):
     def _test(self, param_dict):
-        if param_dict['seq_encoder'] == 'RNN':
+        if param_dict['seq_encoder'] == SEQ_ENCODER.RNN:
             import tests.nn_conv_rnn as nn_conv
-        elif param_dict['seq_encoder'] == 'ATTN':
+        elif param_dict['seq_encoder'] == SEQ_ENCODER.ATTN:
             import tests.nn_conv_attn as nn_conv
 
         sac = SAC_Base(
@@ -51,12 +52,12 @@ class TestSeqEncoderModel(unittest.TestCase):
 
         step = 0
         while step < 10:
-            if param_dict['seq_encoder'] == 'RNN':
+            if param_dict['seq_encoder'] == SEQ_ENCODER.RNN:
                 sac.choose_rnn_action(*gen_batch_obs_for_rnn(OBS_SHAPES,
                                                              d_action_size=param_dict['d_action_size'],
                                                              c_action_size=param_dict['c_action_size'],
                                                              seq_hidden_state_shape=seq_hidden_state_shape))
-            elif param_dict['seq_encoder'] == 'ATTN':
+            elif param_dict['seq_encoder'] == SEQ_ENCODER.ATTN:
                 sac.choose_attn_action(*gen_batch_obs_for_attn(OBS_SHAPES,
                                                                d_action_size=param_dict['d_action_size'],
                                                                c_action_size=param_dict['c_action_size'],
@@ -80,7 +81,7 @@ def __gen_vanilla():
         'd_action_size': [10],
         'c_action_size': [4],
         'n_step': [3],
-        'siamese': [None, 'ATC', 'BYOL'],
+        'siamese': [None, SIAMESE.ATC, SIAMESE.BYOL],
         'siamese_use_q': [False, True],
         'siamese_use_adaptive': [False, True],
         'use_add_with_td': [False, True]
@@ -109,10 +110,10 @@ def __gen_seq_encoder():
         'c_action_size': [4],
         'burn_in_step': [5],
         'n_step': [3],
-        'seq_encoder': ['RNN', 'ATTN'],
+        'seq_encoder': [SEQ_ENCODER.RNN, SEQ_ENCODER.ATTN],
         'use_prediction': [True, False],
         'use_extra_data': [True, False],
-        'siamese': [None, 'ATC', 'BYOL'],
+        'siamese': [None, SIAMESE.ATC, SIAMESE.BYOL],
         'siamese_use_q': [False, True],
         'siamese_use_adaptive': [False, True],
         'use_add_with_td': [False, True]

@@ -61,9 +61,10 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
         self.num_heads = num_heads
 
         self.attn = MultiheadAttention(embed_dim, num_heads)
-        self.layer_norm_1 = nn.LayerNorm(embed_dim)
-        self.dense = LinearLayers(embed_dim, embed_dim, 1, embed_dim)
-        self.layer_norm_2 = nn.LayerNorm(embed_dim)
+        # self.layer_norm_1 = nn.LayerNorm(embed_dim)
+        # self.dense = LinearLayers(embed_dim, embed_dim, 1, embed_dim)
+        self.mlp = LinearLayers(embed_dim, output_size=embed_dim)
+        # self.layer_norm_2 = nn.LayerNorm(embed_dim)
 
     def get_attn_mask(self,
                       key_length: int,
@@ -95,7 +96,7 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
 
     def forward(self,
                 key: torch.Tensor,
-                query_length: int = 1,
+                query_length: int,
                 key_padding_mask: Optional[torch.Tensor] = None):
         """
         Args:
@@ -122,11 +123,12 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
         query = key[:, -query_length:]
         output, attn_weights = self.attn(query, key, key,
                                          attn_mask=attn_mask)
-        output += query
-        output = _t = self.layer_norm_1(output)
-        output = self.dense(output)
-        output += _t
-        output = self.layer_norm_2(output)
+        output = output + query
+        _t = output
+        # output = _t = self.layer_norm_1(output)
+        output = self.mlp(output)
+        output = output + _t
+        # output = self.layer_norm_2(output)
 
         return output, attn_weights
 
