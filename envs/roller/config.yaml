@@ -49,7 +49,7 @@ hard_attn:
     max_iter: 500
 
   sac_config:
-    burn_in_step: 10
+    burn_in_step: 128
     n_step: 5
     seq_encoder: ATTN
 

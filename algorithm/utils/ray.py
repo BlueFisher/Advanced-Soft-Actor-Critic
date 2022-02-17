@@ -6,8 +6,21 @@ import numpy as np
 import torch
 
 
+def generate_unity_to_nn_ray_index(ray_size):
+    ray_index = []
+
+    for i in reversed(range(ray_size // 2)):
+        ray_index.append((i * 2 + 1) * 2)
+        ray_index.append((i * 2 + 1) * 2 + 1)
+    for i in range(ray_size // 2):
+        ray_index.append((i * 2 + 2) * 2)
+        ray_index.append((i * 2 + 2) * 2 + 1)
+
+    return ray_index
+
+
 class RayVisual:
-    def __init__(self, model_abs_dir: Optional[str] = None) -> None:
+    def __init__(self, model_abs_dir: Optional[Path] = None) -> None:
         self.model_abs_dir = model_abs_dir
 
         plt.ion()
@@ -33,20 +46,26 @@ class RayVisual:
         if self.fig is None:
             self.fig, self.axes = plt.subplots(nrows=batch_size, ncols=fig_size,
                                                squeeze=False,
-                                               figsize=(3 * fig_size, 3 * batch_size),
-                                               subplot_kw={'projection': 'polar'})
+                                               figsize=(3 * fig_size, 3 * batch_size))
             self.scs = [[] for _ in range(batch_size)]
             for i in range(batch_size):
                 for j, ray in enumerate(rays):
-                    self.axes[i][j].set_theta_offset(np.pi / 2)
-                    self.axes[i][j].set_rlim(0, 1)
+                    self.axes[i][j].spines['right'].set_visible(False)
+                    self.axes[i][j].spines['top'].set_visible(False)
+                    self.axes[i][j].spines['left'].set_position('center')
+                    self.axes[i][j].spines['bottom'].set_position('center')
+                    self.axes[i][j].set_xlim(-1, 1)
+                    self.axes[i][j].set_ylim(-1, 1)
                     self.scs[i].append(self.axes[i][j].scatter([], [], s=1))
 
             self.fig.canvas.draw()
 
         for i in range(batch_size):
             for j, ray in enumerate(rays):
-                self.scs[i][j].set_offsets(np.c_[np.linspace(-np.pi, np.pi, 720), ray[i, :, -1]])
+                ray_rad = np.linspace(0, np.pi, 400)
+                ray_x = np.cos(ray_rad) * ray[i, :, -1]
+                ray_y = np.sin(ray_rad) * ray[i, :, -1]
+                self.scs[i][j].set_offsets(np.c_[ray_x, ray_y])
 
         self.fig.canvas.flush_events()
         self.idx += 1

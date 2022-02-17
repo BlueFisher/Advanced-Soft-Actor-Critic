@@ -1,3 +1,4 @@
+import copy
 import importlib
 import json
 import logging
@@ -18,6 +19,7 @@ import algorithm.config_helper as config_helper
 from algorithm.agent import Agent
 from algorithm.utils import (ReadWriteLock, RLock, UselessEpisodeException,
                              gen_pre_n_actions)
+from algorithm.utils.enums import *
 
 from .constants import *
 from .learner_trainer import Trainer
@@ -118,15 +120,9 @@ class Learner:
         if args.agents is not None:
             config['base_config']['n_agents'] = args.agents
 
-        self.config = config
-        self.base_config = config['base_config']
-        self.reset_config = config['reset_config']
-        self.model_config = config['model_config']
-        self.sac_config = config['sac_config']
-
         model_abs_dir = Path(root_dir).joinpath('models',
-                                                self.base_config['scene'],
-                                                self.base_config['name'],
+                                                config['base_config']['scene'],
+                                                config['base_config']['name'],
                                                 f'learner{_id}')
         model_abs_dir.mkdir(parents=True, exist_ok=True)
         self.model_abs_dir = model_abs_dir
@@ -135,6 +131,14 @@ class Learner:
             config_helper.set_logger(Path(model_abs_dir).joinpath(f'learner.log'))
 
         config_helper.display_config(config, self._logger)
+
+        convert_config_to_enum(config['sac_config'])
+
+        self.config = config
+        self.base_config = config['base_config']
+        self.reset_config = config['reset_config']
+        self.model_config = config['model_config']
+        self.sac_config = config['sac_config']
 
     def _init_env(self):
         if self.base_config['env_type'] == 'UNITY':
@@ -266,10 +270,10 @@ class Learner:
 
     def _get_actor_register_result(self, actor_id):
         if self._registered:
-
             noise = self.base_config['noise_increasing_rate'] * actor_id
-            actor_sac_config = self.sac_config
+            actor_sac_config = copy.deepcopy(self.sac_config)
             actor_sac_config['noise'] = min(noise, self.base_config['noise_max'])
+            convert_config_to_string(actor_sac_config)
 
             return (str(self.model_abs_dir),
                     self.reset_config,
@@ -377,14 +381,14 @@ class Learner:
                             )
 
                     with self._sac_bak_lock.read('choose_action'):
-                        if seq_encoder == 'RNN':
+                        if seq_encoder == SEQ_ENCODER.RNN:
                             action, prob, next_seq_hidden_state = self.sac_bak.choose_rnn_action(obs_list,
                                                                                                  pre_action,
                                                                                                  seq_hidden_state)
                             if np.isnan(np.min(next_seq_hidden_state)):
                                 raise UselessEpisodeException()
 
-                        elif seq_encoder == 'ATTN':
+                        elif seq_encoder == SEQ_ENCODER.ATTN:
                             ep_length = max(1, max([a.episode_length for a in agents]))
 
                             all_episode_trans = [a.get_episode_trans(ep_length) for a in agents]

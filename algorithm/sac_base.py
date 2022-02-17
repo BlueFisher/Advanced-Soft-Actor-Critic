@@ -38,7 +38,7 @@ class SAC_Base(object):
 
                  burn_in_step: int = 0,
                  n_step: int = 1,
-                 seq_encoder: Optional[str] = None,
+                 seq_encoder: Optional[SEQ_ENCODER] = None,
 
                  batch_size: int = 256,
                  tau: float = 0.005,
@@ -55,13 +55,13 @@ class SAC_Base(object):
                  discrete_dqn_like: bool = False,
                  use_priority: bool = True,
                  use_n_step_is: bool = True,
-                 siamese: Optional[str] = None,
+                 siamese: Optional[SIAMESE] = None,
                  siamese_use_q: bool = False,
                  siamese_use_adaptive: bool = False,
                  use_prediction: bool = False,
                  transition_kl: float = 0.8,
                  use_extra_data: bool = True,
-                 curiosity: Optional[str] = None,
+                 curiosity: Optional[CURIOSITY] = None,
                  curiosity_strength: float = 1.,
                  use_rnd: bool = False,
                  rnd_n_sample: int = 10,
@@ -228,7 +228,7 @@ class SAC_Base(object):
             ModelRep = model.ModelRep
 
         """ REPRESENTATION """
-        if self.seq_encoder == 'RNN':
+        if self.seq_encoder == SEQ_ENCODER.RNN:
             self.model_rep: ModelBaseRNNRep = ModelRep(self.obs_shapes,
                                                        self.d_action_size, self.c_action_size,
                                                        False, self.train_mode,
@@ -246,7 +246,7 @@ class SAC_Base(object):
                                                         test_pre_action)
             state_size, self.seq_hidden_state_shape = test_state.shape[-1], test_rnn_state.shape[1:]
 
-        elif self.seq_encoder == 'ATTN':
+        elif self.seq_encoder == SEQ_ENCODER.ATTN:
             self.model_rep: ModelBaseAttentionRep = ModelRep(self.obs_shapes,
                                                              self.d_action_size, self.c_action_size,
                                                              False, self.train_mode,
@@ -528,7 +528,7 @@ class SAC_Base(object):
         return np.zeros([batch_size, self.d_action_size + self.c_action_size], dtype=np.float32)
 
     def get_initial_seq_hidden_state(self, batch_size):
-        assert self.seq_encoder in ('RNN', 'ATTN')
+        assert self.seq_encoder is not None
 
         return np.zeros([batch_size, *self.seq_hidden_state_shape], dtype=np.float32)
 
@@ -590,11 +590,11 @@ class SAC_Base(object):
             l_probs: [Batch, l]
         """
 
-        if self.seq_encoder == 'RNN':
+        if self.seq_encoder == SEQ_ENCODER.RNN:
             l_states, _ = self.model_rep(l_obses_list,
                                          gen_pre_n_actions(l_actions),
                                          f_seq_hidden_states[:, 0])
-        elif self.seq_encoder == 'ATTN':
+        elif self.seq_encoder == SEQ_ENCODER.ATTN:
             l_states, *_ = self.model_rep(l_indexes,
                                           l_obses_list,
                                           gen_pre_n_actions(l_actions),
@@ -641,7 +641,7 @@ class SAC_Base(object):
             l_seq_hidden_states: [Batch, l, *seq_hidden_state_shape]
         """
 
-        if self.seq_encoder == 'RNN':
+        if self.seq_encoder == SEQ_ENCODER.RNN:
             l_rnn_states = []
             l_actions = gen_pre_n_actions(l_actions)
             rnn_state = f_seq_hidden_states[:, 0]
@@ -653,7 +653,7 @@ class SAC_Base(object):
 
             return torch.stack(l_rnn_states, dim=1)
 
-        elif self.seq_encoder == 'ATTN':
+        elif self.seq_encoder == SEQ_ENCODER.ATTN:
             _, l_attn_states, _ = self.model_rep(l_indexes,
                                                  l_obses_list,
                                                  gen_pre_n_actions(l_actions),
@@ -917,7 +917,7 @@ class SAC_Base(object):
         else:
             m_pre_actions = gen_pre_n_actions(bn_actions, keep_last_action=True)
 
-            if self.seq_encoder == 'RNN':
+            if self.seq_encoder == SEQ_ENCODER.RNN:
                 rnn_state = f_seq_hidden_states[:, 0]
                 if self.siamese is not None and self.siamese_use_q:
                     b_states, rnn_state_at_n = self.model_rep(b_obses_list := [o[:, :self.burn_in_step, ...] for o in m_obses_list],
@@ -948,7 +948,7 @@ class SAC_Base(object):
                                                                m_pre_actions,
                                                                rnn_state)
 
-            elif self.seq_encoder == 'ATTN':
+            elif self.seq_encoder == SEQ_ENCODER.ATTN:
                 m_indexes = torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1)
                 m_padding_mask = torch.concat([bn_padding_masks,
                                                torch.zeros_like(bn_padding_masks[:, -1:], dtype=torch.bool)],
@@ -1130,7 +1130,7 @@ class SAC_Base(object):
 
                 pre_actions_at_n = bn_actions[:, self.burn_in_step - 1:self.burn_in_step, ...]
 
-                if self.seq_encoder == 'RNN':
+                if self.seq_encoder == SEQ_ENCODER.RNN:
                     state = self.model_rep.get_state_from_encoders(obses_list_at_n,
                                                                    _encoder if len(_encoder) > 1 else _encoder[0],
                                                                    pre_actions_at_n,
@@ -1142,7 +1142,7 @@ class SAC_Base(object):
                     state = state[:, 0, ...]
                     target_state = target_state[:, 0, ...]
 
-                elif self.seq_encoder == 'ATTN':
+                elif self.seq_encoder == SEQ_ENCODER.ATTN:
                     padding_masks_at_n = bn_padding_masks[:, self.burn_in_step:self.burn_in_step + 1]
                     state = self.model_rep.get_state_from_encoders(bn_indexes[:, self.burn_in_step:self.burn_in_step + 1],
                                                                    obses_list_at_n,
@@ -1449,11 +1449,11 @@ class SAC_Base(object):
             m_obses_list = [torch.cat([bn_obses, next_obs.unsqueeze(1)], dim=1)
                             for bn_obses, next_obs in zip(bn_obses_list, next_obs_list)]
 
-            if self.seq_encoder == 'RNN':
+            if self.seq_encoder == SEQ_ENCODER.RNN:
                 m_states, _ = self.model_rep(m_obses_list,
                                              gen_pre_n_actions(bn_actions, keep_last_action=True),
                                              f_seq_hidden_states[:, 0])
-            elif self.seq_encoder == 'ATTN':
+            elif self.seq_encoder == SEQ_ENCODER.ATTN:
                 m_states, *_ = self.model_rep(torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1),
                                               m_obses_list,
                                               gen_pre_n_actions(bn_actions, keep_last_action=True),
@@ -1745,7 +1745,7 @@ class SAC_Base(object):
         m_obses_list = [torch.cat([bn_obses, next_obs.unsqueeze(1)], dim=1)
                         for bn_obses, next_obs in zip(bn_obses_list, next_obs_list)]
 
-        if self.seq_encoder == 'RNN':
+        if self.seq_encoder == SEQ_ENCODER.RNN:
             rnn_state = f_seq_hidden_states[:, 0]
             tmp_states, _ = self.model_rep([m_obses[:, :self.burn_in_step + 1, ...] for m_obses in m_obses_list],
                                            gen_pre_n_actions(bn_actions[:, :self.burn_in_step + 1, ...]),
@@ -1755,7 +1755,7 @@ class SAC_Base(object):
                                                         gen_pre_n_actions(bn_actions,
                                                                           keep_last_action=True),
                                                         rnn_state)
-        elif self.seq_encoder == 'ATTN':
+        elif self.seq_encoder == SEQ_ENCODER.ATTN:
             tmp_states, *_ = self.model_rep(bn_indexes[:, :self.burn_in_step + 1],
                                             [m_obses[:, :self.burn_in_step + 1, ...] for m_obses in m_obses_list],
                                             gen_pre_n_actions(bn_actions[:, :self.burn_in_step + 1, ...]),
@@ -1993,7 +1993,7 @@ class SAC_Base(object):
             self.replay_buffer.add(storage_data,
                                    ignore_size=self.burn_in_step + self.n_step)
 
-        if self.seq_encoder == 'ATTN' and self.summary_writer is not None and self.summary_available:
+        if self.seq_encoder == SEQ_ENCODER.ATTN and self.summary_writer is not None and self.summary_available:
             self.summary_available = False
             with torch.no_grad():
                 l_indexes = l_indexes[:, self.burn_in_step:]

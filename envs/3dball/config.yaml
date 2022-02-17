@@ -32,4 +32,4 @@ hard_attn:
     name: "hard_attn_{time}"
   sac_config:
     seq_encoder: ATTN
-    burn_in_step: 10
+    burn_in_step: 128

@@ -7,7 +7,7 @@ import torch
 
 
 class ImageVisual:
-    def __init__(self, model_abs_dir: Optional[str] = None) -> None:
+    def __init__(self, model_abs_dir: Optional[Path] = None) -> None:
         self.model_abs_dir = model_abs_dir
 
         plt.ion()
@@ -48,7 +48,7 @@ class ImageVisual:
         self.fig.canvas.flush_events()
         if self.model_abs_dir:
             save_name = '' if save_name is None else save_name + '-'
-            self.fig.savefig(Path(self.model_abs_dir).joinpath(f'{save_name}{self.idx}.jpg'), bbox_inches='tight')
+            self.fig.savefig(self.model_abs_dir.joinpath(f'{save_name}{self.idx}.jpg'), bbox_inches='tight')
         self.idx += 1
 
 

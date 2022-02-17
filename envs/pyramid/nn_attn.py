@@ -1,21 +1,27 @@
-import math
-
 import torch
-from torch import nn
 
 import algorithm.nn_models as m
 
-EXTRA_SIZE = 4
+EXTRA_SIZE = 6
 
 
 class ModelRep(m.ModelBaseAttentionRep):
-    def _build_model(self):
-        assert self.obs_shapes[0] == (44,)
-        assert self.obs_shapes[1] == (8,)
+    def _build_model(self, pe: str):
+        assert self.obs_shapes[0] == (55,)
+        assert self.obs_shapes[1] == (11,)
 
-        embed_dim = self.obs_shapes[1][0] - EXTRA_SIZE + self.c_action_size
-        self.pos = m.AbsolutePositionalEncoding(embed_dim)
-        self.attn = m.EpisodeMultiheadAttention(embed_dim, 2, num_layers=2)
+        self.pe = pe
+
+        embed_dim = self.obs_shapes[0][0] + self.obs_shapes[1][0] - EXTRA_SIZE + self.c_action_size
+
+        if pe == 'cat':
+            self.pos = m.AbsolutePositionalEncoding(embed_dim)
+            self.attn = m.EpisodeMultiheadAttention(embed_dim * 2, 2, num_layers=3)
+        elif pe == 'add':
+            self.pos = m.AbsolutePositionalEncoding(embed_dim)
+            self.attn = m.EpisodeMultiheadAttention(embed_dim, 2, num_layers=3)
+        else:
+            self.attn = m.EpisodeMultiheadAttention(embed_dim, 2, num_layers=3)
 
     def forward(self, index, obs_list, pre_action,
                 query_length=1,
@@ -26,9 +32,14 @@ class ModelRep(m.ModelBaseAttentionRep):
         ray_obs, vec_obs = obs_list
         vec_obs = vec_obs[..., :-EXTRA_SIZE]
 
-        x = torch.concat([vec_obs, pre_action], dim=-1)
+        x = torch.concat([ray_obs, vec_obs, pre_action], dim=-1)
         pe = self.pos(index)
-        x = x + pe
+
+        if self.pe == 'cat':
+            x = torch.concat([x, pe], dim=-1)
+        elif self.pe == 'add':
+            x = x + pe
+
         output, hn, attn_weights_list = self.attn(x,
                                                   query_length,
                                                   hidden_state,
