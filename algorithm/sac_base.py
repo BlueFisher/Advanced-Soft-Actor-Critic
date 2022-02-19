@@ -920,15 +920,19 @@ class SAC_Base(object):
             if self.seq_encoder == SEQ_ENCODER.RNN:
                 rnn_state = f_seq_hidden_states[:, 0]
                 if self.siamese is not None and self.siamese_use_q:
-                    b_states, rnn_state_at_n = self.model_rep(b_obses_list := [o[:, :self.burn_in_step, ...] for o in m_obses_list],
-                                                              b_pre_actions := m_pre_actions[:, :self.burn_in_step, ...],
+                    b_obses_list = [o[:, :self.burn_in_step, ...] for o in m_obses_list]
+                    b_pre_actions = m_pre_actions[:, :self.burn_in_step, ...]
+                    b_states, rnn_state_at_n = self.model_rep(b_obses_list,
+                                                              b_pre_actions,
                                                               rnn_state)
                     b_target_states, target_rnn_state_at_n = self.model_target_rep(b_obses_list,
                                                                                    b_pre_actions,
                                                                                    rnn_state)
 
-                    n1_states, _ = self.model_rep(n1_obses_list := [o[:, self.burn_in_step:, ...] for o in m_obses_list],
-                                                  n1_pre_actions := m_pre_actions[:, self.burn_in_step:, ...],
+                    n1_obses_list = [o[:, self.burn_in_step:, ...] for o in m_obses_list]
+                    n1_pre_actions = m_pre_actions[:, self.burn_in_step:, ...]
+                    n1_states, _ = self.model_rep(n1_obses_list,
+                                                  n1_pre_actions,
                                                   rnn_state_at_n)
                     n1_target_states, _ = self.model_target_rep(n1_obses_list,
                                                                 n1_pre_actions,
@@ -1117,7 +1121,8 @@ class SAC_Base(object):
                 _encoder = [e[:, 0, ...] for e in encoder_list]
                 _target_encoder = [t_e[:, 0, ...] for t_e in target_encoder_list]
 
-                state = self.model_rep.get_state_from_encoders(_obs := [n_obses[:, 0, ...] for n_obses in n_obses_list],
+                _obs = [n_obses[:, 0, ...] for n_obses in n_obses_list]
+                state = self.model_rep.get_state_from_encoders(_obs,
                                                                _encoder if len(_encoder) > 1 else _encoder[0])
                 target_state = self.model_target_rep.get_state_from_encoders(_obs,
                                                                              _target_encoder if len(_target_encoder) > 1 else _target_encoder[0])
@@ -1483,6 +1488,12 @@ class SAC_Base(object):
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             self.summary_available = True
+
+            # for p in self.model_rep.named_parameters():
+            #     n, v = p
+            #     if (g := v.grad) is not None:
+            #         print(n, g.shape, torch.max(g).item(), torch.mean(g).item(), torch.min(g).item())
+
             with torch.no_grad():
                 self.summary_writer.add_scalar('loss/q', loss_q, self.global_step)
                 if self.d_action_size:
@@ -2029,8 +2040,8 @@ class SAC_Base(object):
                 bn_seq_hidden_states: [Batch, b + n, *seq_hidden_state_shape],
             )
         """
-
-        if (sampled := self.replay_buffer.sample()) is None:
+        sampled = self.replay_buffer.sample()
+        if sampled is None:
             return None
 
         """
@@ -2102,7 +2113,8 @@ class SAC_Base(object):
                           bn_seq_hidden_states if self.seq_encoder is not None else None)
 
     def train(self):
-        if (train_data := self._sample()) is None:
+        train_data = self._sample()
+        if train_data is None:
             return 0
 
         """

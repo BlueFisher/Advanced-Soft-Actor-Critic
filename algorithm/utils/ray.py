@@ -31,7 +31,9 @@ class RayVisual:
     def __call__(self, *rays: Union[np.ndarray, torch.Tensor], save_name=None):
         """
         Args:
-            *rays: [Batch, L, C]
+            *rays: [Batch, ray_size, C]
+                ray[..., -1] = 0 if has_hit else 1
+                ray[..., -2] = hit_fraction if has_hit else 1
         """
         if len(rays[0].shape) > 3:
             rays = [ray[:, 0, ...] for ray in rays]
@@ -50,6 +52,7 @@ class RayVisual:
             self.scs = [[] for _ in range(batch_size)]
             for i in range(batch_size):
                 for j, ray in enumerate(rays):
+                    # ray: [Batch, ray_size, C]
                     self.axes[i][j].spines['right'].set_visible(False)
                     self.axes[i][j].spines['top'].set_visible(False)
                     self.axes[i][j].spines['left'].set_position('center')
@@ -62,9 +65,10 @@ class RayVisual:
 
         for i in range(batch_size):
             for j, ray in enumerate(rays):
-                ray_rad = np.linspace(0, np.pi, 400)
-                ray_x = np.cos(ray_rad) * ray[i, :, -1]
-                ray_y = np.sin(ray_rad) * ray[i, :, -1]
+                mask = ray[i, :, -2] == 0.
+                ray_rad = np.linspace(0, np.pi, 400)[mask]
+                ray_x = np.cos(ray_rad) * ray[i, :, -1][mask]
+                ray_y = np.sin(ray_rad) * ray[i, :, -1][mask]
                 self.scs[i][j].set_offsets(np.c_[ray_x, ray_y])
 
         self.fig.canvas.flush_events()

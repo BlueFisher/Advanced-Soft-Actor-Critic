@@ -296,7 +296,8 @@ class Main(object):
 
             self._log_episode_info(iteration, time.time() - iter_time, agents)
 
-            if self.train_mode and (p := self.model_abs_dir.joinpath('save_model')).exists():
+            p = self.model_abs_dir.joinpath('save_model')
+            if self.train_mode and p.exists():
                 self.sac.save_model()
                 p.unlink()
 

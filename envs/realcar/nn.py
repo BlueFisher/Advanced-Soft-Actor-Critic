@@ -60,11 +60,11 @@ class ModelRep(m.ModelBaseRNNRep):
         vis = self.conv(vis_cam)
 
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
-        self._ray_visual(ray)
         # ray_random = (torch.rand(1) * self.ray_random).int()
         random_index = torch.randperm(RAY_SIZE)[:self.ray_random]
-        ray[..., random_index, 0] = 0.
-        ray[..., random_index, 1] = 0.03
+        ray[..., random_index, 0] = 1.
+        ray[..., random_index, 1] = 1.
+        self._ray_visual(ray)
         ray = self.ray_conv(ray)
 
         vis_ray_concat = self.vis_ray_dense(torch.cat([vis, ray], dim=-1))

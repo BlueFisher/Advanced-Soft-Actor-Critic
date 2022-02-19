@@ -83,28 +83,3 @@ ray350:
   model_config:
     rep:
       ray_random: 350
-
-ray400:
-  model_config:
-    rep:
-      ray_random: 400
-
-ray450:
-  model_config:
-    rep:
-      ray_random: 450
-
-ray500:
-  model_config:
-    rep:
-      ray_random: 500
-
-ray550:
-  model_config:
-    rep:
-      ray_random: 550
-
-ray600:
-  model_config:
-    rep:
-      ray_random: 600
