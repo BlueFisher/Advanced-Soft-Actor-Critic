@@ -6,28 +6,37 @@ import algorithm.nn_models as m
 EXTRA_SIZE = 3
 
 
-class ModelRep(m.ModelBaseRNNRep):
+class ModelRep(m.ModelBaseAttentionRep):
     def _build_model(self):
         self.conv = m.ConvLayers(30, 30, 3, 'simple', out_dense_depth=2, output_size=8)
 
-        self.rnn = m.GRU(self.conv.output_size + self.d_action_size + self.c_action_size, 8, 2)
+        embed_dim = self.conv.output_size + self.d_action_size + self.c_action_size
+        self.attn = m.EpisodeMultiheadAttention(embed_dim, 1, num_layers=3)
 
         self.dense = nn.Sequential(
-            nn.Linear(self.obs_shapes[0][0] - EXTRA_SIZE + 8, 8),
+            nn.Linear(self.obs_shapes[0][0] - EXTRA_SIZE + embed_dim, 8),
             nn.Tanh()
         )
 
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, index, obs_list, pre_action,
+                query_length=1,
+                hidden_state=None,
+                is_prev_hidden_state=False,
+                padding_mask=None):
         obs_vec, obs_vis = obs_list
         obs_vec = obs_vec[..., EXTRA_SIZE:]
 
         vis = self.conv(obs_vis)
 
-        state, hn = self.rnn(torch.cat([vis, pre_action], dim=-1), rnn_state)
+        state, hn, attn_weights_list = self.attn(torch.cat([vis, pre_action], dim=-1),
+                                                 query_length,
+                                                 hidden_state,
+                                                 is_prev_hidden_state,
+                                                 padding_mask)
 
-        state = self.dense(torch.cat([obs_vec, state], dim=-1))
+        state = self.dense(torch.cat([obs_vec[:, -query_length:], state], dim=-1))
 
-        return state, hn
+        return state, hn, attn_weights_list
 
     def get_augmented_encoders(self, obs_list):
         obs_vec, obs_vis = obs_list
@@ -36,13 +45,21 @@ class ModelRep(m.ModelBaseRNNRep):
 
         return vis_encoder
 
-    def get_state_from_encoders(self, obs_list, encoders, pre_action, rnn_state=None):
+    def get_state_from_encoders(self, index, obs_list, encoders, pre_action,
+                                query_length=1,
+                                hidden_state=None,
+                                is_prev_hidden_state=False,
+                                padding_mask=None):
         obs_vec, obs_vis = obs_list
         obs_vec = obs_vec[..., EXTRA_SIZE:]
 
         vis_encoder = encoders
 
-        state, _ = self.rnn(torch.cat([vis_encoder, pre_action], dim=-1), rnn_state)
+        state, *_ = self.attn(torch.cat([vis_encoder, pre_action], dim=-1),
+                              query_length,
+                              hidden_state,
+                              is_prev_hidden_state,
+                              padding_mask)
 
         state = self.dense(torch.cat([obs_vec, state], dim=-1))
 

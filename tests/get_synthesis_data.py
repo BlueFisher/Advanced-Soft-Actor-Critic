@@ -12,91 +12,101 @@ def get_product(possible_dict):
         }
 
 
-def gen_batch_obs(obs_shapes, rnn_shape=None, d_action_size=None, c_action_size=None, batch=10):
-    obs_list = [np.random.randn(batch, *obs_shape).astype(np.float32) for obs_shape in obs_shapes]
-
-    if rnn_shape:
-        if d_action_size:
-            d_actoin = np.eye(d_action_size)[np.random.rand(batch, d_action_size).argmax(axis=-1)]
-        else:
-            d_actoin = np.empty((batch, 0))
-
-        if c_action_size:
-            c_action = np.random.rand(batch, c_action_size)
-            c_action = np.clip(c_action, -.99, 99.)
-        else:
-            c_action = np.empty((batch, 0))
-
-        action = np.concatenate([d_actoin, c_action], axis=-1).astype(np.float32)
-
-        rnn_state = np.random.randn(batch, *rnn_shape).astype(np.float32)
-
-        return obs_list, action, rnn_state
+def get_action(batch, seq_len, d_action_size, c_action_size):
+    if seq_len is None:
+        batch = (batch, )
     else:
-        return obs_list
+        batch = (batch, seq_len)
 
-
-def gen_batch_trans(obs_shapes, d_action_size, c_action_size, n, rnn_shape=None, batch=10):
     if d_action_size:
-        d_actoin = np.eye(d_action_size)[np.random.rand(n * batch, d_action_size).argmax(axis=-1)]
-        d_actoin = d_actoin.reshape(batch, n, d_action_size)
+        d_actoin = np.eye(d_action_size)[np.random.rand(*batch, d_action_size).argmax(axis=-1)]
     else:
-        d_actoin = np.empty((batch, n, 0))
+        d_actoin = np.empty((*batch, 0))
 
     if c_action_size:
-        c_action = np.random.rand(batch, n, c_action_size)
+        c_action = np.random.rand(*batch, c_action_size)
         c_action = np.clip(c_action, -.99, 99.)
     else:
-        c_action = np.empty((batch, n, 0))
-    n_actions = np.concatenate([d_actoin, c_action], axis=-1).astype(np.float32)
+        c_action = np.empty((*batch, 0))
 
+    return np.concatenate([d_actoin, c_action], axis=-1).astype(np.float32)
+
+
+def gen_batch_obs(obs_shapes, batch=10):
+    return (
+        [np.random.randn(batch, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
+    )
+
+
+def gen_batch_obs_for_rnn(obs_shapes, d_action_size, c_action_size, seq_hidden_state_shape, batch=10):
+    return (
+        [np.random.randn(batch, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
+        get_action(batch, None, d_action_size, c_action_size),
+        np.random.randn(batch, *seq_hidden_state_shape).astype(np.float32)
+    )
+
+
+def gen_batch_obs_for_attn(obs_shapes, d_action_size, c_action_size, seq_hidden_state_shape, batch=10):
+    episode_len = random.randint(1, 100)
+
+    # ep_indexes
+    # ep_padding_masks
+    # ep_obses_list
+    # ep_actions
+    # ep_attn_hidden_states
+    return (
+        np.expand_dims(np.arange(episode_len), 0).repeat(batch, 0),
+        np.random.randint(0, 2, size=(batch, episode_len), dtype=bool),
+        [np.random.randn(batch, episode_len, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
+        get_action(batch, episode_len, d_action_size, c_action_size),
+        np.random.randn(batch, episode_len, *seq_hidden_state_shape).astype(np.float32)
+    )
+
+
+def gen_batch_trans(obs_shapes, d_action_size, c_action_size, n, seq_hidden_state_shape=None, batch=10):
     # n_obses_list, n_actions, n_rewards, next_obs_list, n_dones, n_mu_probs,
     vanilla_batch_trans = [
         [np.random.randn(batch, n, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
-        n_actions,
+        get_action(batch, n, d_action_size, c_action_size),
         np.random.randn(batch, n).astype(np.float32),
         [np.random.randn(batch, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
         np.random.randint(0, 2, size=(batch, n), dtype=bool),
         np.random.randn(batch, n).astype(np.float32),
     ]
 
-    if rnn_shape:
+    if seq_hidden_state_shape:
         return vanilla_batch_trans + [
-            np.random.randn(batch, *rnn_shape).astype(np.float32)
+            np.random.randn(batch, *seq_hidden_state_shape).astype(np.float32)
         ]
     else:
         return vanilla_batch_trans
 
 
-def gen_episode_trans(obs_shapes, d_action_size, c_action_size, rnn_shape=None, episode_len=None):
+def gen_episode_trans(obs_shapes, d_action_size, c_action_size, seq_hidden_state_shape=None, episode_len=None):
     if episode_len is None:
         episode_len = random.randint(1, 100)
 
-    if d_action_size:
-        d_actoin = np.eye(d_action_size)[np.random.rand(episode_len, d_action_size).argmax(axis=-1)]
-        d_actoin = d_actoin.reshape(1, -1, d_action_size)
-    else:
-        d_actoin = np.empty((1, episode_len, 0))
-
-    if c_action_size:
-        c_action = np.random.rand(1, episode_len, c_action_size)
-        c_action = np.clip(c_action, -.99, 99.)
-    else:
-        c_action = np.empty((1, episode_len, 0))
-    n_actions = np.concatenate([d_actoin, c_action], axis=-1).astype(np.float32)
-
-    # n_obses_list, n_actions, n_rewards, next_obs_list, n_dones, n_probs
+    # ep_indexes,
+    # ep_padding_masks,
+    # ep_obses_list,
+    # ep_actions,
+    # ep_rewards,
+    # next_obs_list,
+    # ep_dones,
+    # ep_probs
     vanilla_episode_trans = [
+        np.expand_dims(np.arange(episode_len), 0),
+        np.random.randint(0, 2, size=(1, episode_len), dtype=bool),
         [np.random.randn(1, episode_len, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
-        n_actions,
+        get_action(1, episode_len, d_action_size, c_action_size),
         np.random.randn(1, episode_len).astype(np.float32),
         [np.random.randn(1, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
         np.random.randint(0, 2, size=(1, episode_len), dtype=bool),
         np.random.randn(1, episode_len).astype(np.float32),
     ]
-    if rnn_shape:
+    if seq_hidden_state_shape:
         return vanilla_episode_trans + [
-            np.random.randn(1, episode_len, *rnn_shape).astype(np.float32)
+            np.random.randn(1, episode_len, *seq_hidden_state_shape).astype(np.float32)
         ]
     else:
         return vanilla_episode_trans

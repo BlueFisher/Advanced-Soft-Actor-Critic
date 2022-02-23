@@ -40,7 +40,7 @@ class ModelSimpleRep(ModelBaseSimpleRep):
 class ModelBaseRNNRep(nn.Module):
     def __init__(self, obs_shapes: List[Tuple], d_action_size: int, c_action_size: int,
                  is_target: bool, train_mode: bool,
-                 model_abs_dir: str, **kwargs):
+                 model_abs_dir: Optional[Path] = None, **kwargs):
         super().__init__()
         self.obs_shapes = obs_shapes
         self.d_action_size = d_action_size
@@ -61,6 +61,22 @@ class ModelBaseRNNRep(nn.Module):
         raise Exception("get_augmented_encoders not implemented")
 
     def get_state_from_encoders(self, obs_list, encoders, pre_action, rnn_state=None) -> torch.Tensor:
+        raise Exception("get_state_from_encoders not implemented")
+
+
+class ModelBaseAttentionRep(ModelBaseRNNRep):
+    def forward(self, index, obs_list, pre_action,
+                query_length=1,
+                hidden_state=None,
+                is_prev_hidden_state=False,
+                padding_mask=None):
+        raise Exception('ModelAttentionRep not implemented')
+
+    def get_state_from_encoders(self, index, obs_list, encoders, pre_action,
+                                query_length=1,
+                                hidden_state=None,
+                                is_prev_hidden_state=False,
+                                padding_mask=None) -> torch.Tensor:
         raise Exception("get_state_from_encoders not implemented")
 
 

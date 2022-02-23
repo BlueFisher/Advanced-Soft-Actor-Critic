@@ -29,44 +29,44 @@ class SAC_Base(object):
                  train_mode: bool = True,
                  last_ckpt: Optional[str] = None,
 
-                 seed=None,
-                 write_summary_per_step=1e3,
-                 save_model_per_step=1e5,
+                 seed: Optional[float] = None,
+                 write_summary_per_step: float = 1e3,
+                 save_model_per_step: float = 1e5,
 
-                 ensemble_q_num=2,
-                 ensemble_q_sample=2,
+                 ensemble_q_num: int = 2,
+                 ensemble_q_sample: int = 2,
 
-                 burn_in_step=0,
-                 n_step=1,
-                 use_rnn=False,
+                 burn_in_step: int = 0,
+                 n_step: int = 1,
+                 seq_encoder: Optional[SEQ_ENCODER] = None,
 
-                 batch_size=256,
-                 tau=0.005,
-                 update_target_per_step=1,
-                 init_log_alpha=-2.3,
-                 use_auto_alpha=True,
-                 learning_rate=3e-4,
-                 gamma=0.99,
-                 v_lambda=0.9,
-                 v_rho=1.,
-                 v_c=1.,
-                 clip_epsilon=0.2,
+                 batch_size: int = 256,
+                 tau: float = 0.005,
+                 update_target_per_step: int = 1,
+                 init_log_alpha: float = -2.3,
+                 use_auto_alpha: bool = True,
+                 learning_rate: float = 3e-4,
+                 gamma: float = 0.99,
+                 v_lambda: float = 0.9,
+                 v_rho: float = 1.,
+                 v_c: float = 1.,
+                 clip_epsilon: float = 0.2,
 
-                 discrete_dqn_like=False,
-                 use_priority=True,
-                 use_n_step_is=True,
-                 siamese: Optional[str] = None,
-                 siamese_use_q=False,
-                 siamese_use_adaptive=False,
-                 use_prediction=False,
-                 transition_kl=0.8,
-                 use_extra_data=True,
-                 curiosity: Optional[str] = None,
-                 curiosity_strength=1,
-                 use_rnd=False,
-                 rnd_n_sample=10,
-                 use_normalization=False,
-                 use_add_with_td=False,
+                 discrete_dqn_like: bool = False,
+                 use_priority: bool = True,
+                 use_n_step_is: bool = True,
+                 siamese: Optional[SIAMESE] = None,
+                 siamese_use_q: bool = False,
+                 siamese_use_adaptive: bool = False,
+                 use_prediction: bool = False,
+                 transition_kl: float = 0.8,
+                 use_extra_data: bool = True,
+                 curiosity: Optional[CURIOSITY] = None,
+                 curiosity_strength: float = 1.,
+                 use_rnd: bool = False,
+                 rnd_n_sample: int = 10,
+                 use_normalization: bool = False,
+                 use_add_with_td: bool = False,
 
                  replay_config=None):
         """
@@ -88,7 +88,7 @@ class SAC_Base(object):
 
         burn_in_step: Burn-in steps in R2D2
         n_step: Update Q function by `n_step` steps
-        use_rnn: If using RNN
+        seq_encoder: None | RNN | ATTN
 
         batch_size: Batch size for training
         tau: Coefficient of updating target network
@@ -128,7 +128,7 @@ class SAC_Base(object):
 
         self.burn_in_step = burn_in_step
         self.n_step = n_step
-        self.use_rnn = use_rnn
+        self.seq_encoder = seq_encoder
 
         self.write_summary_per_step = int(write_summary_per_step)
         self.save_model_per_step = int(save_model_per_step)
@@ -170,6 +170,7 @@ class SAC_Base(object):
         if model_abs_dir and self.train_mode:
             summary_path = Path(model_abs_dir).joinpath(summary_path)
             self.summary_writer = SummaryWriter(str(summary_path))
+            self.summary_available = True
 
         if self.train_mode:
             replay_config = {} if replay_config is None else replay_config
@@ -227,7 +228,7 @@ class SAC_Base(object):
             ModelRep = model.ModelRep
 
         """ REPRESENTATION """
-        if self.use_rnn:
+        if self.seq_encoder == SEQ_ENCODER.RNN:
             self.model_rep: ModelBaseRNNRep = ModelRep(self.obs_shapes,
                                                        self.d_action_size, self.c_action_size,
                                                        False, self.train_mode,
@@ -238,11 +239,33 @@ class SAC_Base(object):
                                                               True, self.train_mode,
                                                               self.model_abs_dir,
                                                               **model_config['rep']).to(self.device)
-            # Get represented state and rnn_state dimension
+            # Get represented state and seq_hidden_state_shape
             test_obs_list = [torch.rand(self.batch_size, 1, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
             test_pre_action = torch.rand(self.batch_size, 1, self.d_action_size + self.c_action_size, device=self.device)
-            test_state, test_next_rnn_state = self.model_rep(test_obs_list, test_pre_action)
-            state_size, self.rnn_state_shape = test_state.shape[-1], test_next_rnn_state.shape[1:]
+            test_state, test_rnn_state = self.model_rep(test_obs_list,
+                                                        test_pre_action)
+            state_size, self.seq_hidden_state_shape = test_state.shape[-1], test_rnn_state.shape[1:]
+
+        elif self.seq_encoder == SEQ_ENCODER.ATTN:
+            self.model_rep: ModelBaseAttentionRep = ModelRep(self.obs_shapes,
+                                                             self.d_action_size, self.c_action_size,
+                                                             False, self.train_mode,
+                                                             self.model_abs_dir,
+                                                             **model_config['rep']).to(self.device)
+            self.model_target_rep: ModelBaseAttentionRep = ModelRep(self.obs_shapes,
+                                                                    self.d_action_size, self.c_action_size,
+                                                                    True, self.train_mode,
+                                                                    self.model_abs_dir,
+                                                                    **model_config['rep']).to(self.device)
+            # Get represented state and seq_hidden_state_shape
+            test_index = torch.zeros((self.batch_size, 1), dtype=torch.int32, device=self.device)
+            test_obs_list = [torch.rand(self.batch_size, 1, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
+            test_pre_action = torch.rand(self.batch_size, 1, self.d_action_size + self.c_action_size, device=self.device)
+            test_state, test_attn_state, _ = self.model_rep(test_index,
+                                                            test_obs_list,
+                                                            test_pre_action)
+            state_size, self.seq_hidden_state_shape = test_state.shape[-1], test_attn_state.shape[2:]
+
         else:
             self.model_rep: ModelBaseSimpleRep = ModelRep(self.obs_shapes,
                                                           False, self.train_mode,
@@ -501,10 +524,13 @@ class SAC_Base(object):
     def get_global_step(self):
         return self.global_step.item()
 
-    def get_initial_rnn_state(self, batch_size):
-        assert self.use_rnn
+    def get_initial_action(self, batch_size):
+        return np.zeros([batch_size, self.d_action_size + self.c_action_size], dtype=np.float32)
 
-        return np.zeros([batch_size, *self.rnn_state_shape], dtype=np.float32)
+    def get_initial_seq_hidden_state(self, batch_size):
+        assert self.seq_encoder is not None
+
+        return np.zeros([batch_size, *self.seq_hidden_state_shape], dtype=np.float32)
 
     @torch.no_grad()
     def _update_target_variables(self, tau=1.):
@@ -546,25 +572,39 @@ class SAC_Base(object):
 
     @torch.no_grad()
     def get_l_probs(self,
+                    l_indexes: torch.Tensor,
+                    l_padding_masks: torch.Tensor,
                     l_obses_list: List[torch.Tensor],
                     l_actions: torch.Tensor,
-                    rnn_state: torch.Tensor = None):
+                    f_seq_hidden_states: torch.Tensor = None):
         """
         Args:
+            l_indexes: [Batch, l]
+            l_padding_masks: [Batch, l]
             l_obses_list: list([Batch, l, *obs_shapes_i], ...)
+            l_states: [Batch, l, state_size]
             l_actions: [Batch, l, action_size]
-            rnn_state: [Batch, *rnn_state_shape]
+            f_seq_hidden_states: [Batch, 1, *seq_hidden_state_shape]
 
         Returns:
-            n_rnn_states: [Batch, l]
+            l_probs: [Batch, l]
         """
 
-        if self.use_rnn:
+        if self.seq_encoder == SEQ_ENCODER.RNN:
             l_states, _ = self.model_rep(l_obses_list,
                                          gen_pre_n_actions(l_actions),
-                                         rnn_state)  # [Batch, l, state_size]
+                                         f_seq_hidden_states[:, 0])
+        elif self.seq_encoder == SEQ_ENCODER.ATTN:
+            l_states, *_ = self.model_rep(l_indexes,
+                                          l_obses_list,
+                                          gen_pre_n_actions(l_actions),
+                                          query_length=l_indexes.shape[1],
+                                          hidden_state=f_seq_hidden_states,
+                                          is_prev_hidden_state=True,
+                                          padding_mask=l_padding_masks)
         else:
-            l_states = self.model_rep(l_obses_list)  # [Batch, l, state_size]
+            l_states = self.model_rep(l_obses_list)
+        #  l_states: [Batch, l, state_size]
 
         d_policy, c_policy = self.model_policy(l_states, l_obses_list)
 
@@ -582,52 +622,51 @@ class SAC_Base(object):
 
         return policy_prob
 
-    def get_l_probs_np(self,
-                       l_obses_list: List[np.ndarray],
-                       l_actions: np.ndarray,
-                       rnn_state: np.ndarray = None):
+    @torch.no_grad()
+    def get_l_seq_hidden_states(self,
+                                l_indexes: torch.Tensor,
+                                l_padding_masks: torch.Tensor,
+                                l_obses_list: List[torch.Tensor],
+                                l_actions: torch.Tensor,
+                                f_seq_hidden_states: torch.Tensor):
         """
         Args:
+            l_indexes: [Batch, l]
+            l_padding_masks: [Batch, l]
             l_obses_list: list([Batch, l, *obs_shapes_i], ...)
             l_actions: [Batch, l, action_size]
-            rnn_state: [Batch, *rnn_state_shape]
+            f_seq_hidden_states: [Batch, 1, *seq_hidden_state_shape]
 
         Returns:
-            n_rnn_states: [Batch, l]
+            l_seq_hidden_states: [Batch, l, *seq_hidden_state_shape]
         """
 
-        probs = self.get_l_probs([torch.from_numpy(l_obses).to(self.device) for l_obses in l_obses_list],
-                                 torch.from_numpy(l_actions).to(self.device),
-                                 torch.from_numpy(rnn_state).to(self.device) if self.use_rnn else None)
+        if self.seq_encoder == SEQ_ENCODER.RNN:
+            l_rnn_states = []
+            l_actions = gen_pre_n_actions(l_actions)
+            rnn_state = f_seq_hidden_states[:, 0]
+            for i in range(l_obses_list[0].shape[1]):
+                _, rnn_state = self.model_rep([o[:, i:i + 1, ...] for o in l_obses_list],
+                                              l_actions[:, i:i + 1, ...],
+                                              rnn_state)
+                l_rnn_states.append(rnn_state)
 
-        return probs.cpu().numpy()
+            return torch.stack(l_rnn_states, dim=1)
+
+        elif self.seq_encoder == SEQ_ENCODER.ATTN:
+            _, l_attn_states, _ = self.model_rep(l_indexes,
+                                                 l_obses_list,
+                                                 gen_pre_n_actions(l_actions),
+                                                 query_length=l_indexes.shape[1],
+                                                 hidden_state=f_seq_hidden_states,
+                                                 is_prev_hidden_state=True,
+                                                 padding_mask=l_padding_masks)
+
+            return l_attn_states
 
     @torch.no_grad()
-    def get_n_rnn_states(self, n_obses_list: List[np.ndarray],
-                         n_actions: np.ndarray,
-                         rnn_state: np.ndarray):
-        """
-        Args:
-            n_obses_list: list([Batch, n, *obs_shapes_i], ...)
-            n_actions: [Batch, n, action_size]
-            rnn_state: [Batch, *rnn_state_shape]
-
-        Returns:
-            n_rnn_states: [Batch, n, *rnn_state_shape]
-        """
-
-        n_rnn_states = []
-        n_actions = gen_pre_n_actions(n_actions)
-        for i in range(n_obses_list[0].shape[1]):
-            _, rnn_state = self.model_rep([o[:, i:i + 1, ...] for o in n_obses_list],
-                                          n_actions[:, i:i + 1, ...],
-                                          rnn_state)
-            n_rnn_states.append(rnn_state)
-
-        return torch.stack(n_rnn_states, dim=1)
-
-    @torch.no_grad()
-    def get_dqn_like_d_y(self, n_rewards: torch.Tensor,
+    def get_dqn_like_d_y(self,
+                         n_rewards: torch.Tensor,
                          n_dones: torch.Tensor,
                          stacked_next_q: torch.Tensor,
                          stacked_next_target_q: torch.Tensor):
@@ -689,7 +728,7 @@ class SAC_Base(object):
 
             n_step_is = n_pi_probs / n_mu_probs.clamp(min=1e-8)
 
-            # ρ_t, t \in [s, s+n-1]
+            # \rho_t, t \in [s, s+n-1]
             rho = torch.minimum(n_step_is, torch.tensor(self.v_rho, device=self.device))  # [Batch, n]
 
             # \prod{c_i}, i \in [s, t-1]
@@ -697,7 +736,7 @@ class SAC_Base(object):
             c = torch.cat([torch.ones((n_step_is.shape[0], 1), device=self.device), c[..., :-1]], dim=-1)
             c = torch.cumprod(c, dim=1)
 
-            # \prod{c_i} * ρ_t * td_error
+            # \prod{c_i} * \rho_t * td_error
             td_error = c * rho * td_error
 
         # \sum{td_error}
@@ -845,16 +884,20 @@ class SAC_Base(object):
         return d_y, c_y  # [Batch, 1]
 
     def _train_rep_q(self,
+                     bn_indexes: torch.Tensor,
+                     bn_padding_masks: torch.Tensor,
                      bn_obses_list: List[torch.Tensor],
                      bn_actions: torch.Tensor,
                      bn_rewards: torch.Tensor,
                      next_obs_list: List[torch.Tensor],
                      bn_dones: torch.Tensor,
-                     bn_mu_probs: torch.Tensor = None,
-                     priority_is: torch.Tensor = None,
-                     initial_rnn_state: torch.Tensor = None):
+                     bn_mu_probs: Optional[torch.Tensor] = None,
+                     priority_is: Optional[torch.Tensor] = None,
+                     f_seq_hidden_states: Optional[torch.Tensor] = None):
         """
         Args:
+            bn_indexes: [Batch, b + n]
+            bn_padding_masks: [Batch, b + n]
             bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
             bn_actions: [Batch, b + n, action_size]
             bn_rewards: [Batch, b + n]
@@ -862,41 +905,78 @@ class SAC_Base(object):
             bn_dones: [Batch, b + n], dtype=torch.bool
             bn_mu_probs: [Batch, b + n]
             priority_is: [Batch, 1]
-            initial_rnn_state: [Batch, *rnn_state_shape]
+            f_seq_hidden_states: [Batch, 1, *seq_hidden_state_shape]
         """
 
         m_obses_list = [torch.cat([n_obses, next_obs.unsqueeze(1)], dim=1)
                         for n_obses, next_obs in zip(bn_obses_list, next_obs_list)]
 
-        if self.use_rnn:
-            m_pre_actions = gen_pre_n_actions(bn_actions, keep_last_action=True)
-            if self.siamese is not None and self.siamese_use_q:
-                b_states, rnn_state_at_n = self.model_rep([o[:, :self.burn_in_step, ...] for o in m_obses_list],
-                                                          m_pre_actions[:, :self.burn_in_step, ...],
-                                                          initial_rnn_state)
-                b_target_states, target_rnn_state_at_n = self.model_target_rep([o[:, :self.burn_in_step, ...] for o in m_obses_list],
-                                                                               m_pre_actions[:, :self.burn_in_step, ...],
-                                                                               initial_rnn_state)
-
-                n1_states, _ = self.model_rep([o[:, self.burn_in_step:, ...] for o in m_obses_list],
-                                              m_pre_actions[:, self.burn_in_step:, ...],
-                                              rnn_state_at_n)
-                n1_target_states, _ = self.model_target_rep([o[:, self.burn_in_step:, ...] for o in m_obses_list],
-                                                            m_pre_actions[:, self.burn_in_step:, ...],
-                                                            target_rnn_state_at_n)
-
-                m_states = torch.cat([b_states, n1_states], dim=1)
-                m_target_states = torch.cat([b_target_states, n1_target_states], dim=1)
-            else:
-                m_states, _ = self.model_rep(m_obses_list,
-                                             m_pre_actions,
-                                             initial_rnn_state)
-                m_target_states, _ = self.model_target_rep(m_obses_list,
-                                                           m_pre_actions,
-                                                           initial_rnn_state)
-        else:
+        if self.seq_encoder is None:
             m_states = self.model_rep(m_obses_list)
             m_target_states = self.model_target_rep(m_obses_list)
+        else:
+            m_pre_actions = gen_pre_n_actions(bn_actions, keep_last_action=True)
+
+            if self.seq_encoder == SEQ_ENCODER.RNN:
+                rnn_state = f_seq_hidden_states[:, 0]
+                if self.siamese is not None and self.siamese_use_q:
+                    b_obses_list = [o[:, :self.burn_in_step, ...] for o in m_obses_list]
+                    b_pre_actions = m_pre_actions[:, :self.burn_in_step, ...]
+                    b_states, rnn_state_at_n = self.model_rep(b_obses_list,
+                                                              b_pre_actions,
+                                                              rnn_state)
+                    b_target_states, target_rnn_state_at_n = self.model_target_rep(b_obses_list,
+                                                                                   b_pre_actions,
+                                                                                   rnn_state)
+
+                    n1_obses_list = [o[:, self.burn_in_step:, ...] for o in m_obses_list]
+                    n1_pre_actions = m_pre_actions[:, self.burn_in_step:, ...]
+                    n1_states, _ = self.model_rep(n1_obses_list,
+                                                  n1_pre_actions,
+                                                  rnn_state_at_n)
+                    n1_target_states, _ = self.model_target_rep(n1_obses_list,
+                                                                n1_pre_actions,
+                                                                target_rnn_state_at_n)
+
+                    m_states = torch.cat([b_states, n1_states], dim=1)
+                    m_target_states = torch.cat([b_target_states, n1_target_states], dim=1)
+
+                    # [Batch, 1, *seq_hidden_state_shapes]
+                    seq_hidden_states_at_n = rnn_state_at_n.unsqueeze(1)
+                    seq_target_hidden_states_at_n = target_rnn_state_at_n.unsqueeze(1)
+                else:
+                    m_states, _ = self.model_rep(m_obses_list,
+                                                 m_pre_actions,
+                                                 rnn_state)
+                    m_target_states, _ = self.model_target_rep(m_obses_list,
+                                                               m_pre_actions,
+                                                               rnn_state)
+
+            elif self.seq_encoder == SEQ_ENCODER.ATTN:
+                m_indexes = torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1)
+                m_padding_mask = torch.concat([bn_padding_masks,
+                                               torch.zeros_like(bn_padding_masks[:, -1:], dtype=torch.bool)],
+                                              dim=1)
+
+                m_states, m_attn_states, _ = self.model_rep(m_indexes,
+                                                            m_obses_list,
+                                                            m_pre_actions,
+                                                            query_length=bn_indexes.shape[1] + 1,
+                                                            hidden_state=f_seq_hidden_states,
+                                                            is_prev_hidden_state=True,
+                                                            padding_mask=m_padding_mask)
+                m_target_states, m_target_attn_states, _ = self.model_target_rep(m_indexes,
+                                                                                 m_obses_list,
+                                                                                 m_pre_actions,
+                                                                                 query_length=bn_indexes.shape[1] + 1,
+                                                                                 hidden_state=f_seq_hidden_states,
+                                                                                 is_prev_hidden_state=True,
+                                                                                 padding_mask=m_padding_mask)
+
+                if self.siamese is not None and self.siamese_use_q:
+                    # [Batch, 1, *seq_hidden_state_shapes]
+                    seq_hidden_states_at_n = m_attn_states[:, self.burn_in_step:self.burn_in_step + 1]
+                    seq_target_hidden_states_at_n = m_target_attn_states[:, self.burn_in_step:self.burn_in_step + 1]
 
         bn_states = m_states[:, :-1, ...]
         state = m_states[:, self.burn_in_step, ...]
@@ -961,17 +1041,19 @@ class SAC_Base(object):
             opt_q.zero_grad()
             loss_q.backward(retain_graph=True)
 
-        grads_rep_main = [m.grad.detach() for m in self.model_rep.parameters()]
+        grads_rep_main = [m.grad.detach() if m.grad is not None else None for m in self.model_rep.parameters()]
 
         """ Siamese Representation Learning """
         loss_siamese = None
         if self.siamese is not None:
             loss_siamese = self._train_siamese_representation_learning(
                 grads_rep_main,
+                bn_indexes,
+                bn_padding_masks,
                 bn_obses_list,
                 bn_actions,
-                rnn_state_at_n if self.use_rnn and self.siamese_use_q else None,
-                target_rnn_state_at_n if self.use_rnn and self.siamese_use_q else None)
+                seq_hidden_states_at_n=seq_hidden_states_at_n if self.seq_encoder is not None and self.siamese_use_q else None,
+                seq_target_hidden_states_at_n=seq_target_hidden_states_at_n if self.seq_encoder is not None and self.siamese_use_q else None)
 
         for opt_q in self.optimizer_q_list:
             opt_q.step()
@@ -1017,10 +1099,12 @@ class SAC_Base(object):
 
     def _train_siamese_representation_learning(self,
                                                grads_rep_main,
+                                               bn_indexes: torch.Tensor,
+                                               bn_padding_masks: torch.Tensor,
                                                bn_obses_list: List[torch.Tensor],
                                                bn_actions: torch.Tensor,
-                                               rnn_state_at_n: torch.Tensor = None,
-                                               target_rnn_state_at_n: torch.Tensor = None):
+                                               seq_hidden_states_at_n: Optional[torch.Tensor] = None,
+                                               seq_target_hidden_states_at_n: Optional[torch.Tensor] = None):
 
         n_obses_list = [bn_obses[:, self.burn_in_step:, ...] for bn_obses in bn_obses_list]
         encoder_list = self.model_rep.get_augmented_encoders(n_obses_list)  # [Batch, n, f], ...
@@ -1033,28 +1117,56 @@ class SAC_Base(object):
         batch, n, *_ = encoder_list[0].shape
 
         if self.siamese_use_q:
-            if self.use_rnn:
-                _encoder = [e[:, 0:1, ...] for e in encoder_list]
-                _target_encoder = [t_e[:, 0:1, ...] for t_e in target_encoder_list]
-
-                state = self.model_rep.get_state_from_encoders([n_obses[:, 0:1, ...] for n_obses in n_obses_list],
-                                                               _encoder if len(_encoder) > 1 else _encoder[0],
-                                                               bn_actions[:, self.burn_in_step - 1:self.burn_in_step, ...],
-                                                               rnn_state_at_n)
-                target_state = self.model_target_rep.get_state_from_encoders([n_obses[:, 0:1, ...] for n_obses in n_obses_list],
-                                                                             _target_encoder if len(_target_encoder) > 1 else _target_encoder[0],
-                                                                             bn_actions[:, self.burn_in_step - 1:self.burn_in_step, ...],
-                                                                             target_rnn_state_at_n)
-                state = state[:, 0, ...]
-                target_state = target_state[:, 0, ...]
-            else:
+            if self.seq_encoder is None:
                 _encoder = [e[:, 0, ...] for e in encoder_list]
                 _target_encoder = [t_e[:, 0, ...] for t_e in target_encoder_list]
 
-                state = self.model_rep.get_state_from_encoders([n_obses[:, 0, ...] for n_obses in n_obses_list],
+                _obs = [n_obses[:, 0, ...] for n_obses in n_obses_list]
+                state = self.model_rep.get_state_from_encoders(_obs,
                                                                _encoder if len(_encoder) > 1 else _encoder[0])
-                target_state = self.model_target_rep.get_state_from_encoders([n_obses[:, 0, ...] for n_obses in n_obses_list],
+                target_state = self.model_target_rep.get_state_from_encoders(_obs,
                                                                              _target_encoder if len(_target_encoder) > 1 else _target_encoder[0])
+
+            else:
+                obses_list_at_n = [n_obses[:, 0:1, ...] for n_obses in n_obses_list]
+
+                _encoder = [e[:, 0:1, ...] for e in encoder_list]
+                _target_encoder = [t_e[:, 0:1, ...] for t_e in target_encoder_list]
+
+                pre_actions_at_n = bn_actions[:, self.burn_in_step - 1:self.burn_in_step, ...]
+
+                if self.seq_encoder == SEQ_ENCODER.RNN:
+                    state = self.model_rep.get_state_from_encoders(obses_list_at_n,
+                                                                   _encoder if len(_encoder) > 1 else _encoder[0],
+                                                                   pre_actions_at_n,
+                                                                   seq_hidden_states_at_n[:, 0])
+                    target_state = self.model_target_rep.get_state_from_encoders(obses_list_at_n,
+                                                                                 _target_encoder if len(_target_encoder) > 1 else _target_encoder[0],
+                                                                                 pre_actions_at_n,
+                                                                                 seq_target_hidden_states_at_n[:, 0])
+                    state = state[:, 0, ...]
+                    target_state = target_state[:, 0, ...]
+
+                elif self.seq_encoder == SEQ_ENCODER.ATTN:
+                    padding_masks_at_n = bn_padding_masks[:, self.burn_in_step:self.burn_in_step + 1]
+                    state = self.model_rep.get_state_from_encoders(bn_indexes[:, self.burn_in_step:self.burn_in_step + 1],
+                                                                   obses_list_at_n,
+                                                                   _encoder if len(_encoder) > 1 else _encoder[0],
+                                                                   pre_actions_at_n,
+                                                                   query_length=1,
+                                                                   hidden_state=seq_hidden_states_at_n,
+                                                                   is_prev_hidden_state=True,
+                                                                   padding_mask=padding_masks_at_n)
+                    target_state = self.model_target_rep.get_state_from_encoders(bn_indexes[:, self.burn_in_step:self.burn_in_step + 1],
+                                                                                 obses_list_at_n,
+                                                                                 _encoder if len(_encoder) > 1 else _encoder[0],
+                                                                                 pre_actions_at_n,
+                                                                                 query_length=1,
+                                                                                 hidden_state=seq_target_hidden_states_at_n,
+                                                                                 is_prev_hidden_state=True,
+                                                                                 padding_mask=padding_masks_at_n)
+                    state = state[:, 0, ...]
+                    target_state = target_state[:, 0, ...]
 
         if self.siamese == 'ATC':
             encoder_list = [e.reshape(batch * n, -1) for e in encoder_list]  # [Batch * n, f], ...
@@ -1300,6 +1412,8 @@ class SAC_Base(object):
         return loss_rnd
 
     def _train(self,
+               bn_indexes: torch.Tensor,
+               bn_padding_masks: torch.Tensor,
                bn_obses_list: List[torch.Tensor],
                bn_actions: torch.Tensor,
                bn_rewards: torch.Tensor,
@@ -1307,9 +1421,11 @@ class SAC_Base(object):
                bn_dones: torch.Tensor,
                bn_mu_probs: torch.Tensor = None,
                priority_is: torch.Tensor = None,
-               initial_rnn_state: torch.Tensor = None):
+               f_seq_hidden_states: torch.Tensor = None):
         """
         Args:
+            bn_indexes: [Batch, b + n], dtype=torch.int32
+            bn_padding_masks: [Batch, b + n], dtype=torch.bool
             bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
             bn_actions: [Batch, b + n, action_size]
             bn_rewards: [Batch, b + n]
@@ -1317,28 +1433,40 @@ class SAC_Base(object):
             bn_dones: [Batch, b + n], dtype=torch.bool
             bn_mu_probs: [Batch, b + n]
             priority_is: [Batch, 1]
-            initial_rnn_state: [Batch, *rnn_state_shape]
+            f_seq_hidden_states: [Batch, 1, *seq_hidden_state_shape]
         """
 
         if self.global_step % self.update_target_per_step == 0:
             self._update_target_variables(tau=self.tau)
 
-        loss_q, loss_siamese, loss_predictions = self._train_rep_q(bn_obses_list,
+        loss_q, loss_siamese, loss_predictions = self._train_rep_q(bn_indexes,
+                                                                   bn_padding_masks,
+                                                                   bn_obses_list,
                                                                    bn_actions,
                                                                    bn_rewards,
                                                                    next_obs_list,
                                                                    bn_dones,
-                                                                   bn_mu_probs, priority_is,
-                                                                   initial_rnn_state)
+                                                                   bn_mu_probs,
+                                                                   priority_is,
+                                                                   f_seq_hidden_states)
 
         with torch.no_grad():
             m_obses_list = [torch.cat([bn_obses, next_obs.unsqueeze(1)], dim=1)
                             for bn_obses, next_obs in zip(bn_obses_list, next_obs_list)]
 
-            if self.use_rnn:
+            if self.seq_encoder == SEQ_ENCODER.RNN:
                 m_states, _ = self.model_rep(m_obses_list,
                                              gen_pre_n_actions(bn_actions, keep_last_action=True),
-                                             initial_rnn_state)
+                                             f_seq_hidden_states[:, 0])
+            elif self.seq_encoder == SEQ_ENCODER.ATTN:
+                m_states, *_ = self.model_rep(torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1),
+                                              m_obses_list,
+                                              gen_pre_n_actions(bn_actions, keep_last_action=True),
+                                              query_length=bn_indexes.shape[1] + 1,
+                                              hidden_state=f_seq_hidden_states,
+                                              is_prev_hidden_state=True,
+                                              padding_mask=torch.concat([bn_padding_masks,
+                                                                        torch.zeros_like(bn_padding_masks[:, -1:], dtype=torch.bool)], dim=1))
             else:
                 m_states = self.model_rep(m_obses_list)
 
@@ -1359,6 +1487,8 @@ class SAC_Base(object):
             loss_rnd = self._train_rnd(bn_states, bn_actions)
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
+            self.summary_available = True
+
             with torch.no_grad():
                 self.summary_writer.add_scalar('loss/q', loss_q, self.global_step)
                 if self.d_action_size:
@@ -1525,11 +1655,10 @@ class SAC_Base(object):
         Args:
             obs_list: list([Batch, *obs_shapes_i], ...)
             pre_action: [Batch, d_action_size + c_action_size]
-            rnn_state: [Batch, *rnn_state_shape]
-
+            rnn_state: [Batch, *seq_hidden_state_shape]
         Returns:
             action: [Batch, d_action_size + c_action_size] (numpy)
-            rnn_state: [Batch, *rnn_state_shape] (numpy)
+            rnn_state: [Batch, *seq_hidden_state_shape] (numpy)
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         pre_action = torch.from_numpy(pre_action).to(self.device)
@@ -1543,33 +1672,87 @@ class SAC_Base(object):
 
         action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_avaiable)
 
-        return action.detach().cpu().numpy(), prob.detach().cpu().numpy(), next_rnn_state.detach().cpu().numpy()
+        return (action.detach().cpu().numpy(),
+                prob.detach().cpu().numpy(),
+                next_rnn_state.detach().cpu().numpy())
+
+    @torch.no_grad()
+    def choose_attn_action(self,
+                           ep_indexes: np.ndarray,
+                           ep_padding_masks: np.ndarray,
+                           ep_obses_list: List[np.ndarray],
+                           ep_pre_actions: np.ndarray,
+                           ep_attn_hidden_states: np.ndarray,
+
+                           disable_sample: bool = False,
+                           force_rnd_if_avaiable: bool = False):
+        """
+        Args:
+            ep_indexes: [Batch, episode_len]
+            ep_padding_masks: [Batch, episode_len]
+            ep_obses_list: list([Batch, episode_len, *obs_shapes_i], ...)
+            ep_pre_actions: [Batch, episode_len, d_action_size + c_action_size]
+            ep_attn_hidden_states: [Batch, episode_len, *seq_hidden_state_shape]
+
+        Returns:
+            action: [Batch, d_action_size + c_action_size] (numpy)
+            attn_hidden_state: [Batch, *rnn_state_shape] (numpy)
+        """
+        ep_indexes = torch.from_numpy(ep_indexes).to(self.device)
+        ep_padding_masks = torch.from_numpy(ep_padding_masks).to(self.device)
+        ep_obses_list = [torch.from_numpy(obs).to(self.device) for obs in ep_obses_list]
+        ep_pre_actions = torch.from_numpy(ep_pre_actions).to(self.device)
+        ep_attn_hidden_states = torch.from_numpy(ep_attn_hidden_states).to(self.device)
+
+        state, next_attn_hidden_state, _ = self.model_rep(ep_indexes,
+                                                          ep_obses_list, ep_pre_actions,
+                                                          query_length=1,
+                                                          hidden_state=ep_attn_hidden_states,
+                                                          is_prev_hidden_state=False,
+                                                          padding_mask=ep_padding_masks)
+        state = state.squeeze(1)
+        next_attn_hidden_state = next_attn_hidden_state.squeeze(1)
+
+        action, prob = self._choose_action([o[:, -1] for o in ep_obses_list],
+                                           state,
+                                           disable_sample,
+                                           force_rnd_if_avaiable)
+
+        return (action.detach().cpu().numpy(),
+                prob.detach().cpu().numpy(),
+                next_attn_hidden_state.detach().cpu().numpy())
 
     @torch.no_grad()
     def _get_td_error(self,
+                      bn_indexes: torch.Tensor,
+                      bn_padding_masks: torch.Tensor,
                       bn_obses_list: List[torch.Tensor],
                       bn_actions: torch.Tensor,
                       bn_rewards: torch.Tensor,
                       next_obs_list: List[torch.Tensor],
                       bn_dones: torch.Tensor,
                       bn_mu_probs: torch.Tensor = None,
-                      rnn_state: torch.Tensor = None):
+                      f_seq_hidden_states: torch.Tensor = None):
         """
         Args:
+            bn_indexes: [Batch, b + n]
+            bn_padding_masks: [Batch, b + n]
             bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
             bn_actions: [Batch, b + n, action_size]
             bn_rewards: [Batch, b + n]
             next_obs_list: list([Batch, *obs_shapes_i], ...)
             bn_dones: [Batch, b + n]
             bn_mu_probs: [Batch, b + n]
-            rnn_states: [Batch, *rnn_state_shape]
+            f_seq_hidden_states: [Batch, 1, *seq_hidden_state_shape]
 
         Returns:
             The td-error of observations, [Batch, 1]
         """
         m_obses_list = [torch.cat([bn_obses, next_obs.unsqueeze(1)], dim=1)
                         for bn_obses, next_obs in zip(bn_obses_list, next_obs_list)]
-        if self.use_rnn:
+
+        if self.seq_encoder == SEQ_ENCODER.RNN:
+            rnn_state = f_seq_hidden_states[:, 0]
             tmp_states, _ = self.model_rep([m_obses[:, :self.burn_in_step + 1, ...] for m_obses in m_obses_list],
                                            gen_pre_n_actions(bn_actions[:, :self.burn_in_step + 1, ...]),
                                            rnn_state)
@@ -1578,6 +1761,24 @@ class SAC_Base(object):
                                                         gen_pre_n_actions(bn_actions,
                                                                           keep_last_action=True),
                                                         rnn_state)
+        elif self.seq_encoder == SEQ_ENCODER.ATTN:
+            tmp_states, *_ = self.model_rep(bn_indexes[:, :self.burn_in_step + 1],
+                                            [m_obses[:, :self.burn_in_step + 1, ...] for m_obses in m_obses_list],
+                                            gen_pre_n_actions(bn_actions[:, :self.burn_in_step + 1, ...]),
+                                            query_length=self.burn_in_step + 1,
+                                            hidden_state=f_seq_hidden_states,
+                                            is_prev_hidden_state=True,
+                                            padding_mask=bn_padding_masks[:, :self.burn_in_step + 1])
+            state = tmp_states[:, self.burn_in_step, ...]
+            m_target_states, *_ = self.model_target_rep(torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1),
+                                                        m_obses_list,
+                                                        gen_pre_n_actions(bn_actions,
+                                                                          keep_last_action=True),
+                                                        query_length=bn_indexes.shape[1] + 1,
+                                                        hidden_state=f_seq_hidden_states,
+                                                        is_prev_hidden_state=True,
+                                                        padding_mask=torch.concat([bn_padding_masks,
+                                                                                   torch.zeros_like(bn_padding_masks[:, -1:], dtype=torch.bool)], dim=1))
         else:
             state = self.model_rep([m_obses[:, self.burn_in_step, ...] for m_obses in m_obses_list])
             m_target_states = self.model_target_rep(m_obses_list)
@@ -1618,87 +1819,27 @@ class SAC_Base(object):
                               dim=-1, keepdim=True)
         return td_error
 
-    def episode_to_batch(self,
-                         l_obses_list: List[np.ndarray],
-                         l_actions: np.ndarray,
-                         l_rewards: np.ndarray,
-                         next_obs_list: List[np.ndarray],
-                         l_dones: np.ndarray,
-                         l_mu_probs: np.ndarray = None,
-                         l_rnn_states: np.ndarray = None):
-        """
-        Args:
-            l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-            l_actions: [1, episode_len, action_size]
-            l_rewards: [1, episode_len]
-            next_obs_list: list([1, *obs_shapes_i], ...)
-            l_dones: [1, episode_len]
-            l_mu_probs: [1, episode_len]
-            l_rnn_states: [1, episode_len, *rnn_state_shape]
-
-        Returns:
-            bn_obses_list: list([episode_len - ignore + 1, b + n, *obs_shapes_i], ...)
-            bn_actions: [episode_len - ignore + 1, b + n, action_size]
-            bn_rewards: [episode_len - ignore + 1, b + n]
-            next_obs_list: list([episode_len - ignore + 1, *obs_shapes_i], ...)
-            bn_dones: [episode_len - ignore + 1, b + n]
-            bn_mu_probs: [episode_len - ignore + 1, b + n]
-            rnn_state: [episode_len - ignore + 1, *rnn_state_shape]
-        """
-        ignore_size = self.burn_in_step + self.n_step
-
-        tmp_bn_obses_list = [None] * len(l_obses_list)
-        for j, l_obses in enumerate(l_obses_list):
-            tmp_bn_obses_list[j] = np.concatenate([l_obses[:, i:i + ignore_size]
-                                                  for i in range(l_obses.shape[1] - ignore_size + 1)], axis=0)
-        bn_actions = np.concatenate([l_actions[:, i:i + ignore_size]
-                                    for i in range(l_actions.shape[1] - ignore_size + 1)], axis=0)
-        bn_rewards = np.concatenate([l_rewards[:, i:i + ignore_size]
-                                    for i in range(l_rewards.shape[1] - ignore_size + 1)], axis=0)
-        tmp_next_obs_list = [None] * len(next_obs_list)
-        for j, l_obses in enumerate(l_obses_list):
-            tmp_next_obs_list[j] = np.concatenate([l_obses[:, i + ignore_size]
-                                                   for i in range(l_obses.shape[1] - ignore_size)]
-                                                  + [next_obs_list[j]],
-                                                  axis=0)
-        bn_dones = np.concatenate([l_dones[:, i:i + ignore_size]
-                                  for i in range(l_dones.shape[1] - ignore_size + 1)], axis=0)
-
-        if self.use_n_step_is:
-            bn_mu_probs = np.concatenate([l_mu_probs[:, i:i + ignore_size]
-                                         for i in range(l_mu_probs.shape[1] - ignore_size + 1)], axis=0)
-
-        if self.use_rnn:
-            rnn_state = np.concatenate([l_rnn_states[:, i]
-                                        for i in range(l_rnn_states.shape[1] - ignore_size + 1)], axis=0)
-
-        return (
-            tmp_bn_obses_list,
-            bn_actions,
-            bn_rewards,
-            tmp_next_obs_list,
-            bn_dones,
-            bn_mu_probs if self.use_n_step_is else None,
-            rnn_state if self.use_rnn else None
-        )
-
     def get_episode_td_error(self,
+                             l_indexes: np.ndarray,
+                             l_padding_masks: np.ndarray,
                              l_obses_list: List[np.ndarray],
                              l_actions: np.ndarray,
                              l_rewards: np.ndarray,
                              next_obs_list: List[np.ndarray],
                              l_dones: np.ndarray,
                              l_mu_probs: np.ndarray = None,
-                             l_rnn_states: np.ndarray = None):
+                             l_seq_hidden_states: np.ndarray = None):
         """
         Args:
+            l_indexes: [1, episode_len]
+            l_padding_masks: [1, episode_len]
             l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
             l_actions: [1, episode_len, action_size]
             l_rewards: [1, episode_len]
             next_obs_list: list([1, *obs_shapes_i], ...)
             l_dones: [1, episode_len]
             l_mu_probs: [1, episode_len]
-            l_rnn_states: [1, episode_len, *rnn_state_shape]
+            l_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
 
         Returns:
             The td-error of raw episode observations
@@ -1706,28 +1847,36 @@ class SAC_Base(object):
         """
         ignore_size = self.burn_in_step + self.n_step
 
-        (bn_obses_list,
+        (bn_indexes,
+         bn_padding_masks,
+         bn_obses_list,
          bn_actions,
          bn_rewards,
          next_obs_list,
          bn_dones,
          bn_mu_probs,
-         rnn_state) = self.episode_to_batch(l_obses_list,
-                                            l_actions,
-                                            l_rewards,
-                                            next_obs_list,
-                                            l_dones,
-                                            l_mu_probs,
-                                            l_rnn_states)
+         f_seq_hidden_states) = episode_to_batch(self.burn_in_step + self.n_step,
+                                                 l_indexes.shape[1],
+                                                 l_indexes,
+                                                 l_padding_masks,
+                                                 l_obses_list,
+                                                 l_actions,
+                                                 l_rewards,
+                                                 next_obs_list,
+                                                 l_dones,
+                                                 l_probs=l_mu_probs,
+                                                 l_seq_hidden_states=l_seq_hidden_states)
 
         """
-        bn_obses_list: list([episode_len - ignore + 1, b + n, *obs_shapes_i], ...)
-        bn_actions: [episode_len - ignore + 1, b + n, action_size]
-        bn_rewards: [episode_len - ignore + 1, b + n]
-        next_obs_list: list([episode_len - ignore + 1, *obs_shapes_i], ...)
-        bn_dones: [episode_len - ignore + 1, b + n]
-        bn_mu_probs: [episode_len - ignore + 1, b + n]
-        rnn_state: [episode_len - ignore + 1, *rnn_state_shape]
+        bn_indexes: [episode_len - bn + 1, bn]
+        bn_padding_masks: [episode_len - bn + 1, bn]
+        bn_obses_list: list([episode_len - bn + 1, bn, *obs_shapes_i], ...)
+        bn_actions: [episode_len - bn + 1, bn, action_size]
+        bn_rewards: [episode_len - bn + 1, bn]
+        next_obs_list: list([episode_len - bn + 1, *obs_shapes_i], ...)
+        bn_dones: [episode_len - bn + 1, bn]
+        bn_mu_probs: [episode_len - bn + 1, bn]
+        f_seq_hidden_states: [episode_len - bn + 1, 1, *seq_hidden_state_shape]
         """
 
         td_error_list = []
@@ -1736,21 +1885,25 @@ class SAC_Base(object):
         for i in range(math.ceil(all_batch / batch_size)):
             b_i, b_j = i * batch_size, (i + 1) * batch_size
 
-            _bn_obses_list = [torch.from_numpy(o[b_i:b_j, :]).to(self.device) for o in bn_obses_list]
-            _bn_actions = torch.from_numpy(bn_actions[b_i:b_j, :]).to(self.device)
-            _bn_rewards = torch.from_numpy(bn_rewards[b_i:b_j, :]).to(self.device)
-            _next_obs_list = [torch.from_numpy(o[b_i:b_j, :]).to(self.device) for o in next_obs_list]
-            _bn_dones = torch.from_numpy(bn_dones[b_i:b_j, :]).to(self.device)
-            _bn_mu_probs = torch.from_numpy(bn_mu_probs[b_i:b_j, :]).to(self.device) if self.use_n_step_is else None
-            _rnn_state = torch.from_numpy(rnn_state[b_i:b_j, :]).to(self.device) if self.use_rnn else None
+            _bn_indexes = torch.from_numpy(bn_indexes[b_i:b_j]).to(self.device)
+            _bn_padding_masks = torch.from_numpy(bn_padding_masks[b_i:b_j]).to(self.device)
+            _bn_obses_list = [torch.from_numpy(o[b_i:b_j]).to(self.device) for o in bn_obses_list]
+            _bn_actions = torch.from_numpy(bn_actions[b_i:b_j]).to(self.device)
+            _bn_rewards = torch.from_numpy(bn_rewards[b_i:b_j]).to(self.device)
+            _next_obs_list = [torch.from_numpy(o[b_i:b_j]).to(self.device) for o in next_obs_list]
+            _bn_dones = torch.from_numpy(bn_dones[b_i:b_j]).to(self.device)
+            _bn_mu_probs = torch.from_numpy(bn_mu_probs[b_i:b_j]).to(self.device) if self.use_n_step_is else None
+            _f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states[b_i:b_j]).to(self.device) if self.seq_encoder is not None else None
 
-            td_error = self._get_td_error(bn_obses_list=_bn_obses_list,
+            td_error = self._get_td_error(bn_indexes=_bn_indexes,
+                                          bn_padding_masks=_bn_padding_masks,
+                                          bn_obses_list=_bn_obses_list,
                                           bn_actions=_bn_actions,
                                           bn_rewards=_bn_rewards,
                                           next_obs_list=_next_obs_list,
                                           bn_dones=_bn_dones,
                                           bn_mu_probs=_bn_mu_probs,
-                                          rnn_state=_rnn_state).detach().cpu().numpy()
+                                          f_seq_hidden_states=_f_seq_hidden_states).detach().cpu().numpy()
             td_error_list.append(td_error.flatten())
 
         td_error = np.concatenate([*td_error_list,
@@ -1758,29 +1911,35 @@ class SAC_Base(object):
         return td_error
 
     def fill_replay_buffer(self,
+                           l_indexes: np.ndarray,
+                           l_padding_masks: np.ndarray,
                            l_obses_list: List[np.ndarray],
                            l_actions: np.ndarray,
                            l_rewards: np.ndarray,
                            next_obs_list: List[np.ndarray],
                            l_dones: np.ndarray,
                            l_probs: List[np.ndarray],
-                           l_rnn_states: np.ndarray = None):
+                           l_seq_hidden_states: np.ndarray = None):
         """
         Args:
+            l_indexes: [1, episode_len]
+            l_padding_masks: [1, episode_len]
             l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
             l_actions: [1, episode_len, action_size]
             l_rewards: [1, episode_len]
             next_obs_list: list([1, *obs_shapes_i], ...)
             l_dones: [1, episode_len]
             l_probs: [1, episode_len]
-            l_rnn_states: [1, episode_len, *rnn_state_shape]
+            l_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
 
         # Ignore episodes which length is too short
-        if l_obses_list[0].shape[1] < self.burn_in_step + self.n_step:
+        if l_indexes.shape[1] < self.burn_in_step + self.n_step:
             return
 
         # Reshape [1, episode_len, ...] to [episode_len, ...]
+        index = l_indexes.squeeze(0)
+        padding_mask = l_padding_masks.squeeze(0)
         obs_list = [l_obses.squeeze(0) for l_obses in l_obses_list]
         if self.use_normalization:
             self._udpate_normalizer([torch.from_numpy(obs).to(self.device) for obs in obs_list])
@@ -1789,6 +1948,10 @@ class SAC_Base(object):
         done = l_dones.squeeze(0)
 
         # Padding next_obs for episode experience replay
+        index = np.concatenate([index,
+                                index[-1:] + 1])
+        padding_mask = np.concatenate([padding_mask,
+                                       np.zeros([1], dtype=bool)])
         obs_list = [np.concatenate([obs, next_obs]) for obs, next_obs in zip(obs_list, next_obs_list)]
         action = np.concatenate([action,
                                  np.empty([1, action.shape[-1]], dtype=np.float32)])
@@ -1797,9 +1960,10 @@ class SAC_Base(object):
         done = np.concatenate([done,
                                np.zeros([1], dtype=bool)])
 
-        storage_data = {f'obs_{i}': obs for i, obs in enumerate(obs_list)}
         storage_data = {
-            **storage_data,
+            'index': index,
+            'padding_mask': padding_mask,
+            **{f'obs_{i}': obs for i, obs in enumerate(obs_list)},
             'action': action,
             'reward': reward,
             'done': done,
@@ -1812,26 +1976,45 @@ class SAC_Base(object):
                                       np.empty([1], dtype=np.float32)])
             storage_data['mu_prob'] = mu_prob
 
-        if self.use_rnn:
-            rnn_state = l_rnn_states.squeeze(0)
-            rnn_state = np.concatenate([rnn_state,
-                                        np.empty([1, *rnn_state.shape[1:]], dtype=np.float32)])
-            storage_data['rnn_state'] = rnn_state
+        if self.seq_encoder is not None:
+            seq_hidden_state = l_seq_hidden_states.squeeze(0)
+            seq_hidden_state = np.concatenate([seq_hidden_state,
+                                               np.empty([1, *seq_hidden_state.shape[1:]], dtype=np.float32)])
+            storage_data['seq_hidden_state'] = seq_hidden_state
 
         # n_step transitions except the first one and the last obs_, n_step - 1 + 1
         if self.use_add_with_td:
-            td_error = self.get_episode_td_error(l_obses_list=l_obses_list,
+            td_error = self.get_episode_td_error(l_indexes=l_indexes,
+                                                 l_padding_masks=l_padding_masks,
+                                                 l_obses_list=l_obses_list,
                                                  l_actions=l_actions,
                                                  l_rewards=l_rewards,
                                                  next_obs_list=next_obs_list,
                                                  l_dones=l_dones,
                                                  l_mu_probs=l_mu_probs if self.use_n_step_is else None,
-                                                 l_rnn_states=l_rnn_states if self.use_rnn else None)
+                                                 l_seq_hidden_states=l_seq_hidden_states if self.seq_encoder is not None else None)
             self.replay_buffer.add_with_td_error(td_error, storage_data,
                                                  ignore_size=self.burn_in_step + self.n_step)
         else:
             self.replay_buffer.add(storage_data,
                                    ignore_size=self.burn_in_step + self.n_step)
+
+        if self.seq_encoder == SEQ_ENCODER.ATTN and self.summary_writer is not None and self.summary_available:
+            self.summary_available = False
+            with torch.no_grad():
+                l_indexes = l_indexes[:, self.burn_in_step:]
+                l_obses_list = [o[:, self.burn_in_step:] for o in l_obses_list]
+                l_pre_l_actions = gen_pre_n_actions(l_actions[:, self.burn_in_step:])
+                l_padding_masks = l_padding_masks[:, self.burn_in_step:]
+                *_, attn_weights_list = self.model_rep(torch.from_numpy(l_indexes).to(self.device),
+                                                       [torch.from_numpy(o).to(self.device) for o in l_obses_list],
+                                                       torch.from_numpy(l_pre_l_actions).to(self.device),
+                                                       query_length=l_indexes.shape[1],
+                                                       padding_mask=torch.from_numpy(l_padding_masks).to(self.device))
+
+                for i, attn_weight in enumerate(attn_weights_list):
+                    image = plot_attn_weight(attn_weight[0].cpu().numpy())
+                    self.summary_writer.add_images(f'attn_weight/{i}', image, self.global_step)
 
     def _sample(self):
         """
@@ -1840,6 +2023,8 @@ class SAC_Base(object):
         Returns:
             pointers: [Batch, ]
             (
+                bn_indexes: [Batch, b + n]
+                bn_padding_masks: [Batch, b + n]
                 bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
                 bn_actions: [Batch, b + n, action_size]
                 bn_rewards: [Batch, b + n]
@@ -1847,25 +2032,27 @@ class SAC_Base(object):
                 bn_dones: [Batch, b + n]
                 bn_mu_probs: [Batch, b + n]
                 priority_is: [Batch, 1]
-                rnn_states: [Batch, *rnn_state_shape]
+                bn_seq_hidden_states: [Batch, b + n, *seq_hidden_state_shape],
             )
         """
-
-        if (sampled := self.replay_buffer.sample()) is None:
+        sampled = self.replay_buffer.sample()
+        if sampled is None:
             return None
 
         """
         trans:
+            index: [Batch, ]
+            padding_mask: [Batch, ]
             obs_i: [Batch, *obs_shapes_i]
             action: [Batch, action_size]
             reward: [Batch, ]
             done: [Batch, ]
             mu_prob: [Batch, ]
-            rnn_state: [Batch, *rnn_state_shape]
+            seq_hidden_state: [Batch, *seq_hidden_state_shape],
         """
         pointers, trans, priority_is = sampled
 
-        # Get n_step transitions TODO: could be faster
+        # Get n_step transitions TODO: could be faster, no need get all data
         trans = {k: [v] for k, v in trans.items()}
         # k: [v, v, ...]
         for i in range(1, self.burn_in_step + self.n_step + 1):
@@ -1877,18 +2064,24 @@ class SAC_Base(object):
             trans[k] = np.concatenate([np.expand_dims(t, 1) for t in v], axis=1)
 
         """
+        m_indexes: [Batch, N + 1]
+        m_padding_masks: [Batch, N + 1]
         m_obses_list: list([Batch, N + 1, *obs_shapes_i], ...)
         m_actions: [Batch, N + 1, action_size]
         m_rewards: [Batch, N + 1]
         m_dones: [Batch, N + 1]
         m_mu_probs: [Batch, N + 1]
-        m_rnn_states: [Batch, N + 1, *rnn_state_shape]
+        m_seq_hidden_state: [Batch, N + 1, *seq_hidden_state_shape]
         """
+        m_indexes = trans['index']
+        m_padding_masks = trans['padding_mask']
         m_obses_list = [trans[f'obs_{i}'] for i in range(len(self.obs_shapes))]
         m_actions = trans['action']
         m_rewards = trans['reward']
         m_dones = trans['done']
 
+        bn_indexes = m_indexes[:, :-1]
+        bn_padding_masks = m_padding_masks[:, :-1]
         bn_obses_list = [m_obses[:, :-1, ...] for m_obses in m_obses_list]
         bn_actions = m_actions[:, :-1, ...]
         bn_rewards = m_rewards[:, :-1]
@@ -1899,24 +2092,29 @@ class SAC_Base(object):
             m_mu_probs = trans['mu_prob']
             bn_mu_probs = m_mu_probs[:, :-1]
 
-        if self.use_rnn:
-            m_rnn_states = trans['rnn_state']
-            rnn_state = m_rnn_states[:, 0, ...]
+        if self.seq_encoder is not None:
+            m_seq_hidden_states = trans['seq_hidden_state']
+            bn_seq_hidden_states = m_seq_hidden_states[:, :-1, ...]
 
-        return pointers, (bn_obses_list,
+        return pointers, (bn_indexes,
+                          bn_padding_masks,
+                          bn_obses_list,
                           bn_actions,
                           bn_rewards,
                           next_obs_list,
                           bn_dones,
                           bn_mu_probs if self.use_n_step_is else None,
                           priority_is if self.use_priority else None,
-                          rnn_state if self.use_rnn else None)
+                          bn_seq_hidden_states if self.seq_encoder is not None else None)
 
     def train(self):
-        if (train_data := self._sample()) is None:
+        train_data = self._sample()
+        if train_data is None:
             return 0
 
         """
+        bn_indexes: [Batch, b + n]
+        bn_padding_masks: [Batch, b + n]
         bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
         bn_actions: [Batch, b + n, action_size]
         bn_rewards: [Batch, b + n]
@@ -1924,13 +2122,16 @@ class SAC_Base(object):
         bn_dones: [Batch, b + n]
         bn_mu_probs: [Batch, b + n]
         priority_is: [Batch, 1]
-        rnn_states: [Batch, *rnn_state_shape]
+        bn_seq_hidden_states: [Batch, b + n, *seq_hidden_state_shape]
         """
-        pointers, (bn_obses_list, bn_actions, bn_rewards, next_obs_list, bn_dones,
+        pointers, (bn_indexes, bn_padding_masks,
+                   bn_obses_list, bn_actions, bn_rewards, next_obs_list, bn_dones,
                    bn_mu_probs,
                    priority_is,
-                   rnn_state) = train_data
+                   bn_seq_hidden_states) = train_data
 
+        bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
+        bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
         bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
         bn_actions = torch.from_numpy(bn_actions).to(self.device)
         bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
@@ -1940,17 +2141,20 @@ class SAC_Base(object):
             bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
         if self.use_priority:
             priority_is = torch.from_numpy(priority_is).to(self.device)
-        if self.use_rnn:
-            rnn_state = torch.from_numpy(rnn_state).to(self.device)
+        if self.seq_encoder is not None:
+            f_seq_hidden_states = bn_seq_hidden_states[:, :1]
+            f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states).to(self.device)
 
-        self._train(bn_obses_list=bn_obses_list,
+        self._train(bn_indexes=bn_indexes,
+                    bn_padding_masks=bn_padding_masks,
+                    bn_obses_list=bn_obses_list,
                     bn_actions=bn_actions,
                     bn_rewards=bn_rewards,
                     next_obs_list=next_obs_list,
                     bn_dones=bn_dones,
                     bn_mu_probs=bn_mu_probs if self.use_n_step_is else None,
                     priority_is=priority_is if self.use_priority else None,
-                    initial_rnn_state=rnn_state if self.use_rnn else None)
+                    f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None)
 
         step = self.get_global_step()
 
@@ -1958,28 +2162,36 @@ class SAC_Base(object):
             self.save_model()
 
         if self.use_n_step_is:
-            bn_pi_probs_tensor = self.get_l_probs(bn_obses_list,
+            bn_pi_probs_tensor = self.get_l_probs(bn_indexes,
+                                                  bn_padding_masks,
+                                                  bn_obses_list,
                                                   bn_actions,
-                                                  rnn_state=rnn_state if self.use_rnn else None)
+                                                  f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None)
 
         # Update td_error
         if self.use_priority:
-            td_error = self._get_td_error(bn_obses_list=bn_obses_list,
+            td_error = self._get_td_error(bn_indexes=bn_indexes,
+                                          bn_padding_masks=bn_padding_masks,
+                                          bn_obses_list=bn_obses_list,
                                           bn_actions=bn_actions,
                                           bn_rewards=bn_rewards,
                                           next_obs_list=next_obs_list,
                                           bn_dones=bn_dones,
                                           bn_mu_probs=bn_pi_probs_tensor if self.use_n_step_is else None,
-                                          rnn_state=rnn_state if self.use_rnn else None).detach().cpu().numpy()
+                                          f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None).detach().cpu().numpy()
             self.replay_buffer.update(pointers, td_error)
 
-        # Update rnn_state
-        if self.use_rnn:
+        # Update seq_hidden_states
+        if self.seq_encoder is not None:
             pointers_list = [pointers + i for i in range(1, self.burn_in_step + self.n_step + 1)]
             tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-            bn_rnn_states = self.get_n_rnn_states(bn_obses_list, bn_actions, rnn_state).detach().cpu().numpy()
-            rnn_states = bn_rnn_states.reshape(-1, *bn_rnn_states.shape[2:])
-            self.replay_buffer.update_transitions(tmp_pointers, 'rnn_state', rnn_states)
+            bn_seq_hidden_states = self.get_l_seq_hidden_states(bn_indexes,
+                                                                bn_padding_masks,
+                                                                bn_obses_list,
+                                                                bn_actions,
+                                                                f_seq_hidden_states=f_seq_hidden_states).detach().cpu().numpy()
+            seq_hidden_state = bn_seq_hidden_states.reshape(-1, *bn_seq_hidden_states.shape[2:])
+            self.replay_buffer.update_transitions(tmp_pointers, 'seq_hidden_state', seq_hidden_state)
 
         # Update n_mu_probs
         if self.use_n_step_is:

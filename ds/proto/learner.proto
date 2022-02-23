@@ -9,7 +9,6 @@ service LearnerService {
 
   rpc RegisterActor(Empty) returns (RegisterActorResponse);
 
-  rpc GetAction(GetActionRequest) returns (Action);
   rpc GetPolicyVariables(Empty) returns (NNVariables);
   rpc Add(AddRequest) returns (Empty);
   // Update variables from evolver
@@ -28,23 +27,16 @@ message RegisterActorResponse{
   string sac_config_json = 5;
 }
 
-message GetActionRequest {
-  repeated NDarray obs_list = 1;
-  NDarray rnn_state = 3;
-}
-message Action {
-  NDarray action = 1;
-  NDarray rnn_state = 3;
-}
-
 message AddRequest {
-  repeated NDarray l_obses_list = 1;
-  NDarray l_actions = 2;
-  NDarray l_rewards = 3;
-  repeated NDarray next_obs_list = 4;
-  NDarray l_dones = 5;
-  NDarray l_mu_probs = 6;
-  NDarray l_rnn_states = 7;
+  NDarray l_indexes = 1;
+  NDarray l_padding_masks = 2;
+  repeated NDarray l_obses_list = 3;
+  NDarray l_actions = 4;
+  NDarray l_rewards = 5;
+  repeated NDarray next_obs_list = 6;
+  NDarray l_dones = 7;
+  NDarray l_mu_probs = 8;
+  NDarray l_seq_hidden_states = 9;
 }
 
 message NNVariables {

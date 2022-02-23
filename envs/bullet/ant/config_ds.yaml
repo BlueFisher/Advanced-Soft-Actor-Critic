@@ -36,8 +36,8 @@ hard:
     evolver_host: ant-hard-ds-evolver
 
   sac_config: &hard_sac
-    use_rnn: true
-    use_prediction: true
+    seq_encoder: RNN
+    # use_prediction: true
 
     random_params:
       n_step:

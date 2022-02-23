@@ -29,34 +29,31 @@ default:
     v_lambda: 0.99
     clip_epsilon: 1.
 
-hard:
-  base_config: &hard_base
-    name: "hard_nopre_{time}"
-    nn: nn_hard
+hard_rnn:
+  base_config:
+    name: "hard_rnn_{time}"
+    nn: nn_hard_rnn
     max_iter: 500
-  sac_config: &hard_sac
+
+  sac_config:
     burn_in_step: 10
     n_step: 5
-    use_rnn: true
+    seq_encoder: RNN
 
     tau: 0.005
 
-hard_pre:
+hard_attn:
   base_config:
-    <<: *hard_base
-    name: "hard_pre_{time}"
-  sac_config:
-    <<: *hard_sac
-    use_prediction: true
+    name: "hard_attn_{time}"
+    nn: nn_hard_attn
+    max_iter: 500
 
-hard_pre_noextra:
-  base_config:
-    <<: *hard_base
-    name: "hard_pre_noextra_{time}"
   sac_config:
-    <<: *hard_sac
-    use_prediction: true
-    use_extra_data: false
+    burn_in_step: 128
+    n_step: 5
+    seq_encoder: ATTN
+
+    tau: 0.005
 
 visual:
   base_config:
@@ -66,9 +63,11 @@ visual:
 
     name: "{time}"
     nn: nn_visual
+
   replay_config:
     beta: 0.4
     beta_increment_per_sampling: 0.001
+
   sac_config:
     n_step: 3
 
@@ -77,44 +76,3 @@ visual:
     init_log_alpha: -2.3
 
     clip_epsilon: 0.2
-
-visual_hard:
-  base_config: &visual_hard_base
-    scene: VisualRoller
-
-    no_graphics: false
-
-    name: "hard_nopre_{time}"
-    nn: nn_visual_hard
-  replay_config: &visual_hard_replay
-    beta: 0.4
-    beta_increment_per_sampling: 0.001
-  sac_config: &visual_hard_sac
-    burn_in_step: 40
-    n_step: 3
-    use_rnn: true
-
-    tau: 0.005
-
-    init_log_alpha: -2.3
-
-    clip_epsilon: 0.2
-
-visual_hard_pre:
-  base_config:
-    <<: *visual_hard_base
-    name: "hard_pre_{time}"
-  sac_config:
-    <<: *visual_hard_sac
-    use_prediction: true
-  replay_config: *visual_hard_replay
-
-visual_hard_pre_noextra:
-  base_config:
-    <<: *visual_hard_base
-    name: "hard_pre_noextra_{time}"
-  sac_config:
-    <<: *visual_hard_sac
-    use_prediction: true
-    use_extra_data: false
-  replay_config: *visual_hard_replay
