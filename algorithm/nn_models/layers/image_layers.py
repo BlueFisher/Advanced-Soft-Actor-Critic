@@ -1,49 +1,9 @@
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
 
-
-class LinearLayers(nn.Module):
-    def __init__(self, input_size, dense_n=64, dense_depth=0, output_size=None):
-        """
-                 ┌────────┐
-             ┌───► dense_n│
-             │   └───┬────┘
-        dense_depth  │
-             │   ┌───▼────┐
-             └───┤  relu  ├─────┐
-                 └───┬────┘     │
-                     │          │
-               ┌─────▼──────┐   │
-               │output_size │   │
-               └─────┬──────┘   │
-                     │          │
-                     ▼          ▼
-
-        """
-        super().__init__()
-
-        self.input_size = input_size
-        self.output_size = input_size
-        dense = []
-        for i in range(dense_depth):
-            linear = nn.Linear(input_size if i == 0 else dense_n, dense_n)
-            nn.init.xavier_uniform_(linear.weight.data)
-            torch.zero_(linear.bias.data)
-            dense.append(linear)
-            dense.append(nn.ReLU())
-            self.output_size = dense_n
-        if output_size:
-            dense.append(nn.Linear(self.output_size, output_size))
-            self.output_size = output_size
-
-        self.dense = nn.Sequential(*dense)
-
-    def forward(self, x):
-        assert x.shape[-1] == self.input_size
-
-        return self.dense(x)
+from .linear_layers import LinearLayers
 
 
 def conv1d_output_size(
@@ -300,27 +260,3 @@ class Transform(nn.Module):
             return x.reshape(*batch, *x.shape[1:])
         else:
             raise Exception('The dimension of input should be greater than or equal to 4')
-
-
-class GRU(nn.GRU):
-    def forward(self, x: torch.Tensor, h0: torch.Tensor = None):
-        if h0 is not None:
-            h0 = h0.transpose(0, 1).contiguous()
-
-        output, hn = super().forward(x.transpose(0, 1).contiguous(), h0)
-
-        return output.transpose(0, 1), hn.transpose(0, 1)
-
-
-class LSTM(nn.LSTM):
-    def forward(self, x: torch.Tensor, hc_0: torch.Tensor = None):
-        if hc_0 is not None:
-            hc_0 = hc_0.transpose(0, 1)
-            h0, c0 = torch.chunk(hc_0, 2, dim=-1)
-            h0 = h0.contiguous()
-            c0 = c0.contiguous()
-            hc_0 = (h0, c0)
-
-        output, (hn, cn) = super().forward(x.transpose(0, 1).contiguous(), hc_0)
-
-        return output.transpose(0, 1), torch.cat([hn, cn], dim=-1).transpose(0, 1)

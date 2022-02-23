@@ -5,54 +5,62 @@ default:
       linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
     n_agents: 10
-    max_step: 100000
+    max_step: -1
     reset_on_iteration: false
 
   reset_config:
     force_reset: true
-
-  sac_config:
-    burn_in_step: 30
-    n_step: 3
-    v_lambda: 0.99
-    use_rnn: true
-
-ray:
-  base_config: &ray_base
-    scene: RayPyramid
-    nn: nn_ray
-    name: "ray20_nopre_{time}"
-  reset_config: &ray_reset
     ray_length: 20
 
-ray_pre:
-  base_config:
-    <<: *ray_base
-    name: "ray20_pre_{time}"
-  reset_config: *ray_reset
-  sac_config:
-    use_prediction: true
+  model_config:
+    rep:
+      pe: cat
 
-ray_noextra:
-  base_config:
-    <<: *ray_base
-    name: "ray20_pre_noextra_{time}"
-  reset_config: *ray_reset
   sac_config:
-    use_prediction: true
-    use_extra_data: false
+    save_model_per_step: 10000
 
-visual:
-  base_config: &visual_base
-    scene: VisualPyramid
-    no_graphics: false
-    name: "nopre_{time}"
-    nn: nn_visual
-    max_step: -1
+    burn_in_step: 128
+    n_step: 3
+    v_lambda: 0.99
+    seq_encoder: ATTN
 
-visual_pre:
+    use_rnd: true
+    rnd_n_sample: 50
+
+ray_nope:
   base_config:
-    <<: *visual_base
-    name: "pre_{time}"
+    scene: RayPyramid
+    nn: nn_nope
+    name: "attn_nope_{time}"
+  model_config:
+    rep:
+      pe: nope
+
+ray_peadd:
+  base_config:
+    scene: RayPyramid
+    nn: nn_attn
+    name: "attn_peadd_{time}"
+  model_config:
+    rep:
+      pe: add
+
+ray_pecat:
+  base_config:
+    scene: RayPyramid
+    nn: nn_attn
+    name: "attn_pecat_{time}"
+  model_config:
+    rep:
+      pe: cat
+
+ray_nornn:
+  base_config:
+    scene: RayPyramid
+    nn: nn_nornn
+    name: "nornn_{time}"
+  reset_config:
+    ray_length: 20
   sac_config:
-    use_prediction: true
+    burn_in_step: 0
+    seq_encoder: NONE

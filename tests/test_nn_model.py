@@ -3,6 +3,8 @@ import unittest
 from algorithm.sac_base import SAC_Base
 from tests.get_synthesis_data import *
 
+OBS_SHAPES = [(10,)]
+
 
 class TestNNModel(unittest.TestCase):
     def _test(self, param_dict, is_q_model):
@@ -20,10 +22,8 @@ class TestNNModel(unittest.TestCase):
                     super()._build_model(**param_dict)
             nn_vanilla.ModelPolicy = ModelPolicy
 
-        obs_shapes = [(10,)]
-
         sac = SAC_Base(
-            obs_shapes=obs_shapes,
+            obs_shapes=OBS_SHAPES,
             d_action_size=4,
             c_action_size=4,
             model_abs_dir=None,
@@ -32,8 +32,11 @@ class TestNNModel(unittest.TestCase):
 
         step = 0
         while step < 5:
-            sac.choose_action(gen_batch_obs(obs_shapes))
-            sac.fill_replay_buffer(*gen_episode_trans(obs_shapes, 4, 4, episode_len=10))
+            sac.choose_action(*gen_batch_obs(OBS_SHAPES))
+            sac.fill_replay_buffer(*gen_episode_trans(OBS_SHAPES,
+                                                      d_action_size=4,
+                                                      c_action_size=4,
+                                                      episode_len=10))
             step = sac.train()
 
     @staticmethod

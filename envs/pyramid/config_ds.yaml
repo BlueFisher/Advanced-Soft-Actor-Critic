@@ -24,7 +24,7 @@ default:
   sac_config:
     burn_in_step: 30
     n_step: 3
-    use_rnn: true
+    seq_encoder: RNN
 
 pre:
   base_config:
