@@ -10,9 +10,10 @@ class ModelRep(m.ModelBaseAttentionRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (8, )
 
-        embed_dim = 8 - EXTRA_SIZE + 2
-        self.attn = m.EpisodeMultiheadAttention(embed_dim + 8, 3, num_layers=2)
-        self.pos = m.AbsolutePositionalEncoding(8)
+        embed_dim = 8 - EXTRA_SIZE + 2  # 7
+        self.mlp = m.LinearLayers(embed_dim, output_size=32)
+        self.attn = m.EpisodeMultiheadAttention(32, 2, num_layers=2)
+        self.pos = m.AbsolutePositionalEncoding(32)
 
     def forward(self, index, obs_list, pre_action,
                 query_length=1,
@@ -22,9 +23,12 @@ class ModelRep(m.ModelBaseAttentionRep):
         obs = obs_list[0][..., :-EXTRA_SIZE]
 
         x = torch.concat([obs, pre_action], dim=-1)
+        x = self.mlp(x)
 
         pe = self.pos(index)
-        x = torch.concat([x, pe], dim=-1)
+        # x = torch.concat([x, pe], dim=-1)
+        x = x + pe
+
         output, hn, attn_weights_list = self.attn(x,
                                                   query_length,
                                                   hidden_state,
