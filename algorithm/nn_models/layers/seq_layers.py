@@ -54,17 +54,15 @@ class MultiheadAttention(nn.MultiheadAttention):
 
 
 class EpisodeMultiheadAttentionBlock(nn.Module):
-    def __init__(self, embed_dim: int, num_heads: int):
+    def __init__(self, embed_dim: int, num_heads: int,
+                 use_residual: bool = True):
         super().__init__()
 
         self.embed_dim = embed_dim
         self.num_heads = num_heads
+        self.use_residual = use_residual
 
         self.attn = MultiheadAttention(embed_dim, num_heads)
-        # self.layer_norm_1 = nn.LayerNorm(embed_dim)
-        # self.dense = LinearLayers(embed_dim, embed_dim, 1, embed_dim)
-        self.mlp = LinearLayers(embed_dim, output_size=embed_dim)
-        # self.layer_norm_2 = nn.LayerNorm(embed_dim)
 
     def get_attn_mask(self,
                       key_length: int,
@@ -123,19 +121,17 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
         query = key[:, -query_length:]
         output, attn_weights = self.attn(query, key, key,
                                          attn_mask=attn_mask)
-        output = output + query
-        _t = output
-        # output = _t = self.layer_norm_1(output)
-        output = self.mlp(output)
-        output = output + _t
-        # output = self.layer_norm_2(output)
+
+        if self.use_residual:
+            output = output + query
 
         return output, attn_weights
 
 
 class EpisodeMultiheadAttention(nn.Module):
     def __init__(self, embed_dim: int, num_heads: int,
-                 num_layers: int = 2):
+                 num_layers: int = 2,
+                 use_residual: bool = True):
         super().__init__()
 
         self.embed_dim = embed_dim
@@ -143,7 +139,8 @@ class EpisodeMultiheadAttention(nn.Module):
         self.num_layers = num_layers
 
         self._attn_list = nn.ModuleList(
-            [EpisodeMultiheadAttentionBlock(embed_dim, num_heads) for _ in range(num_layers)]
+            [EpisodeMultiheadAttentionBlock(embed_dim, num_heads,
+                                            use_residual=use_residual) for _ in range(num_layers)]
         )
 
     def forward(self,
@@ -190,7 +187,8 @@ class EpisodeMultiheadAttention(nn.Module):
                                                      key_padding_mask=key_padding_mask)
             attn_weights_list.append(attn_weight)
 
-            hidden_state_list = hidden_state.chunk(self.num_layers - 1, dim=-1)
+            if self.num_layers > 1:
+                hidden_state_list = hidden_state.chunk(self.num_layers - 1, dim=-1)
 
             for i, attn in enumerate(self._attn_list[1:]):
                 next_hidden_state_list.append(output)
@@ -209,7 +207,8 @@ class EpisodeMultiheadAttention(nn.Module):
             next_hidden_state_list.append(output[:, -query_length:])
             attn_weights_list.append(attn_weight[:, -query_length:])
 
-            hidden_state_list = hidden_state.chunk(self.num_layers - 1, dim=-1)
+            if self.num_layers > 1:
+                hidden_state_list = hidden_state.chunk(self.num_layers - 1, dim=-1)
 
             for i, attn in enumerate(self._attn_list[1:-1]):
                 _k = output[:, -key_length:]
@@ -220,16 +219,20 @@ class EpisodeMultiheadAttention(nn.Module):
                 next_hidden_state_list.append(output[:, -query_length:])
                 attn_weights_list.append(attn_weight[:, -query_length:])
 
-            _k = output[:, -key_length:]
-            _k = torch.concat([hidden_state_list[-1], _k], dim=1)
+            if self.num_layers > 1:
+                _k = output[:, -key_length:]
+                _k = torch.concat([hidden_state_list[-1], _k], dim=1)
 
-            output, attn_weight = self._attn_list[-1](_k, query_length,
-                                                      key_padding_mask=key_padding_mask)
-            attn_weights_list.append(attn_weight)
+                output, attn_weight = self._attn_list[-1](_k, query_length,
+                                                          key_padding_mask=key_padding_mask)
+                attn_weights_list.append(attn_weight)
 
             _q = output
 
-        return _q, torch.concat(next_hidden_state_list, dim=-1), attn_weights_list
+        if self.num_layers > 1:
+            return _q, torch.concat(next_hidden_state_list, dim=-1), attn_weights_list
+        else:
+            return _q, torch.empty(key.shape[0], query_length, 1), attn_weights_list
 
 
 class AbsolutePositionalEncoding(nn.Module):

@@ -258,7 +258,7 @@ class SAC_Base(object):
                                                                     self.model_abs_dir,
                                                                     **model_config['rep']).to(self.device)
             # Get represented state and seq_hidden_state_shape
-            test_index = torch.zeros((self.batch_size, 1), dtype=torch.int32)
+            test_index = torch.zeros((self.batch_size, 1), dtype=torch.int32, device=self.device)
             test_obs_list = [torch.rand(self.batch_size, 1, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
             test_pre_action = torch.rand(self.batch_size, 1, self.d_action_size + self.c_action_size, device=self.device)
             test_state, test_attn_state, _ = self.model_rep(test_index,
@@ -1488,11 +1488,6 @@ class SAC_Base(object):
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             self.summary_available = True
-
-            # for p in self.model_rep.named_parameters():
-            #     n, v = p
-            #     if (g := v.grad) is not None:
-            #         print(n, g.shape, torch.max(g).item(), torch.mean(g).item(), torch.min(g).item())
 
             with torch.no_grad():
                 self.summary_writer.add_scalar('loss/q', loss_q, self.global_step)
