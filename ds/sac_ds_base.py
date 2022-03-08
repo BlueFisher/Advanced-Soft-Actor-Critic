@@ -9,6 +9,8 @@ import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
+from algorithm.utils.enums import CURIOSITY, SIAMESE
+
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from algorithm.sac_base import SAC_Base
 
@@ -61,8 +63,7 @@ class SAC_DS_Base(SAC_Base):
                  use_rnd=False,
                  rnd_n_sample=10,
                  use_normalization=False,
-
-                 noise=0.):
+                 action_noise: Optional[List[float]] = None):
 
         self.obs_shapes = obs_shapes
         self.d_action_size = d_action_size
@@ -101,10 +102,9 @@ class SAC_DS_Base(SAC_Base):
         self.use_rnd = use_rnd
         self.rnd_n_sample = rnd_n_sample
         self.use_normalization = use_normalization
+        self.action_noise = action_noise
         self.use_priority = False
         self.use_n_step_is = True
-
-        self.noise = noise
 
         self.device = device
         if device is None:
@@ -123,46 +123,6 @@ class SAC_DS_Base(SAC_Base):
 
         self._build_model(model, model_config, init_log_alpha, learning_rate)
         self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
-
-    def _random_action(self, action):
-        if self.noise == 0.:
-            return action
-
-        batch = action.shape[0]
-        d_action = action[..., :self.d_action_size]
-        c_action = action[..., self.d_action_size:]
-
-        if self.d_action_size:
-            action_random = np.eye(self.d_action_size)[np.random.randint(0, self.d_action_size, size=batch)]
-            cond = np.random.rand(batch) < self.noise
-            d_action[cond] = action_random[cond]
-
-        if self.c_action_size:
-            c_action = np.tanh(np.arctanh(c_action) + np.random.randn(batch, self.c_action_size) * self.noise)
-
-        return np.concatenate([d_action, c_action], axis=-1).astype(np.float32)
-
-    def choose_action(self,
-                      obs_list: List[np.ndarray],
-                      disable_sample: bool = False,
-                      force_rnd_if_avaiable: bool = False):
-        action, prob = super().choose_action(obs_list,
-                                             disable_sample=disable_sample,
-                                             force_rnd_if_avaiable=force_rnd_if_avaiable)
-
-        return self._random_action(action), prob
-
-    def choose_rnn_action(self,
-                          obs_list: List[np.ndarray],
-                          pre_action: np.ndarray,
-                          rnn_state: np.ndarray,
-                          disable_sample: bool = False,
-                          force_rnd_if_avaiable: bool = False):
-        action, prob, next_rnn_state = super().choose_rnn_action(obs_list, pre_action, rnn_state,
-                                                                 disable_sample=disable_sample,
-                                                                 force_rnd_if_avaiable=force_rnd_if_avaiable)
-
-        return self._random_action(action), prob, next_rnn_state
 
     def get_policy_variables(self, get_numpy=True):
         """
@@ -201,9 +161,9 @@ class SAC_DS_Base(SAC_Base):
             variables = chain(variables,
                               model_q.parameters())
 
-        if self.siamese == 'ATC':
+        if self.siamese == SIAMESE.ATC:
             variables = chain(variables, self.contrastive_weight_list)
-        elif self.siamese == 'BYOL':
+        elif self.siamese == SIAMESE.BYOL:
             variables = chain(variables,
                               *[pro.parameters() for pro in self.model_rep_projection_list],
                               *[pre.parameters() for pre in self.model_rep_prediction_list])
@@ -214,10 +174,10 @@ class SAC_DS_Base(SAC_Base):
                               self.model_reward.parameters(),
                               self.model_observation.parameters())
 
-        if self.curiosity == 'FORWARD':
+        if self.curiosity == CURIOSITY.FORWARD:
             variables = chain(variables,
                               self.model_forward_dynamic.parameters())
-        elif self.curiosity == 'FORWARD':
+        elif self.curiosity == CURIOSITY.INVERSE:
             variables = chain(variables,
                               self.model_inverse_dynamice.parameters())
 

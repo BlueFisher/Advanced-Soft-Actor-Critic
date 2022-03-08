@@ -67,6 +67,7 @@ class SAC_Base(object):
                  rnd_n_sample: int = 10,
                  use_normalization: bool = False,
                  use_add_with_td: bool = False,
+                 action_noise: Optional[List[float]] = None,
 
                  replay_config=None):
         """
@@ -157,6 +158,7 @@ class SAC_Base(object):
         self.rnd_n_sample = rnd_n_sample
         self.use_normalization = use_normalization
         self.use_add_with_td = use_add_with_td
+        self.action_noise = action_noise
 
         self.device = device
         if device is None:
@@ -320,19 +322,18 @@ class SAC_Base(object):
         self.optimizer_policy = adam_optimizer(self.model_policy.parameters())
 
         """ SIAMESE REPRESENTATION LEARNING """
-        assert self.siamese in (None, 'ATC', 'BYOL')
-        if self.siamese in ('ATC', 'BYOL'):
+        if self.siamese in (SIAMESE.ATC, SIAMESE.BYOL):
             test_encoder_list = self.model_rep.get_augmented_encoders(test_obs_list)
             if not isinstance(test_encoder_list, tuple):
                 test_encoder_list = [test_encoder_list, ]
 
-            if self.siamese == 'ATC':
+            if self.siamese == SIAMESE.ATC:
                 self.contrastive_weight_list = [torch.randn((test_encoder.shape[-1], test_encoder.shape[-1]),
                                                             requires_grad=True,
                                                             device=self.device) for test_encoder in test_encoder_list]
                 self.optimizer_siamese = adam_optimizer(self.contrastive_weight_list)
 
-            elif self.siamese == 'BYOL':
+            elif self.siamese == SIAMESE.BYOL:
                 self.model_rep_projection_list: List[ModelBaseRepProjection] = [
                     model.ModelRepProjection(test_encoder.shape[-1]).to(self.device) for test_encoder in test_encoder_list]
                 self.model_target_rep_projection_list: List[ModelBaseRepProjection] = [
@@ -366,13 +367,12 @@ class SAC_Base(object):
             self.optimizer_alpha = adam_optimizer([self.log_d_alpha, self.log_c_alpha])
 
         """ CURIOSITY """
-        assert self.curiosity in (None, 'FORWARD', 'INVERSE')
-        if self.curiosity == 'FORWARD':
+        if self.curiosity == CURIOSITY.FORWARD:
             self.model_forward_dynamic: ModelBaseForwardDynamic = model.ModelForwardDynamic(state_size,
                                                                                             self.d_action_size + self.c_action_size).to(self.device)
             self.optimizer_curiosity = adam_optimizer(self.model_forward_dynamic.parameters())
 
-        elif self.curiosity == 'INVERSE':
+        elif self.curiosity == CURIOSITY.INVERSE:
             self.model_inverse_dynamic: ModelBaseInverseDynamic = model.ModelInverseDynamic(state_size,
                                                                                             self.d_action_size + self.c_action_size).to(self.device)
             self.optimizer_curiosity = adam_optimizer(self.model_inverse_dynamic.parameters())
@@ -417,10 +417,10 @@ class SAC_Base(object):
         ckpt_dict['optimizer_policy'] = self.optimizer_policy
 
         """ SIAMESE REPRESENTATION LEARNING """
-        if self.siamese == 'ATC':
+        if self.siamese == SIAMESE.ATC:
             for i, weight in enumerate(self.contrastive_weight_list):
                 ckpt_dict[f'contrastive_weights_{i}'] = weight
-        elif self.siamese == 'BYOL':
+        elif self.siamese == SIAMESE.BYOL:
             for i, model_rep_projection in enumerate(self.model_rep_projection_list):
                 ckpt_dict[f'model_rep_projection_{i}'] = model_rep_projection
             for i, model_target_rep_projection in enumerate(self.model_target_rep_projection_list):
@@ -444,9 +444,9 @@ class SAC_Base(object):
 
         """ CURIOSITY """
         if self.curiosity is not None:
-            if self.curiosity == 'forward':
+            if self.curiosity == CURIOSITY.FORWARD:
                 ckpt_dict['model_forward_dynamic'] = self.model_forward_dynamic
-            elif self.curiosity == 'inverse':
+            elif self.curiosity == CURIOSITY.INVERSE:
                 ckpt_dict['model_inverse_dynamic'] = self.model_inverse_dynamic
             ckpt_dict['optimizer_curiosity'] = self.optimizer_curiosity
 
@@ -782,11 +782,11 @@ class SAC_Base(object):
         next_d_policy, next_c_policy = self.model_policy(next_n_states, next_n_obses_list)
 
         if self.curiosity is not None:
-            if self.curiosity == 'FORWARD':
+            if self.curiosity == CURIOSITY.FORWARD:
                 approx_next_n_states = self.model_forward_dynamic(n_states, n_actions)  # [Batch, n, state_size]
                 in_n_rewards = torch.sum(torch.pow(approx_next_n_states - next_n_states, 2), dim=-1) * 0.5  # [Batch, n]
 
-            elif self.curiosity == 'INVERSE':
+            elif self.curiosity == CURIOSITY.INVERSE:
                 approx_n_actions = self.model_inverse_dynamic(n_states, next_n_states)  # [Batch, n, action_size]
                 in_n_rewards = torch.sum(torch.pow(approx_n_actions - n_actions, 2), dim=-1) * 0.5  # [Batch, n]
 
@@ -1168,7 +1168,7 @@ class SAC_Base(object):
                     state = state[:, 0, ...]
                     target_state = target_state[:, 0, ...]
 
-        if self.siamese == 'ATC':
+        if self.siamese == SIAMESE.ATC:
             encoder_list = [e.reshape(batch * n, -1) for e in encoder_list]  # [Batch * n, f], ...
             target_encoder_list = [t_e.reshape(batch * n, -1) for t_e in target_encoder_list]  # [Batch * n, f], ...
             logits_list = [torch.mm(e, weight) for e, weight in zip(encoder_list, self.contrastive_weight_list)]
@@ -1179,7 +1179,7 @@ class SAC_Base(object):
             loss_list = [functional.binary_cross_entropy_with_logits(logits, self._contrastive_labels)
                          for logits in logits_list]
 
-        elif self.siamese == 'BYOL':
+        elif self.siamese == SIAMESE.BYOL:
             encoder_list = [encoder.reshape(batch * n, -1) for encoder in encoder_list]  # [Batch * n, f], ...
             projection_list = [pro(encoder) for pro, encoder in zip(self.model_rep_projection_list, encoder_list)]
             prediction_list = [pre(projection) for pre, projection in zip(self.model_rep_prediction_list, projection_list)]
@@ -1198,9 +1198,9 @@ class SAC_Base(object):
 
         self.optimizer_siamese.zero_grad()
 
-        if self.siamese == 'ATC':
+        if self.siamese == SIAMESE.ATC:
             loss.backward(inputs=self.contrastive_weight_list, retain_graph=True)
-        elif self.siamese == 'BYOL':
+        elif self.siamese == SIAMESE.BYOL:
             loss.backward(inputs=list(chain(*[pro.parameters() for pro in self.model_rep_projection_list],
                                             *[pre.parameters() for pre in self.model_rep_prediction_list])), retain_graph=True)
 
@@ -1383,12 +1383,12 @@ class SAC_Base(object):
 
         self.optimizer_curiosity.zero_grad()
 
-        if self.curiosity == 'FORWARD':
+        if self.curiosity == CURIOSITY.FORWARD:
             approx_next_n_states = self.model_forward_dynamic(n_states, n_actions)
             loss_curiosity = functional.mse_loss(approx_next_n_states, next_n_states)
             loss_curiosity.backward(inputs=list(self.model_forward_dynamic.parameters()))
 
-        elif self.curiosity == 'INVERSE':
+        elif self.curiosity == CURIOSITY.INVERSE:
             approx_n_actions = self.model_inverse_dynamic(n_states, next_n_states)
             loss_curiosity = functional.mse_loss(approx_n_actions, n_actions)
             loss_curiosity.backward(inputs=list(self.model_inverse_dynamic.parameters()))
@@ -1569,6 +1569,25 @@ class SAC_Base(object):
         return actions[torch.tensor(range(batch)), idx]
 
     @torch.no_grad()
+    def _random_action(self, d_action, c_action):
+        if self.action_noise is None:
+            return d_action, c_action
+
+        batch = max(d_action.shape[0], c_action.shape[0])
+
+        action_noise = torch.linspace(*self.action_noise, steps=batch, device=self.device)  # [Batch, ]
+
+        if self.d_action_size:
+            action_random = torch.eye(self.d_action_size)[torch.randint(0, self.d_action_size, size=(batch, ))]
+            mask = torch.rand(batch) < action_noise.squeeze(1)
+            d_action[mask] = action_random[mask]
+
+        if self.c_action_size:
+            c_action = torch.tanh(torch.atanh(c_action) + torch.randn(batch, self.c_action_size, device=self.device) * action_noise.unsqueeze(1))
+
+        return d_action, c_action
+
+    @torch.no_grad()
     def _choose_action(self,
                        obs_list: List[torch.Tensor],
                        state: torch.Tensor,
@@ -1616,6 +1635,8 @@ class SAC_Base(object):
             else:
                 c_action = torch.empty(0, device=self.device)
 
+        d_action, c_action = self._random_action(d_action, c_action)
+        
         policy_prob = torch.ones((state.shape[:1]), device=self.device)  # [Batch, ]
         if self.d_action_size:
             policy_prob *= torch.exp(d_policy.log_prob(d_action))  # [Batch, ]

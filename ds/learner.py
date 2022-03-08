@@ -271,8 +271,10 @@ class Learner:
     def _get_actor_register_result(self, actor_id):
         if self._registered:
             noise = self.base_config['noise_increasing_rate'] * actor_id
+            noise = min(noise, self.base_config['noise_max'])
+
             actor_sac_config = copy.deepcopy(self.sac_config)
-            actor_sac_config['noise'] = min(noise, self.base_config['noise_max'])
+            actor_sac_config['action_noise'] = [noise, noise]
             convert_config_to_string(actor_sac_config)
 
             return (str(self.model_abs_dir),

@@ -8,7 +8,7 @@ default:
 
     no_graphics: false
 
-    n_agents: 10
+    n_agents: 50
     reset_on_iteration: false
 
   reset_config:
@@ -43,6 +43,36 @@ byol:
     name: "byol_{time}"
   sac_config:
     siamese: BYOL
+
+atc_q:
+  base_config:
+    name: "atc_q_{time}"
+  sac_config:
+    siamese: ATC
+    siamese_use_q: true
+
+byol_q:
+  base_config:
+    name: "byol_q_{time}"
+  sac_config:
+    siamese: BYOL
+    siamese_use_q: true
+
+atc_q_ada:
+  base_config:
+    name: "atc_q_ada_{time}"
+  sac_config:
+    siamese: ATC
+    siamese_use_q: true
+    siamese_use_adaptive: true
+
+byol_q_ada:
+  base_config:
+    name: "byol_q_ada_{time}"
+  sac_config:
+    siamese: BYOL
+    siamese_use_q: true
+    siamese_use_adaptive: true
 
 ray0:
   model_config:
