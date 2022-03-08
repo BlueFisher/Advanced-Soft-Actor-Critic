@@ -378,9 +378,9 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
     env = UnityWrapper(train_mode=True,
-                       file_name=r'D:\Unity\win-RL-Envs\RLEnvironments.exe',
-                       scene='Roller',
-                       n_agents=30)
+                       file_name=r'/data/linux-RL-Envs/RLEnvironments.x86_64',
+                       scene='3DBall',
+                       n_agents=10)
     obs_shape_list, d_action_size, c_action_size = env.init()
 
     for i in range(100):

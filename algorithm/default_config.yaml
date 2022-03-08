@@ -81,3 +81,4 @@ sac_config:
   rnd_n_sample: 10 # RND sample times
   use_normalization: false # If using observation normalization
   use_add_with_td: false
+  action_noise: null # [noise_min, noise_max]

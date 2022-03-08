@@ -25,7 +25,7 @@ class ModelRep(m.ModelBaseRNNRep):
         self.brightness = m.Transform(T.ColorJitter(brightness=(brightness, brightness)))
 
         self.ray_index = generate_unity_to_nn_ray_index(RAY_SIZE)
-        self._ray_visual = RayVisual()
+        # self._ray_visual = RayVisual()
 
         self.conv = m.ConvLayers(84, 84, 3, 'simple',
                                  out_dense_n=64, out_dense_depth=2)
@@ -64,7 +64,7 @@ class ModelRep(m.ModelBaseRNNRep):
         random_index = torch.randperm(RAY_SIZE)[:self.ray_random]
         ray[..., random_index, 0] = 1.
         ray[..., random_index, 1] = 1.
-        self._ray_visual(ray)
+        # self._ray_visual(ray)
         ray = self.ray_conv(ray)
 
         vis_ray_concat = self.vis_ray_dense(torch.cat([vis, ray], dim=-1))
@@ -94,9 +94,9 @@ class ModelRep(m.ModelBaseRNNRep):
 
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
         ray_random = (torch.rand(1) * self.ray_random).int()
-        random_index = torch.randperm(RAY_SIZE)[:ray_random]
-        ray[..., random_index, 0] = 0.
-        ray[..., random_index, 1] = 0.03
+        random_index = torch.randperm(RAY_SIZE)[:self.ray_random]
+        ray[..., random_index, 0] = 1.
+        ray[..., random_index, 1] = 1.
         ray_encoder = self.ray_conv(ray)
 
         return vis_cam_encoder, ray_encoder

@@ -14,14 +14,16 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         embed_dim = self.obs_shapes[0][0] + self.obs_shapes[1][0] - EXTRA_SIZE + self.c_action_size
 
+        self.mlp = m.LinearLayers(embed_dim, output_size=64)
+
         if pe == 'cat':
-            self.pos = m.AbsolutePositionalEncoding(embed_dim)
-            self.attn = m.EpisodeMultiheadAttention(embed_dim * 2, 2, num_layers=3)
+            self.pos = m.AbsolutePositionalEncoding(64)
+            self.attn = m.EpisodeMultiheadAttention(64 * 2, 2, num_layers=2)
         elif pe == 'add':
-            self.pos = m.AbsolutePositionalEncoding(embed_dim)
-            self.attn = m.EpisodeMultiheadAttention(embed_dim, 2, num_layers=3)
+            self.pos = m.AbsolutePositionalEncoding(64)
+            self.attn = m.EpisodeMultiheadAttention(64, 2, num_layers=2)
         else:
-            self.attn = m.EpisodeMultiheadAttention(embed_dim, 2, num_layers=3)
+            self.attn = m.EpisodeMultiheadAttention(64, 2, num_layers=2)
 
     def forward(self, index, obs_list, pre_action,
                 query_length=1,
@@ -33,11 +35,13 @@ class ModelRep(m.ModelBaseAttentionRep):
         vec_obs = vec_obs[..., :-EXTRA_SIZE]
 
         x = torch.concat([ray_obs, vec_obs, pre_action], dim=-1)
-        pe = self.pos(index)
-
+        x = self.mlp(x)
+        
         if self.pe == 'cat':
+            pe = self.pos(index)
             x = torch.concat([x, pe], dim=-1)
         elif self.pe == 'add':
+            pe = self.pos(index)
             x = x + pe
 
         output, hn, attn_weights_list = self.attn(x,
