@@ -60,8 +60,8 @@ class ModelRep(m.ModelBaseRNNRep):
         vis = self.conv(vis_cam)
 
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
-        # ray_random = (torch.rand(1) * self.ray_random).int()
-        random_index = torch.randperm(RAY_SIZE)[:self.ray_random]
+        ray_random = (torch.rand(1) * self.ray_random).int()
+        random_index = torch.randperm(RAY_SIZE)[:ray_random]
         ray[..., random_index, 0] = 1.
         ray[..., random_index, 1] = 1.
         # self._ray_visual(ray)
@@ -94,7 +94,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
         ray_random = (torch.rand(1) * self.ray_random).int()
-        random_index = torch.randperm(RAY_SIZE)[:self.ray_random]
+        random_index = torch.randperm(RAY_SIZE)[:ray_random]
         ray[..., random_index, 0] = 1.
         ray[..., random_index, 1] = 1.
         ray_encoder = self.ray_conv(ray)

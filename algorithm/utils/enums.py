@@ -17,22 +17,22 @@ class CURIOSITY(Enum):
 
 
 def convert_config_to_enum(config):
-    if config['seq_encoder'] is not None:
+    if 'seq_encoder' in config and config['seq_encoder'] is not None:
         config['seq_encoder'] = SEQ_ENCODER[config['seq_encoder']]
 
-    if config['siamese'] is not None:
+    if 'siamese' in config and config['siamese'] is not None:
         config['siamese'] = SIAMESE[config['siamese']]
 
-    if config['curiosity'] is not None:
+    if 'curiosity' in config and config['curiosity'] is not None:
         config['curiosity'] = CURIOSITY[config['curiosity']]
 
 
 def convert_config_to_string(config):
-    if config['seq_encoder'] is not None:
+    if 'seq_encoder' in config and config['seq_encoder'] is not None:
         config['seq_encoder'] = config['seq_encoder'].name
 
-    if config['siamese'] is not None:
+    if 'siamese' in config and config['siamese'] is not None:
         config['siamese'] = config['siamese'].name
 
-    if config['curiosity'] is not None:
+    if'curiosity' in config and config['curiosity'] is not None:
         config['curiosity'] = config['curiosity'].name

@@ -6,23 +6,7 @@ from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 
-from algorithm.utils import elapsed_counter, elapsed_timer
-
-
-def traverse_lists(data: Union[Any, Tuple], process):
-    if not isinstance(data, tuple):
-        data = (data, )
-
-    buffer = []
-    for d in zip(*data):
-        if isinstance(d[0], list):
-            buffer.append(traverse_lists(d, process))
-        elif d[0] is None:
-            buffer.append(None)
-        else:
-            buffer.append(process(*d))
-
-    return buffer
+from algorithm.utils import elapsed_counter, elapsed_timer, traverse_lists
 
 
 class SharedMemoryManager:

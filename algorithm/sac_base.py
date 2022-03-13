@@ -11,6 +11,7 @@ from torch import autograd, distributions, nn, optim
 from torch.nn import functional
 from torch.utils.tensorboard import SummaryWriter
 
+from .batch_buffer import BatchBuffer
 from .nn_models import *
 from .replay_buffer import PrioritizedReplayBuffer
 from .utils import *
@@ -33,6 +34,9 @@ class SAC_Base(object):
                  write_summary_per_step: float = 1e3,
                  save_model_per_step: float = 1e5,
 
+                 use_replay_buffer: bool = True,
+                 use_priority: bool = True,
+
                  ensemble_q_num: int = 2,
                  ensemble_q_sample: int = 2,
 
@@ -53,7 +57,6 @@ class SAC_Base(object):
                  clip_epsilon: float = 0.2,
 
                  discrete_dqn_like: bool = False,
-                 use_priority: bool = True,
                  use_n_step_is: bool = True,
                  siamese: Optional[SIAMESE] = None,
                  siamese_use_q: bool = False,
@@ -124,6 +127,9 @@ class SAC_Base(object):
         self.model_abs_dir = model_abs_dir
         self.train_mode = train_mode
 
+        self.use_replay_buffer = use_replay_buffer
+        self.use_priority = use_priority
+
         self.ensemble_q_num = ensemble_q_num
         self.ensemble_q_sample = ensemble_q_sample
 
@@ -144,7 +150,6 @@ class SAC_Base(object):
         self.clip_epsilon = clip_epsilon
 
         self.discrete_dqn_like = discrete_dqn_like
-        self.use_priority = use_priority
         self.use_n_step_is = use_n_step_is
         self.siamese = siamese
         self.siamese_use_q = siamese_use_q
@@ -160,9 +165,10 @@ class SAC_Base(object):
         self.use_add_with_td = use_add_with_td
         self.action_noise = action_noise
 
-        self.device = device
         if device is None:
-            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        else:
+            self.device = torch.device(device)
 
         if seed is not None:
             torch.manual_seed(seed)
@@ -175,8 +181,13 @@ class SAC_Base(object):
             self.summary_available = True
 
         if self.train_mode:
-            replay_config = {} if replay_config is None else replay_config
-            self.replay_buffer = PrioritizedReplayBuffer(batch_size=batch_size, **replay_config)
+            if self.use_replay_buffer:
+                replay_config = {} if replay_config is None else replay_config
+                self.replay_buffer = PrioritizedReplayBuffer(batch_size=batch_size, **replay_config)
+            else:
+                self.batch_buffer = BatchBuffer(self.burn_in_step,
+                                                self.n_step,
+                                                self.batch_size)
 
         self._logger = logging.getLogger('sac.base')
 
@@ -521,16 +532,21 @@ class SAC_Base(object):
     def _increase_global_step(self):
         self.global_step.add_(1)
 
+        return self.global_step.item()
+
     def get_global_step(self):
         return self.global_step.item()
 
     def get_initial_action(self, batch_size):
         return np.zeros([batch_size, self.d_action_size + self.c_action_size], dtype=np.float32)
 
-    def get_initial_seq_hidden_state(self, batch_size):
+    def get_initial_seq_hidden_state(self, batch_size, get_numpy=True):
         assert self.seq_encoder is not None
 
-        return np.zeros([batch_size, *self.seq_hidden_state_shape], dtype=np.float32)
+        if get_numpy:
+            return np.zeros([batch_size, *self.seq_hidden_state_shape], dtype=np.float32)
+        else:
+            return torch.zeros([batch_size, *self.seq_hidden_state_shape], device=self.device)
 
     @torch.no_grad()
     def _update_target_variables(self, tau=1.):
@@ -892,8 +908,8 @@ class SAC_Base(object):
                      next_obs_list: List[torch.Tensor],
                      bn_dones: torch.Tensor,
                      bn_mu_probs: Optional[torch.Tensor] = None,
-                     priority_is: Optional[torch.Tensor] = None,
-                     f_seq_hidden_states: Optional[torch.Tensor] = None):
+                     f_seq_hidden_states: Optional[torch.Tensor] = None,
+                     priority_is: Optional[torch.Tensor] = None,):
         """
         Args:
             bn_indexes: [Batch, b + n]
@@ -904,8 +920,8 @@ class SAC_Base(object):
             next_obs_list: list([Batch, *obs_shapes_i], ...)
             bn_dones: [Batch, b + n], dtype=torch.bool
             bn_mu_probs: [Batch, b + n]
-            priority_is: [Batch, 1]
             f_seq_hidden_states: [Batch, 1, *seq_hidden_state_shape]
+            priority_is: [Batch, 1]
         """
 
         m_obses_list = [torch.cat([n_obses, next_obs.unsqueeze(1)], dim=1)
@@ -919,38 +935,12 @@ class SAC_Base(object):
 
             if self.seq_encoder == SEQ_ENCODER.RNN:
                 rnn_state = f_seq_hidden_states[:, 0]
-                if self.siamese is not None and self.siamese_use_q:
-                    b_obses_list = [o[:, :self.burn_in_step, ...] for o in m_obses_list]
-                    b_pre_actions = m_pre_actions[:, :self.burn_in_step, ...]
-                    b_states, rnn_state_at_n = self.model_rep(b_obses_list,
-                                                              b_pre_actions,
-                                                              rnn_state)
-                    b_target_states, target_rnn_state_at_n = self.model_target_rep(b_obses_list,
-                                                                                   b_pre_actions,
-                                                                                   rnn_state)
-
-                    n1_obses_list = [o[:, self.burn_in_step:, ...] for o in m_obses_list]
-                    n1_pre_actions = m_pre_actions[:, self.burn_in_step:, ...]
-                    n1_states, _ = self.model_rep(n1_obses_list,
-                                                  n1_pre_actions,
-                                                  rnn_state_at_n)
-                    n1_target_states, _ = self.model_target_rep(n1_obses_list,
-                                                                n1_pre_actions,
-                                                                target_rnn_state_at_n)
-
-                    m_states = torch.cat([b_states, n1_states], dim=1)
-                    m_target_states = torch.cat([b_target_states, n1_target_states], dim=1)
-
-                    # [Batch, 1, *seq_hidden_state_shapes]
-                    seq_hidden_states_at_n = rnn_state_at_n.unsqueeze(1)
-                    seq_target_hidden_states_at_n = target_rnn_state_at_n.unsqueeze(1)
-                else:
-                    m_states, _ = self.model_rep(m_obses_list,
-                                                 m_pre_actions,
-                                                 rnn_state)
-                    m_target_states, _ = self.model_target_rep(m_obses_list,
-                                                               m_pre_actions,
-                                                               rnn_state)
+                m_states, _ = self.model_rep(m_obses_list,
+                                             m_pre_actions,
+                                             rnn_state)
+                m_target_states, _ = self.model_target_rep(m_obses_list,
+                                                           m_pre_actions,
+                                                           rnn_state)
 
             elif self.seq_encoder == SEQ_ENCODER.ATTN:
                 m_indexes = torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1)
@@ -958,25 +948,20 @@ class SAC_Base(object):
                                                torch.zeros_like(bn_padding_masks[:, -1:], dtype=torch.bool)],
                                               dim=1)
 
-                m_states, m_attn_states, _ = self.model_rep(m_indexes,
+                m_states, _, _ = self.model_rep(m_indexes,
                                                             m_obses_list,
                                                             m_pre_actions,
                                                             query_length=bn_indexes.shape[1] + 1,
                                                             hidden_state=f_seq_hidden_states,
                                                             is_prev_hidden_state=True,
                                                             padding_mask=m_padding_mask)
-                m_target_states, m_target_attn_states, _ = self.model_target_rep(m_indexes,
+                m_target_states, _, _ = self.model_target_rep(m_indexes,
                                                                                  m_obses_list,
                                                                                  m_pre_actions,
                                                                                  query_length=bn_indexes.shape[1] + 1,
                                                                                  hidden_state=f_seq_hidden_states,
                                                                                  is_prev_hidden_state=True,
                                                                                  padding_mask=m_padding_mask)
-
-                if self.siamese is not None and self.siamese_use_q:
-                    # [Batch, 1, *seq_hidden_state_shapes]
-                    seq_hidden_states_at_n = m_attn_states[:, self.burn_in_step:self.burn_in_step + 1]
-                    seq_target_hidden_states_at_n = m_target_attn_states[:, self.burn_in_step:self.burn_in_step + 1]
 
         bn_states = m_states[:, :-1, ...]
         state = m_states[:, self.burn_in_step, ...]
@@ -1029,7 +1014,7 @@ class SAC_Base(object):
                 for i in range(self.ensemble_q_num):
                     loss_q_list[i] += loss_none_mse(c_q_list[i], c_y)  # [Batch, 1]
 
-        if self.use_priority:
+        if self.use_replay_buffer and self.use_priority:
             loss_q_list = [loss_q * priority_is for loss_q in loss_q_list]
 
         loss_q_list = [torch.mean(loss) for loss in loss_q_list]
@@ -1041,19 +1026,21 @@ class SAC_Base(object):
             opt_q.zero_grad()
             loss_q.backward(retain_graph=True)
 
+        # TODO: could be None
         grads_rep_main = [m.grad.detach() if m.grad is not None else None for m in self.model_rep.parameters()]
+        grads_q_main_list = [[m.grad.detach() if m.grad is not None else None for m in q.parameters()]
+                             for q in self.model_q_list]
 
         """ Siamese Representation Learning """
-        loss_siamese = None
+        loss_siamese, loss_siamese_q = None, None
         if self.siamese is not None:
-            loss_siamese = self._train_siamese_representation_learning(
+            loss_siamese, loss_siamese_q = self._train_siamese_representation_learning(
                 grads_rep_main,
+                grads_q_main_list,
                 bn_indexes,
                 bn_padding_masks,
                 bn_obses_list,
-                bn_actions,
-                seq_hidden_states_at_n=seq_hidden_states_at_n if self.seq_encoder is not None and self.siamese_use_q else None,
-                seq_target_hidden_states_at_n=seq_target_hidden_states_at_n if self.seq_encoder is not None and self.siamese_use_q else None)
+                bn_actions)
 
         for opt_q in self.optimizer_q_list:
             opt_q.step()
@@ -1062,6 +1049,7 @@ class SAC_Base(object):
         loss_predictions = None
         if self.use_prediction:
             loss_predictions = self._train_rpm(grads_rep_main,
+                                               grads_q_main_list,
                                                m_obses_list,
                                                m_states,
                                                m_target_states,
@@ -1071,40 +1059,41 @@ class SAC_Base(object):
         if self.optimizer_rep:
             self.optimizer_rep.step()
 
-        return loss_q_list[0], loss_siamese, loss_predictions
+        return loss_q_list[0], loss_siamese, loss_siamese_q, loss_predictions
 
     @torch.no_grad()
-    def calculate_adaptive_weights(self, grads_rep_main: List[torch.Tensor],
-                                   losses: List[torch.Tensor]):
-        with torch.no_grad():
-            grads_rep_auxes = [autograd.grad(loss, self.model_rep.parameters(),
-                                             allow_unused=True,
-                                             retain_graph=True)
-                               for loss in losses]
-            grads_rep_auxes = [[g_aux if g_aux is not None else torch.zeros_like(g_main)
-                                for g_main, g_aux in zip(grads_rep_main, grads_aux)]
-                               for grads_aux in grads_rep_auxes]
+    def calculate_adaptive_weights(self,
+                                   grads_main: List[torch.Tensor],
+                                   losses: List[torch.Tensor],
+                                   model: nn.Module):
 
-            _grads_rep_main = torch.cat([g.reshape(1, -1) for g in grads_rep_main], dim=1)
-            _grads_rep_auxes = [torch.cat([g.reshape(1, -1) for g in grads_aux], dim=1)
-                                for grads_aux in grads_rep_auxes]
+        grads_auxes = [autograd.grad(loss, model.parameters(),
+                                     allow_unused=True,
+                                     retain_graph=True)
+                       for loss in losses]
+        grads_auxes = [[g_aux if g_aux is not None else torch.zeros_like(g_main)
+                        for g_main, g_aux in zip(grads_main, grads_aux)]
+                       for grads_aux in grads_auxes]
 
-            coses = [functional.cosine_similarity(_grads_rep_main, _grads_aux)
-                     for _grads_aux in _grads_rep_auxes]
-            coses = [torch.sign(cos).clamp(min=0) for cos in coses]
+        _grads_main = torch.cat([g.reshape(1, -1) for g in grads_main], dim=1)
+        _grads_auxes = [torch.cat([g.reshape(1, -1) for g in grads_aux], dim=1)
+                        for grads_aux in grads_auxes]
 
-            for grads_aux, cos in zip(grads_rep_auxes, coses):
-                for param_rep, grad_rep_aux in zip(self.model_rep.parameters(), grads_aux):
-                    param_rep.grad += cos * grad_rep_aux
+        coses = [functional.cosine_similarity(_grads_main, _grads_aux)
+                 for _grads_aux in _grads_auxes]
+        coses = [torch.sign(cos).clamp(min=0) for cos in coses]
+
+        for grads_aux, cos in zip(grads_auxes, coses):
+            for param, grad_aux in zip(model.parameters(), grads_aux):
+                param.grad += cos * grad_aux
 
     def _train_siamese_representation_learning(self,
                                                grads_rep_main,
+                                               grads_q_main_list,
                                                bn_indexes: torch.Tensor,
                                                bn_padding_masks: torch.Tensor,
                                                bn_obses_list: List[torch.Tensor],
-                                               bn_actions: torch.Tensor,
-                                               seq_hidden_states_at_n: Optional[torch.Tensor] = None,
-                                               seq_target_hidden_states_at_n: Optional[torch.Tensor] = None):
+                                               bn_actions: torch.Tensor):
 
         n_obses_list = [bn_obses[:, self.burn_in_step:, ...] for bn_obses in bn_obses_list]
         encoder_list = self.model_rep.get_augmented_encoders(n_obses_list)  # [Batch, n, f], ...
@@ -1115,6 +1104,27 @@ class SAC_Base(object):
             target_encoder_list = (target_encoder_list, )
 
         batch, n, *_ = encoder_list[0].shape
+
+        if self.siamese == SIAMESE.ATC:
+            _encoder_list = [e.reshape(batch * n, -1) for e in encoder_list]  # [Batch * n, f], ...
+            _target_encoder_list = [t_e.reshape(batch * n, -1) for t_e in target_encoder_list]  # [Batch * n, f], ...
+            logits_list = [torch.mm(e, weight) for e, weight in zip(_encoder_list, self.contrastive_weight_list)]
+            logits_list = [torch.mm(logits, t_e.t()) for logits, t_e in zip(logits_list, _target_encoder_list)]  # [Batch * n, Batch * n], ...
+            if not hasattr(self, '_contrastive_labels'):
+                self._contrastive_labels = torch.block_diag(*torch.ones(batch, n, n, device=self.device))
+
+            loss_siamese_list = [functional.binary_cross_entropy_with_logits(logits, self._contrastive_labels)
+                                 for logits in logits_list]
+
+        elif self.siamese == SIAMESE.BYOL:
+            _encoder_list = [e.reshape(batch * n, -1) for e in encoder_list]  # [Batch * n, f], ...
+            projection_list = [pro(encoder) for pro, encoder in zip(self.model_rep_projection_list, _encoder_list)]
+            prediction_list = [pre(projection) for pre, projection in zip(self.model_rep_prediction_list, projection_list)]
+            _target_encoder_list = [t_e.reshape(batch * n, -1) for t_e in target_encoder_list]  # [Batch * n, f], ...
+            t_projection_list = [t_pro(t_e) for t_pro, t_e in zip(self.model_target_rep_projection_list, _target_encoder_list)]
+
+            loss_siamese_list = [functional.cosine_similarity(prediction, t_projection).mean()  # [Batch * n, ] -> [1, ]
+                                 for prediction, t_projection in zip(prediction_list, t_projection_list)]
 
         if self.siamese_use_q:
             if self.seq_encoder is None:
@@ -1139,74 +1149,32 @@ class SAC_Base(object):
                     state = self.model_rep.get_state_from_encoders(obses_list_at_n,
                                                                    _encoder if len(_encoder) > 1 else _encoder[0],
                                                                    pre_actions_at_n,
-                                                                   seq_hidden_states_at_n[:, 0])
+                                                                   self.get_initial_seq_hidden_state(batch, False))
                     target_state = self.model_target_rep.get_state_from_encoders(obses_list_at_n,
                                                                                  _target_encoder if len(_target_encoder) > 1 else _target_encoder[0],
                                                                                  pre_actions_at_n,
-                                                                                 seq_target_hidden_states_at_n[:, 0])
+                                                                                 self.get_initial_seq_hidden_state(batch, False))
                     state = state[:, 0, ...]
                     target_state = target_state[:, 0, ...]
 
                 elif self.seq_encoder == SEQ_ENCODER.ATTN:
+                    indexes_at_n = bn_indexes[:, self.burn_in_step:self.burn_in_step + 1]
                     padding_masks_at_n = bn_padding_masks[:, self.burn_in_step:self.burn_in_step + 1]
-                    state = self.model_rep.get_state_from_encoders(bn_indexes[:, self.burn_in_step:self.burn_in_step + 1],
+                    state = self.model_rep.get_state_from_encoders(indexes_at_n,
                                                                    obses_list_at_n,
                                                                    _encoder if len(_encoder) > 1 else _encoder[0],
                                                                    pre_actions_at_n,
                                                                    query_length=1,
-                                                                   hidden_state=seq_hidden_states_at_n,
-                                                                   is_prev_hidden_state=True,
                                                                    padding_mask=padding_masks_at_n)
-                    target_state = self.model_target_rep.get_state_from_encoders(bn_indexes[:, self.burn_in_step:self.burn_in_step + 1],
+                    target_state = self.model_target_rep.get_state_from_encoders(indexes_at_n,
                                                                                  obses_list_at_n,
                                                                                  _encoder if len(_encoder) > 1 else _encoder[0],
                                                                                  pre_actions_at_n,
                                                                                  query_length=1,
-                                                                                 hidden_state=seq_target_hidden_states_at_n,
-                                                                                 is_prev_hidden_state=True,
                                                                                  padding_mask=padding_masks_at_n)
                     state = state[:, 0, ...]
                     target_state = target_state[:, 0, ...]
 
-        if self.siamese == SIAMESE.ATC:
-            encoder_list = [e.reshape(batch * n, -1) for e in encoder_list]  # [Batch * n, f], ...
-            target_encoder_list = [t_e.reshape(batch * n, -1) for t_e in target_encoder_list]  # [Batch * n, f], ...
-            logits_list = [torch.mm(e, weight) for e, weight in zip(encoder_list, self.contrastive_weight_list)]
-            logits_list = [torch.mm(logits, t_e.t()) for logits, t_e in zip(logits_list, target_encoder_list)]  # [Batch * n, Batch * n], ...
-            if not hasattr(self, '_contrastive_labels'):
-                self._contrastive_labels = torch.block_diag(*torch.ones(batch, n, n, device=self.device))
-
-            loss_list = [functional.binary_cross_entropy_with_logits(logits, self._contrastive_labels)
-                         for logits in logits_list]
-
-        elif self.siamese == SIAMESE.BYOL:
-            encoder_list = [encoder.reshape(batch * n, -1) for encoder in encoder_list]  # [Batch * n, f], ...
-            projection_list = [pro(encoder) for pro, encoder in zip(self.model_rep_projection_list, encoder_list)]
-            prediction_list = [pre(projection) for pre, projection in zip(self.model_rep_prediction_list, projection_list)]
-            target_encoder_list = [t_encoder.reshape(batch * n, -1) for t_encoder in target_encoder_list]  # [Batch * n, f], ...
-            t_projection_list = [t_pro(t_encoder) for t_pro, t_encoder in zip(self.model_target_rep_projection_list, target_encoder_list)]
-
-            loss_list = [functional.cosine_similarity(prediction, t_projection).mean()  # [Batch * n, ] -> [1, ]
-                         for prediction, t_projection in zip(prediction_list, t_projection_list)]
-
-        loss = sum(loss_list)
-
-        if self.siamese_use_adaptive:
-            self.calculate_adaptive_weights(grads_rep_main, loss_list)
-        else:
-            loss.backward(inputs=list(self.model_rep.parameters()), retain_graph=True)
-
-        self.optimizer_siamese.zero_grad()
-
-        if self.siamese == SIAMESE.ATC:
-            loss.backward(inputs=self.contrastive_weight_list, retain_graph=True)
-        elif self.siamese == SIAMESE.BYOL:
-            loss.backward(inputs=list(chain(*[pro.parameters() for pro in self.model_rep_projection_list],
-                                            *[pre.parameters() for pre in self.model_rep_prediction_list])), retain_graph=True)
-
-        self.optimizer_siamese.step()
-
-        if self.siamese_use_q:
             q_loss_list = []
 
             d_actions = bn_actions[:, self.burn_in_step, :self.d_action_size]
@@ -1235,10 +1203,34 @@ class SAC_Base(object):
                 q_loss_list += [functional.mse_loss(q, t_q)
                                 for q, t_q in zip(c_q_list, target_c_q_list)]
 
-            for q_loss, q in zip(q_loss_list, self.model_q_list):
-                q_loss.backward(inputs=list(q.parameters()), retain_graph=True)
+            loss_list = loss_siamese_list + q_loss_list
+        else:
+            loss_list = loss_siamese_list
 
-        return loss
+        if self.siamese_use_q:
+            if self.siamese_use_adaptive:
+                for grads_q_main, q_loss, q in zip(grads_q_main_list, q_loss_list, self.model_q_list):
+                    self.calculate_adaptive_weights(grads_q_main, [q_loss], q)
+            else:
+                for q_loss, q in zip(q_loss_list, self.model_q_list):
+                    q_loss.backward(inputs=list(q.parameters()), retain_graph=True)
+
+        loss = sum(loss_list)
+
+        if self.siamese_use_adaptive:
+            self.calculate_adaptive_weights(grads_rep_main, loss_list, self.model_rep)
+        else:
+            loss.backward(inputs=list(self.model_rep.parameters()), retain_graph=True)
+
+        self.optimizer_siamese.zero_grad()
+        if self.siamese == SIAMESE.ATC:
+            loss.backward(inputs=self.contrastive_weight_list, retain_graph=True)
+        elif self.siamese == SIAMESE.BYOL:
+            loss.backward(inputs=list(chain(*[pro.parameters() for pro in self.model_rep_projection_list],
+                                            *[pre.parameters() for pre in self.model_rep_prediction_list])), retain_graph=True)
+        self.optimizer_siamese.step()
+
+        return sum(loss_siamese_list), sum(q_loss_list) if self.siamese_use_q else None
 
     def _train_rpm(self,
                    grads_rep_main,
@@ -1271,7 +1263,7 @@ class SAC_Base(object):
                                                    [m_obses[:, self.burn_in_step:, ...] for m_obses in m_obses_list])
         loss_obs /= self.n_step
 
-        self.calculate_adaptive_weights(grads_rep_main, [loss_transition, loss_reward, loss_obs])
+        self.calculate_adaptive_weights(grads_rep_main, [loss_transition, loss_reward, loss_obs], self.model_rep)
 
         loss_predictions = loss_transition + loss_reward + loss_obs
         self.optimizer_prediction.zero_grad()
@@ -1420,8 +1412,8 @@ class SAC_Base(object):
                next_obs_list: List[torch.Tensor],
                bn_dones: torch.Tensor,
                bn_mu_probs: torch.Tensor = None,
-               priority_is: torch.Tensor = None,
-               f_seq_hidden_states: torch.Tensor = None):
+               f_seq_hidden_states: torch.Tensor = None,
+               priority_is: torch.Tensor = None):
         """
         Args:
             bn_indexes: [Batch, b + n], dtype=torch.int32
@@ -1432,23 +1424,23 @@ class SAC_Base(object):
             next_obs_list: list([Batch, *obs_shapes_i], ...)
             bn_dones: [Batch, b + n], dtype=torch.bool
             bn_mu_probs: [Batch, b + n]
-            priority_is: [Batch, 1]
             f_seq_hidden_states: [Batch, 1, *seq_hidden_state_shape]
+            priority_is: [Batch, 1]
         """
 
         if self.global_step % self.update_target_per_step == 0:
             self._update_target_variables(tau=self.tau)
 
-        loss_q, loss_siamese, loss_predictions = self._train_rep_q(bn_indexes,
-                                                                   bn_padding_masks,
-                                                                   bn_obses_list,
-                                                                   bn_actions,
-                                                                   bn_rewards,
-                                                                   next_obs_list,
-                                                                   bn_dones,
-                                                                   bn_mu_probs,
-                                                                   priority_is,
-                                                                   f_seq_hidden_states)
+        loss_q, loss_siamese, loss_siamese_q, loss_predictions = self._train_rep_q(bn_indexes,
+                                                                                   bn_padding_masks,
+                                                                                   bn_obses_list,
+                                                                                   bn_actions,
+                                                                                   bn_rewards,
+                                                                                   next_obs_list,
+                                                                                   bn_dones,
+                                                                                   bn_mu_probs,
+                                                                                   f_seq_hidden_states,
+                                                                                   priority_is)
 
         with torch.no_grad():
             m_obses_list = [torch.cat([bn_obses, next_obs.unsqueeze(1)], dim=1)
@@ -1504,6 +1496,10 @@ class SAC_Base(object):
                     self.summary_writer.add_scalar('loss/siamese',
                                                    loss_siamese,
                                                    self.global_step)
+                    if self.siamese_use_q:
+                        self.summary_writer.add_scalar('loss/siamese_q',
+                                                       loss_siamese_q,
+                                                       self.global_step)
 
                 if self.use_prediction:
                     approx_next_state_dist_entropy, loss_reward, loss_obs = loss_predictions
@@ -1636,7 +1632,7 @@ class SAC_Base(object):
                 c_action = torch.empty(0, device=self.device)
 
         d_action, c_action = self._random_action(d_action, c_action)
-        
+
         policy_prob = torch.ones((state.shape[:1]), device=self.device)  # [Batch, ]
         if self.d_action_size:
             policy_prob *= torch.exp(d_policy.log_prob(d_action))  # [Batch, ]
@@ -1931,16 +1927,26 @@ class SAC_Base(object):
                                    np.zeros(ignore_size, dtype=np.float32)])
         return td_error
 
-    def fill_replay_buffer(self,
-                           l_indexes: np.ndarray,
-                           l_padding_masks: np.ndarray,
-                           l_obses_list: List[np.ndarray],
-                           l_actions: np.ndarray,
-                           l_rewards: np.ndarray,
-                           next_obs_list: List[np.ndarray],
-                           l_dones: np.ndarray,
-                           l_probs: List[np.ndarray],
-                           l_seq_hidden_states: np.ndarray = None):
+    def put_episode(self, *episode_trans):
+        # Ignore episodes which length is too short
+        if episode_trans[0].shape[1] < self.burn_in_step + self.n_step:
+            return
+
+        if self.use_replay_buffer:
+            self._fill_replay_buffer(*episode_trans)
+        else:
+            self.batch_buffer.put_episode(*episode_trans)
+
+    def _fill_replay_buffer(self,
+                            l_indexes: np.ndarray,
+                            l_padding_masks: np.ndarray,
+                            l_obses_list: List[np.ndarray],
+                            l_actions: np.ndarray,
+                            l_rewards: np.ndarray,
+                            next_obs_list: List[np.ndarray],
+                            l_dones: np.ndarray,
+                            l_probs: List[np.ndarray],
+                            l_seq_hidden_states: np.ndarray = None):
         """
         Args:
             l_indexes: [1, episode_len]
@@ -1953,11 +1959,6 @@ class SAC_Base(object):
             l_probs: [1, episode_len]
             l_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
-
-        # Ignore episodes which length is too short
-        if l_indexes.shape[1] < self.burn_in_step + self.n_step:
-            return
-
         # Reshape [1, episode_len, ...] to [episode_len, ...]
         index = l_indexes.squeeze(0)
         padding_mask = l_padding_masks.squeeze(0)
@@ -2037,7 +2038,7 @@ class SAC_Base(object):
                     image = plot_attn_weight(attn_weight[0].cpu().numpy())
                     self.summary_writer.add_images(f'attn_weight/{i}', image, self.global_step)
 
-    def _sample(self):
+    def _sample_from_replay_buffer(self):
         """
         Sample from replay buffer
 
@@ -2052,8 +2053,8 @@ class SAC_Base(object):
                 next_obs_list: list([Batch, *obs_shapes_i], ...)
                 bn_dones: [Batch, b + n]
                 bn_mu_probs: [Batch, b + n]
-                priority_is: [Batch, 1]
                 bn_seq_hidden_states: [Batch, b + n, *seq_hidden_state_shape],
+                priority_is: [Batch, 1]
             )
         """
         sampled = self.replay_buffer.sample()
@@ -2125,102 +2126,118 @@ class SAC_Base(object):
                           next_obs_list,
                           bn_dones,
                           bn_mu_probs if self.use_n_step_is else None,
-                          priority_is if self.use_priority else None,
-                          bn_seq_hidden_states if self.seq_encoder is not None else None)
+                          bn_seq_hidden_states if self.seq_encoder is not None else None,
+                          priority_is if self.use_priority else None)
 
     def train(self):
-        train_data = self._sample()
-        if train_data is None:
-            return 0
-
-        """
-        bn_indexes: [Batch, b + n]
-        bn_padding_masks: [Batch, b + n]
-        bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
-        bn_actions: [Batch, b + n, action_size]
-        bn_rewards: [Batch, b + n]
-        next_obs_list: list([Batch, *obs_shapes_i], ...)
-        bn_dones: [Batch, b + n]
-        bn_mu_probs: [Batch, b + n]
-        priority_is: [Batch, 1]
-        bn_seq_hidden_states: [Batch, b + n, *seq_hidden_state_shape]
-        """
-        pointers, (bn_indexes, bn_padding_masks,
-                   bn_obses_list, bn_actions, bn_rewards, next_obs_list, bn_dones,
-                   bn_mu_probs,
-                   priority_is,
-                   bn_seq_hidden_states) = train_data
-
-        bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
-        bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
-        bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
-        bn_actions = torch.from_numpy(bn_actions).to(self.device)
-        bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
-        next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
-        bn_dones = torch.from_numpy(bn_dones).to(self.device)
-        if self.use_n_step_is:
-            bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
-        if self.use_priority:
-            priority_is = torch.from_numpy(priority_is).to(self.device)
-        if self.seq_encoder is not None:
-            f_seq_hidden_states = bn_seq_hidden_states[:, :1]
-            f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states).to(self.device)
-
-        self._train(bn_indexes=bn_indexes,
-                    bn_padding_masks=bn_padding_masks,
-                    bn_obses_list=bn_obses_list,
-                    bn_actions=bn_actions,
-                    bn_rewards=bn_rewards,
-                    next_obs_list=next_obs_list,
-                    bn_dones=bn_dones,
-                    bn_mu_probs=bn_mu_probs if self.use_n_step_is else None,
-                    priority_is=priority_is if self.use_priority else None,
-                    f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None)
-
         step = self.get_global_step()
 
-        if step % self.save_model_per_step == 0:
-            self.save_model()
+        if self.use_replay_buffer:
+            train_data = self._sample_from_replay_buffer()
+            if train_data is None:
+                return step
 
-        if self.use_n_step_is:
-            bn_pi_probs_tensor = self.get_l_probs(bn_indexes,
-                                                  bn_padding_masks,
-                                                  bn_obses_list,
-                                                  bn_actions,
-                                                  f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None)
+            pointers, batch = train_data
+            batch_list = [batch]
+        else:
+            batch_list = self.batch_buffer.get_batch()
+            batch_list = [(*batch, None) for batch in batch_list]
 
-        # Update td_error
-        if self.use_priority:
-            td_error = self._get_td_error(bn_indexes=bn_indexes,
-                                          bn_padding_masks=bn_padding_masks,
-                                          bn_obses_list=bn_obses_list,
-                                          bn_actions=bn_actions,
-                                          bn_rewards=bn_rewards,
-                                          next_obs_list=next_obs_list,
-                                          bn_dones=bn_dones,
-                                          bn_mu_probs=bn_pi_probs_tensor if self.use_n_step_is else None,
-                                          f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None).detach().cpu().numpy()
-            self.replay_buffer.update(pointers, td_error)
+        for batch in batch_list:
+            (bn_indexes,
+             bn_padding_masks,
+             bn_obses_list,
+             bn_actions,
+             bn_rewards,
+             next_obs_list,
+             bn_dones,
+             bn_mu_probs,
+             bn_seq_hidden_states,
+             priority_is) = batch
 
-        # Update seq_hidden_states
-        if self.seq_encoder is not None:
-            pointers_list = [pointers + i for i in range(1, self.burn_in_step + self.n_step + 1)]
-            tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-            bn_seq_hidden_states = self.get_l_seq_hidden_states(bn_indexes,
-                                                                bn_padding_masks,
-                                                                bn_obses_list,
-                                                                bn_actions,
-                                                                f_seq_hidden_states=f_seq_hidden_states).detach().cpu().numpy()
-            seq_hidden_state = bn_seq_hidden_states.reshape(-1, *bn_seq_hidden_states.shape[2:])
-            self.replay_buffer.update_transitions(tmp_pointers, 'seq_hidden_state', seq_hidden_state)
+            """
+            bn_indexes: [Batch, b + n]
+            bn_padding_masks: [Batch, b + n]
+            bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
+            bn_actions: [Batch, b + n, action_size]
+            bn_rewards: [Batch, b + n]
+            next_obs_list: list([Batch, *obs_shapes_i], ...)
+            bn_dones: [Batch, b + n]
+            bn_mu_probs: [Batch, b + n]
+            bn_seq_hidden_states: [Batch, b + n, *seq_hidden_state_shape]
+            priority_is: [Batch, 1]
+            """
 
-        # Update n_mu_probs
-        if self.use_n_step_is:
-            pointers_list = [pointers + i for i in range(0, self.burn_in_step + self.n_step)]
-            tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-            pi_probs = bn_pi_probs_tensor.detach().cpu().numpy().reshape(-1)
-            self.replay_buffer.update_transitions(tmp_pointers, 'mu_prob', pi_probs)
+            bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
+            bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
+            bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
+            bn_actions = torch.from_numpy(bn_actions).to(self.device)
+            bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
+            next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
+            bn_dones = torch.from_numpy(bn_dones).to(self.device)
+            if self.use_n_step_is:
+                bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
+            if self.seq_encoder is not None:
+                f_seq_hidden_states = bn_seq_hidden_states[:, :1]
+                f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states).to(self.device)
+            if self.use_replay_buffer and self.use_priority:
+                priority_is = torch.from_numpy(priority_is).to(self.device)
 
-        self._increase_global_step()
+            self._train(bn_indexes=bn_indexes,
+                        bn_padding_masks=bn_padding_masks,
+                        bn_obses_list=bn_obses_list,
+                        bn_actions=bn_actions,
+                        bn_rewards=bn_rewards,
+                        next_obs_list=next_obs_list,
+                        bn_dones=bn_dones,
+                        bn_mu_probs=bn_mu_probs if self.use_n_step_is else None,
+                        f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None,
+                        priority_is=priority_is if self.use_replay_buffer and self.use_priority else None)
 
-        return step + 1
+            if step % self.save_model_per_step == 0:
+                self.save_model()
+
+            if self.use_replay_buffer:
+
+                if self.use_n_step_is:
+                    bn_pi_probs_tensor = self.get_l_probs(bn_indexes,
+                                                          bn_padding_masks,
+                                                          bn_obses_list,
+                                                          bn_actions,
+                                                          f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None)
+
+                # Update td_error
+                if self.use_priority:
+                    td_error = self._get_td_error(bn_indexes=bn_indexes,
+                                                  bn_padding_masks=bn_padding_masks,
+                                                  bn_obses_list=bn_obses_list,
+                                                  bn_actions=bn_actions,
+                                                  bn_rewards=bn_rewards,
+                                                  next_obs_list=next_obs_list,
+                                                  bn_dones=bn_dones,
+                                                  bn_mu_probs=bn_pi_probs_tensor if self.use_n_step_is else None,
+                                                  f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None).detach().cpu().numpy()
+                    self.replay_buffer.update(pointers, td_error)
+
+                # Update seq_hidden_states
+                if self.seq_encoder is not None:
+                    pointers_list = [pointers + i for i in range(1, self.burn_in_step + self.n_step + 1)]
+                    tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
+                    bn_seq_hidden_states = self.get_l_seq_hidden_states(bn_indexes,
+                                                                        bn_padding_masks,
+                                                                        bn_obses_list,
+                                                                        bn_actions,
+                                                                        f_seq_hidden_states=f_seq_hidden_states).detach().cpu().numpy()
+                    seq_hidden_state = bn_seq_hidden_states.reshape(-1, *bn_seq_hidden_states.shape[2:])
+                    self.replay_buffer.update_transitions(tmp_pointers, 'seq_hidden_state', seq_hidden_state)
+
+                # Update n_mu_probs
+                if self.use_n_step_is:
+                    pointers_list = [pointers + i for i in range(0, self.burn_in_step + self.n_step)]
+                    tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
+                    pi_probs = bn_pi_probs_tensor.detach().cpu().numpy().reshape(-1)
+                    self.replay_buffer.update_transitions(tmp_pointers, 'mu_prob', pi_probs)
+
+            step = self._increase_global_step()
+
+        return step

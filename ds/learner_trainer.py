@@ -13,7 +13,7 @@ import numpy as np
 
 import algorithm.config_helper as config_helper
 from algorithm.utils import (RLock, elapsed_counter, elapsed_timer,
-                             episode_to_batch)
+                             episode_to_batch, traverse_lists)
 
 from .constants import *
 from .sac_ds_base import SAC_DS_Base

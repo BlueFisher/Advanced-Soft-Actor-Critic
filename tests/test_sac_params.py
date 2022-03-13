@@ -9,6 +9,8 @@ OBS_SHAPES = [(10,), (30, 30, 3)]
 
 class TestVanillaModel(unittest.TestCase):
     def _test(self, param_dict):
+        convert_config_to_enum(param_dict)
+
         import tests.nn_conv_vanilla as nn_conv
 
         sac = SAC_Base(
@@ -21,10 +23,10 @@ class TestVanillaModel(unittest.TestCase):
         step = 0
         while step < 10:
             sac.choose_action(*gen_batch_obs(OBS_SHAPES))
-            sac.fill_replay_buffer(*gen_episode_trans(OBS_SHAPES,
-                                                      d_action_size=param_dict['d_action_size'],
-                                                      c_action_size=param_dict['c_action_size'],
-                                                      episode_len=10))
+            sac.put_episode(*gen_episode_trans(OBS_SHAPES,
+                                               d_action_size=param_dict['d_action_size'],
+                                               c_action_size=param_dict['c_action_size'],
+                                               episode_len=10))
             step = sac.train()
 
     @staticmethod
@@ -36,6 +38,8 @@ class TestVanillaModel(unittest.TestCase):
 
 class TestSeqEncoderModel(unittest.TestCase):
     def _test(self, param_dict):
+        convert_config_to_enum(param_dict)
+
         if param_dict['seq_encoder'] == SEQ_ENCODER.RNN:
             import tests.nn_conv_rnn as nn_conv
         elif param_dict['seq_encoder'] == SEQ_ENCODER.ATTN:
@@ -62,11 +66,11 @@ class TestSeqEncoderModel(unittest.TestCase):
                                                                d_action_size=param_dict['d_action_size'],
                                                                c_action_size=param_dict['c_action_size'],
                                                                seq_hidden_state_shape=seq_hidden_state_shape))
-            sac.fill_replay_buffer(*gen_episode_trans(OBS_SHAPES,
-                                                      d_action_size=param_dict['d_action_size'],
-                                                      c_action_size=param_dict['c_action_size'],
-                                                      seq_hidden_state_shape=seq_hidden_state_shape,
-                                                      episode_len=40))
+            sac.put_episode(*gen_episode_trans(OBS_SHAPES,
+                                               d_action_size=param_dict['d_action_size'],
+                                               c_action_size=param_dict['c_action_size'],
+                                               seq_hidden_state_shape=seq_hidden_state_shape,
+                                               episode_len=40))
             step = sac.train()
 
     @staticmethod
@@ -80,11 +84,13 @@ def __gen_vanilla():
     param_dict_candidates = {
         'd_action_size': [10],
         'c_action_size': [4],
+        'use_replay_buffer': [True, False],
+        'use_priority': [True, False],
         'n_step': [3],
-        'siamese': [None, SIAMESE.ATC, SIAMESE.BYOL],
+        'siamese': [None, 'ATC', 'BYOL'],
         'siamese_use_q': [False, True],
         'siamese_use_adaptive': [False, True],
-        'use_add_with_td': [False, True]
+        # 'use_add_with_td': [False, True]
     }
     possible_param_dicts = get_product(param_dict_candidates)
 
@@ -108,15 +114,16 @@ def __gen_seq_encoder():
     param_dict_candidates = {
         'd_action_size': [10],
         'c_action_size': [4],
+        'use_replay_buffer': [True, False],
         'burn_in_step': [5],
         'n_step': [3],
-        'seq_encoder': [SEQ_ENCODER.RNN, SEQ_ENCODER.ATTN],
-        'use_prediction': [True, False],
-        'use_extra_data': [True, False],
-        'siamese': [None, SIAMESE.ATC, SIAMESE.BYOL],
+        'seq_encoder': ['RNN', 'ATTN'],
+        # 'use_prediction': [True, False],
+        # 'use_extra_data': [True, False],
+        'siamese': [None, 'ATC', 'BYOL'],
         'siamese_use_q': [False, True],
         'siamese_use_adaptive': [False, True],
-        'use_add_with_td': [False, True]
+        # 'use_add_with_td': [False, True]
     }
 
     possible_param_dicts = get_product(param_dict_candidates)
