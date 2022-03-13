@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -46,6 +46,22 @@ def format_global_step(num):
         num = str(num)
 
     return '%s%s' % (num, ['', 'k', 'm', 'g', 't', 'p'][magnitude])
+
+
+def traverse_lists(data: Union[Any, Tuple], process):
+    if not isinstance(data, tuple):
+        data = (data, )
+
+    buffer = []
+    for d in zip(*data):
+        if isinstance(d[0], list):
+            buffer.append(traverse_lists(d, process))
+        elif d[0] is None:
+            buffer.append(None)
+        else:
+            buffer.append(process(*d))
+
+    return buffer
 
 
 def episode_to_batch(bn: int,
@@ -107,7 +123,7 @@ def episode_to_batch(bn: int,
 
     if l_probs is not None:
         bn_probs = np.concatenate([l_probs[:, i:i + bn]
-                                      for i in range(episode_length - bn + 1)], axis=0)
+                                   for i in range(episode_length - bn + 1)], axis=0)
 
     if l_seq_hidden_states is not None:
         f_seq_hidden_states = np.concatenate([l_seq_hidden_states[:, i:i + 1]

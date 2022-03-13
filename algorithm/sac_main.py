@@ -274,7 +274,7 @@ class Main(object):
                             # ep_obses_list, ep_actions, ep_rewards, next_obs_list, ep_dones, ep_probs,
                             # ep_seq_hidden_states
                             for episode_trans in episode_trans_list:
-                                self.sac.fill_replay_buffer(*episode_trans)
+                                self.sac.put_episode(*episode_trans)
                         trained_steps = self.sac.train()
 
                     obs_list = next_obs_list

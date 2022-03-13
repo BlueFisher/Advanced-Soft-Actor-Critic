@@ -103,12 +103,15 @@ class SAC_DS_Base(SAC_Base):
         self.rnd_n_sample = rnd_n_sample
         self.use_normalization = use_normalization
         self.action_noise = action_noise
+
+        self.use_replay_buffer = False
         self.use_priority = False
         self.use_n_step_is = True
 
-        self.device = device
         if device is None:
-            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        else:
+            self.device = torch.device(device)
 
         if seed is not None:
             torch.manual_seed(seed)

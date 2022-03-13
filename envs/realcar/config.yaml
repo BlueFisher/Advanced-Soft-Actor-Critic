@@ -13,6 +13,8 @@ default:
 
   reset_config:
     force_reset: true
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
 
   model_config:
     rep:
@@ -55,6 +57,22 @@ byol_q:
   base_config:
     name: "byol_q_{time}"
   sac_config:
+    siamese: BYOL
+    siamese_use_q: true
+
+atc_q_nob:
+  base_config:
+    name: "atc_q_nob_{time}"
+  sac_config:
+    use_replay_buffer: false
+    siamese: ATC
+    siamese_use_q: true
+
+byol_q_nob:
+  base_config:
+    name: "byol_q_nob_{time}"
+  sac_config:
+    use_replay_buffer: false
     siamese: BYOL
     siamese_use_q: true
 
