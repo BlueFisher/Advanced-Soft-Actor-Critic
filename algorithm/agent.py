@@ -1,7 +1,6 @@
 from typing import List, Optional, Tuple
 
 import numpy as np
-from numpy.lib.shape_base import expand_dims
 
 
 class Agent(object):

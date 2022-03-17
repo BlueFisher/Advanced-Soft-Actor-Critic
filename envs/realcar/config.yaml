@@ -9,6 +9,7 @@ default:
     no_graphics: false
 
     n_agents: 50
+    max_step: 120000
     reset_on_iteration: false
 
   reset_config:
@@ -57,22 +58,6 @@ byol_q:
   base_config:
     name: "byol_q_{time}"
   sac_config:
-    siamese: BYOL
-    siamese_use_q: true
-
-atc_q_nob:
-  base_config:
-    name: "atc_q_nob_{time}"
-  sac_config:
-    use_replay_buffer: false
-    siamese: ATC
-    siamese_use_q: true
-
-byol_q_nob:
-  base_config:
-    name: "byol_q_nob_{time}"
-  sac_config:
-    use_replay_buffer: false
     siamese: BYOL
     siamese_use_q: true
 

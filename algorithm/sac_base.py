@@ -571,7 +571,7 @@ class SAC_Base(object):
 
     @torch.no_grad()
     def _udpate_normalizer(self, obs_list: List[torch.Tensor]):
-        self.normalizer_step = self.normalizer_step + obs_list[0].shape[0]
+        self.normalizer_step.add_(obs_list[0].shape[0])
 
         input_to_old_means = [obs_list[i] - self.running_means[i] for i in range(len(obs_list))]
         new_means = [self.running_means[i] + torch.sum(
@@ -579,12 +579,12 @@ class SAC_Base(object):
         ) for i in range(len(obs_list))]
 
         input_to_new_means = [obs_list[i] - new_means[i] for i in range(len(obs_list))]
-        new_variance = [self.running_variances[i] + torch.sum(
+        new_variances = [self.running_variances[i] + torch.sum(
             input_to_new_means[i] * input_to_old_means[i], dim=0
         ) for i in range(len(obs_list))]
 
-        self.running_means = new_means
-        self.running_variances = new_variance
+        for t_p, p in zip(self.running_means + self.running_variances, new_means + new_variances):
+            t_p.copy_(p)
 
     @torch.no_grad()
     def get_l_probs(self,
@@ -633,7 +633,7 @@ class SAC_Base(object):
         if self.c_action_size:
             l_selected_c_actions = l_actions[..., self.d_action_size:]
             c_policy_prob = squash_correction_prob(c_policy, torch.atanh(l_selected_c_actions))
-            # [Batch, l, action_size]
+            # [Batch, l, c_action_size]
             policy_prob *= torch.prod(c_policy_prob, dim=-1)  # [Batch, l]
 
         return policy_prob
@@ -949,19 +949,19 @@ class SAC_Base(object):
                                               dim=1)
 
                 m_states, _, _ = self.model_rep(m_indexes,
-                                                            m_obses_list,
-                                                            m_pre_actions,
-                                                            query_length=bn_indexes.shape[1] + 1,
-                                                            hidden_state=f_seq_hidden_states,
-                                                            is_prev_hidden_state=True,
-                                                            padding_mask=m_padding_mask)
+                                                m_obses_list,
+                                                m_pre_actions,
+                                                query_length=bn_indexes.shape[1] + 1,
+                                                hidden_state=f_seq_hidden_states,
+                                                is_prev_hidden_state=True,
+                                                padding_mask=m_padding_mask)
                 m_target_states, _, _ = self.model_target_rep(m_indexes,
-                                                                                 m_obses_list,
-                                                                                 m_pre_actions,
-                                                                                 query_length=bn_indexes.shape[1] + 1,
-                                                                                 hidden_state=f_seq_hidden_states,
-                                                                                 is_prev_hidden_state=True,
-                                                                                 padding_mask=m_padding_mask)
+                                                              m_obses_list,
+                                                              m_pre_actions,
+                                                              query_length=bn_indexes.shape[1] + 1,
+                                                              hidden_state=f_seq_hidden_states,
+                                                              is_prev_hidden_state=True,
+                                                              padding_mask=m_padding_mask)
 
         bn_states = m_states[:, :-1, ...]
         state = m_states[:, self.burn_in_step, ...]
@@ -1026,8 +1026,8 @@ class SAC_Base(object):
             opt_q.zero_grad()
             loss_q.backward(retain_graph=True)
 
-        # TODO: could be None
-        grads_rep_main = [m.grad.detach() if m.grad is not None else None for m in self.model_rep.parameters()]
+        grads_rep_main = [m.grad.detach() if m.grad is not None else None
+                          for m in self.model_rep.parameters()]
         grads_q_main_list = [[m.grad.detach() if m.grad is not None else None for m in q.parameters()]
                              for q in self.model_q_list]
 
@@ -1064,26 +1064,26 @@ class SAC_Base(object):
     @torch.no_grad()
     def calculate_adaptive_weights(self,
                                    grads_main: List[torch.Tensor],
-                                   losses: List[torch.Tensor],
+                                   loss_list: List[torch.Tensor],
                                    model: nn.Module):
 
-        grads_auxes = [autograd.grad(loss, model.parameters(),
-                                     allow_unused=True,
-                                     retain_graph=True)
-                       for loss in losses]
-        grads_auxes = [[g_aux if g_aux is not None else torch.zeros_like(g_main)
-                        for g_main, g_aux in zip(grads_main, grads_aux)]
-                       for grads_aux in grads_auxes]
+        grads_aux_list = [autograd.grad(loss, model.parameters(),
+                                        allow_unused=True,
+                                        retain_graph=True)
+                          for loss in loss_list]
+        grads_aux_list = [[g_aux if g_aux is not None else torch.zeros_like(g_main)
+                           for g_main, g_aux in zip(grads_main, grads_aux)]
+                          for grads_aux in grads_aux_list]
 
         _grads_main = torch.cat([g.reshape(1, -1) for g in grads_main], dim=1)
-        _grads_auxes = [torch.cat([g.reshape(1, -1) for g in grads_aux], dim=1)
-                        for grads_aux in grads_auxes]
+        _grads_aux_list = [torch.cat([g.reshape(1, -1) for g in grads_aux], dim=1)
+                           for grads_aux in grads_aux_list]
 
-        coses = [functional.cosine_similarity(_grads_main, _grads_aux)
-                 for _grads_aux in _grads_auxes]
-        coses = [torch.sign(cos).clamp(min=0) for cos in coses]
+        cos_list = [functional.cosine_similarity(_grads_main, _grads_aux)
+                    for _grads_aux in _grads_aux_list]
+        cos_list = [torch.sign(cos).clamp(min=0) for cos in cos_list]
 
-        for grads_aux, cos in zip(grads_auxes, coses):
+        for grads_aux, cos in zip(grads_aux_list, cos_list):
             for param, grad_aux in zip(model.parameters(), grads_aux):
                 param.grad += cos * grad_aux
 
@@ -1804,8 +1804,8 @@ class SAC_Base(object):
         d_action = action[..., :self.d_action_size]
         c_action = action[..., self.d_action_size:]
 
-        # ([Batch, action_size], [Batch, 1])
         q_list = [q(state, c_action) for q in self.model_q_list]
+        # ([Batch, action_size], [Batch, 1])
         d_q_list = [q[0] for q in q_list]  # [Batch, action_size]
         c_q_list = [q[1] for q in q_list]  # [Batch, 1]
 
@@ -1821,9 +1821,10 @@ class SAC_Base(object):
                                m_target_states[:, -1, ...],
                                bn_dones[:, self.burn_in_step:],
                                bn_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
-
         # [Batch, 1]
+
         q_td_error_list = [torch.zeros((state.shape[0], 1), device=self.device) for _ in range(self.ensemble_q_num)]
+        # [Batch, 1]
         if self.d_action_size:
             for i in range(self.ensemble_q_num):
                 q_td_error_list[i] += torch.abs(d_q_list[i] - d_y)
@@ -2198,7 +2199,6 @@ class SAC_Base(object):
                 self.save_model()
 
             if self.use_replay_buffer:
-
                 if self.use_n_step_is:
                     bn_pi_probs_tensor = self.get_l_probs(bn_indexes,
                                                           bn_padding_masks,
