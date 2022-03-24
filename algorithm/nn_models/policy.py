@@ -74,7 +74,7 @@ class ModelPolicy(ModelBasePolicy):
             l = self.c_dense(state)
             mean = self.mean_dense(l)
             logstd = self.logstd_dense(l)
-            c_policy = torch.distributions.Normal(torch.tanh(mean), torch.clamp(torch.exp(logstd), 0.1, 1.0))
+            c_policy = torch.distributions.Normal(torch.tanh(mean / 5.) * 5., torch.exp(torch.clamp(logstd, -20, 0.5)))
         else:
             c_policy = None
 

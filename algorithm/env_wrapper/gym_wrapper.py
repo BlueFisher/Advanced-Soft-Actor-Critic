@@ -195,7 +195,8 @@ class GymWrapper:
 
 
 if __name__ == "__main__":
-    gym_wrapper = GymWrapper(True, 'AntBulletEnv-v0', n_agents=3, force_seq=True)
+    logging.basicConfig(level=logging.INFO)
+    gym_wrapper = GymWrapper(True, 'HalfCheetah-v2', n_agents=1, force_seq=True, render=True)
     gym_wrapper.init()
 
     tt = []
@@ -203,7 +204,7 @@ if __name__ == "__main__":
         t = time.time()
         gym_wrapper.reset()
         for i in range(1000):
-            gym_wrapper.step(np.random.randn(3, 8))
+            gym_wrapper.step(None, np.random.randn(6,))
         tt.append(time.time() - t)
 
     print(tt)

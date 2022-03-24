@@ -1,0 +1,22 @@
+default:
+  base_config:
+    env_type: GYM
+    scene: HalfCheetah
+
+    build_path: "HalfCheetah-v3"
+
+    max_iter: -1
+    max_step: 500000
+    n_agents: 10
+
+  replay_config:
+    capacity: 1048576
+
+  sac_config:
+    write_summary_per_step: 500 # Write summaries in TensorBoard every N steps
+    save_model_per_step: 10000 # Save model every N steps
+
+    init_log_alpha: 0.
+
+    n_step: 3
+    v_lambda: 0.99

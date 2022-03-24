@@ -1,7 +1,7 @@
 default:
   base_config:
     env_type: GYM
-    scene: Humanoid
+    scene: HumanoidBullet
 
     build_path: "HumanoidBulletEnv-v0"
 

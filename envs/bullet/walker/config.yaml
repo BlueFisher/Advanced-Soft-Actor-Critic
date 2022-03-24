@@ -1,7 +1,7 @@
 default:
   base_config:
     env_type: GYM
-    scene: Walker2D
+    scene: Walker2DBullet
 
     build_path: "Walker2DBulletEnv-v0"
 

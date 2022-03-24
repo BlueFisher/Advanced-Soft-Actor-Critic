@@ -1,22 +1,27 @@
 default:
   base_config:
     env_type: GYM
-    scene: HalfCheetah
+    scene: HalfCheetahBullet
 
     build_path: "HalfCheetahBulletEnv-v0"
 
     max_iter: -1
-    max_step: 1000000
+    max_step: 500000
     n_agents: 10
 
   sac_config:
     write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
     save_model_per_step: 10000 # Save model every N steps
 
-    n_step: 5
+    init_log_alpha: 0.
+
+    n_step: 1
     v_lambda: 0.99
 
-    use_normalization: true
+    use_rnd: true
+    rnd_n_sample: 50
+
+    # use_normalization: true
 
 hard:
   base_config: &hard_base
