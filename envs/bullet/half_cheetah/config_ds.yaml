@@ -1,7 +1,7 @@
 default:
   base_config:
     env_type: GYM
-    scene: HalfCheetah
+    scene: HalfCheetahBullet
 
     build_path: "HalfCheetahBulletEnv-v0"
 

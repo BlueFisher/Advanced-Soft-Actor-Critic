@@ -1,43 +1,41 @@
 default:
   base_config:
     env_type: GYM
-    scene: AntBullet
+    scene: HalfCheetah
 
-    build_path: "AntBulletEnv-v0"
+    build_path: "HalfCheetahBulletEnv-v0"
 
-    noise_increasing_rate: 0.01
+    noise_increasing_rate: 0.02
 
     n_agents: 10
 
     evolver_cem_time: 8
 
   net_config:
-    evolver_host: ant-ds-evolver
+    evolver_host: cheetah-ds-evolver
 
   sac_config:
     write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
     save_model_per_step: 10000 # Save model every N steps
 
-    ensemble_q_num: 5
-
-    batch_size: 256
-
-    n_step: 3
-
-    use_normalization: true
-
+    batch_size: 1024
+    n_step: 5
+    v_lambda: 0.9
 
 hard:
   base_config: &hard_base
-    scene: AntHard
+    scene: HalfCheetahHard
     nn: nn_hard
 
   net_config:
-    evolver_host: ant-hard-ds-evolver
+    evolver_host: cheetah-hard-ds-evolver
 
   sac_config: &hard_sac
     seq_encoder: RNN
-    # use_prediction: true
+    use_prediction: true
+    v_lambda: 0.99
+
+    use_normalization: true
 
     random_params:
       n_step:

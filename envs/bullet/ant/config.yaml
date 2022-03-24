@@ -1,7 +1,7 @@
 default:
   base_config:
     env_type: GYM
-    scene: Ant
+    scene: AntBullet
 
     build_path: "AntBulletEnv-v0"
 
