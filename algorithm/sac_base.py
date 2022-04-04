@@ -1128,10 +1128,11 @@ class SAC_Base(object):
 
         if self.siamese_use_q:
             if self.seq_encoder is None:
+                _obs = [n_obses[:, 0, ...] for n_obses in n_obses_list]
+
                 _encoder = [e[:, 0, ...] for e in encoder_list]
                 _target_encoder = [t_e[:, 0, ...] for t_e in target_encoder_list]
 
-                _obs = [n_obses[:, 0, ...] for n_obses in n_obses_list]
                 state = self.model_rep.get_state_from_encoders(_obs,
                                                                _encoder if len(_encoder) > 1 else _encoder[0])
                 target_state = self.model_target_rep.get_state_from_encoders(_obs,
@@ -1177,19 +1178,19 @@ class SAC_Base(object):
 
             q_loss_list = []
 
-            d_actions = bn_actions[:, self.burn_in_step, :self.d_action_size]
-            c_actions = bn_actions[:, self.burn_in_step, self.d_action_size:]
+            d_action = bn_actions[:, self.burn_in_step, :self.d_action_size]
+            c_action = bn_actions[:, self.burn_in_step, self.d_action_size:]
 
-            q_list = [q(state, c_actions)
+            q_list = [q(state, c_action)
                       for q in self.model_q_list]  # [Batch, 1], ...
-            target_q_list = [q(target_state, c_actions)
+            target_q_list = [q(target_state, c_action)
                              for q in self.model_target_q_list]  # [Batch, 1], ...
 
             if self.d_action_size:
-                q_single_list = [torch.sum(d_actions * q[0], dim=-1)
+                q_single_list = [torch.sum(d_action * q[0], dim=-1)
                                  for q in q_list]
                 # [Batch, d_action_size], ... -> [Batch, ], ...
-                target_q_single_list = [torch.sum(d_actions * t_q[0], dim=-1)
+                target_q_single_list = [torch.sum(d_action * t_q[0], dim=-1)
                                         for t_q in target_q_list]
                 # [Batch, d_action_size], ... -> [Batch, ], ...
 

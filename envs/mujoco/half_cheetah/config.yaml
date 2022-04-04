@@ -18,5 +18,7 @@ default:
 
     init_log_alpha: 0.
 
-    n_step: 3
-    v_lambda: 0.99
+    n_step: 1
+    v_lambda: 1.
+
+    learning_rate: 1.0e-3

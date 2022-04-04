@@ -9,7 +9,7 @@ default:
     no_graphics: false
 
     n_agents: 50
-    max_step: 120000
+    max_step: 300000
     reset_on_iteration: false
 
   reset_config:
@@ -21,7 +21,7 @@ default:
     rep:
       blur: 0
       brightness: 1
-      ray_random: 200
+      ray_random: 0
       need_speed: true
 
   sac_config:
@@ -217,6 +217,146 @@ ray_0_blur_7_brightness_1.0:
       brightness: 1.0
       ray_random: 0
 
+ray_50_blur_0_brightness_0.2:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+      ray_random: 50
+
+ray_50_blur_0_brightness_0.4:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+      ray_random: 50
+
+ray_50_blur_0_brightness_0.6:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+      ray_random: 50
+
+ray_50_blur_0_brightness_0.8:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+      ray_random: 50
+
+ray_50_blur_0_brightness_1.0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+      ray_random: 50
+
+ray_50_blur_3_brightness_0.2:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+      ray_random: 50
+
+ray_50_blur_3_brightness_0.4:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+      ray_random: 50
+
+ray_50_blur_3_brightness_0.6:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+      ray_random: 50
+
+ray_50_blur_3_brightness_0.8:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+      ray_random: 50
+
+ray_50_blur_3_brightness_1.0:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+      ray_random: 50
+
+ray_50_blur_5_brightness_0.2:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+      ray_random: 50
+
+ray_50_blur_5_brightness_0.4:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+      ray_random: 50
+
+ray_50_blur_5_brightness_0.6:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+      ray_random: 50
+
+ray_50_blur_5_brightness_0.8:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+      ray_random: 50
+
+ray_50_blur_5_brightness_1.0:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+      ray_random: 50
+
+ray_50_blur_7_brightness_0.2:
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+      ray_random: 50
+
+ray_50_blur_7_brightness_0.4:
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+      ray_random: 50
+
+ray_50_blur_7_brightness_0.6:
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+      ray_random: 50
+
+ray_50_blur_7_brightness_0.8:
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+      ray_random: 50
+
+ray_50_blur_7_brightness_1.0:
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+      ray_random: 50
+
 ray_100_blur_0_brightness_0.2:
   model_config:
     rep:
@@ -356,6 +496,146 @@ ray_100_blur_7_brightness_1.0:
       blur: 7
       brightness: 1.0
       ray_random: 100
+
+ray_150_blur_0_brightness_0.2:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+      ray_random: 150
+
+ray_150_blur_0_brightness_0.4:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+      ray_random: 150
+
+ray_150_blur_0_brightness_0.6:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+      ray_random: 150
+
+ray_150_blur_0_brightness_0.8:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+      ray_random: 150
+
+ray_150_blur_0_brightness_1.0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+      ray_random: 150
+
+ray_150_blur_3_brightness_0.2:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+      ray_random: 150
+
+ray_150_blur_3_brightness_0.4:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+      ray_random: 150
+
+ray_150_blur_3_brightness_0.6:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+      ray_random: 150
+
+ray_150_blur_3_brightness_0.8:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+      ray_random: 150
+
+ray_150_blur_3_brightness_1.0:
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+      ray_random: 150
+
+ray_150_blur_5_brightness_0.2:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+      ray_random: 150
+
+ray_150_blur_5_brightness_0.4:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+      ray_random: 150
+
+ray_150_blur_5_brightness_0.6:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+      ray_random: 150
+
+ray_150_blur_5_brightness_0.8:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+      ray_random: 150
+
+ray_150_blur_5_brightness_1.0:
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+      ray_random: 150
+
+ray_150_blur_7_brightness_0.2:
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+      ray_random: 150
+
+ray_150_blur_7_brightness_0.4:
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+      ray_random: 150
+
+ray_150_blur_7_brightness_0.6:
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+      ray_random: 150
+
+ray_150_blur_7_brightness_0.8:
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+      ray_random: 150
+
+ray_150_blur_7_brightness_1.0:
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+      ray_random: 150
 
 ray_200_blur_0_brightness_0.2:
   model_config:
@@ -636,143 +916,3 @@ ray_300_blur_7_brightness_1.0:
       blur: 7
       brightness: 1.0
       ray_random: 300
-
-ray_350_blur_0_brightness_0.2:
-  model_config:
-    rep:
-      blur: 0
-      brightness: 0.2
-      ray_random: 350
-
-ray_350_blur_0_brightness_0.4:
-  model_config:
-    rep:
-      blur: 0
-      brightness: 0.4
-      ray_random: 350
-
-ray_350_blur_0_brightness_0.6:
-  model_config:
-    rep:
-      blur: 0
-      brightness: 0.6
-      ray_random: 350
-
-ray_350_blur_0_brightness_0.8:
-  model_config:
-    rep:
-      blur: 0
-      brightness: 0.8
-      ray_random: 350
-
-ray_350_blur_0_brightness_1.0:
-  model_config:
-    rep:
-      blur: 0
-      brightness: 1.0
-      ray_random: 350
-
-ray_350_blur_3_brightness_0.2:
-  model_config:
-    rep:
-      blur: 3
-      brightness: 0.2
-      ray_random: 350
-
-ray_350_blur_3_brightness_0.4:
-  model_config:
-    rep:
-      blur: 3
-      brightness: 0.4
-      ray_random: 350
-
-ray_350_blur_3_brightness_0.6:
-  model_config:
-    rep:
-      blur: 3
-      brightness: 0.6
-      ray_random: 350
-
-ray_350_blur_3_brightness_0.8:
-  model_config:
-    rep:
-      blur: 3
-      brightness: 0.8
-      ray_random: 350
-
-ray_350_blur_3_brightness_1.0:
-  model_config:
-    rep:
-      blur: 3
-      brightness: 1.0
-      ray_random: 350
-
-ray_350_blur_5_brightness_0.2:
-  model_config:
-    rep:
-      blur: 5
-      brightness: 0.2
-      ray_random: 350
-
-ray_350_blur_5_brightness_0.4:
-  model_config:
-    rep:
-      blur: 5
-      brightness: 0.4
-      ray_random: 350
-
-ray_350_blur_5_brightness_0.6:
-  model_config:
-    rep:
-      blur: 5
-      brightness: 0.6
-      ray_random: 350
-
-ray_350_blur_5_brightness_0.8:
-  model_config:
-    rep:
-      blur: 5
-      brightness: 0.8
-      ray_random: 350
-
-ray_350_blur_5_brightness_1.0:
-  model_config:
-    rep:
-      blur: 5
-      brightness: 1.0
-      ray_random: 350
-
-ray_350_blur_7_brightness_0.2:
-  model_config:
-    rep:
-      blur: 7
-      brightness: 0.2
-      ray_random: 350
-
-ray_350_blur_7_brightness_0.4:
-  model_config:
-    rep:
-      blur: 7
-      brightness: 0.4
-      ray_random: 350
-
-ray_350_blur_7_brightness_0.6:
-  model_config:
-    rep:
-      blur: 7
-      brightness: 0.6
-      ray_random: 350
-
-ray_350_blur_7_brightness_0.8:
-  model_config:
-    rep:
-      blur: 7
-      brightness: 0.8
-      ray_random: 350
-
-ray_350_blur_7_brightness_1.0:
-  model_config:
-    rep:
-      blur: 7
-      brightness: 1.0
-      ray_random: 350
