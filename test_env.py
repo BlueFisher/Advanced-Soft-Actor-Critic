@@ -98,7 +98,9 @@ class Main(object):
     def _run(self):
         obs_list = self.env.reset(reset_config=self.reset_config)
 
-        agents = [Agent(i) for i in range(self.base_config['n_agents'])]
+        agents = [Agent(i,
+                        self.obs_shapes,
+                        self.action_size,) for i in range(self.base_config['n_agents'])]
 
         agent_size = len(agents)
         fig_size = sum([len(s) == 3 for s in self.obs_shapes])
@@ -166,17 +168,21 @@ class Main(object):
                     if self.save_image:
                         episode_trans_list = [t for t in episode_trans_list if t is not None]
                         for episode_trans in episode_trans_list:
-                            # n_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-                            n_obses_list, *_ = episode_trans
+                            # ep_indexes, ep_padding_masks,
+                            # ep_obses_list, ep_actions, ep_rewards, next_obs_list, ep_dones, ep_probs,
+                            # ep_seq_hidden_states
 
-                            for i, n_obses in enumerate(n_obses_list):
-                                n_obses = n_obses[0]
-                                if len(n_obses.shape) > 2:
-                                    img = Image.fromarray(np.uint8(n_obses[0] * 255))
+                            # list([1, episode_len, *obs_shapes_i], ...)
+                            ep_obses_list = episode_trans[2]
+
+                            for i, ep_obses in enumerate(ep_obses_list):
+                                ep_obses = ep_obses[0]
+                                if len(ep_obses.shape) > 2:
+                                    img = Image.fromarray(np.uint8(ep_obses[0] * 255))
                                     self._logger.info(f'Saved {img_save_index}-{i}')
                                     img.save(self.model_abs_dir.joinpath(f'{img_save_index}-{i}.gif'),
                                              save_all=True,
-                                             append_images=[Image.fromarray(np.uint8(o * 255)) for o in n_obses[1:]])
+                                             append_images=[Image.fromarray(np.uint8(o * 255)) for o in ep_obses[1:]])
 
                         img_save_index += 1
 

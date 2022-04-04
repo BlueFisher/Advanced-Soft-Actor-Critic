@@ -99,6 +99,7 @@ class UnityWrapperProcess:
                         self.close()
             except:
                 self._logger.error(traceback.format_exc())
+                self._logger.warning(f'Process {os.getpid()} exits with error')
 
     def init(self):
         """
@@ -137,6 +138,8 @@ class UnityWrapperProcess:
             if len(o.shape) >= 3:
                 self.engine_configuration_channel.set_configuration_parameters(quality_level=5)
                 break
+
+        self._logger.info('Initialized')
 
         return obs_shapes, discrete_action_size, continuous_action_size
 
@@ -230,11 +233,22 @@ class UnityWrapper:
             scene: The scene name
             n_agents: The agents count
         """
+        self.train_mode = train_mode
+        self.file_name = file_name
+        self.base_port = base_port
+        self.no_graphics = no_graphics
+        self.seed = seed
+        self.scene = scene
+        self.additional_args = additional_args
+        self.n_agents = n_agents
+
         # If use multiple processes
         if force_seq is None:
             self._seq_envs: bool = n_agents <= MAX_N_AGENTS_PER_PROCESS
         else:
             self._seq_envs: bool = force_seq
+
+        self._process_id = 0
 
         self.env_length = math.ceil(n_agents / MAX_N_AGENTS_PER_PROCESS)
 
@@ -255,24 +269,37 @@ class UnityWrapper:
                                                       min(MAX_N_AGENTS_PER_PROCESS, n_agents - i * MAX_N_AGENTS_PER_PROCESS)))
         else:
             # All environments are executed in parallel
-            self._conns: List[multiprocessing.connection.Connection] = []
+            self._conns: List[multiprocessing.connection.Connection] = [None] * self.env_length
 
-            for i in range(self.env_length):
+            self._generate_processes()
+
+    def _generate_processes(self, force_init=False):
+        if self._seq_envs:
+            return
+
+        for i, conn in enumerate(self._conns):
+            if conn is None:
                 parent_conn, child_conn = multiprocessing.Pipe()
-                self._conns.append(parent_conn)
+                self._conns[i] = parent_conn
                 p = multiprocessing.Process(target=UnityWrapperProcess,
                                             args=(child_conn,
-                                                  train_mode,
-                                                  file_name,
-                                                  i,
-                                                  base_port,
-                                                  no_graphics,
-                                                  seed,
-                                                  scene,
-                                                  additional_args,
-                                                  min(MAX_N_AGENTS_PER_PROCESS, n_agents - i * MAX_N_AGENTS_PER_PROCESS)),
+                                                  self.train_mode,
+                                                  self.file_name,
+                                                  self._process_id,
+                                                  self.base_port,
+                                                  self.no_graphics,
+                                                  self.seed,
+                                                  self.scene,
+                                                  self.additional_args,
+                                                  min(MAX_N_AGENTS_PER_PROCESS, self.n_agents - i * MAX_N_AGENTS_PER_PROCESS)),
                                             daemon=True)
                 p.start()
+
+                if force_init:
+                    parent_conn.send((INIT, None))
+                    parent_conn.recv()
+
+                self._process_id += 1
 
     def init(self):
         """
@@ -344,16 +371,27 @@ class UnityWrapper:
                 self._conns[i].send((STEP, actions))
 
         if not self._seq_envs:
-            for conn in self._conns:
-                (obses_list,
-                 rewards,
-                 dones,
-                 max_steps) = conn.recv()
+            succeeded = True
 
-                all_obses_list.append(obses_list)
-                all_rewards.append(rewards)
-                all_dones.append(dones)
-                all_max_steps.append(max_steps)
+            for i, conn in enumerate(self._conns):
+                try:
+                    (obses_list,
+                     rewards,
+                     dones,
+                     max_steps) = conn.recv()
+
+                    all_obses_list.append(obses_list)
+                    all_rewards.append(rewards)
+                    all_dones.append(dones)
+                    all_max_steps.append(max_steps)
+                except:
+                    self._conns[i] = None
+                    succeeded = False
+
+            if not succeeded:
+                self._generate_processes(force_init=True)
+
+                return None, None, None, None
 
         obses_list = [np.concatenate(obses) for obses in zip(*all_obses_list)]
         rewards = np.concatenate(all_rewards)

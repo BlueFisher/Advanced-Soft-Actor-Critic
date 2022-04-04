@@ -167,6 +167,7 @@ class Main(object):
                                     seq_hidden_state_shape=self.sac.seq_hidden_state_shape if seq_encoder is not None else None)
                   for i in range(num_agents)]
 
+        force_reset = False
         iteration = 0
         trained_steps = 0
 
@@ -174,10 +175,12 @@ class Main(object):
             if self.base_config['max_step'] != -1 and trained_steps >= self.base_config['max_step']:
                 break
 
-            if self.base_config['reset_on_iteration'] or any([a.max_reached for a in agents]):
+            if self.base_config['reset_on_iteration'] or any([a.max_reached for a in agents]) or force_reset:
                 obs_list = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
+
+                force_reset = False
             else:
                 for agent in agents:
                     agent.reset()
@@ -247,6 +250,12 @@ class Main(object):
 
                     next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
                                                                                    action[..., self.d_action_size:])
+
+                    if next_obs_list is None:
+                        force_reset = True
+
+                        self._logger.warning('Step encounters error, episode ignored')
+                        continue
 
                     if step == self.base_config['max_step_each_iter']:
                         local_done = [True] * len(agents)
