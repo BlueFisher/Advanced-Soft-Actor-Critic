@@ -141,7 +141,7 @@ class GymWrapper:
     def step(self, d_action, c_action):
         obs = np.empty([self.n_agents, self._state_dim], dtype=np.float32)
         reward = np.empty(self.n_agents, dtype=np.float32)
-        done = np.empty(self.n_agents, dtype=np.bool)
+        done = np.empty(self.n_agents, dtype=bool)
         max_step = np.full(self.n_agents, False)
 
         if self.is_discrete:
