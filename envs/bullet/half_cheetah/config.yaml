@@ -1,9 +1,7 @@
 default:
   base_config:
     env_type: GYM
-    scene: HalfCheetahBullet
-
-    build_path: "HalfCheetahBulletEnv-v0"
+    env_name: HalfCheetahBulletEnv-v0
 
     max_iter: -1
     max_step: 500000

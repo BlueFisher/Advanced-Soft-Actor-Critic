@@ -1,20 +1,13 @@
 base_config:
-  env_type: UNITY # UNITY or GYM
-  scene:
-    scene # The scene name.
-    # If in Unity envs, it indicates the specific scene.
-    # If in Gym envs, it is just a readable name displayed in TensorBoard
-
-  no_graphics: true # For Unity envs, if an env does not need pixel input, set true
-
-  # Only for Unity Environments
-  build_path: # Unity executable path
-    win32: path_win32
-    linux: path_linux
-  port: 5005
-
-  # Only for Gym Enviroments
-  # build_path: GymEnv # Like CartPole-v1
+  env_type: UNITY # UNITY | GYM | DM_CONTROL
+  env_name: env_name # The environment name.
+  env_args: null
+  unity_args: # Only for Unity Environments
+    no_graphics: true # If an env does not need pixel input, set true
+    build_path: # Unity executable path
+      win32: path_win32
+      linux: path_linux
+    port: 5005
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
   nn: nn # Neural network models file

@@ -1,9 +1,7 @@
 default:
   base_config:
     env_type: GYM
-    scene: HumanoidBullet
-
-    build_path: "HumanoidBulletEnv-v0"
+    env_name: HumanoidBulletEnv-v0
 
     max_iter: -1
     n_agents: 10

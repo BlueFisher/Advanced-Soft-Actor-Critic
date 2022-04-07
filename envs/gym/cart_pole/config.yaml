@@ -1,9 +1,7 @@
 default:
   base_config:
     env_type: GYM
-    scene: CartPole
-
-    build_path: CartPole-v1
+    env_name: CartPole-v1
 
     max_step: -1
     max_iter: 1000

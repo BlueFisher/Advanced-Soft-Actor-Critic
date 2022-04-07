@@ -1,9 +1,7 @@
 default:
   base_config:
     env_type: GYM
-    scene: AntBullet
-
-    build_path: "AntBulletEnv-v0"
+    env_name: AntBulletEnv-v0
 
     max_iter: -1
     max_step: 1000000

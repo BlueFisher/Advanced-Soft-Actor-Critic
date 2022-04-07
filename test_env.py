@@ -39,12 +39,16 @@ class Main(object):
         # Initialize config from command line arguments
         self.train_mode = not args.run
         self.render = args.render
+
         self.run_in_editor = args.editor
-        self.additional_args = args.additional_args
+
         self.save_image = args.save_image
 
+        if args.additional_args is not None:
+            config['base_config']['env_args'] = args.additional_args
         if args.port is not None:
-            config['base_config']['port'] = args.port
+            config['base_config']['unity_args']['port'] = args.port
+
         if args.agents is not None:
             config['base_config']['n_agents'] = args.agents
 
@@ -52,7 +56,7 @@ class Main(object):
 
         # The absolute directory of a specific training
         model_abs_dir = Path(root_dir).joinpath('models',
-                                                config['base_config']['scene'],
+                                                config['base_config']['env_name'],
                                                 config['base_config']['name'])
         model_abs_dir.mkdir(parents=True, exist_ok=True)
         self.model_abs_dir = model_abs_dir
@@ -73,27 +77,36 @@ class Main(object):
                                         n_agents=self.base_config['n_agents'])
             else:
                 self.env = UnityWrapper(train_mode=self.train_mode,
-                                        file_name=self.base_config['build_path'][sys.platform],
-                                        base_port=self.base_config['port'],
-                                        no_graphics=self.base_config['no_graphics'] and not self.render,
-                                        scene=self.base_config['scene'],
-                                        additional_args=self.additional_args,
+                                        file_name=self.base_config['unity_args']['build_path'][sys.platform],
+                                        base_port=self.base_config['unity_args']['port'],
+                                        no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
+                                        scene=self.base_config['env_name'],
+                                        additional_args=self.base_config['env_args'],
                                         n_agents=self.base_config['n_agents'])
 
         elif self.base_config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
 
             self.env = GymWrapper(train_mode=self.train_mode,
-                                  env_name=self.base_config['build_path'],
+                                  env_name=self.base_config['env_name'],
                                   render=self.render,
                                   n_agents=self.base_config['n_agents'])
+
+        elif self.base_config['env_type'] == 'DM_CONTROL':
+            from algorithm.env_wrapper.dm_control_wrapper import DMControlWrapper
+
+            self.env = DMControlWrapper(train_mode=self.train_mode,
+                                        env_name=self.base_config['env_name'],
+                                        render=self.render,
+                                        n_agents=self.base_config['n_agents'])
+
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
         self.obs_shapes, self.d_action_size, self.c_action_size = self.env.init()
         self.action_size = self.d_action_size + self.c_action_size
 
-        self._logger.info(f'{self.base_config["build_path"]} initialized')
+        self._logger.info(f'{self.base_config["env_name"]} initialized')
 
     def _run(self):
         obs_list = self.env.reset(reset_config=self.reset_config)

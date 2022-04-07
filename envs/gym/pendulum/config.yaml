@@ -1,9 +1,7 @@
 default:
   base_config:
     env_type: GYM
-    scene: Pendulum
-
-    build_path: Pendulum-v0
+    env_name: Pendulum-v0
 
     max_step: -1
     max_iter: 100

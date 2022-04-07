@@ -1,10 +1,10 @@
 default:
   base_config:
-    scene: Roller
-
-    build_path:
-      win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
-      linux: /data/linux-RL-Envs/RLEnvironments.x86_64
+    env_name: Roller
+    unity_args:
+      build_path:
+        win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
+        linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
     n_agents: 10
     max_iter: 200
