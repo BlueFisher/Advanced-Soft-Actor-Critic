@@ -1,12 +1,11 @@
 default:
   base_config:
-    scene: RosCar
-
-    build_path:
-      win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
-      linux: /data/linux-RL-Envs/RLEnvironments.x86_64
-
-    no_graphics: false
+    env_name: RosCar
+    unity_args:
+      build_path:
+        win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
+        linux: /data/linux-RL-Envs/RLEnvironments.x86_64
+      no_graphics: false
 
     n_agents: 50
     max_step: 300000

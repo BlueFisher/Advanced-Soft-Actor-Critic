@@ -107,10 +107,9 @@ class Actor(object):
                                                            args.config)
 
         # Initialize config from command line arguments
-        self.additional_args = args.additional_args
-        self.device = args.device
-        self.run_in_editor = args.editor
         self.logger_in_file = args.logger_in_file
+
+        self.device = args.device
 
         if args.evolver_host is not None:
             config['net_config']['evolver_host'] = args.evolver_host
@@ -120,8 +119,11 @@ class Actor(object):
         return config, config_abs_dir
 
     def _init_config(self, config, args):
+        if args.additional_args is not None:
+            config['base_config']['env_args'] = args.additional_args
         if args.build_port is not None:
-            config['base_config']['build_port'] = args.build_port
+            config['base_config']['unity_args']['build_port'] = args.build_port
+
         if args.nn is not None:
             config['base_config']['nn'] = args.nn
         if args.agents is not None:
@@ -162,27 +164,34 @@ class Actor(object):
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
             if self.run_in_editor:
-                self.env = UnityWrapper()
+                self.env = UnityWrapper(n_agents=self.base_config['n_agents'])
             else:
-                self.env = UnityWrapper(file_name=self.base_config['build_path'][sys.platform],
-                                        base_port=self.base_config['build_port'],
-                                        no_graphics=self.base_config['no_graphics'],
-                                        scene=self.base_config['scene'],
-                                        additional_args=self.additional_args,
+                self.env = UnityWrapper(file_name=self.base_config['unity_args']['build_path'][sys.platform],
+                                        base_port=self.base_config['unity_args']['build_port'],
+                                        no_graphics=self.base_config['unity_args']['no_graphics'],
+                                        scene=self.base_config['env_name'],
+                                        additional_args=self.base_config['env_args'],
                                         n_agents=self.base_config['n_agents'])
 
         elif self.base_config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
 
-            self.env = GymWrapper(env_name=self.base_config['build_path'],
+            self.env = GymWrapper(env_name=self.base_config['env_name'],
                                   n_agents=self.base_config['n_agents'])
+
+        elif self.base_config['env_type'] == 'DM_CONTROL':
+            from algorithm.env_wrapper.dm_control_wrapper import DMControlWrapper
+
+            self.env = DMControlWrapper(env_name=self.base_config['env_name'],
+                                        n_agents=self.base_config['n_agents'])
+
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
         self.obs_shapes, self.d_action_size, self.c_action_size = self.env.init()
         self.action_size = self.d_action_size + self.c_action_size
 
-        self._logger.info(f'{self.base_config["build_path"]} initialized')
+        self._logger.info(f'{self.base_config["env_name"]} initialized')
 
     def _init_sac(self, config_abs_dir):
         nn_abs_path = Path(config_abs_dir).joinpath(f'{self.base_config["nn"]}.py')
@@ -297,10 +306,11 @@ class Actor(object):
                                     max_return_episode_trans=self.base_config['max_episode_length'])
                   for i in range(num_agents)]
 
+        force_reset = False
         iteration = 0
 
         while self._stub.connected and self._evolver_stub.connected:
-            if self.base_config['reset_on_iteration'] or any([a.max_reached for a in agents]):
+            if self.base_config['reset_on_iteration'] or any([a.max_reached for a in agents]) or force_reset:
                 obs_list = self.env.reset(reset_config=self.reset_config)
                 for agent in agents:
                     agent.clear()
@@ -308,7 +318,6 @@ class Actor(object):
                 for agent in agents:
                     agent.reset()
 
-            action = np.zeros([len(agents), self.action_size], dtype=np.float32)
             step = 0
 
             self._update_policy_variables()
@@ -376,6 +385,12 @@ class Actor(object):
 
                     next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
                                                                                    action[..., self.d_action_size:])
+
+                    if next_obs_list is None:
+                        force_reset = True
+
+                        self._logger.warning('Step encounters error, episode ignored')
+                        continue
 
                     if step == self.base_config['max_step_each_iter']:
                         local_done = [True] * len(agents)

@@ -1,9 +1,7 @@
 default:
   base_config:
     env_type: GYM
-    scene: Walker2DBullet
-
-    build_path: "Walker2DBulletEnv-v0"
+    env_name: Walker2DBulletEnv-v0
 
     noise_increasing_rate: 0.01
 

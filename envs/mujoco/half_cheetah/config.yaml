@@ -1,9 +1,7 @@
 default:
   base_config:
     env_type: GYM
-    scene: HalfCheetah
-
-    build_path: "HalfCheetah-v3"
+    env_name: HalfCheetah-v3
 
     max_iter: -1
     max_step: 500000

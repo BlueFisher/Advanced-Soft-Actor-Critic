@@ -1,9 +1,7 @@
 default:
   base_config:
     env_type: GYM
-    scene: MountainCar
-
-    build_path: MountainCarContinuous-v0
+    env_name: MountainCarContinuous-v0
 
     max_step: -1
     max_iter: 100

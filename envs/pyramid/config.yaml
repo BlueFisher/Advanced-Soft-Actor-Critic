@@ -1,8 +1,10 @@
 default:
   base_config:
-    build_path:
-      win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
-      linux: /data/linux-RL-Envs/RLEnvironments.x86_64
+    env_name: RayPyramid
+    unity_args:
+      build_path:
+        win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
+        linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
     n_agents: 50
     max_step: -1
@@ -31,7 +33,6 @@ default:
 
 ray_nope:
   base_config:
-    scene: RayPyramid
     nn: nn_attn
     name: "attn_nope_{time}"
   model_config:
@@ -40,7 +41,6 @@ ray_nope:
 
 ray_peadd:
   base_config:
-    scene: RayPyramid
     nn: nn_attn
     name: "attn_peadd_{time}"
   model_config:
@@ -49,7 +49,6 @@ ray_peadd:
 
 ray_pecat:
   base_config:
-    scene: RayPyramid
     nn: nn_attn
     name: "attn_pecat_{time}"
   model_config:
@@ -58,7 +57,6 @@ ray_pecat:
 
 ray_nornn:
   base_config:
-    scene: RayPyramid
     nn: nn_nornn
     name: "nornn_{time}"
   reset_config:

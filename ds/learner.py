@@ -83,12 +83,13 @@ class Learner:
                                                            args.config)
 
         # Initialize config from command line arguments
+        self.logger_in_file = args.logger_in_file
         self.render = args.render
+
         self.run_in_editor = args.editor
-        self.additional_args = args.additional_args
+
         self.device = args.device
         self.last_ckpt = args.ckpt
-        self.logger_in_file = args.logger_in_file
 
         if args.evolver_host is not None:
             config['net_config']['evolver_host'] = args.evolver_host
@@ -113,15 +114,18 @@ class Learner:
     def _init_config(self, _id, root_dir, config, args):
         if args.name is not None:
             config['base_config']['name'] = args.name
+        if args.additional_args is not None:
+            config['base_config']['env_args'] = args.additional_args
         if args.build_port is not None:
-            config['base_config']['build_port'] = args.build_port
+            config['base_config']['unity_args']['build_port'] = args.build_port
+
         if args.nn is not None:
             config['base_config']['nn'] = args.nn
         if args.agents is not None:
             config['base_config']['n_agents'] = args.agents
 
         model_abs_dir = Path(root_dir).joinpath('models',
-                                                config['base_config']['scene'],
+                                                config['base_config']['env_name'],
                                                 config['base_config']['name'],
                                                 f'learner{_id}')
         model_abs_dir.mkdir(parents=True, exist_ok=True)
@@ -145,29 +149,40 @@ class Learner:
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
             if self.run_in_editor:
-                self.env = UnityWrapper()
+                self.env = UnityWrapper(train_mode=False,
+                                        n_agents=self.base_config['n_agents'])
             else:
                 self.env = UnityWrapper(train_mode=False,
-                                        file_name=self.base_config['build_path'][sys.platform],
-                                        base_port=self.base_config['build_port'],
-                                        no_graphics=self.base_config['no_graphics'],
-                                        scene=self.base_config['scene'],
-                                        additional_args=self.additional_args,
+                                        file_name=self.base_config['unity_args']['build_path'][sys.platform],
+                                        base_port=self.base_confi['unity_args']['build_port'],
+                                        no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
+                                        scene=self.base_config['env_name'],
+                                        additional_args=self.base_config['env_args'],
                                         n_agents=self.base_config['n_agents'])
 
         elif self.base_config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
 
             self.env = GymWrapper(train_mode=False,
-                                  env_name=self.base_config['build_path'],
+                                  env_name=self.base_config['env_name'],
+                                  render=self.render,
                                   n_agents=self.base_config['n_agents'])
+
+        elif self.base_config['env_type'] == 'DM_CONTROL':
+            from algorithm.env_wrapper.dm_control_wrapper import DMControlWrapper
+
+            self.env = DMControlWrapper(train_mode=False,
+                                        env_name=self.base_config['env_name'],
+                                        render=self.render,
+                                        n_agents=self.base_config['n_agents'])
+
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
         self.obs_shapes, self.d_action_size, self.c_action_size = self.env.init()
         self.action_size = self.d_action_size + self.c_action_size
 
-        self._logger.info(f'{self.base_config["build_path"]} initialized')
+        self._logger.info(f'{self.base_config["env_name"]} initialized')
 
     def _init_sac(self, config_abs_dir: Path):
         # If nn model exists, load saved model, or copy a new one
@@ -430,6 +445,9 @@ class Learner:
 
                     next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
                                                                                    action[..., self.d_action_size:])
+
+                    if next_obs_list is None:
+                        raise UselessEpisodeException()
 
                     if step == self.base_config['max_step_each_iter']:
                         local_done = [True] * len(agents)

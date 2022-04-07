@@ -29,11 +29,12 @@ if __name__ == '__main__':
     parser.add_argument('--learner_port', type=int, help='learner port')
 
     parser.add_argument('--render', action='store_true', help='render')
-    parser.add_argument('--editor', action='store_true', help='running in Unity Editor')
-    parser.add_argument('--additional_args', help='additional args for Unity')
-    parser.add_argument('--build_port', '-p', type=int, default=5005, help='communication port')
+    parser.add_argument('--additional_args', help='additional args for environments')
     parser.add_argument('--agents', type=int, help='number of agents')
 
+    parser.add_argument('--build_port', '-p', type=int, default=5005, help='UNITY: communication port')
+    parser.add_argument('--editor', action='store_true', help='UNITY: running in Unity Editor')
+    
     parser.add_argument('--name', '-n', help='training name')
     parser.add_argument('--nn', help='neural network model')
     parser.add_argument('--device', help='cpu or gpu')

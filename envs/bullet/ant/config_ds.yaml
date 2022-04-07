@@ -1,9 +1,7 @@
 default:
   base_config:
     env_type: GYM
-    scene: AntBullet
-
-    build_path: "AntBulletEnv-v0"
+    env_name: AntBulletEnv-v0
 
     noise_increasing_rate: 0.01
 
