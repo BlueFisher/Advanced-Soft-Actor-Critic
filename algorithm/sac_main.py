@@ -56,8 +56,8 @@ class Main(object):
 
         if args.name is not None:
             config['base_config']['name'] = args.name
-        if args.additional_args is not None:
-            config['base_config']['env_args'] = args.additional_args
+        if args.env_args is not None:
+            config['base_config']['env_args'] = args.env_args
         if args.port is not None:
             config['base_config']['unity_args']['port'] = args.port
 

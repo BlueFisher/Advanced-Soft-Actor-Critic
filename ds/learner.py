@@ -114,8 +114,8 @@ class Learner:
     def _init_config(self, _id, root_dir, config, args):
         if args.name is not None:
             config['base_config']['name'] = args.name
-        if args.additional_args is not None:
-            config['base_config']['env_args'] = args.additional_args
+        if args.env_args is not None:
+            config['base_config']['env_args'] = args.env_args
         if args.build_port is not None:
             config['base_config']['unity_args']['build_port'] = args.build_port
 
