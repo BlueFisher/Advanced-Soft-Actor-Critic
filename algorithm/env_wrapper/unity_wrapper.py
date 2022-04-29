@@ -83,7 +83,9 @@ class UnityWrapperProcess:
             time_scale=20 if train_mode else 1)
 
         self._env.reset()
-        self.bahavior_name = list(self._env.behavior_specs)[0]
+        bahavior_names = list(self._env.behavior_specs)
+        assert len(bahavior_names) == 1
+        self.bahavior_name = bahavior_names[0]
 
         if conn:
             try:

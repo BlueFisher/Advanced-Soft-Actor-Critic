@@ -17,13 +17,12 @@ class ModelRep(m.ModelBaseRNNRep):
         assert self.obs_shapes[2] == (6,)  # vector
 
         self.ray_random = ray_random
-        self.need_speed = need_speed
         if blur != 0:
             self.blurrer = m.Transform(T.GaussianBlur(blur, sigma=blur))
         else:
             self.blurrer = None
-
         self.brightness = m.Transform(T.ColorJitter(brightness=(brightness, brightness)))
+        self.need_speed = need_speed
 
         self.ray_index = generate_unity_to_nn_ray_index(RAY_SIZE)
         # self._ray_visual = RayVisual()

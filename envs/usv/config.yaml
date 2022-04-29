@@ -7,7 +7,7 @@ default:
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
       no_graphics: false
 
-    n_agents: 10
+    n_agents: 50
     reset_on_iteration: false
 
   reset_config:
@@ -16,268 +16,4561 @@ default:
     bounding_box_random: 0
     semantic_segmentation_random: 0
 
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1
+      need_speed: true
+
   sac_config:
-    write_summary_per_step: 1000
+    write_summary_per_step: 500 # Write summaries in TensorBoard every N steps
+    save_model_per_step: 10000 # Save model every N steps
 
     n_step: 3
     burn_in_step: 10
     seq_encoder: RNN
+
     use_rnd: true
     rnd_n_sample: 50
 
-br0sr0:
+atc:
+  base_config:
+    name: "atc_{time}"
+  sac_config:
+    siamese: ATC
+
+byol:
+  base_config:
+    name: "byol_{time}"
+  sac_config:
+    siamese: BYOL
+
+atc_q:
+  base_config:
+    name: "atc_q_{time}"
+  sac_config:
+    siamese: ATC
+    siamese_use_q: true
+
+byol_q:
+  base_config:
+    name: "byol_q_{time}"
+  sac_config:
+    siamese: BYOL
+    siamese_use_q: true
+
+atc_q_ada:
+  base_config:
+    name: "atc_q_ada_{time}"
+  sac_config:
+    siamese: ATC
+    siamese_use_q: true
+    siamese_use_adaptive: true
+
+byol_q_ada:
+  base_config:
+    name: "byol_q_ada_{time}"
+  sac_config:
+    siamese: BYOL
+    siamese_use_q: true
+    siamese_use_adaptive: true
+
+blur_0_brightness_0.2_bbox_0_ss_0:
   reset_config:
     bounding_box_random: 0
     semantic_segmentation_random: 0
-br0sr2:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_0_ss_2:
   reset_config:
     bounding_box_random: 0
     semantic_segmentation_random: 2
-br0sr4:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_0_ss_6:
   reset_config:
     bounding_box_random: 0
-    semantic_segmentation_random: 4
-br0sr6:
-  reset_config:
-    bounding_box_random: 0
     semantic_segmentation_random: 6
-br0sr8:
-  reset_config:
-    bounding_box_random: 0
-    semantic_segmentation_random: 8
-br0sr10:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_0_ss_10:
   reset_config:
     bounding_box_random: 0
     semantic_segmentation_random: 10
-br0sr12:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_0_ss_14:
   reset_config:
     bounding_box_random: 0
-    semantic_segmentation_random: 12
-br0sr14:
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.2_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.2
+
+blur_0_brightness_0.4_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_0_ss_14:
   reset_config:
     bounding_box_random: 0
     semantic_segmentation_random: 14
-br2sr0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_2_ss_0:
   reset_config:
     bounding_box_random: 2
     semantic_segmentation_random: 0
-br2sr2:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_2_ss_2:
   reset_config:
     bounding_box_random: 2
     semantic_segmentation_random: 2
-br2sr4:
-  reset_config:
-    bounding_box_random: 2
-    semantic_segmentation_random: 4
-br2sr6:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_2_ss_6:
   reset_config:
     bounding_box_random: 2
     semantic_segmentation_random: 6
-br2sr8:
-  reset_config:
-    bounding_box_random: 2
-    semantic_segmentation_random: 8
-br2sr10:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_2_ss_10:
   reset_config:
     bounding_box_random: 2
     semantic_segmentation_random: 10
-br2sr12:
-  reset_config:
-    bounding_box_random: 2
-    semantic_segmentation_random: 12
-br2sr14:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_2_ss_14:
   reset_config:
     bounding_box_random: 2
     semantic_segmentation_random: 14
-br4sr0:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 0
-br4sr2:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 2
-br4sr4:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 4
-br4sr6:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 6
-br4sr8:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 8
-br4sr10:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 10
-br4sr12:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 12
-br4sr14:
-  reset_config:
-    bounding_box_random: 4
-    semantic_segmentation_random: 14
-br6sr0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_6_ss_0:
   reset_config:
     bounding_box_random: 6
     semantic_segmentation_random: 0
-br6sr2:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_6_ss_2:
   reset_config:
     bounding_box_random: 6
     semantic_segmentation_random: 2
-br6sr4:
-  reset_config:
-    bounding_box_random: 6
-    semantic_segmentation_random: 4
-br6sr6:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_6_ss_6:
   reset_config:
     bounding_box_random: 6
     semantic_segmentation_random: 6
-br6sr8:
-  reset_config:
-    bounding_box_random: 6
-    semantic_segmentation_random: 8
-br6sr10:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_6_ss_10:
   reset_config:
     bounding_box_random: 6
     semantic_segmentation_random: 10
-br6sr12:
-  reset_config:
-    bounding_box_random: 6
-    semantic_segmentation_random: 12
-br6sr14:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_6_ss_14:
   reset_config:
     bounding_box_random: 6
     semantic_segmentation_random: 14
-br8sr0:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 0
-br8sr2:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 2
-br8sr4:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 4
-br8sr6:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 6
-br8sr8:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 8
-br8sr10:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 10
-br8sr12:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 12
-br8sr14:
-  reset_config:
-    bounding_box_random: 8
-    semantic_segmentation_random: 14
-br10sr0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_10_ss_0:
   reset_config:
     bounding_box_random: 10
     semantic_segmentation_random: 0
-br10sr2:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_10_ss_2:
   reset_config:
     bounding_box_random: 10
     semantic_segmentation_random: 2
-br10sr4:
-  reset_config:
-    bounding_box_random: 10
-    semantic_segmentation_random: 4
-br10sr6:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_10_ss_6:
   reset_config:
     bounding_box_random: 10
     semantic_segmentation_random: 6
-br10sr8:
-  reset_config:
-    bounding_box_random: 10
-    semantic_segmentation_random: 8
-br10sr10:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_10_ss_10:
   reset_config:
     bounding_box_random: 10
     semantic_segmentation_random: 10
-br10sr12:
-  reset_config:
-    bounding_box_random: 10
-    semantic_segmentation_random: 12
-br10sr14:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_10_ss_14:
   reset_config:
     bounding_box_random: 10
     semantic_segmentation_random: 14
-br12sr0:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 0
-br12sr2:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 2
-br12sr4:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 4
-br12sr6:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 6
-br12sr8:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 8
-br12sr10:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 10
-br12sr12:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 12
-br12sr14:
-  reset_config:
-    bounding_box_random: 12
-    semantic_segmentation_random: 14
-br14sr0:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_14_ss_0:
   reset_config:
     bounding_box_random: 14
     semantic_segmentation_random: 0
-br14sr2:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_14_ss_2:
   reset_config:
     bounding_box_random: 14
     semantic_segmentation_random: 2
-br14sr4:
-  reset_config:
-    bounding_box_random: 14
-    semantic_segmentation_random: 4
-br14sr6:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_14_ss_6:
   reset_config:
     bounding_box_random: 14
     semantic_segmentation_random: 6
-br14sr8:
-  reset_config:
-    bounding_box_random: 14
-    semantic_segmentation_random: 8
-br14sr10:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_14_ss_10:
   reset_config:
     bounding_box_random: 14
     semantic_segmentation_random: 10
-br14sr12:
-  reset_config:
-    bounding_box_random: 14
-    semantic_segmentation_random: 12
-br14sr14:
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.4_bbox_14_ss_14:
   reset_config:
     bounding_box_random: 14
     semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.4
+
+blur_0_brightness_0.6_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.6_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.6
+
+blur_0_brightness_0.8_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_0.8_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 0.8
+
+blur_0_brightness_1.0_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_0_brightness_1.0_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 0
+      brightness: 1.0
+
+blur_3_brightness_0.2_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.2_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.2
+
+blur_3_brightness_0.4_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.4_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.4
+
+blur_3_brightness_0.6_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.6_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.6
+
+blur_3_brightness_0.8_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_0.8_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 0.8
+
+blur_3_brightness_1.0_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_3_brightness_1.0_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 3
+      brightness: 1.0
+
+blur_5_brightness_0.2_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.2_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.2
+
+blur_5_brightness_0.4_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.4_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.4
+
+blur_5_brightness_0.6_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.6_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.6
+
+blur_5_brightness_0.8_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_0.8_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 0.8
+
+blur_5_brightness_1.0_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_5_brightness_1.0_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 5
+      brightness: 1.0
+
+blur_7_brightness_0.2_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.2_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.2
+
+blur_7_brightness_0.4_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.4_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.4
+
+blur_7_brightness_0.6_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.6_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.6
+
+blur_7_brightness_0.8_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_0.8_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 0.8
+
+blur_7_brightness_1.0_bbox_0_ss_0:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_0_ss_2:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_0_ss_6:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_0_ss_10:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_0_ss_14:
+  reset_config:
+    bounding_box_random: 0
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_2_ss_0:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_2_ss_2:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_2_ss_6:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_2_ss_10:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_2_ss_14:
+  reset_config:
+    bounding_box_random: 2
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_6_ss_0:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_6_ss_2:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_6_ss_6:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_6_ss_10:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_6_ss_14:
+  reset_config:
+    bounding_box_random: 6
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_10_ss_0:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_10_ss_2:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_10_ss_6:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_10_ss_10:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_10_ss_14:
+  reset_config:
+    bounding_box_random: 10
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_14_ss_0:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 0
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_14_ss_2:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 2
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_14_ss_6:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 6
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_14_ss_10:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 10
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
+
+blur_7_brightness_1.0_bbox_14_ss_14:
+  reset_config:
+    bounding_box_random: 14
+    semantic_segmentation_random: 14
+  model_config:
+    rep:
+      blur: 7
+      brightness: 1.0
