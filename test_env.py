@@ -1,4 +1,5 @@
 import argparse
+import enum
 import logging
 import sys
 import time
@@ -43,6 +44,7 @@ class Main(object):
         self.run_in_editor = args.editor
 
         self.save_image = args.save_image
+        self.save_standalone = args.save_standalone
 
         if args.env_args is not None:
             config['base_config']['env_args'] = args.env_args
@@ -191,13 +193,18 @@ class Main(object):
                             for i, ep_obses in enumerate(ep_obses_list):
                                 ep_obses = ep_obses[0]
                                 if len(ep_obses.shape) > 2:
-                                    img = Image.fromarray(np.uint8(ep_obses[0] * 255))
-                                    self._logger.info(f'Saved {img_save_index}-{i}')
-                                    img.save(self.model_abs_dir.joinpath(f'{img_save_index}-{i}.gif'),
-                                             save_all=True,
-                                             append_images=[Image.fromarray(np.uint8(o * 255)) for o in ep_obses[1:]])
+                                    if self.save_standalone:
+                                        for j, obs in enumerate(ep_obses):
+                                            img = Image.fromarray(np.uint8(obs * 255))
+                                            img.save(self.model_abs_dir.joinpath(f'{img_save_index}-{i}-{j}.png'))
+                                    else:
+                                        img = Image.fromarray(np.uint8(ep_obses[0] * 255))
+                                        self._logger.info(f'Saved {img_save_index}-{i}')
+                                        img.save(self.model_abs_dir.joinpath(f'{img_save_index}-{i}.gif'),
+                                                save_all=True,
+                                                append_images=[Image.fromarray(np.uint8(o * 255)) for o in ep_obses[1:]])
 
-                        img_save_index += 1
+                            img_save_index += 1
 
                     obs_list = next_obs_list
 
@@ -228,6 +235,7 @@ if __name__ == '__main__':
     parser.add_argument('--agents', type=int, help='number of agents')
 
     parser.add_argument('--save_image', action='store_true')
+    parser.add_argument('--save_standalone', action='store_true')
     args = parser.parse_args()
 
     root_dir = Path(__file__).resolve().parent
