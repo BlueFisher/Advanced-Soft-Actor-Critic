@@ -203,28 +203,28 @@ class Main(object):
         iteration = 0
         trained_steps = 0
 
-        while iteration != self.base_config['max_iter']:
-            if self.base_config['max_step'] != -1 and trained_steps >= self.base_config['max_step']:
-                break
+        try:
+            while iteration != self.base_config['max_iter']:
+                if self.base_config['max_step'] != -1 and trained_steps >= self.base_config['max_step']:
+                    break
 
-            if self.base_config['reset_on_iteration'] \
-                    or any([any([a.max_reached for a in agents]) for agents in ma_agents.values()]) \
-                    or force_reset:
-                ma_obs_list = self.env.reset(reset_config=self.reset_config)
-                for agents in ma_agents.values():
-                    for agent in agents:
-                        agent.clear()
+                if self.base_config['reset_on_iteration'] \
+                        or any([any([a.max_reached for a in agents]) for agents in ma_agents.values()]) \
+                        or force_reset:
+                    ma_obs_list = self.env.reset(reset_config=self.reset_config)
+                    for agents in ma_agents.values():
+                        for agent in agents:
+                            agent.clear()
 
-                force_reset = False
-            else:
-                for agents in ma_agents.values():
-                    for agent in agents:
-                        agent.reset()
+                    force_reset = False
+                else:
+                    for agents in ma_agents.values():
+                        for agent in agents:
+                            agent.reset()
 
-            step = 0
-            iter_time = time.time()
+                step = 0
+                iter_time = time.time()
 
-            try:
                 while not all([all([a.done for a in agents]) for agents in ma_agents.values()]):
                     ma_action = {}
                     ma_prob = {}
@@ -344,28 +344,25 @@ class Main(object):
 
                     step += 1
 
-            except:
-                self._logger.error(traceback.format_exc())
-                self._logger.error('Exiting...')
-                break
+                if self.train_mode:
+                    self._log_episode_summaries(ma_agents)
 
+                self._log_episode_info(iteration, time.time() - iter_time, ma_agents)
+
+                p = self.model_abs_dir.joinpath('save_model')
+                if self.train_mode and p.exists():
+                    self.sac.save_model()
+                    p.unlink()
+
+                iteration += 1
+
+        finally:
             if self.train_mode:
-                self._log_episode_summaries(ma_agents)
-
-            self._log_episode_info(iteration, time.time() - iter_time, ma_agents)
-
-            p = self.model_abs_dir.joinpath('save_model')
-            if self.train_mode and p.exists():
                 for sac in self.ma_sac.values():
                     sac.save_model()
-                p.unlink()
+            self.env.close()
 
-            iteration += 1
-
-        if self.train_mode:
-            for sac in self.ma_sac.values():
-                sac.save_model()
-        self.env.close()
+            self._logger.info('Training terminated')
 
     def _log_episode_summaries(self, ma_agents):
         for n, agents in ma_agents.items():
