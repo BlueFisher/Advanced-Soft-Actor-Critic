@@ -538,7 +538,9 @@ class SAC_Base(object):
         return self.global_step.item()
 
     def get_initial_action(self, batch_size):
-        return np.zeros([batch_size, self.d_action_size + self.c_action_size], dtype=np.float32)
+        d_action = np.eye(self.d_action_size)[np.random.rand(batch_size, self.d_action_size).argmax(axis=-1)].astype(np.float32)
+        c_action = np.zeros([batch_size, self.c_action_size], dtype=np.float32)
+        return np.concatenate([d_action, c_action], axis=-1)
 
     def get_initial_seq_hidden_state(self, batch_size, get_numpy=True):
         assert self.seq_encoder is not None
