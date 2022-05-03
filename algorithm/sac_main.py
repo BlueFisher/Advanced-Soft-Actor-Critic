@@ -120,18 +120,25 @@ class Main(object):
                                   n_agents=self.base_config['n_agents'])
 
         elif self.base_config['env_type'] == 'DM_CONTROL':
-            from algorithm.env_wrapper.dm_control_wrapper import DMControlWrapper
+            from algorithm.env_wrapper.dm_control_wrapper import \
+                DMControlWrapper
 
             self.env = DMControlWrapper(train_mode=self.train_mode,
                                         env_name=self.base_config['env_name'],
                                         render=self.render,
                                         n_agents=self.base_config['n_agents'])
 
+        elif self.base_config['env_type'] == 'TEST':
+            from algorithm.env_wrapper.test_wrapper import TestWrapper
+
+            self.env = TestWrapper(env_args=self.base_config['env_args'],
+                                   n_agents=self.base_config['n_agents'])
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
-        self.obs_shapes, self.d_action_size, self.c_action_size = self.env.init()
-        self.action_size = self.d_action_size + self.c_action_size
+        self.ma_obs_shapes, self.ma_d_action_size, self.ma_c_action_size = self.env.init()
+        self.ma_names = list(self.ma_obs_shapes.keys())
+        self.ma_action_size = {n: self.ma_d_action_size[n] + self.ma_c_action_size[n] for n in self.ma_names}
 
         self._logger.info(f'{self.base_config["env_name"]} initialized')
 
@@ -151,34 +158,40 @@ class Main(object):
         custom_nn_model = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(custom_nn_model)
 
-        self.sac = SAC_Base(obs_shapes=self.obs_shapes,
-                            d_action_size=self.d_action_size,
-                            c_action_size=self.c_action_size,
-                            model_abs_dir=self.model_abs_dir,
-                            model=custom_nn_model,
-                            model_config=self.model_config,
-                            device=self.device,
-                            train_mode=self.train_mode,
-                            last_ckpt=self.last_ckpt,
+        self.ma_sac = {n: SAC_Base(obs_shapes=self.ma_obs_shapes[n],
+                                   d_action_size=self.ma_d_action_size[n],
+                                   c_action_size=self.ma_c_action_size[n],
+                                   model_abs_dir=self.model_abs_dir,
+                                   model=custom_nn_model,
+                                   model_config=self.model_config,
+                                   device=self.device,
+                                   train_mode=self.train_mode,
+                                   last_ckpt=self.last_ckpt,
 
-                            replay_config=self.replay_config,
+                                   replay_config=self.replay_config,
 
-                            **self.sac_config)
+                                   **self.sac_config) for n in self.ma_names}
 
     def _run(self):
         num_agents = self.base_config['n_agents']
-        seq_encoder = self.sac.seq_encoder
+        ma_seq_encoder = {n: sac.seq_encoder for n, sac in self.ma_sac.items()}
 
-        obs_list = self.env.reset(reset_config=self.reset_config)
-        initial_pre_action = self.sac.get_initial_action(num_agents)  # [n_agents, action_size]
-        pre_action = initial_pre_action
-        if seq_encoder is not None:
-            initial_seq_hidden_state = self.sac.get_initial_seq_hidden_state(num_agents)  # [n_agents, *seq_hidden_state_shape]
-            seq_hidden_state = initial_seq_hidden_state
+        ma_obs_list = self.env.reset(reset_config=self.reset_config)
 
-        agents = [self._agent_class(i, self.obs_shapes, self.action_size,
-                                    seq_hidden_state_shape=self.sac.seq_hidden_state_shape if seq_encoder is not None else None)
-                  for i in range(num_agents)]
+        ma_initial_pre_action = {n: sac.get_initial_action(num_agents) for n, sac in self.ma_sac.items()}  # [n_agents, action_size]
+        ma_pre_action = ma_initial_pre_action
+        ma_initial_seq_hidden_state = {}
+        ma_seq_hidden_state = {}
+        for n, sac in self.ma_sac.items():
+            if ma_seq_encoder[n] is not None:
+                ma_initial_seq_hidden_state[n] = sac.get_initial_seq_hidden_state(num_agents)  # [n_agents, *seq_hidden_state_shape]
+                ma_seq_hidden_state[n] = ma_initial_seq_hidden_state[n]
+
+        ma_agents = {n: [self._agent_class(i, self.ma_obs_shapes[n], self.ma_action_size[n],
+                                           seq_hidden_state_shape=self.ma_sac[n].seq_hidden_state_shape
+                                           if ma_seq_encoder[n] is not None else None)
+                         for i in range(num_agents)]
+                     for n in self.ma_names}
 
         force_reset = False
         iteration = 0
@@ -188,123 +201,140 @@ class Main(object):
             if self.base_config['max_step'] != -1 and trained_steps >= self.base_config['max_step']:
                 break
 
-            if self.base_config['reset_on_iteration'] or any([a.max_reached for a in agents]) or force_reset:
-                obs_list = self.env.reset(reset_config=self.reset_config)
-                for agent in agents:
-                    agent.clear()
+            if self.base_config['reset_on_iteration'] \
+                    or any([any([a.max_reached for a in agents]) for agents in ma_agents.values()]) \
+                    or force_reset:
+                ma_obs_list = self.env.reset(reset_config=self.reset_config)
+                for agents in ma_agents.values():
+                    for agent in agents:
+                        agent.clear()
 
                 force_reset = False
             else:
-                for agent in agents:
-                    agent.reset()
+                for agents in ma_agents.values():
+                    for agent in agents:
+                        agent.reset()
 
             step = 0
             iter_time = time.time()
 
             try:
-                while not all([a.done for a in agents]):
-                    # burn-in padding
-                    for agent in [a for a in agents if a.is_empty()]:
-                        for _ in range(self.sac.burn_in_step):
-                            agent.add_transition(
-                                obs_list=[np.zeros(t, dtype=np.float32) for t in self.obs_shapes],
-                                action=initial_pre_action[0],
-                                reward=0.,
-                                local_done=False,
-                                max_reached=False,
-                                next_obs_list=[np.zeros(t, dtype=np.float32) for t in self.obs_shapes],
-                                prob=0.,
-                                is_padding=True,
-                                seq_hidden_state=initial_seq_hidden_state[0]
-                            )
+                while not all([all([a.done for a in agents]) for agents in ma_agents.values()]):
+                    ma_action = {}
+                    ma_prob = {}
+                    ma_next_seq_hidden_state = {}
 
-                    if seq_encoder == SEQ_ENCODER.RNN:
-                        action, prob, next_seq_hidden_state = self.sac.choose_rnn_action(obs_list,
-                                                                                         pre_action,
-                                                                                         seq_hidden_state,
-                                                                                         disable_sample=self.disable_sample)
+                    for n, agents in ma_agents.items():
+                        # burn-in padding
+                        for agent in [a for a in agents if a.is_empty()]:
+                            for _ in range(self.ma_sac[n].burn_in_step):
+                                agent.add_transition(
+                                    obs_list=[np.zeros(t, dtype=np.float32) for t in self.ma_obs_shapes[n]],
+                                    action=ma_initial_pre_action[n][0],
+                                    reward=0.,
+                                    local_done=False,
+                                    max_reached=False,
+                                    next_obs_list=[np.zeros(t, dtype=np.float32) for t in self.ma_obs_shapes[n]],
+                                    prob=0.,
+                                    is_padding=True,
+                                    seq_hidden_state=ma_initial_seq_hidden_state[n][0]
+                                )
 
-                    elif seq_encoder == SEQ_ENCODER.ATTN:
-                        ep_length = min(512, max([a.episode_length for a in agents]))
+                        if ma_seq_encoder[n] == SEQ_ENCODER.RNN:
+                            action, prob, next_seq_hidden_state = self.ma_sac[n].choose_rnn_action(ma_obs_list[n],
+                                                                                                   ma_pre_action[n],
+                                                                                                   ma_seq_hidden_state[n],
+                                                                                                   disable_sample=self.disable_sample)
 
-                        all_episode_trans = [a.get_episode_trans(ep_length) for a in agents]
-                        (all_ep_indexes,
-                            all_ep_padding_masks,
-                            all_ep_obses_list,
-                            all_ep_actions,
-                            all_all_ep_rewards,
-                            all_next_obs_list,
-                            all_ep_dones,
-                            all_ep_probs,
-                            all_ep_attn_states) = zip(*all_episode_trans)
+                        elif ma_seq_encoder[n] == SEQ_ENCODER.ATTN:
+                            ep_length = min(512, max([a.episode_length for a in agents]))
 
-                        ep_indexes = np.concatenate(all_ep_indexes)
-                        ep_padding_masks = np.concatenate(all_ep_padding_masks)
-                        ep_obses_list = [np.concatenate(o) for o in zip(*all_ep_obses_list)]
-                        ep_actions = np.concatenate(all_ep_actions)
-                        ep_attn_states = np.concatenate(all_ep_attn_states)
+                            all_episode_trans = [a.get_episode_trans(ep_length) for a in agents]
+                            (all_ep_indexes,
+                             all_ep_padding_masks,
+                             all_ep_obses_list,
+                             all_ep_actions,
+                             all_all_ep_rewards,
+                             all_next_obs_list,
+                             all_ep_dones,
+                             all_ep_probs,
+                             all_ep_attn_states) = zip(*all_episode_trans)
 
-                        ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
-                        ep_padding_masks = np.concatenate([ep_padding_masks,
-                                                           np.zeros_like(ep_padding_masks[:, -1:], dtype=bool)], axis=1)
-                        ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
-                                         for o, t_o in zip(ep_obses_list, obs_list)]
-                        ep_pre_actions = gen_pre_n_actions(ep_actions, True)
+                            ep_indexes = np.concatenate(all_ep_indexes)
+                            ep_padding_masks = np.concatenate(all_ep_padding_masks)
+                            ep_obses_list = [np.concatenate(o) for o in zip(*all_ep_obses_list)]
+                            ep_actions = np.concatenate(all_ep_actions)
+                            ep_attn_states = np.concatenate(all_ep_attn_states)
 
-                        action, prob, next_seq_hidden_state = self.sac.choose_attn_action(ep_indexes,
-                                                                                          ep_padding_masks,
-                                                                                          ep_obses_list,
-                                                                                          ep_pre_actions,
-                                                                                          ep_attn_states,
-                                                                                          disable_sample=self.disable_sample)
-                    else:
-                        action, prob = self.sac.choose_action(obs_list,
-                                                              disable_sample=self.disable_sample)
+                            ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
+                            ep_padding_masks = np.concatenate([ep_padding_masks,
+                                                               np.zeros_like(ep_padding_masks[:, -1:], dtype=bool)], axis=1)
+                            ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
+                                             for o, t_o in zip(ep_obses_list, ma_obs_list[n])]
+                            ep_pre_actions = gen_pre_n_actions(ep_actions, True)
 
-                    next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
-                                                                                   action[..., self.d_action_size:])
+                            action, prob, next_seq_hidden_state = self.ma_sac[n].choose_attn_action(ep_indexes,
+                                                                                                    ep_padding_masks,
+                                                                                                    ep_obses_list,
+                                                                                                    ep_pre_actions,
+                                                                                                    ep_attn_states,
+                                                                                                    disable_sample=self.disable_sample)
+                        else:
+                            action, prob = self.ma_sac[n].choose_action(ma_obs_list[n],
+                                                                        disable_sample=self.disable_sample)
+                            next_seq_hidden_state = None
 
-                    if next_obs_list is None:
+                        ma_action[n] = action
+                        ma_prob[n] = prob
+                        ma_next_seq_hidden_state[n] = next_seq_hidden_state
+
+                    (ma_next_obs_list,
+                     ma_reward,
+                     ma_local_done,
+                     ma_max_reached) = self.env.step({n: action[..., :self.ma_d_action_size[n]] for n, action in ma_action.items()},
+                                                     {n: action[..., self.ma_d_action_size[n]:] for n, action in ma_action.items()})
+
+                    if ma_next_obs_list is None:
                         force_reset = True
 
                         self._logger.warning('Step encounters error, episode ignored')
                         continue
 
-                    if step == self.base_config['max_step_each_iter']:
-                        local_done = [True] * len(agents)
-                        max_reached = [True] * len(agents)
+                    for n, agents in ma_agents.items():
+                        if step == self.base_config['max_step_each_iter']:
+                            ma_local_done[n] = [True] * len(agents)
+                            ma_max_reached[n] = [True] * len(agents)
 
-                    episode_trans_list = [
-                        agents[i].add_transition(
-                            obs_list=[o[i] for o in obs_list],
-                            action=action[i],
-                            reward=reward[i],
-                            local_done=local_done[i],
-                            max_reached=max_reached[i],
-                            next_obs_list=[o[i] for o in next_obs_list],
-                            prob=prob[i],
-                            is_padding=False,
-                            seq_hidden_state=seq_hidden_state[i] if seq_encoder is not None else None,
-                        )
-                        for i in range(len(agents))
-                    ]
+                        episode_trans_list = [
+                            agents[i].add_transition(
+                                obs_list=[o[i] for o in ma_obs_list[n]],
+                                action=ma_action[n][i],
+                                reward=ma_reward[n][i],
+                                local_done=ma_local_done[n][i],
+                                max_reached=ma_max_reached[n][i],
+                                next_obs_list=[o[i] for o in ma_next_obs_list[n]],
+                                prob=ma_prob[n][i],
+                                is_padding=False,
+                                seq_hidden_state=ma_seq_hidden_state[n][i] if ma_seq_encoder[n] is not None else None,
+                            ) for i in range(len(agents))
+                        ]
 
-                    if self.train_mode:
-                        episode_trans_list = [t for t in episode_trans_list if t is not None]
-                        if len(episode_trans_list) != 0:
-                            # ep_indexes, ep_padding_masks,
-                            # ep_obses_list, ep_actions, ep_rewards, next_obs_list, ep_dones, ep_probs,
-                            # ep_seq_hidden_states
-                            for episode_trans in episode_trans_list:
-                                self.sac.put_episode(*episode_trans)
-                        trained_steps = self.sac.train()
+                        if self.train_mode:
+                            episode_trans_list = [t for t in episode_trans_list if t is not None]
+                            if len(episode_trans_list) != 0:
+                                # ep_indexes, ep_padding_masks,
+                                # ep_obses_list, ep_actions, ep_rewards, next_obs_list, ep_dones, ep_probs,
+                                # ep_seq_hidden_states
+                                for episode_trans in episode_trans_list:
+                                    self.ma_sac[n].put_episode(*episode_trans)
+                            trained_steps = self.ma_sac[n].train()
 
-                    obs_list = next_obs_list
-                    pre_action = action
-                    pre_action[local_done] = initial_pre_action[local_done]
-                    if seq_encoder is not None:
-                        seq_hidden_state = next_seq_hidden_state
-                        seq_hidden_state[local_done] = initial_seq_hidden_state[local_done]
+                        ma_obs_list[n] = ma_next_obs_list[n]
+                        ma_pre_action[n] = ma_action[n]
+                        ma_pre_action[n][ma_local_done[n]] = ma_initial_pre_action[n][ma_local_done[n]]
+                        if ma_seq_encoder[n] is not None:
+                            ma_seq_hidden_state[n] = ma_next_seq_hidden_state[n]
+                            ma_seq_hidden_state[n][ma_local_done[n]] = ma_initial_seq_hidden_state[n][ma_local_done[n]]
 
                     step += 1
 
@@ -314,32 +344,36 @@ class Main(object):
                 break
 
             if self.train_mode:
-                self._log_episode_summaries(agents)
+                self._log_episode_summaries(ma_agents)
 
-            self._log_episode_info(iteration, time.time() - iter_time, agents)
+            self._log_episode_info(iteration, time.time() - iter_time, ma_agents)
 
             p = self.model_abs_dir.joinpath('save_model')
             if self.train_mode and p.exists():
-                self.sac.save_model()
+                for sac in self.ma_sac.values():
+                    sac.save_model()
                 p.unlink()
 
             iteration += 1
 
         if self.train_mode:
-            self.sac.save_model()
+            for sac in self.ma_sac.values():
+                sac.save_model()
         self.env.close()
 
-    def _log_episode_summaries(self, agents):
-        rewards = np.array([a.reward for a in agents])
-        self.sac.write_constant_summaries([
-            {'tag': 'reward/mean', 'simple_value': rewards.mean()},
-            {'tag': 'reward/max', 'simple_value': rewards.max()},
-            {'tag': 'reward/min', 'simple_value': rewards.min()}
-        ])
+    def _log_episode_summaries(self, ma_agents):
+        for n, agents in ma_agents.items():
+            rewards = np.array([a.reward for a in agents])
+            self.ma_sac[n].write_constant_summaries([
+                {'tag': 'reward/mean', 'simple_value': rewards.mean()},
+                {'tag': 'reward/max', 'simple_value': rewards.max()},
+                {'tag': 'reward/min', 'simple_value': rewards.min()}
+            ])
 
-    def _log_episode_info(self, iteration, iter_time, agents):
-        global_step = format_global_step(self.sac.get_global_step())
-        rewards = [a.reward for a in agents]
-        rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        max_step = max([a.steps for a in agents])
-        self._logger.info(f'{iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}')
+    def _log_episode_info(self, iteration, iter_time, ma_agents):
+        for n, agents in ma_agents.items():
+            global_step = format_global_step(self.ma_sac[n].get_global_step())
+            rewards = [a.reward for a in agents]
+            rewards = ", ".join([f"{i:6.1f}" for i in rewards])
+            max_step = max([a.steps for a in agents])
+            self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}')

@@ -180,7 +180,8 @@ class Actor(object):
                                   n_agents=self.base_config['n_agents'])
 
         elif self.base_config['env_type'] == 'DM_CONTROL':
-            from algorithm.env_wrapper.dm_control_wrapper import DMControlWrapper
+            from algorithm.env_wrapper.dm_control_wrapper import \
+                DMControlWrapper
 
             self.env = DMControlWrapper(env_name=self.base_config['env_name'],
                                         n_agents=self.base_config['n_agents'])
