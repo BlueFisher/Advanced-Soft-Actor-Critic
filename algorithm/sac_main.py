@@ -158,19 +158,25 @@ class Main(object):
         custom_nn_model = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(custom_nn_model)
 
-        self.ma_sac = {n: SAC_Base(obs_shapes=self.ma_obs_shapes[n],
-                                   d_action_size=self.ma_d_action_size[n],
-                                   c_action_size=self.ma_c_action_size[n],
-                                   model_abs_dir=self.model_abs_dir,
-                                   model=custom_nn_model,
-                                   model_config=self.model_config,
-                                   device=self.device,
-                                   train_mode=self.train_mode,
-                                   last_ckpt=self.last_ckpt,
+        self.ma_sac = {}
 
-                                   replay_config=self.replay_config,
+        for i, n in enumerate(self.ma_names):
+            model_abs_dir = self.model_abs_dir
+            if len(self.ma_names) > 1:
+                model_abs_dir = model_abs_dir / str(i)
+            self.ma_sac[n] = SAC_Base(obs_shapes=self.ma_obs_shapes[n],
+                                      d_action_size=self.ma_d_action_size[n],
+                                      c_action_size=self.ma_c_action_size[n],
+                                      model_abs_dir=model_abs_dir,
+                                      model=custom_nn_model,
+                                      model_config=self.model_config,
+                                      device=self.device,
+                                      train_mode=self.train_mode,
+                                      last_ckpt=self.last_ckpt,
 
-                                   **self.sac_config) for n in self.ma_names}
+                                      replay_config=self.replay_config,
+
+                                      **self.sac_config)
 
     def _run(self):
         num_agents = self.base_config['n_agents']
