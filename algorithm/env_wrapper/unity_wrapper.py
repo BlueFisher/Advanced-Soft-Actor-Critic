@@ -325,9 +325,9 @@ class UnityWrapper:
     def init(self):
         """
         Returns:
-            observation shapes: tuple[(o1, ), (o2, ), (o3_1, o3_2, o3_3), ...]
-            discrete action size: int, sum of all action branches
-            continuous action size: int
+            observation shapes: dict[str, tuple[(o1, ), (o2, ), (o3_1, o3_2, o3_3), ...]]
+            discrete action size: dict[str, int], sum of all action branches
+            continuous action size: dict[str, int]
         """
         if self._seq_envs:
             for env in self._envs:
@@ -344,7 +344,7 @@ class UnityWrapper:
     def reset(self, reset_config=None):
         """
         return:
-            observations: list[(NAgents, o1), (NAgents, o2), (NAgents, o3_1, o3_2, o3_3)]
+            observation: dict[str, list[(NAgents, o1), (NAgents, o2), (NAgents, o3_1, o3_2, o3_3)]]
         """
         if self._seq_envs:
             envs_ma_obs_list = [env.reset(reset_config) for env in self._envs]
@@ -362,14 +362,14 @@ class UnityWrapper:
     def step(self, ma_d_action, ma_c_action):
         """
         Args:
-            d_action: (NAgents, discrete_action_size), one hot like action
-            c_action: (NAgents, continuous_action_size)
+            d_action: dict[str, (NAgents, discrete_action_size)], one hot like action
+            c_action: dict[str, (NAgents, continuous_action_size)]
 
         Returns:
-            observations: list[(NAgents, o1), (NAgents, o2), (NAgents, o3_1, o3_2, o3_3)]
-            rewards: (NAgents, )
-            dones: (NAgents, ), bool
-            max_steps: (NAgents, ), bool
+            observation: dict[str, list[(NAgents, o1), (NAgents, o2), (NAgents, o3_1, o3_2, o3_3)]]
+            reward: dict[str, (NAgents, )]
+            done: dict[str, (NAgents, )], bool
+            max_step: dict[str, (NAgents, )], bool
         """
         ma_envs_obs_list = {n: [] for n in self.behavior_names}
         ma_envs_reward = {n: [] for n in self.behavior_names}

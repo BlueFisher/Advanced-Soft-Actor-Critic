@@ -53,32 +53,34 @@ class MainHitted(Main):
                 f.write(log + '\n')
             self._logger.info(log)
 
-    def _log_episode_summaries(self, agents):
-        rewards = np.array([a.reward for a in agents])
-        hitted = sum([a.hitted for a in agents])
+    def _log_episode_summaries(self, ma_agents):
+        for n, agents in ma_agents.items():
+            rewards = np.array([a.reward for a in agents])
+            hitted = sum([a.hitted for a in agents])
 
-        self.sac.write_constant_summaries([
-            {'tag': 'reward/mean', 'simple_value': rewards.mean()},
-            {'tag': 'reward/max', 'simple_value': rewards.max()},
-            {'tag': 'reward/min', 'simple_value': rewards.min()},
-            {'tag': 'reward/hitted', 'simple_value': hitted}
-        ])
+            self.ma_sac[n].write_constant_summaries([
+                {'tag': 'reward/mean', 'simple_value': rewards.mean()},
+                {'tag': 'reward/max', 'simple_value': rewards.max()},
+                {'tag': 'reward/min', 'simple_value': rewards.min()},
+                {'tag': 'reward/hitted', 'simple_value': hitted}
+            ])
 
-    def _log_episode_info(self, iteration, iter_time, agents):
-        global_step = format_global_step(self.sac.get_global_step())
-        rewards = [a.reward for a in agents]
-        rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        hitted = sum([a.hitted for a in agents])
-        max_step = max([a.steps for a in agents])
+    def _log_episode_info(self, iteration, iter_time, ma_agents):
+        for n, agents in ma_agents.items():
+            global_step = format_global_step(self.ma_sac[n].get_global_step())
+            rewards = [a.reward for a in agents]
+            rewards = ", ".join([f"{i:6.1f}" for i in rewards])
+            hitted = sum([a.hitted for a in agents])
+            max_step = max([a.steps for a in agents])
 
-        if not self.train_mode:
-            for agent in agents:
-                if agent.steps > 10:
-                    self.evaluation_data['episodes'] += 1
-                    if agent.hitted:
-                        self.evaluation_data['hitted'] += 1
-                        self.evaluation_data['hitted_steps'] += agent.steps
-                    else:
-                        self.evaluation_data['failed_steps'] += agent.steps
+            if not self.train_mode:
+                for agent in agents:
+                    if agent.steps > 10:
+                        self.evaluation_data['episodes'] += 1
+                        if agent.hitted:
+                            self.evaluation_data['hitted'] += 1
+                            self.evaluation_data['hitted_steps'] += agent.steps
+                        else:
+                            self.evaluation_data['failed_steps'] += agent.steps
 
-        self._logger.info(f'{iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}, hitted {hitted}')
+            self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}, hitted {hitted}')
