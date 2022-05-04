@@ -566,21 +566,6 @@ class StubController:
                 time.sleep(RECONNECTION_TIME)
 
     @rpc_error_inspector
-    def get_action(self, obs_list, rnn_state=None):
-        request = learner_pb2.GetActionRequest(obs_list=[ndarray_to_proto(obs)
-                                                         for obs in obs_list],
-                                               rnn_state=ndarray_to_proto(rnn_state))
-
-        response = self._learner_stub.GetAction(request)
-        action = proto_to_ndarray(response.action)
-        rnn_state = proto_to_ndarray(response.rnn_state)
-
-        if rnn_state is None:
-            return action
-        else:
-            return action, rnn_state
-
-    @rpc_error_inspector
     def get_policy_variables(self):
         response = self._learner_stub.GetPolicyVariables(Empty())
         if response.succeeded:
