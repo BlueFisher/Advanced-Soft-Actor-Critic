@@ -4,7 +4,6 @@ import math
 import multiprocessing
 import multiprocessing.connection
 import os
-import traceback
 from typing import List
 
 import numpy as np
@@ -99,8 +98,7 @@ class UnityWrapperProcess:
                         conn.send(self.step(*data))
                     elif cmd == CLOSE:
                         self.close()
-            except:
-                self._logger.error(traceback.format_exc())
+            finally:
                 self._logger.warning(f'Process {os.getpid()} exits with error')
 
     def init(self):
