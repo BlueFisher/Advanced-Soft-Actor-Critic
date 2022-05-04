@@ -3,7 +3,6 @@ import logging
 import shutil
 import sys
 import time
-import traceback
 from pathlib import Path
 
 import numpy as np
