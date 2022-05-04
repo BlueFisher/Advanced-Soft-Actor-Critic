@@ -3,7 +3,6 @@ import logging
 import shutil
 import sys
 import time
-import traceback
 from pathlib import Path
 
 import numpy as np
@@ -133,6 +132,7 @@ class Main(object):
 
             self.env = TestWrapper(env_args=self.base_config['env_args'],
                                    n_agents=self.base_config['n_agents'])
+
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
@@ -159,7 +159,6 @@ class Main(object):
         spec.loader.exec_module(custom_nn_model)
 
         self.ma_sac = {}
-
         for i, n in enumerate(self.ma_names):
             model_abs_dir = self.model_abs_dir
             if len(self.ma_names) > 1:
