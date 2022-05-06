@@ -1,6 +1,6 @@
 default:
   base_config:
-    env_name: VisualRoller
+    env_name: Roller
     unity_args:
       build_path:
         win32: D:\Unity\win-RL-Envs\RLEnvironments.exe

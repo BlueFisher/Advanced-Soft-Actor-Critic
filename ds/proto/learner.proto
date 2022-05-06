@@ -3,17 +3,18 @@ package learner;
 
 import "ndarray.proto";
 import "pingpong.proto";
+import "ma_variables.proto";
 
 service LearnerService {
   rpc Persistence(stream Ping) returns (stream Pong);
 
   rpc RegisterActor(Empty) returns (RegisterActorResponse);
 
-  rpc GetPolicyVariables(Empty) returns (NNVariables);
+  rpc GetPolicyVariables(Empty) returns (MAVariables);
   rpc Add(AddRequest) returns (Empty);
   // Update variables from evolver
-  rpc GetNNVariables(Empty) returns (NNVariables);
-  rpc UpdateNNVariables(NNVariables) returns (Empty);
+  rpc GetNNVariables(Empty) returns (MAVariables);
+  rpc UpdateNNVariables(MAVariables) returns (Empty);
 
   rpc ForceClose(Empty) returns (Empty);
 }
@@ -28,18 +29,14 @@ message RegisterActorResponse{
 }
 
 message AddRequest {
-  NDarray l_indexes = 1;
-  NDarray l_padding_masks = 2;
-  repeated NDarray l_obses_list = 3;
-  NDarray l_actions = 4;
-  NDarray l_rewards = 5;
-  repeated NDarray next_obs_list = 6;
-  NDarray l_dones = 7;
-  NDarray l_mu_probs = 8;
-  NDarray l_seq_hidden_states = 9;
-}
-
-message NNVariables {
-  bool succeeded = 1;
-  repeated NDarray variables = 2;
+  string ma_name = 1;
+  NDarray l_indexes = 2;
+  NDarray l_padding_masks = 3;
+  repeated NDarray l_obses_list = 4;
+  NDarray l_actions = 5;
+  NDarray l_rewards = 6;
+  repeated NDarray next_obs_list = 7;
+  NDarray l_dones = 8;
+  NDarray l_mu_probs = 9;
+  NDarray l_seq_hidden_states = 10;
 }

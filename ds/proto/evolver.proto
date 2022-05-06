@@ -3,6 +3,7 @@ package evolver;
 
 import "ndarray.proto";
 import "pingpong.proto";
+import "ma_variables.proto";
 
 service EvolverService {
   rpc Persistence(stream Ping) returns (stream Pong);
@@ -10,7 +11,7 @@ service EvolverService {
   rpc RegisterLearner(RegisterLearnerRequest) returns (RegisterLearnerResponse);
   rpc RegisterActor(Empty) returns (RegisterActorResponse);
   rpc PostReward(PostRewardToEvolverRequest) returns (Empty);
-  rpc GetNNVariables(Empty) returns (GetNNVariablesResponse);
+  rpc GetNNVariables(Empty) returns (MAVariables);
 }
 
 message RegisterLearnerRequest {
@@ -33,9 +34,4 @@ message RegisterActorResponse {
 }
 message PostRewardToEvolverRequest {
   float reward = 1;
-}
-
-message GetNNVariablesResponse{
-  bool succeeded = 1;
-  repeated NDarray variables = 2;
 }

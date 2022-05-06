@@ -19,6 +19,7 @@ from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
 from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
+from .proto.ma_variables_proto import ma_variables_to_proto, proto_to_ma_variables
 from .utils import PeerSet, rpc_error_inspector
 
 
@@ -123,7 +124,7 @@ class Evolver:
 
         config['base_config']['name'] = config_helper.generate_base_name(config['base_config']['name'], 'ds')
         model_abs_dir = Path(root_dir).joinpath('models',
-                                                config['base_config']['scene'],
+                                                config['base_config']['env_name'],
                                                 config['base_config']['name'])
         model_abs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -153,7 +154,7 @@ class Evolver:
                 if peer in self._learners:
                     del self._learners[peer]
 
-    def _post_reward(self, reward, peer):
+    def _post_reward(self, reward, peer): # TODO
         if not self.base_config['evolver_enabled']:
             return
 
@@ -462,10 +463,8 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
 
     # From learner
     def GetNNVariables(self, request, context):
-        variables = self._get_nn_variables()
-        if variables is None:
-            return evolver_pb2.GetNNVariablesResponse(succeeded=False)
+        ma_variables = self._get_nn_variables() # TODO
+        if ma_variables is None:
+            return ma_variables_to_proto(None)
         else:
-            return evolver_pb2.GetNNVariablesResponse(
-                succeeded=True,
-                variables=[ndarray_to_proto(v) for v in variables])
+            return ma_variables_to_proto(ma_variables)
