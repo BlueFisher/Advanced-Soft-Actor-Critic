@@ -176,10 +176,10 @@ class SAC_Base(object):
             torch.cuda.manual_seed_all(seed)
 
         self.summary_writer = None
-        if model_abs_dir and self.train_mode:
+        if self.model_abs_dir and self.train_mode:
             if ma_name is not None:
-                model_abs_dir = model_abs_dir / ma_name.replace('?', '-')
-            summary_path = Path(model_abs_dir).joinpath(summary_path)
+                self.model_abs_dir = self.model_abs_dir / ma_name.replace('?', '-')
+            summary_path = Path(self.model_abs_dir).joinpath(summary_path)
             self.summary_writer = SummaryWriter(str(summary_path))
             self.summary_available = True
 
@@ -547,7 +547,7 @@ class SAC_Base(object):
         if self.d_action_size:
             d_action = np.eye(self.d_action_size)[np.random.rand(batch_size, self.d_action_size).argmax(axis=-1)].astype(np.float32)
         else:
-            d_action = np.empty((batch_size, 0))
+            d_action = np.empty((batch_size, 0), dtype=np.float32)
 
         c_action = np.zeros([batch_size, self.c_action_size], dtype=np.float32)
 

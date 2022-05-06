@@ -8,14 +8,14 @@ from tests.get_synthesis_data import *
 
 
 class TestSACMain(unittest.TestCase):
-    def test_vanilla(self):
+    def _test_vanilla(self, env_args_dict):
         args = argparse.Namespace(
             config=None,
             run=False,
             logger_in_file=False,
 
             render=False,
-            env_args=None,
+            env_args=env_args_dict,
             agents=None,
             max_iter=None,
 
@@ -33,14 +33,14 @@ class TestSACMain(unittest.TestCase):
         root_dir = Path(__file__).resolve().parent.parent
         Main(root_dir, f'envs/test', args)
 
-    def test_rnn(self):
+    def _test_rnn(self, env_args_dict):
         args = argparse.Namespace(
             config='rnn',
             run=False,
             logger_in_file=False,
 
             render=False,
-            env_args=None,
+            env_args=env_args_dict,
             agents=None,
             max_iter=None,
 
@@ -57,3 +57,123 @@ class TestSACMain(unittest.TestCase):
 
         root_dir = Path(__file__).resolve().parent.parent
         Main(root_dir, f'envs/test', args)
+
+    @staticmethod
+    def gen_vanilla(param_dict):
+        def func(self):
+            self._test_vanilla(param_dict)
+        return func
+
+
+def __gen_vanilla():
+    env_args_dict_candidates = {
+        'ma_obs_shapes': [{
+            'test0': [(6,)]
+        }],
+        'ma_d_action_size': [
+            {
+                'test0': 0,
+            },
+            {
+                'test0': 2,
+            }
+        ],
+        'ma_c_action_size': [
+            {
+                'test0': 0,
+            },
+            {
+                'test0': 2,
+            }
+        ]
+    }
+
+    env_args_dicts = [
+        {
+            'ma_obs_shapes': {
+                'test0': [(6,)]
+            },
+            'ma_d_action_size': {
+                'test0': 0
+            },
+            'ma_c_action_size': {
+                'test0': 2
+            }
+        },
+        {
+            'ma_obs_shapes': {
+                'test0': [(6,)]
+            },
+            'ma_d_action_size': {
+                'test0': 2
+            },
+            'ma_c_action_size': {
+                'test0': 0
+            }
+        },
+        {
+            'ma_obs_shapes': {
+                'test0': [(6,)]
+            },
+            'ma_d_action_size': {
+                'test0': 2
+            },
+            'ma_c_action_size': {
+                'test0': 2
+            }
+        },
+        {
+            'ma_obs_shapes': {
+                'test0': [(6,)],
+                'test1': [(8,)]
+            },
+            'ma_d_action_size': {
+                'test0': 0,
+                'test1': 0
+            },
+            'ma_c_action_size': {
+                'test0': 2,
+                'test1': 4
+            }
+        },
+        {
+            'ma_obs_shapes': {
+                'test0': [(6,)],
+                'test1': [(8,)]
+            },
+            'ma_d_action_size': {
+                'test0': 0,
+                'test1': 0
+            },
+            'ma_c_action_size': {
+                'test0': 2,
+                'test1': 4
+            }
+        },
+        {
+            'ma_obs_shapes': {
+                'test0': [(6,)],
+                'test1': [(8,)]
+            },
+            'ma_d_action_size': {
+                'test0': 2,
+                'test1': 4
+            },
+            'ma_c_action_size': {
+                'test0': 2,
+                'test1': 4
+            }
+        },
+    ]
+
+    i = 0
+    for env_args_dict in env_args_dicts:
+        func_name = f'test_{i:03d}'
+
+        setattr(TestSACMain, func_name,
+                TestSACMain.gen_vanilla(env_args_dict))
+
+        i += 1
+
+
+__gen_vanilla()
