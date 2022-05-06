@@ -24,6 +24,7 @@ class SAC_DS_Base(SAC_Base):
                  model,
                  model_config: Optional[dict] = None,
                  device: Optional[str] = None,
+                 ma_name: Optional[str] = None,
                  summary_path: str = 'log',
                  train_mode: bool = True,
                  last_ckpt: Optional[str] = None,
@@ -119,10 +120,15 @@ class SAC_DS_Base(SAC_Base):
 
         self.summary_writer = None
         if model_abs_dir:
+            if ma_name is not None:
+                model_abs_dir = model_abs_dir / ma_name.replace('?', '-')
             summary_path = Path(model_abs_dir).joinpath(summary_path)
             self.summary_writer = SummaryWriter(str(summary_path))
 
-        self._logger = logging.getLogger('sac.base.ds')
+        if ma_name is None:
+            self._logger = logging.getLogger('sac.base.ds')
+        else:
+            self._logger = logging.getLogger(f'sac.base.ds.{ma_name}')
 
         self._build_model(model, model_config, init_log_alpha, learning_rate)
         self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)

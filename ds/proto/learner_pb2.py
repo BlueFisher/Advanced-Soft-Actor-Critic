@@ -13,6 +13,7 @@ _sym_db = _symbol_database.Default()
 
 import ndarray_pb2 as ndarray__pb2
 import pingpong_pb2 as pingpong__pb2
+import ma_variables_pb2 as ma__variables__pb2
 
 
 DESCRIPTOR = _descriptor.FileDescriptor(
@@ -21,9 +22,9 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\rlearner.proto\x12\x07learner\x1a\rndarray.proto\x1a\x0epingpong.proto\"\x90\x01\n\x15RegisterActorResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x11\n\tunique_id\x18\x02 \x01(\x05\x12\x19\n\x11reset_config_json\x18\x03 \x01(\t\x12\x19\n\x11model_config_json\x18\x04 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x05 \x01(\t\"\xa7\x02\n\nAddRequest\x12\x1b\n\tl_indexes\x18\x01 \x01(\x0b\x32\x08.NDarray\x12!\n\x0fl_padding_masks\x18\x02 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cl_obses_list\x18\x03 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\tl_actions\x18\x04 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tl_rewards\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1f\n\rnext_obs_list\x18\x06 \x03(\x0b\x32\x08.NDarray\x12\x19\n\x07l_dones\x18\x07 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nl_mu_probs\x18\x08 \x01(\x0b\x32\x08.NDarray\x12%\n\x13l_seq_hidden_states\x18\t \x01(\x0b\x32\x08.NDarray\"=\n\x0bNNVariables\x12\x11\n\tsucceeded\x18\x01 \x01(\x08\x12\x1b\n\tvariables\x18\x02 \x03(\x0b\x32\x08.NDarray2\xc3\x02\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.learner.RegisterActorResponse\x12\x32\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12\"\n\x03\x41\x64\x64\x12\x13.learner.AddRequest\x1a\x06.Empty\x12.\n\x0eGetNNVariables\x12\x06.Empty\x1a\x14.learner.NNVariables\x12\x31\n\x11UpdateNNVariables\x12\x14.learner.NNVariables\x1a\x06.Empty\x12\x1c\n\nForceClose\x12\x06.Empty\x1a\x06.Emptyb\x06proto3'
+  serialized_pb=b'\n\rlearner.proto\x12\x07learner\x1a\rndarray.proto\x1a\x0epingpong.proto\x1a\x12ma_variables.proto\"\x90\x01\n\x15RegisterActorResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x11\n\tunique_id\x18\x02 \x01(\x05\x12\x19\n\x11reset_config_json\x18\x03 \x01(\t\x12\x19\n\x11model_config_json\x18\x04 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x05 \x01(\t\"\xb8\x02\n\nAddRequest\x12\x0f\n\x07ma_name\x18\x01 \x01(\t\x12\x1b\n\tl_indexes\x18\x02 \x01(\x0b\x32\x08.NDarray\x12!\n\x0fl_padding_masks\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cl_obses_list\x18\x04 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\tl_actions\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tl_rewards\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1f\n\rnext_obs_list\x18\x07 \x03(\x0b\x32\x08.NDarray\x12\x19\n\x07l_dones\x18\x08 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nl_mu_probs\x18\t \x01(\x0b\x32\x08.NDarray\x12%\n\x13l_seq_hidden_states\x18\n \x01(\x0b\x32\x08.NDarray2\xab\x02\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.learner.RegisterActorResponse\x12*\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x0c.MAVariables\x12\"\n\x03\x41\x64\x64\x12\x13.learner.AddRequest\x1a\x06.Empty\x12&\n\x0eGetNNVariables\x12\x06.Empty\x1a\x0c.MAVariables\x12)\n\x11UpdateNNVariables\x12\x0c.MAVariables\x1a\x06.Empty\x12\x1c\n\nForceClose\x12\x06.Empty\x1a\x06.Emptyb\x06proto3'
   ,
-  dependencies=[ndarray__pb2.DESCRIPTOR,pingpong__pb2.DESCRIPTOR,])
+  dependencies=[ndarray__pb2.DESCRIPTOR,pingpong__pb2.DESCRIPTOR,ma__variables__pb2.DESCRIPTOR,])
 
 
 
@@ -83,8 +84,8 @@ _REGISTERACTORRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=58,
-  serialized_end=202,
+  serialized_start=78,
+  serialized_end=222,
 )
 
 
@@ -97,64 +98,71 @@ _ADDREQUEST = _descriptor.Descriptor(
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='l_indexes', full_name='learner.AddRequest.l_indexes', index=0,
-      number=1, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
+      name='ma_name', full_name='learner.AddRequest.ma_name', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='l_padding_masks', full_name='learner.AddRequest.l_padding_masks', index=1,
+      name='l_indexes', full_name='learner.AddRequest.l_indexes', index=1,
       number=2, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='l_obses_list', full_name='learner.AddRequest.l_obses_list', index=2,
-      number=3, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='l_actions', full_name='learner.AddRequest.l_actions', index=3,
-      number=4, type=11, cpp_type=10, label=1,
+      name='l_padding_masks', full_name='learner.AddRequest.l_padding_masks', index=2,
+      number=3, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='l_rewards', full_name='learner.AddRequest.l_rewards', index=4,
+      name='l_obses_list', full_name='learner.AddRequest.l_obses_list', index=3,
+      number=4, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='l_actions', full_name='learner.AddRequest.l_actions', index=4,
       number=5, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='next_obs_list', full_name='learner.AddRequest.next_obs_list', index=5,
-      number=6, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='l_dones', full_name='learner.AddRequest.l_dones', index=6,
-      number=7, type=11, cpp_type=10, label=1,
+      name='l_rewards', full_name='learner.AddRequest.l_rewards', index=5,
+      number=6, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='l_mu_probs', full_name='learner.AddRequest.l_mu_probs', index=7,
+      name='next_obs_list', full_name='learner.AddRequest.next_obs_list', index=6,
+      number=7, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='l_dones', full_name='learner.AddRequest.l_dones', index=7,
       number=8, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='l_seq_hidden_states', full_name='learner.AddRequest.l_seq_hidden_states', index=8,
+      name='l_mu_probs', full_name='learner.AddRequest.l_mu_probs', index=8,
       number=9, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='l_seq_hidden_states', full_name='learner.AddRequest.l_seq_hidden_states', index=9,
+      number=10, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -171,47 +179,8 @@ _ADDREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=205,
-  serialized_end=500,
-)
-
-
-_NNVARIABLES = _descriptor.Descriptor(
-  name='NNVariables',
-  full_name='learner.NNVariables',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='succeeded', full_name='learner.NNVariables.succeeded', index=0,
-      number=1, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='variables', full_name='learner.NNVariables.variables', index=1,
-      number=2, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=502,
-  serialized_end=563,
+  serialized_start=225,
+  serialized_end=537,
 )
 
 _ADDREQUEST.fields_by_name['l_indexes'].message_type = ndarray__pb2._NDARRAY
@@ -223,10 +192,8 @@ _ADDREQUEST.fields_by_name['next_obs_list'].message_type = ndarray__pb2._NDARRAY
 _ADDREQUEST.fields_by_name['l_dones'].message_type = ndarray__pb2._NDARRAY
 _ADDREQUEST.fields_by_name['l_mu_probs'].message_type = ndarray__pb2._NDARRAY
 _ADDREQUEST.fields_by_name['l_seq_hidden_states'].message_type = ndarray__pb2._NDARRAY
-_NNVARIABLES.fields_by_name['variables'].message_type = ndarray__pb2._NDARRAY
 DESCRIPTOR.message_types_by_name['RegisterActorResponse'] = _REGISTERACTORRESPONSE
 DESCRIPTOR.message_types_by_name['AddRequest'] = _ADDREQUEST
-DESCRIPTOR.message_types_by_name['NNVariables'] = _NNVARIABLES
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 RegisterActorResponse = _reflection.GeneratedProtocolMessageType('RegisterActorResponse', (_message.Message,), {
@@ -243,13 +210,6 @@ AddRequest = _reflection.GeneratedProtocolMessageType('AddRequest', (_message.Me
   })
 _sym_db.RegisterMessage(AddRequest)
 
-NNVariables = _reflection.GeneratedProtocolMessageType('NNVariables', (_message.Message,), {
-  'DESCRIPTOR' : _NNVARIABLES,
-  '__module__' : 'learner_pb2'
-  # @@protoc_insertion_point(class_scope:learner.NNVariables)
-  })
-_sym_db.RegisterMessage(NNVariables)
-
 
 
 _LEARNERSERVICE = _descriptor.ServiceDescriptor(
@@ -259,8 +219,8 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=566,
-  serialized_end=889,
+  serialized_start=540,
+  serialized_end=839,
   methods=[
   _descriptor.MethodDescriptor(
     name='Persistence',
@@ -288,7 +248,7 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
     index=2,
     containing_service=None,
     input_type=ndarray__pb2._EMPTY,
-    output_type=_NNVARIABLES,
+    output_type=ma__variables__pb2._MAVARIABLES,
     serialized_options=None,
     create_key=_descriptor._internal_create_key,
   ),
@@ -308,7 +268,7 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
     index=4,
     containing_service=None,
     input_type=ndarray__pb2._EMPTY,
-    output_type=_NNVARIABLES,
+    output_type=ma__variables__pb2._MAVARIABLES,
     serialized_options=None,
     create_key=_descriptor._internal_create_key,
   ),
@@ -317,7 +277,7 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
     full_name='learner.LearnerService.UpdateNNVariables',
     index=5,
     containing_service=None,
-    input_type=_NNVARIABLES,
+    input_type=ma__variables__pb2._MAVARIABLES,
     output_type=ndarray__pb2._EMPTY,
     serialized_options=None,
     create_key=_descriptor._internal_create_key,

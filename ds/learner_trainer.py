@@ -7,7 +7,7 @@ import threading
 import traceback
 from multiprocessing.connection import Connection
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -24,6 +24,7 @@ class BatchGenerator:
     def __init__(self,
                  logger_in_file: bool,
                  model_abs_dir: str,
+                 ma_name: Optional[str],
                  burn_in_step: int,
                  n_step: int,
                  batch_size: int,
@@ -40,7 +41,11 @@ class BatchGenerator:
         # Since no set_logger() in main.py
         config_helper.set_logger(Path(model_abs_dir).joinpath(f'learner_trainer_batch_generator_{os.getpid()}.log') if logger_in_file else None)
 
-        self._logger = logging.getLogger(f'ds.learner.trainer.batch_generator_{os.getpid()}')
+        if ma_name is None:
+            self._logger = logging.getLogger(f'ds.learner.trainer.batch_generator_{os.getpid()}')
+        else:
+            self._logger = logging.getLogger(f'ds.learner.trainer.{ma_name}.batch_generator_{os.getpid()}')
+
         self._logger.info(f'BatchGenerator {os.getpid()} initialized')
 
         episode_buffer.init_logger(self._logger)
@@ -116,21 +121,25 @@ class Trainer:
                  episode_length_array: mp.Array,
                  cmd_pipe_server: Connection,
 
-                 logger_in_file,
-                 obs_shapes,
-                 d_action_size,
-                 c_action_size,
-                 model_abs_dir,
+                 logger_in_file: bool,
+                 obs_shapes: List[Tuple],
+                 d_action_size: int,
+                 c_action_size: int,
+                 model_abs_dir: str,
                  model_spec,
-                 device,
-                 last_ckpt,
+                 device: str,
+                 ma_name: Optional[str],
+                 last_ckpt: Optional[str],
                  config):
 
         self._all_variables_buffer = all_variables_buffer
 
         # Since no set_logger() in main.py
         config_helper.set_logger(Path(model_abs_dir).joinpath('learner_trainer.log') if logger_in_file else None)
-        self._logger = logging.getLogger('ds.learner.trainer')
+        if ma_name is None:
+            self._logger = logging.getLogger('ds.learner.trainer')
+        else:
+            self._logger = logging.getLogger(f'ds.learner.trainer.{ma_name}')
 
         all_variables_buffer.init_logger(self._logger)
 
@@ -148,6 +157,7 @@ class Trainer:
                                model=custom_nn_model,
                                model_config=config['model_config'],
                                device=device,
+                               ma_name=ma_name,
                                last_ckpt=last_ckpt,
 
                                **config['sac_config'])
@@ -174,6 +184,7 @@ class Trainer:
             mp.Process(target=BatchGenerator, kwargs={
                 'logger_in_file': logger_in_file,
                 'model_abs_dir': model_abs_dir,
+                'ma_name': ma_name,
                 'burn_in_step': self.sac.burn_in_step,
                 'n_step': self.sac.n_step,
                 'batch_size': batch_size,

@@ -3,6 +3,7 @@
 import grpc
 
 import evolver_pb2 as evolver__pb2
+import ma_variables_pb2 as ma__variables__pb2
 import ndarray_pb2 as ndarray__pb2
 import pingpong_pb2 as pingpong__pb2
 
@@ -39,7 +40,7 @@ class EvolverServiceStub(object):
         self.GetNNVariables = channel.unary_unary(
                 '/evolver.EvolverService/GetNNVariables',
                 request_serializer=ndarray__pb2.Empty.SerializeToString,
-                response_deserializer=evolver__pb2.GetNNVariablesResponse.FromString,
+                response_deserializer=ma__variables__pb2.MAVariables.FromString,
                 )
 
 
@@ -102,7 +103,7 @@ def add_EvolverServiceServicer_to_server(servicer, server):
             'GetNNVariables': grpc.unary_unary_rpc_method_handler(
                     servicer.GetNNVariables,
                     request_deserializer=ndarray__pb2.Empty.FromString,
-                    response_serializer=evolver__pb2.GetNNVariablesResponse.SerializeToString,
+                    response_serializer=ma__variables__pb2.MAVariables.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -195,6 +196,6 @@ class EvolverService(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/evolver.EvolverService/GetNNVariables',
             ndarray__pb2.Empty.SerializeToString,
-            evolver__pb2.GetNNVariablesResponse.FromString,
+            ma__variables__pb2.MAVariables.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

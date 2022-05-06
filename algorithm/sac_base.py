@@ -26,6 +26,7 @@ class SAC_Base(object):
                  model,
                  model_config: Optional[dict] = None,
                  device: Optional[str] = None,
+                 ma_name: Optional[str] = None,
                  summary_path: str = 'log',
                  train_mode: bool = True,
                  last_ckpt: Optional[str] = None,
@@ -176,6 +177,8 @@ class SAC_Base(object):
 
         self.summary_writer = None
         if model_abs_dir and self.train_mode:
+            if ma_name is not None:
+                model_abs_dir = model_abs_dir / ma_name.replace('?', '-')
             summary_path = Path(model_abs_dir).joinpath(summary_path)
             self.summary_writer = SummaryWriter(str(summary_path))
             self.summary_available = True
@@ -189,7 +192,10 @@ class SAC_Base(object):
                                                 self.n_step,
                                                 self.batch_size)
 
-        self._logger = logging.getLogger('sac.base')
+        if ma_name is None:
+            self._logger = logging.getLogger('sac.base')
+        else:
+            self._logger = logging.getLogger(f'sac.base.{ma_name}')
 
         self._build_model(model, model_config, init_log_alpha, learning_rate)
         self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
@@ -1582,8 +1588,8 @@ class SAC_Base(object):
         action_noise = torch.linspace(*self.action_noise, steps=batch, device=self.device)  # [Batch, ]
 
         if self.d_action_size:
-            action_random = torch.eye(self.d_action_size)[torch.randint(0, self.d_action_size, size=(batch, ))]
-            mask = torch.rand(batch) < action_noise.squeeze(1)
+            action_random = torch.eye(self.d_action_size, device=self.device)[torch.randint(0, self.d_action_size, size=(batch, ))]
+            mask = torch.rand(batch, device=self.device) < action_noise
             d_action[mask] = action_random[mask]
 
         if self.c_action_size:
@@ -1596,7 +1602,7 @@ class SAC_Base(object):
                        obs_list: List[torch.Tensor],
                        state: torch.Tensor,
                        disable_sample: bool = False,
-                       force_rnd_if_avaiable: bool = False):
+                       force_rnd_if_available: bool = False):
         """
         Args:
             state: [Batch, state_size]
@@ -1608,7 +1614,7 @@ class SAC_Base(object):
         batch = state.shape[0]
         d_policy, c_policy = self.model_policy(state, obs_list)
 
-        if self.use_rnd and (self.train_mode or force_rnd_if_avaiable):
+        if self.use_rnd and (self.train_mode or force_rnd_if_available):
             action = self.rnd_sample(state, d_policy, c_policy)
             d_action = action[..., :self.d_action_size]
             c_action = action[..., self.d_action_size:]
@@ -1655,7 +1661,7 @@ class SAC_Base(object):
     def choose_action(self,
                       obs_list: List[np.ndarray],
                       disable_sample: bool = False,
-                      force_rnd_if_avaiable: bool = False):
+                      force_rnd_if_available: bool = False):
         """
         Args:
             obs_list: list([Batch, *obs_shapes_i], ...)
@@ -1666,7 +1672,7 @@ class SAC_Base(object):
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         state = self.model_rep(obs_list)
 
-        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_avaiable)
+        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_available)
         return action.detach().cpu().numpy(), prob.detach().cpu().numpy()
 
     @torch.no_grad()
@@ -1675,7 +1681,7 @@ class SAC_Base(object):
                           pre_action: np.ndarray,
                           rnn_state: np.ndarray,
                           disable_sample: bool = False,
-                          force_rnd_if_avaiable: bool = False):
+                          force_rnd_if_available: bool = False):
         """
         Args:
             obs_list: list([Batch, *obs_shapes_i], ...)
@@ -1695,7 +1701,7 @@ class SAC_Base(object):
         state = state.squeeze(1)
         obs_list = [obs.squeeze(1) for obs in obs_list]
 
-        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_avaiable)
+        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_available)
 
         return (action.detach().cpu().numpy(),
                 prob.detach().cpu().numpy(),
@@ -1710,7 +1716,7 @@ class SAC_Base(object):
                            ep_attn_hidden_states: np.ndarray,
 
                            disable_sample: bool = False,
-                           force_rnd_if_avaiable: bool = False):
+                           force_rnd_if_available: bool = False):
         """
         Args:
             ep_indexes: [Batch, episode_len]
@@ -1741,7 +1747,7 @@ class SAC_Base(object):
         action, prob = self._choose_action([o[:, -1] for o in ep_obses_list],
                                            state,
                                            disable_sample,
-                                           force_rnd_if_avaiable)
+                                           force_rnd_if_available)
 
         return (action.detach().cpu().numpy(),
                 prob.detach().cpu().numpy(),

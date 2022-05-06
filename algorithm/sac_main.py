@@ -159,17 +159,15 @@ class Main(object):
         spec.loader.exec_module(custom_nn_model)
 
         self.ma_sac = {}
-        for i, n in enumerate(self.ma_names):
-            model_abs_dir = self.model_abs_dir
-            if len(self.ma_names) > 1:
-                model_abs_dir = model_abs_dir / str(i)
+        for n in self.ma_names:
             self.ma_sac[n] = SAC_Base(obs_shapes=self.ma_obs_shapes[n],
                                       d_action_size=self.ma_d_action_size[n],
                                       c_action_size=self.ma_c_action_size[n],
-                                      model_abs_dir=model_abs_dir,
+                                      model_abs_dir=self.model_abs_dir,
                                       model=custom_nn_model,
                                       model_config=self.model_config,
                                       device=self.device,
+                                      ma_name=None if len(self.ma_names) == 1 else n,
                                       train_mode=self.train_mode,
                                       last_ckpt=self.last_ckpt,
 
@@ -332,7 +330,7 @@ class Main(object):
                                 # ep_seq_hidden_states
                                 for episode_trans in episode_trans_list:
                                     self.ma_sac[n].put_episode(*episode_trans)
-                            trained_steps = self.ma_sac[n].train()
+                            trained_steps = max(trained_steps, self.ma_sac[n].train())
 
                         ma_obs_list[n] = ma_next_obs_list[n]
                         ma_pre_action[n] = ma_action[n]
