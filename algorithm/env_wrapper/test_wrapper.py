@@ -14,20 +14,29 @@ class TestWrapper:
         self.n_agents = n_agents
 
     def init(self):
-        self._ma_obs_shapes = {
-            'test0': [(6,)],
-            'test1': [(8,)]
-        }
+        if 'ma_obs_shapes' in self.env_args:
+            self._ma_obs_shapes = self.env_args['ma_obs_shapes']
+        else:
+            self._ma_obs_shapes = {
+                'test0': [(6,)],
+                'test1': [(8,)]
+            }
 
-        ma_d_action_size = {
-            'test0': 2,
-            'test1': 4
-        }
+        if 'ma_d_action_size' in self.env_args:
+            ma_d_action_size = self.env_args['ma_d_action_size']
+        else:
+            ma_d_action_size = {
+                'test0': 2,
+                'test1': 4
+            }
 
-        ma_c_action_size = {
-            'test0': 3,
-            'test1': 5
-        }
+        if 'ma_c_action_size' in self.env_args:
+            ma_c_action_size = self.env_args['ma_c_action_size']
+        else:
+            ma_c_action_size = {
+                'test0': 3,
+                'test1': 5
+            }
 
         return self._ma_obs_shapes, ma_d_action_size, ma_c_action_size
 

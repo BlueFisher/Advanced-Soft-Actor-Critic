@@ -34,24 +34,29 @@ class AgentHitted(Agent):
 
 class MainHitted(Main):
     _agent_class = AgentHitted
-    evaluation_data = {
-        'episodes': 0,
-        'hitted': 0,
-        'hitted_steps': 0,
-        'failed_steps': 0
-    }
 
     def _run(self):
+        self.ma_evaluation_data = {n: {
+            'episodes': 0,
+            'hitted': 0,
+            'hitted_steps': 0,
+            'failed_steps': 0
+        } for n in self.ma_names}
+
         super()._run()
 
         if not self.train_mode:
-            result_path = self.model_abs_dir.joinpath('result.txt')
-            result_path.touch(exist_ok=True)
-            hostname = socket.gethostname()
-            log = f'{hostname}, {self.evaluation_data["episodes"]}, {self.evaluation_data["hitted"]}, {self.evaluation_data["hitted_steps"]}, {self.evaluation_data["failed_steps"]}'
-            with open(result_path, 'a') as f:
-                f.write(log + '\n')
-            self._logger.info(log)
+            for n, ev in self.ma_evaluation_data.items():
+                if len(self.ma_names) == 1:
+                    result_path = self.model_abs_dir / 'result.txt'
+                else:
+                    result_path = self.model_abs_dir / f'{n}_result.txt'
+                result_path.touch(exist_ok=True)
+                hostname = socket.gethostname()
+                log = f'{hostname}, {ev["episodes"]}, {ev["hitted"]}, {ev["hitted_steps"]}, {ev["failed_steps"]}'
+                with open(result_path, 'a') as f:
+                    f.write(log + '\n')
+                self._logger.info(log)
 
     def _log_episode_summaries(self, ma_agents):
         for n, agents in ma_agents.items():
@@ -76,11 +81,11 @@ class MainHitted(Main):
             if not self.train_mode:
                 for agent in agents:
                     if agent.steps > 10:
-                        self.evaluation_data['episodes'] += 1
+                        self.ma_evaluation_data[n]['episodes'] += 1
                         if agent.hitted:
-                            self.evaluation_data['hitted'] += 1
-                            self.evaluation_data['hitted_steps'] += agent.steps
+                            self.ma_evaluation_data[n]['hitted'] += 1
+                            self.ma_evaluation_data[n]['hitted_steps'] += agent.steps
                         else:
-                            self.evaluation_data['failed_steps'] += agent.steps
+                            self.ma_evaluation_data[n]['failed_steps'] += agent.steps
 
             self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}, hitted {hitted}')

@@ -119,10 +119,10 @@ class SAC_DS_Base(SAC_Base):
             torch.cuda.manual_seed_all(seed)
 
         self.summary_writer = None
-        if model_abs_dir:
+        if self.model_abs_dir:
             if ma_name is not None:
-                model_abs_dir = model_abs_dir / ma_name.replace('?', '-')
-            summary_path = Path(model_abs_dir).joinpath(summary_path)
+                self.model_abs_dir = self.model_abs_dir / ma_name.replace('?', '-')
+            summary_path = Path(self.model_abs_dir).joinpath(summary_path)
             self.summary_writer = SummaryWriter(str(summary_path))
 
         if ma_name is None:
