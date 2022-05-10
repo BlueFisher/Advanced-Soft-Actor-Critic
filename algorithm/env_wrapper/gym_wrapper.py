@@ -120,7 +120,9 @@ class GymWrapper:
                                             daemon=True)
                 p.start()
 
-        return [(self._state_dim, )], d_action_size, c_action_size
+        return ({'gym': [(self._state_dim, )]},
+                {'gym': d_action_size},
+                {'gym': c_action_size})
 
     def reset(self, reset_config=None):
         if self._seq_envs:
@@ -136,9 +138,11 @@ class GymWrapper:
                 t_obs = conn.recv()
                 obs[i] = t_obs
 
-        return [obs]
+        return {'gym': [obs]}
 
-    def step(self, d_action, c_action):
+    def step(self, ma_d_action, ma_c_action):
+        d_action, c_action = ma_d_action['gym'], ma_c_action['gym']
+
         obs = np.empty([self.n_agents, self._state_dim], dtype=np.float32)
         reward = np.empty(self.n_agents, dtype=np.float32)
         done = np.empty(self.n_agents, dtype=bool)
@@ -183,7 +187,7 @@ class GymWrapper:
         if not self.train_mode and self.n_agents == 1 and 'Bullet' in self.env_name:
             time.sleep(0.01)
 
-        return [obs], reward, done, max_step
+        return {'gym': [obs]}, {'gym': reward}, {'gym': done}, {'gym': max_step}
 
     def close(self):
         if self._seq_envs:
