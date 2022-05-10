@@ -118,7 +118,9 @@ class DMControlWrapper:
                                             daemon=True)
                 p.start()
 
-        return self.observation_shapes, d_action_size, c_action_size
+        return ({'gym': self.observation_shapes},
+                {'gym': d_action_size},
+                {'gym': c_action_size})
 
     def reset(self, reset_config=None):
         if self._seq_envs:
@@ -140,9 +142,11 @@ class DMControlWrapper:
                 for j in range(len(obs_list)):
                     obs_list[j][i] = _obs_list[j]
 
-        return obs_list
+        return {'gym': obs_list}
 
-    def step(self, d_action, c_action):
+    def step(self, ma_d_action, ma_c_action):
+        d_action, c_action = ma_d_action['gym'], ma_c_action['gym']
+
         obs_list = [np.empty([self.n_agents, *s], dtype=np.float32) for s in self.observation_shapes]
         reward = np.empty(self.n_agents, dtype=np.float32)
         done = np.empty(self.n_agents, dtype=bool)
@@ -191,7 +195,7 @@ class DMControlWrapper:
                 for j in range(len(obs_list)):
                     obs_list[j][i] = tmp_obs_list[j]
 
-        return obs_list, reward, done, max_step
+        return {'gym': obs_list}, {'gym': reward}, {'gym': done}, {'gym': max_step}
 
     def close(self):
         if self._seq_envs:
