@@ -154,7 +154,7 @@ class Evolver:
                 if peer in self._learners:
                     del self._learners[peer]
 
-    def _post_reward(self, reward, peer): # TODO
+    def _post_reward(self, reward, peer):  # TODO
         if not self.base_config['evolver_enabled']:
             return
 
@@ -385,7 +385,6 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
         self._logger.info(info)
 
     # From learner and actor
-
     def Persistence(self, request_iterator, context):
         self._record_peer(context)
         for request in request_iterator:
@@ -463,7 +462,7 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
 
     # From learner
     def GetNNVariables(self, request, context):
-        ma_variables = self._get_nn_variables() # TODO
+        ma_variables = self._get_nn_variables()  # TODO
         if ma_variables is None:
             return ma_variables_to_proto(None)
         else:

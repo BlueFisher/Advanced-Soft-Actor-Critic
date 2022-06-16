@@ -10,7 +10,7 @@ def get_ma_obs_list(n_agents, ma_obs_shapes):
 
 class TestWrapper:
     def __init__(self, env_args, n_agents=1):
-        self.env_args = env_args
+        self.env_args = [] if env_args is None else env_args
         self.n_agents = n_agents
 
     def init(self):

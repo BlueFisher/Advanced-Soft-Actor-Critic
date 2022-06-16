@@ -1,9 +1,13 @@
-from typing import List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
+from algorithm.sac_base import SAC_Base
+
+from algorithm.utils.enums import *
+from algorithm.utils.operators import gen_pre_n_actions
 
 
-class Agent(object):
+class Agent:
     reward = 0  # The reward of the first complete episode
     _last_reward = 0  # The reward of the last episode
     steps = 0  # The step count of the first complete episode
@@ -218,6 +222,193 @@ class Agent(object):
         self.steps = self._last_steps
         self.done = False
         self.max_reached = False
+
+
+class AgentManager:
+    def __init__(self,
+                 agent_class: Agent,
+                 obs_shapes: List[Tuple[int]],
+                 d_action_size: int,
+                 c_action_size: int):
+        self._agent_class = agent_class
+
+        self.obs_shapes = obs_shapes
+        self.d_action_size = d_action_size
+        self.c_action_size = c_action_size
+        self.action_size = d_action_size + c_action_size
+
+        self._data = {}
+
+    def __getitem__(self, k):
+        return self._data[k]
+
+    def __setitem__(self, k, v):
+        self._data[k] = v
+
+    def set_sac(self, sac: SAC_Base):
+        self.sac = sac
+        self.seq_encoder = sac.seq_encoder
+
+    def set_agents(self, num_agents: int):
+        self.agents: List[Agent] = [
+            self._agent_class(i, self.obs_shapes, self.action_size,
+                              seq_hidden_state_shape=self.sac.seq_hidden_state_shape
+                              if self.seq_encoder is not None else None)
+            for i in range(num_agents)
+        ]
+
+    def get_action(self,
+                   disable_sample: bool = False,
+                   force_rnd_if_available: bool = False):
+        if self.seq_encoder == SEQ_ENCODER.RNN:
+            action, prob, next_seq_hidden_state = self.sac.choose_rnn_action(self['obs_list'],
+                                                                             self['pre_action'],
+                                                                             self['seq_hidden_state'],
+                                                                             disable_sample=disable_sample,
+                                                                             force_rnd_if_available=force_rnd_if_available)
+
+        elif self.seq_encoder == SEQ_ENCODER.ATTN:
+            ep_length = min(512, max([a.episode_length for a in self.agents]))
+
+            all_episode_trans = [a.get_episode_trans(ep_length) for a in self.agents]
+            (all_ep_indexes,
+                all_ep_padding_masks,
+                all_ep_obses_list,
+                all_ep_actions,
+                all_all_ep_rewards,
+                all_next_obs_list,
+                all_ep_dones,
+                all_ep_probs,
+                all_ep_attn_states) = zip(*all_episode_trans)
+
+            ep_indexes = np.concatenate(all_ep_indexes)
+            ep_padding_masks = np.concatenate(all_ep_padding_masks)
+            ep_obses_list = [np.concatenate(o) for o in zip(*all_ep_obses_list)]
+            ep_actions = np.concatenate(all_ep_actions)
+            ep_attn_states = np.concatenate(all_ep_attn_states)
+
+            ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
+            ep_padding_masks = np.concatenate([ep_padding_masks,
+                                               np.zeros_like(ep_padding_masks[:, -1:], dtype=bool)], axis=1)
+            ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
+                             for o, t_o in zip(ep_obses_list, self['obs_list'])]
+            ep_pre_actions = gen_pre_n_actions(ep_actions, True)
+
+            action, prob, next_seq_hidden_state = self.sac.choose_attn_action(ep_indexes,
+                                                                              ep_padding_masks,
+                                                                              ep_obses_list,
+                                                                              ep_pre_actions,
+                                                                              ep_attn_states,
+                                                                              disable_sample=disable_sample,
+                                                                              force_rnd_if_available=force_rnd_if_available)
+
+        else:
+            action, prob = self.sac.choose_action(self['obs_list'],
+                                                  disable_sample=disable_sample,
+                                                  force_rnd_if_available=force_rnd_if_available)
+            next_seq_hidden_state = None
+
+        self['action'] = action
+        self['d_action'] = action[..., :self.d_action_size]
+        self['c_action'] = action[..., self.d_action_size:]
+        self['prob'] = prob
+        self['next_seq_hidden_state'] = next_seq_hidden_state
+
+
+class MultiAgentsManager:
+    def __init__(self,
+                 agent_class: Agent,
+                 ma_obs_shapes,
+                 ma_d_action_size,
+                 ma_c_action_size):
+        self._agent_class = agent_class
+
+        self._ma_manager: Dict[str, AgentManager] = {}
+        for n in ma_obs_shapes:
+            self._ma_manager[n] = AgentManager(agent_class,
+                                               ma_obs_shapes[n],
+                                               ma_d_action_size[n],
+                                               ma_c_action_size[n])
+
+    def __iter__(self) -> Iterator[Tuple[str, AgentManager]]:
+        return iter(self._ma_manager.items())
+
+    def __getitem__(self, k) -> AgentManager:
+        return self._ma_manager[k]
+
+    def __len__(self):
+        return len(self._ma_manager)
+
+    def init(self, num_agents):
+        for n, mgr in self:
+            mgr['initial_pre_action'] = mgr.sac.get_initial_action(num_agents)  # [n_agents, action_size]
+            mgr['pre_action'] = mgr['initial_pre_action']
+            if mgr.seq_encoder is not None:
+                mgr['initial_seq_hidden_state'] = mgr.sac.get_initial_seq_hidden_state(num_agents)  # [n_agents, *seq_hidden_state_shape]
+                mgr['seq_hidden_state'] = mgr['initial_seq_hidden_state']
+
+            mgr.set_agents(num_agents)
+
+    def is_max_reached(self):
+        return any([any([a.max_reached for a in mgr.agents]) for n, mgr in self])
+
+    def is_done(self):
+        return all([all([a.done for a in mgr.agents]) for n, mgr in self])
+
+    def set_obs_list(self, ma_obs_list):
+        for n, mgr in self:
+            mgr['obs_list'] = ma_obs_list[n]
+
+    def clear(self):
+        for n, mgr in self:
+            for a in mgr.agents:
+                a.clear()
+
+    def reset(self):
+        for n, mgr in self:
+            for a in mgr.agents:
+                a.reset()
+
+    def burn_in_padding(self):
+        for n, mgr in self:
+            for a in [a for a in mgr.agents if a.is_empty()]:
+                for _ in range(mgr.sac.burn_in_step):
+                    a.add_transition(
+                        obs_list=[np.zeros(t, dtype=np.float32) for t in mgr.obs_shapes],
+                        action=mgr['initial_pre_action'][0],
+                        reward=0.,
+                        local_done=False,
+                        max_reached=False,
+                        next_obs_list=[np.zeros(t, dtype=np.float32) for t in mgr.obs_shapes],
+                        prob=0.,
+                        is_padding=True,
+                        seq_hidden_state=mgr['initial_seq_hidden_state'][0]
+                    )
+
+    def get_ma_action(self,
+                      disable_sample: bool = False,
+                      force_rnd_if_available: bool = False):
+        for n, mgr in self:
+            mgr.get_action(disable_sample, force_rnd_if_available)
+
+        ma_d_action = {n: mgr['d_action'] for n, mgr in self}
+        ma_c_action = {n: mgr['c_action'] for n, mgr in self}
+
+        return ma_d_action, ma_c_action
+
+    def post_step(self, ma_next_obs_list, ma_local_done):
+        self.set_obs_list(ma_next_obs_list)
+
+        for n, mgr in self:
+            mgr['pre_action'] = mgr['action']
+            mgr['pre_action'][ma_local_done[n]] = mgr['initial_pre_action'][ma_local_done[n]]
+            if mgr.seq_encoder is not None:
+                mgr['seq_hidden_state'] = mgr['next_seq_hidden_state']
+                mgr['seq_hidden_state'][ma_local_done[n]] = mgr['initial_seq_hidden_state'][ma_local_done[n]]
+
+    def save_model(self):
+        for n, mgr in self:
+            mgr.sac.save_model()
 
 
 if __name__ == "__main__":
