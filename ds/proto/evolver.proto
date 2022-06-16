@@ -18,6 +18,7 @@ message RegisterLearnerRequest {
   string learner_host = 2;
   int32 learner_port = 3;
 }
+
 message RegisterLearnerResponse {
   string name = 1;
   int32 id = 2;
