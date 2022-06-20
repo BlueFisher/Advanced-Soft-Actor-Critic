@@ -82,27 +82,33 @@ class SAC_Base(object):
         d_action_size: Dimension of discrete actions
         c_action_size: Dimension of continuous actions
         model_abs_dir: The directory that saves summary, checkpoints, config etc.
-        model: Custom Model Class
         device: Training in CPU or GPU
+        ma_name: Multi-agent name
         train_mode: Is training or inference
         last_ckpt: The checkpoint to restore
 
+        nn_config: nn model config
+
+        nn: nn model
         seed: Random seed
         write_summary_per_step: Write summaries in TensorBoard every `write_summary_per_step` steps
         save_model_per_step: Save model every N steps
+
+        use_replay_buffer: Whether using prioritized replay buffer
+        use_priority: Whether using PER importance ratio
 
         ensemble_q_num: 2 # Number of Qs
         ensemble_q_sample: 2 # Number of min Qs
 
         burn_in_step: Burn-in steps in R2D2
-        n_step: Update Q function by `n_step` steps
+        n_step: Update Q function by N-steps
         seq_encoder: None | RNN | ATTN
 
         batch_size: Batch size for training
         tau: Coefficient of updating target network
         update_target_per_step: Update target network every 'update_target_per_step' steps
         init_log_alpha: The initial log_alpha
-        use_auto_alpha: If using automating entropy adjustment
+        use_auto_alpha: Whether using automating entropy adjustment
         learning_rate: Learning rate of all optimizers
         gamma: Discount factor
         v_lambda: Discount factor for V-trace
@@ -110,20 +116,21 @@ class SAC_Base(object):
         v_c: C for V-trace
         clip_epsilon: Epsilon for q clip
 
-        use_priority: If using PER importance ratio
-        use_n_step_is: If using importance sampling
-        siamese: ATC | BYOL
-        siamese_use_q: If using contrastive q
-        siamese_use_adaptive: If using adaptive weights
-        use_prediction: If train a transition model
+        discrete_dqn_like: Whether using policy or only Q network if discrete is in action spaces
+        use_n_step_is: Whether using importance sampling
+        siamese: None | ATC | BYOL
+        siamese_use_q: Whether using contrastive q
+        siamese_use_adaptive: Whether using adaptive weights
+        use_prediction: Whether training a transition model
         transition_kl: The coefficient of KL of transition and standard normal
-        use_extra_data: If using extra data to train prediction model
-        curiosity: FORWARD | INVERSE
+        use_extra_data: Whether using extra data to train prediction model
+        curiosity: None | FORWARD | INVERSE
         curiosity_strength: Curiosity strength if using curiosity
-        use_rnd: If using RND
+        use_rnd: Whether using RND
         rnd_n_sample: RND sample times
-        use_normalization: If using observation normalization
-        use_add_with_td: If add transitions in replay buffer with td-error
+        use_normalization: Whether using observation normalization
+        use_add_with_td: Whether add transitions in replay buffer with td-error
+        action_noise: [noise_min, noise_max]
         """
         self.obs_shapes = obs_shapes
         self.d_action_size = d_action_size

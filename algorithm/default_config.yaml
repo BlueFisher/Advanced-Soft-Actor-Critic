@@ -43,10 +43,10 @@ sac_config:
   ensemble_q_sample: 2 # Number of min Qs
 
   burn_in_step: 0 # Burn-in steps in R2D2
-  n_step: 1 # Update Q function by N steps
+  n_step: 1 # Update Q function by N-steps
   seq_encoder: null # RNN | ATTN
 
-  batch_size: 256
+  batch_size: 256 # Batch size for training
 
   tau: 0.005 # Coefficient of updating target network
   update_target_per_step: 1 # Update target network every N steps
@@ -75,7 +75,7 @@ sac_config:
   use_rnd: false # Whether using RND
   rnd_n_sample: 10 # RND sample times
   use_normalization: false # Whether using observation normalization
-  use_add_with_td: false
+  use_add_with_td: false # Whether add transitions in replay buffer with td-error
   action_noise: null # [noise_min, noise_max]
 
 ma_config: null
