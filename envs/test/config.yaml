@@ -7,6 +7,16 @@ default:
     max_step_each_iter: 100
     n_agents: 2
 
+  ma_config:
+    test0:
+      sac_config:
+        nn: nn
+        n_step: 5
+    test1:
+      sac_config:
+        nn: nn
+        n_step: 10
+
 rnn:
   base_config:
     nn: nn_rnn

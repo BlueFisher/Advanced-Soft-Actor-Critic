@@ -7,6 +7,7 @@ from collections import deque
 from concurrent import futures
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import List
 
 import grpc
 import numpy as np
@@ -96,9 +97,9 @@ class Evolver:
         self._lock = threading.Lock()
 
         self._last_update_nn_variable = time.time()
-        self._selected_times = 0
-        self._saved_nn_variables_mean = None
-        self._saved_nn_variables_std = None
+        self._ma_selected_times = None
+        self._ma_saved_nn_variables_mean = None
+        self._ma_saved_nn_variables_std = None
 
         self._update_nn_variables_executors = ThreadPoolExecutor(10)
 
@@ -147,25 +148,38 @@ class Evolver:
         with self._lock:
             if connected:
                 self._learners[peer] = {
-                    'rewards': deque(maxlen=self.base_config['evolver_cem_length']),
-                    'selected': 0
+                    'ma_rewards': {},
+                    'ma_selected': {}
                 }
             else:
                 if peer in self._learners:
                     del self._learners[peer]
 
-    def _post_reward(self, reward, peer):  # TODO
+    def register_ma_names(self, peer, ma_names: List[str]):
+        with self._lock:
+            self._learners[peer]['ma_rewards'] = {
+                n: deque(maxlen=self.base_config['evolver_cem_length']) for n in ma_names
+            }
+            self._learners[peer]['ma_selected'] = {
+                n: 0 for n in ma_names
+            }
+
+        self._ma_selected_times = {n: 0 for n in ma_names}
+        self._ma_saved_nn_variables_mean = {n: None for n in ma_names}
+        self._ma_saved_nn_variables_std = {n: None for n in ma_names}
+
+    def _post_reward(self, ma_name, reward, peer):
         if not self.base_config['evolver_enabled']:
             return
 
         with self._lock:
-            self._learners[peer]['rewards'].append(reward)
+            self._learners[peer]['ma_rewards'][ma_name].append(reward)
 
             # If there is only one learner, return
             if len(self._learners) <= 1:
                 return
 
-            rewards_length_map = map(lambda x: len(x['rewards']), self._learners.values())
+            rewards_length_map = map(lambda x: len(x['ma_rewards'][ma_name]), self._learners.values())
             # All learners have evaluated more than evolver_cem_length times
             # or all learners have evaluated more than evolver_cem_min_length times and
             #   it has been more than evolver_cem_time mins since last evolution
@@ -174,7 +188,7 @@ class Evolver:
                      time.time() - self._last_update_nn_variable >= self.base_config['evolver_cem_time'] * 60):
 
                 # Sort learners by the mean of evaluated rewards
-                learner_reward = [(k, float(np.mean(v['rewards']))) for k, v in self._learners.items()]
+                learner_reward = [(peer, float(np.mean(v['ma_rewards'][ma_name]))) for peer, v in self._learners.items()]
                 learner_reward.sort(key=lambda i: i[1], reverse=True)
 
                 # Select top evolver_cem_best learners and get their nn variables
@@ -184,11 +198,11 @@ class Evolver:
                 best_learners = [i[0] for i in learner_reward[:best_size]]
                 nn_variables_list = list()
                 for learner in best_learners:
-                    self._learners[learner]['selected'] += 1
+                    self._learners[learner]['ma_selected'][ma_name] += 1
                     self._config_generator.learner_selected(learner)
                     stub = self.servicer.get_learner_stub(learner)
                     if stub:
-                        nn_variables = stub.get_nn_variables()
+                        nn_variables = stub.get_nn_variables(ma_name)
                         if nn_variables is not None:
                             for v in nn_variables:
                                 if np.isnan(np.min(v)):
@@ -251,7 +265,7 @@ class Evolver:
                 _min, _mean, _max = [np.mean(s) for s in zip(*std)]
                 self._logger.info(f'Variables std: {_min:.2f}, {_mean:.2f}, {_max:.2f}')
 
-    def _get_nn_variables(self):
+    def _get_ma_nn_variables(self):
         if self._saved_nn_variables_mean is None:
             return None
 
@@ -288,14 +302,13 @@ class LearnerStubController:
         self._logger = logging.getLogger('ds.evolver.learner_stub')
 
     @rpc_error_inspector
-    def get_nn_variables(self):
-        response = self._stub.GetNNVariables(Empty())
+    def get_nn_variables(self, ma_name: str):
+        response = self._stub.GetNNVariables(learner_pb2.GetNNVariablesRequest(ma_name=ma_name))
         return [proto_to_ndarray(v) for v in response.variables]
 
     @rpc_error_inspector
-    def update_nn_variables(self, variables):
-        self._stub.UpdateNNVariables(learner_pb2.NNVariables(
-            variables=[ndarray_to_proto(v) for v in variables]))
+    def update_ma_nn_variables(self, ma_variables):
+        self._stub.UpdateMANNVariables(ma_variables_to_proto(ma_variables))
 
     @rpc_error_inspector
     def force_close(self):
@@ -314,7 +327,7 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
         self._learner_connected = evolver._learner_connected
         self._get_new_learner_config = evolver._get_new_learner_config
         self._post_reward = evolver._post_reward
-        self._get_nn_variables = evolver._get_nn_variables
+        self._get_ma_nn_variables = evolver._get_ma_nn_variables
 
         self._logger = logging.getLogger('ds.evolver.service')
         self._peer_set = PeerSet(self._logger)
@@ -422,6 +435,9 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
                                                    model_config_json=json.dumps(model_config),
                                                    sac_config_json=json.dumps(sac_config))
 
+    def RegisterLearnerMANames(self, request, context):
+        peer = context.peer()
+
     def RegisterActor(self, request, context):
         peer = context.peer()
         self._logger.info(f'{peer} starts registering actor')
@@ -461,8 +477,8 @@ class EvolverService(evolver_pb2_grpc.EvolverServiceServicer):
         return Empty()
 
     # From learner
-    def GetNNVariables(self, request, context):
-        ma_variables = self._get_nn_variables()  # TODO
+    def GetMANNVariables(self, request, context):
+        ma_variables = self._get_ma_nn_variables()  # TODO
         if ma_variables is None:
             return ma_variables_to_proto(None)
         else:

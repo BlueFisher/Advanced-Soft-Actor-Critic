@@ -10,7 +10,6 @@ base_config:
     port: 5005
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
-  nn: nn # Neural network models file
   n_agents: 1 # N agents running in parallel
   max_iter: -1 # Max iteration
   max_step: -1 # Max step. Training will be terminated if max_iter or max_step encounters
@@ -19,7 +18,7 @@ base_config:
 
 reset_config: null # Reset parameters sent to Unity
 
-model_config:
+nn_config:
   rep: null
   policy: null
 
@@ -32,6 +31,7 @@ replay_config:
   td_error_max: 1. # Clipped abs error
 
 sac_config:
+  nn: nn # Neural network models file
   seed: null # Random seed
   write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
   save_model_per_step: 5000 # Save model every N steps
@@ -77,3 +77,5 @@ sac_config:
   use_normalization: false # Whether using observation normalization
   use_add_with_td: false
   action_noise: null # [noise_min, noise_max]
+
+ma_config: null

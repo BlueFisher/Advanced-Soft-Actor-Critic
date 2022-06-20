@@ -1,3 +1,5 @@
+from copy import deepcopy
+from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
@@ -245,6 +247,13 @@ class AgentManager:
     def __setitem__(self, k, v):
         self._data[k] = v
 
+    def set_config(self, config):
+        self.config = deepcopy(config)
+
+    def set_model_abs_dir(self, model_abs_dir: Path):
+        model_abs_dir.mkdir(parents=True, exist_ok=True)
+        self.model_abs_dir = model_abs_dir
+
     def set_sac(self, sac: SAC_Base):
         self.sac = sac
         self.seq_encoder = sac.seq_encoder
@@ -318,9 +327,10 @@ class AgentManager:
 class MultiAgentsManager:
     def __init__(self,
                  agent_class: Agent,
-                 ma_obs_shapes,
-                 ma_d_action_size,
-                 ma_c_action_size):
+                 ma_obs_shapes: dict,
+                 ma_d_action_size: dict,
+                 ma_c_action_size: dict,
+                 model_abs_dir: Path):
         self._agent_class = agent_class
 
         self._ma_manager: Dict[str, AgentManager] = {}
@@ -329,6 +339,11 @@ class MultiAgentsManager:
                                                ma_obs_shapes[n],
                                                ma_d_action_size[n],
                                                ma_c_action_size[n])
+
+            if len(ma_obs_shapes) == 1:
+                self._ma_manager[n].set_model_abs_dir(model_abs_dir)
+            else:
+                self._ma_manager[n].set_model_abs_dir(model_abs_dir / n.replace('?', '-'))
 
     def __iter__(self) -> Iterator[Tuple[str, AgentManager]]:
         return iter(self._ma_manager.items())

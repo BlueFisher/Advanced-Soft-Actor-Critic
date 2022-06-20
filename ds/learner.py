@@ -27,7 +27,7 @@ from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
 from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
-from .proto.ma_variables_proto import ma_variables_to_proto, proto_to_ma_variables
+from .proto.ma_variables_proto import ma_variables_to_proto, proto_to_ma_variables, Variables
 from .sac_ds_base import SAC_DS_Base
 from .utils import (PeerSet, SharedMemoryManager, get_episode_shapes_dtypes,
                     rpc_error_inspector)
@@ -315,18 +315,15 @@ class Learner:
     def _get_ma_policy_variables(self):
         return self._ma_policy_variables_cache
 
-    def _get_ma_nn_variables(self):
-        ma_nn_variables = {}
+    def _get_nn_variables(self, ma_name):
+        mgr = self.ma_manager[ma_name]
+        mgr['cmd_pipe_client'].send(('GET', None))
 
-        for n, mgr in self.ma_manager:
-            mgr['cmd_pipe_client'].send(('GET', None))
-            ma_nn_variables[n] = mgr['cmd_pipe_client'].recv()
-
-        return ma_nn_variables
+        return mgr['cmd_pipe_client'].recv()
 
     def _udpate_ma_nn_variables(self, ma_variables):
-        for n, mgr in self.ma_manager:
-            mgr['cmd_pipe_client'].send(('UPDATE', ma_variables[n]))
+        for n, variables in ma_variables:
+            self.ma_manager[n]['cmd_pipe_client'].send(('UPDATE', variables))
 
     def _save_model(self):
         for n, mgr in self.ma_manager:
@@ -522,7 +519,7 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
         self._add_episode = learner._add_episode
         self._get_ma_policy_variables = learner._get_ma_policy_variables
-        self._get_ma_nn_variables = learner._get_ma_nn_variables
+        self._get_nn_variables = learner._get_nn_variables
         self._udpate_ma_nn_variables = learner._udpate_ma_nn_variables
 
         self._force_close = learner._force_close
@@ -613,12 +610,12 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
     # From evolver
     def GetNNVariables(self, request, context):
-        ma_nn_variables = self._get_ma_nn_variables()
-        return ma_variables_to_proto(ma_nn_variables)
+        variables = self._get_nn_variables(request.ma_name)
+        return Variables(variables=[ndarray_to_proto(v) for v in variables])
 
     # From evolver
-    def UpdateNNVariables(self, request, context):
-        ma_variables = ma_variables_to_proto(request)
+    def UpdateMANNVariables(self, request, context):
+        ma_variables = proto_to_ma_variables(request)
         self._udpate_ma_nn_variables(ma_variables)
         return Empty()
 

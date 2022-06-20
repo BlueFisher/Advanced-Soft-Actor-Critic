@@ -1,3 +1,4 @@
+from copy import deepcopy
 import logging
 import logging.handlers
 import random
@@ -9,7 +10,9 @@ import numpy as np
 import yaml
 
 
-def initialize_config_from_yaml(default_config_path, config_file_path, config_cat=None, is_evolver=False):
+def initialize_config_from_yaml(default_config_path, config_file_path,
+                                config_cat=None,
+                                is_evolver=False):
     """
     config_cat: Specific experiment name. 
                 The `config_cat` will override `default` if it is not None
@@ -33,10 +36,18 @@ def initialize_config_from_yaml(default_config_path, config_file_path, config_ca
                 else:
                     dict_ori[k] = v
 
-    for cat in ['default', config_cat]:
-        if cat is None:
-            continue
-        _tra_dict(config, config_file[cat])
+    _tra_dict(config, config_file['default'])
+    if config_cat is not None:
+        _tra_dict(config, config_file[config_cat])
+
+    ma_configs = {}
+    # Deal with multi-agents config
+    if config['ma_config'] is not None:
+        for ma_name, ma_config in config['ma_config'].items():
+            ma_configs[ma_name] = deepcopy(config)
+            del ma_configs[ma_name]['ma_config']
+            _tra_dict(ma_configs[ma_name], ma_config)
+    del config['ma_config']
 
     # Deal with random_params
     for k, v in config.items():
@@ -63,7 +74,7 @@ def initialize_config_from_yaml(default_config_path, config_file_path, config_ca
                     elif 'truncated' in opt:
                         v[param] = np.random.random() * (opt['truncated'][1] - opt['truncated'][0]) + opt['truncated'][0]
 
-    return config
+    return config, ma_configs
 
 
 def set_logger(logger_file=None):
@@ -99,8 +110,8 @@ def save_config(config, model_root_path: Path, config_name):
         yaml.dump(config, f, default_flow_style=False)
 
 
-def display_config(config, logger):
-    logger.info('Config:\n' + yaml.dump(config, default_flow_style=False))
+def display_config(config, logger, name=''):
+    logger.info(f'Config {name}:\n' + yaml.dump(config, default_flow_style=False))
 
 
 def generate_base_name(name, prefix=None):

@@ -22,7 +22,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\rlearner.proto\x12\x07learner\x1a\rndarray.proto\x1a\x0epingpong.proto\x1a\x12ma_variables.proto\"\x90\x01\n\x15RegisterActorResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x11\n\tunique_id\x18\x02 \x01(\x05\x12\x19\n\x11reset_config_json\x18\x03 \x01(\t\x12\x19\n\x11model_config_json\x18\x04 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x05 \x01(\t\"\xb8\x02\n\nAddRequest\x12\x0f\n\x07ma_name\x18\x01 \x01(\t\x12\x1b\n\tl_indexes\x18\x02 \x01(\x0b\x32\x08.NDarray\x12!\n\x0fl_padding_masks\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cl_obses_list\x18\x04 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\tl_actions\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tl_rewards\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1f\n\rnext_obs_list\x18\x07 \x03(\x0b\x32\x08.NDarray\x12\x19\n\x07l_dones\x18\x08 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nl_mu_probs\x18\t \x01(\x0b\x32\x08.NDarray\x12%\n\x13l_seq_hidden_states\x18\n \x01(\x0b\x32\x08.NDarray2\xab\x02\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.learner.RegisterActorResponse\x12*\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x0c.MAVariables\x12\"\n\x03\x41\x64\x64\x12\x13.learner.AddRequest\x1a\x06.Empty\x12&\n\x0eGetNNVariables\x12\x06.Empty\x1a\x0c.MAVariables\x12)\n\x11UpdateNNVariables\x12\x0c.MAVariables\x1a\x06.Empty\x12\x1c\n\nForceClose\x12\x06.Empty\x1a\x06.Emptyb\x06proto3'
+  serialized_pb=b'\n\rlearner.proto\x12\x07learner\x1a\rndarray.proto\x1a\x0epingpong.proto\x1a\x12ma_variables.proto\"\x90\x01\n\x15RegisterActorResponse\x12\x15\n\rmodel_abs_dir\x18\x01 \x01(\t\x12\x11\n\tunique_id\x18\x02 \x01(\x05\x12\x19\n\x11reset_config_json\x18\x03 \x01(\t\x12\x19\n\x11model_config_json\x18\x04 \x01(\t\x12\x17\n\x0fsac_config_json\x18\x05 \x01(\t\"\xb8\x02\n\nAddRequest\x12\x0f\n\x07ma_name\x18\x01 \x01(\t\x12\x1b\n\tl_indexes\x18\x02 \x01(\x0b\x32\x08.NDarray\x12!\n\x0fl_padding_masks\x18\x03 \x01(\x0b\x32\x08.NDarray\x12\x1e\n\x0cl_obses_list\x18\x04 \x03(\x0b\x32\x08.NDarray\x12\x1b\n\tl_actions\x18\x05 \x01(\x0b\x32\x08.NDarray\x12\x1b\n\tl_rewards\x18\x06 \x01(\x0b\x32\x08.NDarray\x12\x1f\n\rnext_obs_list\x18\x07 \x03(\x0b\x32\x08.NDarray\x12\x19\n\x07l_dones\x18\x08 \x01(\x0b\x32\x08.NDarray\x12\x1c\n\nl_mu_probs\x18\t \x01(\x0b\x32\x08.NDarray\x12%\n\x13l_seq_hidden_states\x18\n \x01(\x0b\x32\x08.NDarray\"(\n\x15GetNNVariablesRequest\x12\x0f\n\x07ma_name\x18\x01 \x01(\t2\xc3\x02\n\x0eLearnerService\x12\x1f\n\x0bPersistence\x12\x05.Ping\x1a\x05.Pong(\x01\x30\x01\x12\x37\n\rRegisterActor\x12\x06.Empty\x1a\x1e.learner.RegisterActorResponse\x12*\n\x12GetPolicyVariables\x12\x06.Empty\x1a\x0c.MAVariables\x12\"\n\x03\x41\x64\x64\x12\x13.learner.AddRequest\x1a\x06.Empty\x12<\n\x0eGetNNVariables\x12\x1e.learner.GetNNVariablesRequest\x1a\n.Variables\x12+\n\x13UpdateMANNVariables\x12\x0c.MAVariables\x1a\x06.Empty\x12\x1c\n\nForceClose\x12\x06.Empty\x1a\x06.Emptyb\x06proto3'
   ,
   dependencies=[ndarray__pb2.DESCRIPTOR,pingpong__pb2.DESCRIPTOR,ma__variables__pb2.DESCRIPTOR,])
 
@@ -183,6 +183,38 @@ _ADDREQUEST = _descriptor.Descriptor(
   serialized_end=537,
 )
 
+
+_GETNNVARIABLESREQUEST = _descriptor.Descriptor(
+  name='GetNNVariablesRequest',
+  full_name='learner.GetNNVariablesRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='ma_name', full_name='learner.GetNNVariablesRequest.ma_name', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=539,
+  serialized_end=579,
+)
+
 _ADDREQUEST.fields_by_name['l_indexes'].message_type = ndarray__pb2._NDARRAY
 _ADDREQUEST.fields_by_name['l_padding_masks'].message_type = ndarray__pb2._NDARRAY
 _ADDREQUEST.fields_by_name['l_obses_list'].message_type = ndarray__pb2._NDARRAY
@@ -194,6 +226,7 @@ _ADDREQUEST.fields_by_name['l_mu_probs'].message_type = ndarray__pb2._NDARRAY
 _ADDREQUEST.fields_by_name['l_seq_hidden_states'].message_type = ndarray__pb2._NDARRAY
 DESCRIPTOR.message_types_by_name['RegisterActorResponse'] = _REGISTERACTORRESPONSE
 DESCRIPTOR.message_types_by_name['AddRequest'] = _ADDREQUEST
+DESCRIPTOR.message_types_by_name['GetNNVariablesRequest'] = _GETNNVARIABLESREQUEST
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 RegisterActorResponse = _reflection.GeneratedProtocolMessageType('RegisterActorResponse', (_message.Message,), {
@@ -210,6 +243,13 @@ AddRequest = _reflection.GeneratedProtocolMessageType('AddRequest', (_message.Me
   })
 _sym_db.RegisterMessage(AddRequest)
 
+GetNNVariablesRequest = _reflection.GeneratedProtocolMessageType('GetNNVariablesRequest', (_message.Message,), {
+  'DESCRIPTOR' : _GETNNVARIABLESREQUEST,
+  '__module__' : 'learner_pb2'
+  # @@protoc_insertion_point(class_scope:learner.GetNNVariablesRequest)
+  })
+_sym_db.RegisterMessage(GetNNVariablesRequest)
+
 
 
 _LEARNERSERVICE = _descriptor.ServiceDescriptor(
@@ -219,8 +259,8 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=540,
-  serialized_end=839,
+  serialized_start=582,
+  serialized_end=905,
   methods=[
   _descriptor.MethodDescriptor(
     name='Persistence',
@@ -267,14 +307,14 @@ _LEARNERSERVICE = _descriptor.ServiceDescriptor(
     full_name='learner.LearnerService.GetNNVariables',
     index=4,
     containing_service=None,
-    input_type=ndarray__pb2._EMPTY,
-    output_type=ma__variables__pb2._MAVARIABLES,
+    input_type=_GETNNVARIABLESREQUEST,
+    output_type=ma__variables__pb2._VARIABLES,
     serialized_options=None,
     create_key=_descriptor._internal_create_key,
   ),
   _descriptor.MethodDescriptor(
-    name='UpdateNNVariables',
-    full_name='learner.LearnerService.UpdateNNVariables',
+    name='UpdateMANNVariables',
+    full_name='learner.LearnerService.UpdateMANNVariables',
     index=5,
     containing_service=None,
     input_type=ma__variables__pb2._MAVARIABLES,
