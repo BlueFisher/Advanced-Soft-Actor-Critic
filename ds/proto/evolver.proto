@@ -9,14 +9,15 @@ service EvolverService {
   rpc Persistence(stream Ping) returns (stream Pong);
 
   rpc RegisterLearner(RegisterLearnerRequest) returns (RegisterLearnerResponse);
+  rpc RegisterLearnerMANames(RegisterLearnerMANamesRequest) returns (Empty);
   rpc RegisterActor(Empty) returns (RegisterActorResponse);
   rpc PostReward(PostRewardToEvolverRequest) returns (Empty);
-  rpc GetNNVariables(Empty) returns (MAVariables);
+  rpc GetMANNVariables(Empty) returns (MAVariables);
 }
 
 message RegisterLearnerRequest {
-  string learner_host = 2;
-  int32 learner_port = 3;
+  string learner_host = 1;
+  int32 learner_port = 2;
 }
 
 message RegisterLearnerResponse {
@@ -26,6 +27,10 @@ message RegisterLearnerResponse {
   string reset_config_json = 3;
   string model_config_json = 4;
   string sac_config_json = 5;
+}
+
+message RegisterLearnerMANamesRequest{
+  repeated ma_names = 1;
 }
 
 message RegisterActorResponse {

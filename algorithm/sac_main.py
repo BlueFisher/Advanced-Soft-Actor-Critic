@@ -38,9 +38,9 @@ class Main(object):
         config_abs_path = config_abs_dir.joinpath('config.yaml')
         default_config_abs_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
         # Merge default_config.yaml and custom config.yaml
-        config = config_helper.initialize_config_from_yaml(default_config_abs_path,
-                                                           config_abs_path,
-                                                           args.config)
+        config, ma_configs = config_helper.initialize_config_from_yaml(default_config_abs_path,
+                                                                       config_abs_path,
+                                                                       args.config)
 
         # Initialize config from command line arguments
         self.train_mode = not args.run
@@ -53,19 +53,20 @@ class Main(object):
         self.device = args.device
         self.last_ckpt = args.ckpt
 
-        if args.name is not None:
-            config['base_config']['name'] = args.name
         if args.env_args is not None:
             config['base_config']['env_args'] = args.env_args
         if args.port is not None:
             config['base_config']['unity_args']['port'] = args.port
-
-        if args.nn is not None:
-            config['base_config']['nn'] = args.nn
         if args.agents is not None:
             config['base_config']['n_agents'] = args.agents
         if args.max_iter is not None:
             config['base_config']['max_iter'] = args.max_iter
+        if args.name is not None:
+            config['base_config']['name'] = args.name
+        if args.nn is not None:
+            config['sac_config']['nn'] = args.nn
+            for ma_config in ma_configs.values():
+                ma_config['sac_config']['nn'] = args.nn
 
         config['base_config']['name'] = config_helper.generate_base_name(config['base_config']['name'])
 
@@ -73,7 +74,6 @@ class Main(object):
         model_abs_dir = Path(root_dir).joinpath('models',
                                                 config['base_config']['env_name'],
                                                 config['base_config']['name'])
-        model_abs_dir.mkdir(parents=True, exist_ok=True)
         self.model_abs_dir = model_abs_dir
 
         if args.logger_in_file:
@@ -81,16 +81,19 @@ class Main(object):
 
         if self.train_mode:
             config_helper.save_config(config, model_abs_dir, 'config.yaml')
-
         config_helper.display_config(config, self._logger)
-
         convert_config_to_enum(config['sac_config'])
+        
+        for n, ma_config in ma_configs.items():
+            if self.train_mode:
+                config_helper.save_config(ma_config, model_abs_dir, f'config_{n}.yaml')
+            config_helper.display_config(ma_config, self._logger, n)
+            convert_config_to_enum(ma_config['sac_config'])
 
         self.base_config = config['base_config']
         self.reset_config = config['reset_config']
-        self.model_config = config['model_config']
-        self.replay_config = config['replay_config']
-        self.sac_config = config['sac_config']
+        self.config = config
+        self.ma_configs = ma_configs
 
         return config_abs_dir
 
@@ -140,41 +143,49 @@ class Main(object):
         self.ma_manager = MultiAgentsManager(self._agent_class,
                                              ma_obs_shapes,
                                              ma_d_action_size,
-                                             ma_c_action_size)
+                                             ma_c_action_size,
+                                             self.model_abs_dir)
+        for n, mgr in self.ma_manager:
+            if n not in self.ma_configs:
+                self._logger.warning(f'{n} not in ma_configs')
+                mgr.set_config(self.config)
+            else:
+                mgr.set_config(self.ma_configs[n])
 
         self._logger.info(f'{self.base_config["env_name"]} initialized')
 
     def _init_sac(self, config_abs_dir: Path):
-        # If nn models exists, load saved model, or copy a new one
-        nn_model_abs_path = self.model_abs_dir.joinpath('nn_models.py')
-        if not self.alway_use_env_nn and nn_model_abs_path.exists():
-            spec = importlib.util.spec_from_file_location('nn', str(nn_model_abs_path))
-            self._logger.info(f'Loaded nn from existed {nn_model_abs_path}')
-        else:
-            nn_abs_path = config_abs_dir.joinpath(f'{self.base_config["nn"]}.py')
-            spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
-            self._logger.info(f'Loaded nn in env dir: {nn_abs_path}')
-            if not self.alway_use_env_nn:
-                shutil.copyfile(nn_abs_path, nn_model_abs_path)
-
-        custom_nn_model = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(custom_nn_model)
-
         for n, mgr in self.ma_manager:
+            # If nn models exists, load saved model, or copy a new one
+            saved_nn_abs_path = mgr.model_abs_dir / 'saved_nn.py'
+            if not self.alway_use_env_nn and saved_nn_abs_path.exists():
+                spec = importlib.util.spec_from_file_location('nn', str(saved_nn_abs_path))
+                self._logger.info(f'Loaded nn from existed {saved_nn_abs_path}')
+            else:
+                nn_abs_path = config_abs_dir / f'{mgr.config["sac_config"]["nn"]}.py'
+
+                spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
+                self._logger.info(f'Loaded nn in env dir: {nn_abs_path}')
+                if not self.alway_use_env_nn:
+                    shutil.copyfile(nn_abs_path, saved_nn_abs_path)
+
+            nn = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(nn)
+            mgr.config['sac_config']['nn'] = nn
+
             mgr.set_sac(SAC_Base(obs_shapes=mgr.obs_shapes,
                                  d_action_size=mgr.d_action_size,
                                  c_action_size=mgr.c_action_size,
-                                 model_abs_dir=self.model_abs_dir,
-                                 model=custom_nn_model,
-                                 model_config=self.model_config,
+                                 model_abs_dir=mgr.model_abs_dir,
                                  device=self.device,
                                  ma_name=None if len(self.ma_manager) == 1 else n,
                                  train_mode=self.train_mode,
                                  last_ckpt=self.last_ckpt,
 
-                                 replay_config=self.replay_config,
+                                 nn_config=mgr.config['nn_config'],
+                                 **mgr.config['sac_config'],
 
-                                 **self.sac_config))
+                                 replay_config=mgr.config['replay_config']))
 
     def _run(self):
         self.ma_manager.init(self.base_config['n_agents'])

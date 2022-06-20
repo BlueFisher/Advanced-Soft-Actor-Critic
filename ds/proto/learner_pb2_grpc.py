@@ -39,11 +39,11 @@ class LearnerServiceStub(object):
                 )
         self.GetNNVariables = channel.unary_unary(
                 '/learner.LearnerService/GetNNVariables',
-                request_serializer=ndarray__pb2.Empty.SerializeToString,
-                response_deserializer=ma__variables__pb2.MAVariables.FromString,
+                request_serializer=learner__pb2.GetNNVariablesRequest.SerializeToString,
+                response_deserializer=ma__variables__pb2.Variables.FromString,
                 )
-        self.UpdateNNVariables = channel.unary_unary(
-                '/learner.LearnerService/UpdateNNVariables',
+        self.UpdateMANNVariables = channel.unary_unary(
+                '/learner.LearnerService/UpdateMANNVariables',
                 request_serializer=ma__variables__pb2.MAVariables.SerializeToString,
                 response_deserializer=ndarray__pb2.Empty.FromString,
                 )
@@ -88,7 +88,7 @@ class LearnerServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def UpdateNNVariables(self, request, context):
+    def UpdateMANNVariables(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -125,11 +125,11 @@ def add_LearnerServiceServicer_to_server(servicer, server):
             ),
             'GetNNVariables': grpc.unary_unary_rpc_method_handler(
                     servicer.GetNNVariables,
-                    request_deserializer=ndarray__pb2.Empty.FromString,
-                    response_serializer=ma__variables__pb2.MAVariables.SerializeToString,
+                    request_deserializer=learner__pb2.GetNNVariablesRequest.FromString,
+                    response_serializer=ma__variables__pb2.Variables.SerializeToString,
             ),
-            'UpdateNNVariables': grpc.unary_unary_rpc_method_handler(
-                    servicer.UpdateNNVariables,
+            'UpdateMANNVariables': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateMANNVariables,
                     request_deserializer=ma__variables__pb2.MAVariables.FromString,
                     response_serializer=ndarray__pb2.Empty.SerializeToString,
             ),
@@ -228,13 +228,13 @@ class LearnerService(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/GetNNVariables',
-            ndarray__pb2.Empty.SerializeToString,
-            ma__variables__pb2.MAVariables.FromString,
+            learner__pb2.GetNNVariablesRequest.SerializeToString,
+            ma__variables__pb2.Variables.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
-    def UpdateNNVariables(request,
+    def UpdateMANNVariables(request,
             target,
             options=(),
             channel_credentials=None,
@@ -244,7 +244,7 @@ class LearnerService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/UpdateNNVariables',
+        return grpc.experimental.unary_unary(request, target, '/learner.LearnerService/UpdateMANNVariables',
             ma__variables__pb2.MAVariables.SerializeToString,
             ndarray__pb2.Empty.FromString,
             options, channel_credentials,
