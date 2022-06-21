@@ -1,4 +1,3 @@
-import copy
 import importlib
 import json
 import logging
@@ -9,6 +8,7 @@ import sys
 import threading
 import time
 from concurrent import futures
+from copy import deepcopy
 from pathlib import Path
 from typing import List
 
@@ -17,55 +17,34 @@ import numpy as np
 
 import algorithm.config_helper as config_helper
 from algorithm.agent import Agent, MultiAgentsManager
-from algorithm.utils import (ReadWriteLock, RLock, UselessEpisodeException,
-                             gen_pre_n_actions)
+from algorithm.utils import ReadWriteLock, RLock
 from algorithm.utils.enums import *
 
 from .constants import *
 from .learner_trainer import Trainer
-from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
+from .proto import learner_pb2, learner_pb2_grpc
+from .proto.ma_variables_proto import ma_variables_to_proto
 from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
-from .proto.ma_variables_proto import ma_variables_to_proto, proto_to_ma_variables, Variables
 from .sac_ds_base import SAC_DS_Base
-from .utils import (PeerSet, SharedMemoryManager, get_episode_shapes_dtypes,
-                    rpc_error_inspector)
+from .utils import PeerSet, SharedMemoryManager, get_episode_shapes_dtypes
 
 
 class Learner:
+    _initialized = False
+    _closed = False
     _agent_class = Agent
     _ma_policy_variables_cache = {}
 
     def __init__(self, root_dir, config_dir, args):
-        self._closed = False
-        self._registered = False
-
         self._logger = logging.getLogger('ds.learner')
 
-        constant_config, config_abs_dir = self._init_constant_config(root_dir, config_dir, args)
-        learner_host = constant_config['net_config']['learner_host']
-        learner_port = constant_config['net_config']['learner_port']
+        config_abs_dir = self._init_config(root_dir, config_dir, args)
+        learner_host = self.config['net_config']['learner_host']
+        learner_port = self.config['net_config']['learner_port']
+        self._initialized = True
 
-        self._evolver_stub = EvolverStubController(
-            constant_config['net_config']['evolver_host'],
-            constant_config['net_config']['evolver_port']
-        )
-
-        (_id, name,
-         reset_config,
-         model_config,
-         sac_config) = self._evolver_stub.register_to_evolver(learner_host, learner_port)
-
-        self._logger.info(f'Registered id: {_id}, name: {name}')
-
-        constant_config['base_config']['name'] = name
-        constant_config['reset_config'] = reset_config
-        constant_config['model_config'] = model_config
-        constant_config['sac_config'] = sac_config
-        self._registered = True
-
-        self._init_config(_id, root_dir, constant_config, args)
         self._init_env()
         self._init_sac(config_abs_dir)
 
@@ -75,13 +54,14 @@ class Learner:
 
         self.close()
 
-    def _init_constant_config(self, root_dir, config_dir, args):
-        default_config_abs_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
+    def _init_config(self, root_dir, config_dir, args):
         config_abs_dir = Path(root_dir).joinpath(config_dir)
         config_abs_path = config_abs_dir.joinpath('config_ds.yaml')
-        config = config_helper.initialize_config_from_yaml(default_config_abs_path,
-                                                           config_abs_path,
-                                                           args.config)
+        default_config_abs_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
+        # Merge default_config.yaml and custom config.yaml
+        config, ma_configs = config_helper.initialize_config_from_yaml(default_config_abs_path,
+                                                                       config_abs_path,
+                                                                       args.config)
 
         # Initialize config from command line arguments
         self.logger_in_file = args.logger_in_file
@@ -92,17 +72,20 @@ class Learner:
         self.device = args.device
         self.last_ckpt = args.ckpt
 
-        if args.evolver_host is not None:
-            config['net_config']['evolver_host'] = args.evolver_host
-        if args.evolver_port is not None:
-            config['net_config']['evolver_port'] = args.evolver_port
         if args.learner_host is not None:
             config['net_config']['learner_host'] = args.learner_host
         if args.learner_port is not None:
             config['net_config']['learner_port'] = args.learner_port
-
-        if config['net_config']['evolver_host'] is None:
-            self._logger.fatal('evolver_host is None')
+        if args.env_args is not None:
+            config['base_config']['env_args'] = args.env_args
+        if args.unity_port is not None:
+            config['base_config']['unity_args']['port'] = args.unity_port
+        if args.agents is not None:
+            config['base_config']['n_agents'] = args.agents
+        if args.name is not None:
+            config['base_config']['name'] = args.name
+        if args.nn is not None:
+            config['base_config']['nn'] = args.nn
 
         # If learner_host is not set, use ip as default
         if config['net_config']['learner_host'] is None:
@@ -110,40 +93,31 @@ class Learner:
             ip = socket.gethostbyname(hostname)
             config['net_config']['learner_host'] = ip
 
-        return config, config_abs_dir
-
-    def _init_config(self, _id, root_dir, config, args):
-        if args.name is not None:
-            config['base_config']['name'] = args.name
-        if args.env_args is not None:
-            config['base_config']['env_args'] = args.env_args
-        if args.build_port is not None:
-            config['base_config']['unity_args']['build_port'] = args.build_port
-
-        if args.nn is not None:
-            config['base_config']['nn'] = args.nn
-        if args.agents is not None:
-            config['base_config']['n_agents'] = args.agents
+        config['base_config']['name'] = config_helper.generate_base_name(config['base_config']['name'])
 
         model_abs_dir = Path(root_dir).joinpath('models',
                                                 config['base_config']['env_name'],
-                                                config['base_config']['name'],
-                                                f'learner{_id}')
-        model_abs_dir.mkdir(parents=True, exist_ok=True)
+                                                config['base_config']['name'])
         self.model_abs_dir = model_abs_dir
 
-        if args.logger_in_file:
+        if self.logger_in_file:
             config_helper.set_logger(Path(model_abs_dir).joinpath(f'learner.log'))
 
+        config_helper.save_config(config, model_abs_dir, 'config.yaml')
         config_helper.display_config(config, self._logger)
-
         convert_config_to_enum(config['sac_config'])
 
-        self.config = config
+        for n, ma_config in ma_configs.items():
+            config_helper.save_config(ma_config, model_abs_dir, f'config_{n}.yaml')
+            config_helper.display_config(ma_config, self._logger, n)
+            convert_config_to_enum(ma_config['sac_config'])
+
         self.base_config = config['base_config']
         self.reset_config = config['reset_config']
-        self.model_config = config['model_config']
-        self.sac_config = config['sac_config']
+        self.config = config
+        self.ma_configs = ma_configs
+
+        return config_abs_dir
 
     def _init_env(self):
         if self.base_config['env_type'] == 'UNITY':
@@ -155,7 +129,7 @@ class Learner:
             else:
                 self.env = UnityWrapper(train_mode=False,
                                         file_name=self.base_config['unity_args']['build_path'][sys.platform],
-                                        base_port=self.base_config['unity_args']['build_port'],
+                                        base_port=self.base_config['unity_args']['port'],
                                         no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
                                         scene=self.base_config['env_name'],
                                         additional_args=self.base_config['env_args'],
@@ -191,42 +165,53 @@ class Learner:
         self.ma_manager = MultiAgentsManager(self._agent_class,
                                              ma_obs_shapes,
                                              ma_d_action_size,
-                                             ma_c_action_size)
+                                             ma_c_action_size,
+                                             self.model_abs_dir)
+
+        for n, mgr in self.ma_manager:
+            if n not in self.ma_configs:
+                self._logger.warning(f'{n} not in ma_configs')
+                mgr.set_config(self.config)
+            else:
+                mgr.set_config(self.ma_configs[n])
 
         self._logger.info(f'{self.base_config["env_name"]} initialized')
 
     def _init_sac(self, config_abs_dir: Path):
-        # If nn model exists, load saved model, or copy a new one
-        nn_model_abs_path = self.model_abs_dir.joinpath('nn_models.py')
-        if nn_model_abs_path.exists():
-            spec = importlib.util.spec_from_file_location('nn', str(nn_model_abs_path))
-        else:
-            nn_abs_path = config_abs_dir.joinpath(f'{self.base_config["nn"]}.py')
-            spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
-            shutil.copyfile(nn_abs_path, nn_model_abs_path)
-
-        custom_nn_model = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(custom_nn_model)
-
         for n, mgr in self.ma_manager:
+            # If nn models exists, load saved model, or copy a new one
+            saved_nn_abs_path = mgr.model_abs_dir / 'saved_nn.py'
+            if saved_nn_abs_path.exists():
+                spec = importlib.util.spec_from_file_location('nn', str(saved_nn_abs_path))
+                self._logger.info(f'Loaded nn from existed {saved_nn_abs_path}')
+            else:
+                nn_abs_path = config_abs_dir / f'{mgr.config["sac_config"]["nn"]}.py'
+
+                spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
+                self._logger.info(f'Loaded nn in env dir: {nn_abs_path}')
+                shutil.copyfile(nn_abs_path, saved_nn_abs_path)
+
+            nn = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(nn)
+            mgr.config['sac_config']['nn'] = nn
+
             mgr.set_sac(SAC_DS_Base(obs_shapes=mgr.obs_shapes,
                                     d_action_size=mgr.d_action_size,
                                     c_action_size=mgr.c_action_size,
                                     model_abs_dir=None,
-                                    model=custom_nn_model,
-                                    model_config=self.model_config,
                                     device=self.device,
                                     ma_name=None if len(self.ma_manager) == 1 else n,
                                     train_mode=False,
                                     last_ckpt=self.last_ckpt,
 
-                                    **self.sac_config))
+                                    nn_config=mgr.config['nn_config'],
+                                    **mgr.config['sac_config']))
+
             mgr['lock'] = ReadWriteLock(None, 2, 2, logger=self._logger)
 
             self._logger.info(f'{n} SAC_BAK started')
 
-        # Initialize all queues for learner_trainer
-        for n, mgr in self.ma_manager:
+            # Initialize all queues for learner_trainer
             mgr['all_variables_buffer'] = SharedMemoryManager(1)
             mgr['all_variables_buffer'].init_from_data_buffer(mgr.sac.get_all_variables())
 
@@ -248,6 +233,9 @@ class Learner:
             mgr['episode_length_array'] = mp.Array('i', range(self.base_config['episode_queue_size']))
 
             mgr['cmd_pipe_client'], cmd_pipe_server = mp.Pipe()
+
+            nn = mgr.config['sac_config']['nn']
+            mgr.config['sac_config']['nn'] = spec  # Cannot pickle module object
             mgr['learner_trainer_process'] = mp.Process(target=Trainer, kwargs={
                 'all_variables_buffer': mgr['all_variables_buffer'],
                 'episode_buffer': mgr['episode_buffer'],
@@ -258,22 +246,17 @@ class Learner:
                 'obs_shapes': mgr.obs_shapes,
                 'd_action_size': mgr.d_action_size,
                 'c_action_size': mgr.c_action_size,
-                'model_abs_dir': self.model_abs_dir,
-                'model_spec': spec,
+                'model_abs_dir': mgr.model_abs_dir,
                 'device': self.device,
                 'ma_name': None if len(self.ma_manager) == 1 else n,
                 'last_ckpt': self.last_ckpt,
-                'config': self.config
+
+                'config': mgr.config
             })
             mgr['learner_trainer_process'].start()
+            mgr.config['sac_config']['nn'] = nn
 
-        ma_nn_variables = self._evolver_stub.get_nn_variables()
-        # TODO
-        # if ma_nn_variables:
-        #     self._udpate_nn_variables(ma_nn_variables)
-        #     self._logger.info(f'Initialized from evolver')
-
-        self._logger.info('Waiting for updating sac_bak in first time')
+        self._logger.info('Waiting for updating sac_bak for the first time')
         self._update_sac_bak()
 
         threading.Thread(target=self._forever_update_sac_bak, daemon=True).start()
@@ -299,31 +282,29 @@ class Learner:
             self._update_sac_bak()
 
     def _get_actor_register_result(self, actor_id):
-        if self._registered:
+        if self._initialized:
+            actor_nn_config = deepcopy(self.config['nn_config'])
+            ma_actor_nn_configs = {n: deepcopy(c['nn_config']) for n, c in self.ma_configs}
+            actor_sac_config = deepcopy(self.config['sac_config'])
+            ma_actor_sac_configs = {n: deepcopy(c['sac_config']) for n, c in self.ma_configs}
+
             noise = self.base_config['noise_increasing_rate'] * actor_id
             noise = min(noise, self.base_config['noise_max'])
-
-            actor_sac_config = copy.deepcopy(self.sac_config)
             actor_sac_config['action_noise'] = [noise, noise]
             convert_config_to_string(actor_sac_config)
+            for n, c in ma_actor_sac_configs:
+                c['action_noise'] = [noise, noise]
+                convert_config_to_string(c)
 
-            return (str(self.model_abs_dir),
+            return (self.model_abs_dir,
                     self.reset_config,
-                    self.model_config,
-                    actor_sac_config)
+                    actor_nn_config,
+                    ma_actor_nn_configs,
+                    actor_sac_config,
+                    ma_actor_sac_configs)
 
     def _get_ma_policy_variables(self):
         return self._ma_policy_variables_cache
-
-    def _get_nn_variables(self, ma_name):
-        mgr = self.ma_manager[ma_name]
-        mgr['cmd_pipe_client'].send(('GET', None))
-
-        return mgr['cmd_pipe_client'].recv()
-
-    def _udpate_ma_nn_variables(self, ma_variables):
-        for n, variables in ma_variables:
-            self.ma_manager[n]['cmd_pipe_client'].send(('UPDATE', variables))
 
     def _save_model(self):
         for n, mgr in self.ma_manager:
@@ -410,9 +391,6 @@ class Learner:
                     if ma_next_obs_list is None:
                         force_reset = True
 
-                        if self.base_config['evolver_enabled']:
-                            self._evolver_stub.post_reward(float('-inf'))
-
                         self._logger.warning('Step encounters error, episode ignored')
                         continue
 
@@ -445,10 +423,6 @@ class Learner:
                 if p.exists():
                     self._save_model()
                     p.unlink()
-
-                # TODO
-                # if self.base_config['evolver_enabled']:
-                #     self._evolver_stub.post_reward(np.mean([a.reward for a in agents]))
 
                 iteration += 1
 
@@ -505,7 +479,6 @@ class Learner:
         if hasattr(self, 'server'):
             self.server.stop(None)
 
-        self._evolver_stub.close()
         self.learner_trainer_process.close()
 
         self._logger.warning('Closed')
@@ -519,8 +492,6 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
         self._add_episode = learner._add_episode
         self._get_ma_policy_variables = learner._get_ma_policy_variables
-        self._get_nn_variables = learner._get_nn_variables
-        self._udpate_ma_nn_variables = learner._udpate_ma_nn_variables
 
         self._force_close = learner._force_close
 
@@ -565,13 +536,17 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
                 (model_abs_dir,
                  reset_config,
-                 model_config,
-                 sac_config) = res
-                return learner_pb2.RegisterActorResponse(model_abs_dir=model_abs_dir,
+                 nn_config,
+                 ma_nn_configs,
+                 sac_config,
+                 ma_sac_configs) = res
+                return learner_pb2.RegisterActorResponse(model_abs_dir=str(model_abs_dir),
                                                          unique_id=actor_id,
                                                          reset_config_json=json.dumps(reset_config),
-                                                         model_config_json=json.dumps(model_config),
-                                                         sac_config_json=json.dumps(sac_config))
+                                                         nn_config_json=json.dumps(nn_config),
+                                                         ma_nn_configs_json={n: json.dumps(c) for n, c in ma_nn_configs.items()},
+                                                         sac_config_json=json.dumps(sac_config),
+                                                         ma_sac_configs_json={n: json.dumps(c) for n, c in ma_sac_configs.items()})
             else:
                 return learner_pb2.RegisterActorResponse(unique_id=-1)
 
@@ -608,102 +583,6 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
         return Empty()
 
-    # From evolver
-    def GetNNVariables(self, request, context):
-        variables = self._get_nn_variables(request.ma_name)
-        return Variables(variables=[ndarray_to_proto(v) for v in variables])
-
-    # From evolver
-    def UpdateMANNVariables(self, request, context):
-        ma_variables = proto_to_ma_variables(request)
-        self._udpate_ma_nn_variables(ma_variables)
-        return Empty()
-
     def ForceClose(self, request, context):
         self._force_close()
         return Empty()
-
-
-class EvolverStubController:
-    _closed = False
-
-    def __init__(self, evolver_host, evolver_port):
-        self._logger = logging.getLogger('ds.learner.evolver_stub')
-
-        self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}', [
-            ('grpc.max_reconnect_backoff_ms', MAX_RECONNECT_BACKOFF_MS),
-            ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
-            ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH)
-        ])
-        self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
-        self._logger.info(f'Starting evolver stub [{evolver_host}:{evolver_port}]')
-
-        self._evolver_connected = False
-
-        t_evolver = threading.Thread(target=self._start_evolver_persistence, daemon=True)
-        t_evolver.start()
-
-    @property
-    def connected(self):
-        return not self._closed and self._evolver_connected
-
-    @rpc_error_inspector
-    def register_to_evolver(self, learner_host, learner_port):
-        self._logger.warning('Waiting for evolver connection')
-        while not self.connected:
-            time.sleep(RECONNECTION_TIME)
-            continue
-
-        response = None
-        self._logger.info('Registering to evolver...')
-        while response is None:
-            response = self._evolver_stub.RegisterLearner(
-                evolver_pb2.RegisterLearnerRequest(learner_host=learner_host,
-                                                   learner_port=learner_port))
-
-            if response:
-                self._logger.info('Registered to evolver')
-
-                return (response.id, response.name,
-                        json.loads(response.reset_config_json),
-                        json.loads(response.model_config_json),
-                        json.loads(response.sac_config_json))
-            else:
-                response = None
-                time.sleep(RECONNECTION_TIME)
-
-    @rpc_error_inspector
-    def post_reward(self, reward):
-        self._evolver_stub.PostReward(
-            evolver_pb2.PostRewardToEvolverRequest(reward=float(reward)))
-
-    @rpc_error_inspector
-    def get_nn_variables(self):
-        response = self._evolver_stub.GetNNVariables(Empty())
-        return proto_to_ma_variables(response)
-
-    def _start_evolver_persistence(self):
-        def request_messages():
-            while not self._closed:
-                yield Ping(time=int(time.time() * 1000))
-                time.sleep(PING_INTERVAL)
-                if not self._evolver_connected:
-                    break
-
-        while not self._closed:
-            try:
-                reponse_iterator = self._evolver_stub.Persistence(request_messages())
-                for response in reponse_iterator:
-                    if not self._evolver_connected:
-                        self._evolver_connected = True
-                        self._logger.info('Evolver connected')
-            except grpc.RpcError:
-                if self._evolver_connected:
-                    self._evolver_connected = False
-                    self._logger.error('Evolver disconnected')
-            finally:
-                time.sleep(RECONNECTION_TIME)
-
-    def close(self):
-        self._evolver_channel.close()
-        self._closed = True

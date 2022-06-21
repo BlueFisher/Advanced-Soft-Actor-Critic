@@ -3,8 +3,8 @@ from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
-from algorithm.sac_base import SAC_Base
 
+from algorithm.sac_base import SAC_Base
 from algorithm.utils.enums import *
 from algorithm.utils.operators import gen_pre_n_actions
 

@@ -21,14 +21,15 @@ class SAC_DS_Base(SAC_Base):
                  d_action_size: int,
                  c_action_size: int,
                  model_abs_dir: Optional[str],
-                 model,
-                 model_config: Optional[dict] = None,
                  device: Optional[str] = None,
                  ma_name: Optional[str] = None,
                  summary_path: str = 'log',
                  train_mode: bool = True,
                  last_ckpt: Optional[str] = None,
 
+                 nn_config: Optional[dict] = None,
+
+                 nn = None,
                  seed=None,
                  write_summary_per_step=1e3,
                  save_model_per_step=1e5,
@@ -130,7 +131,7 @@ class SAC_DS_Base(SAC_Base):
         else:
             self._logger = logging.getLogger(f'sac.base.ds.{ma_name}')
 
-        self._build_model(model, model_config, init_log_alpha, learning_rate)
+        self._build_model(nn, nn_config, init_log_alpha, learning_rate)
         self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
 
     def get_policy_variables(self, get_numpy=True):
@@ -159,9 +160,6 @@ class SAC_DS_Base(SAC_Base):
             v.data.copy_(torch.from_numpy(t_v).to(self.device))
 
     def get_nn_variables(self, get_numpy=True):
-        """
-        For learner to send variables to evolver
-        """
         variables = chain(self.model_rep.parameters(),
                           self.model_policy.parameters(),
                           [self.log_d_alpha, self.log_c_alpha])
@@ -194,17 +192,6 @@ class SAC_DS_Base(SAC_Base):
             return [v.detach().cpu().numpy() for v in variables]
         else:
             return variables
-
-    def update_nn_variables(self, t_variables: List[np.ndarray]):
-        """
-        Update own network from evolver selection
-        """
-        variables = self.get_nn_variables(get_numpy=False)
-
-        for v, t_v in zip(variables, t_variables):
-            v.data.copy_(torch.from_numpy(t_v).to(self.device))
-
-        self._update_target_variables()
 
     def get_all_variables(self, get_numpy=True):
         variables = self.get_nn_variables(get_numpy=False)

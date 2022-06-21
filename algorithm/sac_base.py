@@ -1,10 +1,10 @@
 import importlib
 import logging
 import math
+import shutil
 from collections import defaultdict
 from itertools import chain
 from pathlib import Path
-import shutil
 from typing import List, Optional, Tuple
 
 import numpy as np
