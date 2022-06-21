@@ -59,7 +59,7 @@ class Main(object):
             config['base_config']['unity_args']['port'] = args.port
         if args.agents is not None:
             config['base_config']['n_agents'] = args.agents
-        if args.max_iter is not None:
+        if args.max_iter is not None: 
             config['base_config']['max_iter'] = args.max_iter
         if args.name is not None:
             config['base_config']['name'] = args.name
@@ -77,7 +77,7 @@ class Main(object):
         self.model_abs_dir = model_abs_dir
 
         if args.logger_in_file:
-            config_helper.set_logger(Path(model_abs_dir).joinpath(f'log.log'))
+            config_helper.set_logger(model_abs_dir.joinpath(f'log.log'))
 
         if self.train_mode:
             config_helper.save_config(config, model_abs_dir, 'config.yaml')

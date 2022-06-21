@@ -125,17 +125,17 @@ class Trainer:
                  obs_shapes: List[Tuple],
                  d_action_size: int,
                  c_action_size: int,
-                 model_abs_dir: str,
-                 model_spec,
+                 model_abs_dir: Path,
                  device: str,
                  ma_name: Optional[str],
                  last_ckpt: Optional[str],
+
                  config):
 
         self._all_variables_buffer = all_variables_buffer
 
         # Since no set_logger() in main.py
-        config_helper.set_logger(Path(model_abs_dir).joinpath('learner_trainer.log') if logger_in_file else None)
+        config_helper.set_logger(model_abs_dir.joinpath('learner_trainer.log') if logger_in_file else None)
         if ma_name is None:
             self._logger = logging.getLogger('ds.learner.trainer')
         else:
@@ -145,8 +145,9 @@ class Trainer:
 
         self.base_config = config['base_config']
 
-        custom_nn_model = importlib.util.module_from_spec(model_spec)
-        model_spec.loader.exec_module(custom_nn_model)
+        nn = importlib.util.module_from_spec(config['sac_config']['nn'])
+        config['sac_config']['nn'].loader.exec_module(nn)
+        config['sac_config']['nn'] = nn
 
         self.sac_lock = RLock(1)
 
@@ -154,11 +155,11 @@ class Trainer:
                                d_action_size=d_action_size,
                                c_action_size=c_action_size,
                                model_abs_dir=model_abs_dir,
-                               model=custom_nn_model,
-                               model_config=config['model_config'],
                                device=device,
                                ma_name=ma_name,
                                last_ckpt=last_ckpt,
+
+                               nn_config=config['nn_config'],
 
                                **config['sac_config'])
 

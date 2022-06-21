@@ -1,2 +1,0 @@
-class UselessEpisodeException(Exception):
-    pass

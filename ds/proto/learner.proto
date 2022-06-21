@@ -12,9 +12,6 @@ service LearnerService {
 
   rpc GetPolicyVariables(Empty) returns (MAVariables);
   rpc Add(AddRequest) returns (Empty);
-  // Update variables from evolver
-  rpc GetNNVariables(GetNNVariablesRequest) returns (Variables);
-  rpc UpdateMANNVariables(MAVariables) returns (Empty);
 
   rpc ForceClose(Empty) returns (Empty);
 }
@@ -24,8 +21,10 @@ message RegisterActorResponse{
   int32 unique_id = 2;
 
   string reset_config_json = 3;
-  string model_config_json = 4;
-  string sac_config_json = 5;
+  string nn_config_json = 4;
+  map<string, string> ma_nn_configs_json = 5;
+  string sac_config_json = 6;
+  map<string, string> ma_sac_configs_json = 7;
 }
 
 message AddRequest {
@@ -39,8 +38,4 @@ message AddRequest {
   NDarray l_dones = 8;
   NDarray l_mu_probs = 9;
   NDarray l_seq_hidden_states = 10;
-}
-
-message GetNNVariablesRequest {
-  string ma_name = 1;
 }
