@@ -23,13 +23,15 @@ class SAC_Base(object):
                  d_action_size: int,
                  c_action_size: int,
                  model_abs_dir: Optional[Path],
-                 model,
-                 model_config: Optional[dict] = None,
                  device: Optional[str] = None,
+                 ma_name: Optional[str] = None,
                  summary_path: str = 'log',
                  train_mode: bool = True,
                  last_ckpt: Optional[str] = None,
 
+                 nn_config: Optional[dict] = None,
+
+                 nn=None,
                  seed: Optional[float] = None,
                  write_summary_per_step: float = 1e3,
                  save_model_per_step: float = 1e5,
@@ -72,54 +74,65 @@ class SAC_Base(object):
                  use_add_with_td: bool = False,
                  action_noise: Optional[List[float]] = None,
 
-                 replay_config=None):
+                 replay_config: Optional[dict] = None):
         """
         obs_shapes: List of dimensions of observations
         d_action_size: Dimension of discrete actions
         c_action_size: Dimension of continuous actions
         model_abs_dir: The directory that saves summary, checkpoints, config etc.
-        model: Custom Model Class
         device: Training in CPU or GPU
+        ma_name: Multi-agent name
         train_mode: Is training or inference
         last_ckpt: The checkpoint to restore
 
-        seed: Random seed
-        write_summary_per_step: Write summaries in TensorBoard every `write_summary_per_step` steps
-        save_model_per_step: Save model every N steps
+        nn_config: nn model config
+
+        nn: nn # Neural network models file
+        seed: null # Random seed
+        write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
+        save_model_per_step: 5000 # Save model every N steps
+
+        use_replay_buffer: true # Whether using prioritized replay buffer
+        use_priority: true # Whether using PER importance ratio
 
         ensemble_q_num: 2 # Number of Qs
         ensemble_q_sample: 2 # Number of min Qs
 
-        burn_in_step: Burn-in steps in R2D2
-        n_step: Update Q function by `n_step` steps
-        seq_encoder: None | RNN | ATTN
+        burn_in_step: 0 # Burn-in steps in R2D2
+        n_step: 1 # Update Q function by N-steps
+        seq_encoder: null # RNN | ATTN
 
-        batch_size: Batch size for training
-        tau: Coefficient of updating target network
-        update_target_per_step: Update target network every 'update_target_per_step' steps
-        init_log_alpha: The initial log_alpha
-        use_auto_alpha: If using automating entropy adjustment
-        learning_rate: Learning rate of all optimizers
-        gamma: Discount factor
-        v_lambda: Discount factor for V-trace
-        v_rho: Rho for V-trace
-        v_c: C for V-trace
-        clip_epsilon: Epsilon for q clip
+        batch_size: 256 # Batch size for training
 
-        use_priority: If using PER importance ratio
-        use_n_step_is: If using importance sampling
-        siamese: ATC | BYOL
-        siamese_use_q: If using contrastive q
-        siamese_use_adaptive: If using adaptive weights
-        use_prediction: If train a transition model
-        transition_kl: The coefficient of KL of transition and standard normal
-        use_extra_data: If using extra data to train prediction model
-        curiosity: FORWARD | INVERSE
-        curiosity_strength: Curiosity strength if using curiosity
-        use_rnd: If using RND
-        rnd_n_sample: RND sample times
-        use_normalization: If using observation normalization
-        use_add_with_td: If add transitions in replay buffer with td-error
+        tau: 0.005 # Coefficient of updating target network
+        update_target_per_step: 1 # Update target network every N steps
+
+        init_log_alpha: -2.3 # The initial log_alpha
+        use_auto_alpha: true # Whether using automating entropy adjustment
+
+        learning_rate: 0.0003 # Learning rate of all optimizers
+
+        gamma: 0.99 # Discount factor
+        v_lambda: 1.0 # Discount factor for V-trace
+        v_rho: 1.0 # Rho for V-trace
+        v_c: 1.0 # C for V-trace
+        clip_epsilon: 0.2 # Epsilon for q clip
+
+        discrete_dqn_like: false # Whether using policy or only Q network if discrete is in action spaces
+        use_n_step_is: true # Whether using importance sampling
+        siamese: null # ATC | BYOL
+        siamese_use_q: false # Whether using contrastive q
+        siamese_use_adaptive: false # Whether using adaptive weights
+        use_prediction: false # Whether training a transition model
+        transition_kl: 0.8 # The coefficient of KL of transition and standard normal
+        use_extra_data: true # Whether using extra data to train prediction model
+        curiosity: null # FORWARD | INVERSE
+        curiosity_strength: 1 # Curiosity strength if using curiosity
+        use_rnd: false # Whether using RND
+        rnd_n_sample: 10 # RND sample times
+        use_normalization: false # Whether using observation normalization
+        use_add_with_td: false # Whether add transitions in replay buffer with td-error
+        action_noise: null # [noise_min, noise_max]
         """
         self.obs_shapes = obs_shapes
         self.d_action_size = d_action_size
@@ -175,8 +188,8 @@ class SAC_Base(object):
             torch.cuda.manual_seed_all(seed)
 
         self.summary_writer = None
-        if model_abs_dir and self.train_mode:
-            summary_path = Path(model_abs_dir).joinpath(summary_path)
+        if self.model_abs_dir and self.train_mode:
+            summary_path = Path(self.model_abs_dir).joinpath(summary_path)
             self.summary_writer = SummaryWriter(str(summary_path))
             self.summary_available = True
 
@@ -189,22 +202,25 @@ class SAC_Base(object):
                                                 self.n_step,
                                                 self.batch_size)
 
-        self._logger = logging.getLogger('sac.base')
+        if ma_name is None:
+            self._logger = logging.getLogger('sac.base')
+        else:
+            self._logger = logging.getLogger(f'sac.base.{ma_name}')
 
-        self._build_model(model, model_config, init_log_alpha, learning_rate)
+        self._build_model(nn, nn_config, init_log_alpha, learning_rate)
         self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
 
-    def _build_model(self, model, model_config: Optional[dict], init_log_alpha: float, learning_rate: float):
+    def _build_model(self, nn, nn_config: Optional[dict], init_log_alpha: float, learning_rate: float):
         """
         Initialize variables, network models and optimizers
         """
-        if model_config is None:
-            model_config = {}
-        model_config = defaultdict(dict, model_config)
-        if model_config['rep'] is None:
-            model_config['rep'] = {}
-        if model_config['policy'] is None:
-            model_config['policy'] = {}
+        if nn_config is None:
+            nn_config = {}
+        nn_config = defaultdict(dict, nn_config)
+        if nn_config['rep'] is None:
+            nn_config['rep'] = {}
+        if nn_config['policy'] is None:
+            nn_config['policy'] = {}
 
         self.global_step = torch.tensor(0, dtype=torch.int64, requires_grad=False, device='cpu')
 
@@ -225,7 +241,7 @@ class SAC_Base(object):
 
             p_self = self
 
-            class ModelRep(model.ModelRep):
+            class ModelRep(nn.ModelRep):
                 def forward(self, obs_list, *args, **kwargs):
                     obs_list = [
                         torch.clamp(
@@ -238,7 +254,7 @@ class SAC_Base(object):
 
                     return super().forward(obs_list, *args, **kwargs)
         else:
-            ModelRep = model.ModelRep
+            ModelRep = nn.ModelRep
 
         """ REPRESENTATION """
         if self.seq_encoder == SEQ_ENCODER.RNN:
@@ -246,12 +262,12 @@ class SAC_Base(object):
                                                        self.d_action_size, self.c_action_size,
                                                        False, self.train_mode,
                                                        self.model_abs_dir,
-                                                       **model_config['rep']).to(self.device)
+                                                       **nn_config['rep']).to(self.device)
             self.model_target_rep: ModelBaseRNNRep = ModelRep(self.obs_shapes,
                                                               self.d_action_size, self.c_action_size,
                                                               True, self.train_mode,
                                                               self.model_abs_dir,
-                                                              **model_config['rep']).to(self.device)
+                                                              **nn_config['rep']).to(self.device)
             # Get represented state and seq_hidden_state_shape
             test_obs_list = [torch.rand(self.batch_size, 1, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
             test_pre_action = torch.rand(self.batch_size, 1, self.d_action_size + self.c_action_size, device=self.device)
@@ -264,12 +280,12 @@ class SAC_Base(object):
                                                              self.d_action_size, self.c_action_size,
                                                              False, self.train_mode,
                                                              self.model_abs_dir,
-                                                             **model_config['rep']).to(self.device)
+                                                             **nn_config['rep']).to(self.device)
             self.model_target_rep: ModelBaseAttentionRep = ModelRep(self.obs_shapes,
                                                                     self.d_action_size, self.c_action_size,
                                                                     True, self.train_mode,
                                                                     self.model_abs_dir,
-                                                                    **model_config['rep']).to(self.device)
+                                                                    **nn_config['rep']).to(self.device)
             # Get represented state and seq_hidden_state_shape
             test_index = torch.zeros((self.batch_size, 1), dtype=torch.int32, device=self.device)
             test_obs_list = [torch.rand(self.batch_size, 1, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
@@ -283,11 +299,11 @@ class SAC_Base(object):
             self.model_rep: ModelBaseSimpleRep = ModelRep(self.obs_shapes,
                                                           False, self.train_mode,
                                                           self.model_abs_dir,
-                                                          **model_config['rep']).to(self.device)
+                                                          **nn_config['rep']).to(self.device)
             self.model_target_rep: ModelBaseSimpleRep = ModelRep(self.obs_shapes,
                                                                  True, self.train_mode,
                                                                  self.model_abs_dir,
-                                                                 **model_config['rep']).to(self.device)
+                                                                 **nn_config['rep']).to(self.device)
             # Get represented state dimension
             test_obs_list = [torch.rand(self.batch_size, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
             test_state = self.model_rep(test_obs_list)
@@ -304,20 +320,20 @@ class SAC_Base(object):
             self.optimizer_rep = None
 
         """ Q """
-        self.model_q_list: List[ModelBaseQ] = [model.ModelQ(state_size,
-                                                            self.d_action_size,
-                                                            self.c_action_size,
-                                                            False,
-                                                            self.train_mode,
-                                                            self.model_abs_dir).to(self.device)
+        self.model_q_list: List[ModelBaseQ] = [nn.ModelQ(state_size,
+                                                         self.d_action_size,
+                                                         self.c_action_size,
+                                                         False,
+                                                         self.train_mode,
+                                                         self.model_abs_dir).to(self.device)
                                                for _ in range(self.ensemble_q_num)]
 
-        self.model_target_q_list: List[ModelBaseQ] = [model.ModelQ(state_size,
-                                                                   self.d_action_size,
-                                                                   self.c_action_size,
-                                                                   True,
-                                                                   self.train_mode,
-                                                                   self.model_abs_dir).to(self.device)
+        self.model_target_q_list: List[ModelBaseQ] = [nn.ModelQ(state_size,
+                                                                self.d_action_size,
+                                                                self.c_action_size,
+                                                                True,
+                                                                self.train_mode,
+                                                                self.model_abs_dir).to(self.device)
                                                       for _ in range(self.ensemble_q_num)]
         for model_target_q in self.model_target_q_list:
             for param in model_target_q.parameters():
@@ -326,10 +342,10 @@ class SAC_Base(object):
         self.optimizer_q_list = [adam_optimizer(self.model_q_list[i].parameters()) for i in range(self.ensemble_q_num)]
 
         """ POLICY """
-        self.model_policy: ModelBasePolicy = model.ModelPolicy(state_size, self.d_action_size, self.c_action_size,
-                                                               self.train_mode,
-                                                               self.model_abs_dir,
-                                                               **model_config['policy']).to(self.device)
+        self.model_policy: ModelBasePolicy = nn.ModelPolicy(state_size, self.d_action_size, self.c_action_size,
+                                                            self.train_mode,
+                                                            self.model_abs_dir,
+                                                            **nn_config['policy']).to(self.device)
         self.optimizer_policy = adam_optimizer(self.model_policy.parameters())
 
         """ SIAMESE REPRESENTATION LEARNING """
@@ -346,25 +362,25 @@ class SAC_Base(object):
 
             elif self.siamese == SIAMESE.BYOL:
                 self.model_rep_projection_list: List[ModelBaseRepProjection] = [
-                    model.ModelRepProjection(test_encoder.shape[-1]).to(self.device) for test_encoder in test_encoder_list]
+                    nn.ModelRepProjection(test_encoder.shape[-1]).to(self.device) for test_encoder in test_encoder_list]
                 self.model_target_rep_projection_list: List[ModelBaseRepProjection] = [
-                    model.ModelRepProjection(test_encoder.shape[-1]).to(self.device) for test_encoder in test_encoder_list]
+                    nn.ModelRepProjection(test_encoder.shape[-1]).to(self.device) for test_encoder in test_encoder_list]
 
                 test_projection_list = [pro(test_encoder) for pro, test_encoder in zip(self.model_rep_projection_list, test_encoder_list)]
                 self.model_rep_prediction_list: List[ModelBaseRepPrediction] = [
-                    model.ModelRepPrediction(test_projection.shape[-1]).to(self.device) for test_projection in test_projection_list]
+                    nn.ModelRepPrediction(test_projection.shape[-1]).to(self.device) for test_projection in test_projection_list]
                 self.optimizer_siamese = adam_optimizer(chain(*[pro.parameters() for pro in self.model_rep_projection_list],
                                                               *[pre.parameters() for pre in self.model_rep_prediction_list]))
 
         """ RECURRENT PREDICTION MODELS """
         if self.use_prediction:
-            self.model_transition: ModelBaseTransition = model.ModelTransition(state_size,
-                                                                               self.d_action_size,
-                                                                               self.c_action_size,
+            self.model_transition: ModelBaseTransition = nn.ModelTransition(state_size,
+                                                                            self.d_action_size,
+                                                                            self.c_action_size,
+                                                                            self.use_extra_data).to(self.device)
+            self.model_reward: ModelBaseReward = nn.ModelReward(state_size).to(self.device)
+            self.model_observation: ModelBaseObservation = nn.ModelObservation(state_size, self.obs_shapes,
                                                                                self.use_extra_data).to(self.device)
-            self.model_reward: ModelBaseReward = model.ModelReward(state_size).to(self.device)
-            self.model_observation: ModelBaseObservation = model.ModelObservation(state_size, self.obs_shapes,
-                                                                                  self.use_extra_data).to(self.device)
 
             self.optimizer_prediction = adam_optimizer(chain(self.model_transition.parameters(),
                                                              self.model_reward.parameters(),
@@ -379,19 +395,19 @@ class SAC_Base(object):
 
         """ CURIOSITY """
         if self.curiosity == CURIOSITY.FORWARD:
-            self.model_forward_dynamic: ModelBaseForwardDynamic = model.ModelForwardDynamic(state_size,
-                                                                                            self.d_action_size + self.c_action_size).to(self.device)
+            self.model_forward_dynamic: ModelBaseForwardDynamic = nn.ModelForwardDynamic(state_size,
+                                                                                         self.d_action_size + self.c_action_size).to(self.device)
             self.optimizer_curiosity = adam_optimizer(self.model_forward_dynamic.parameters())
 
         elif self.curiosity == CURIOSITY.INVERSE:
-            self.model_inverse_dynamic: ModelBaseInverseDynamic = model.ModelInverseDynamic(state_size,
-                                                                                            self.d_action_size + self.c_action_size).to(self.device)
+            self.model_inverse_dynamic: ModelBaseInverseDynamic = nn.ModelInverseDynamic(state_size,
+                                                                                         self.d_action_size + self.c_action_size).to(self.device)
             self.optimizer_curiosity = adam_optimizer(self.model_inverse_dynamic.parameters())
 
         """ RANDOM NETWORK DISTILLATION """
         if self.use_rnd:
-            self.model_rnd: ModelBaseRND = model.ModelRND(state_size, self.d_action_size + self.c_action_size).to(self.device)
-            self.model_target_rnd: ModelBaseRND = model.ModelRND(state_size, self.d_action_size + self.c_action_size).to(self.device)
+            self.model_rnd: ModelBaseRND = nn.ModelRND(state_size, self.d_action_size + self.c_action_size).to(self.device)
+            self.model_target_rnd: ModelBaseRND = nn.ModelRND(state_size, self.d_action_size + self.c_action_size).to(self.device)
             for param in self.model_target_rnd.parameters():
                 param.requires_grad = False
             self.optimizer_rnd = adam_optimizer(self.model_rnd.parameters())
@@ -541,7 +557,7 @@ class SAC_Base(object):
         if self.d_action_size:
             d_action = np.eye(self.d_action_size)[np.random.rand(batch_size, self.d_action_size).argmax(axis=-1)].astype(np.float32)
         else:
-            d_action = np.empty((batch_size, 0))
+            d_action = np.empty((batch_size, 0), dtype=np.float32)
 
         c_action = np.zeros([batch_size, self.c_action_size], dtype=np.float32)
 
@@ -1582,8 +1598,8 @@ class SAC_Base(object):
         action_noise = torch.linspace(*self.action_noise, steps=batch, device=self.device)  # [Batch, ]
 
         if self.d_action_size:
-            action_random = torch.eye(self.d_action_size)[torch.randint(0, self.d_action_size, size=(batch, ))]
-            mask = torch.rand(batch) < action_noise.squeeze(1)
+            action_random = torch.eye(self.d_action_size, device=self.device)[torch.randint(0, self.d_action_size, size=(batch, ))]
+            mask = torch.rand(batch, device=self.device) < action_noise
             d_action[mask] = action_random[mask]
 
         if self.c_action_size:
@@ -1596,7 +1612,7 @@ class SAC_Base(object):
                        obs_list: List[torch.Tensor],
                        state: torch.Tensor,
                        disable_sample: bool = False,
-                       force_rnd_if_avaiable: bool = False):
+                       force_rnd_if_available: bool = False):
         """
         Args:
             state: [Batch, state_size]
@@ -1608,7 +1624,7 @@ class SAC_Base(object):
         batch = state.shape[0]
         d_policy, c_policy = self.model_policy(state, obs_list)
 
-        if self.use_rnd and (self.train_mode or force_rnd_if_avaiable):
+        if self.use_rnd and (self.train_mode or force_rnd_if_available):
             action = self.rnd_sample(state, d_policy, c_policy)
             d_action = action[..., :self.d_action_size]
             c_action = action[..., self.d_action_size:]
@@ -1655,7 +1671,7 @@ class SAC_Base(object):
     def choose_action(self,
                       obs_list: List[np.ndarray],
                       disable_sample: bool = False,
-                      force_rnd_if_avaiable: bool = False):
+                      force_rnd_if_available: bool = False):
         """
         Args:
             obs_list: list([Batch, *obs_shapes_i], ...)
@@ -1666,7 +1682,7 @@ class SAC_Base(object):
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         state = self.model_rep(obs_list)
 
-        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_avaiable)
+        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_available)
         return action.detach().cpu().numpy(), prob.detach().cpu().numpy()
 
     @torch.no_grad()
@@ -1675,7 +1691,7 @@ class SAC_Base(object):
                           pre_action: np.ndarray,
                           rnn_state: np.ndarray,
                           disable_sample: bool = False,
-                          force_rnd_if_avaiable: bool = False):
+                          force_rnd_if_available: bool = False):
         """
         Args:
             obs_list: list([Batch, *obs_shapes_i], ...)
@@ -1695,7 +1711,7 @@ class SAC_Base(object):
         state = state.squeeze(1)
         obs_list = [obs.squeeze(1) for obs in obs_list]
 
-        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_avaiable)
+        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_available)
 
         return (action.detach().cpu().numpy(),
                 prob.detach().cpu().numpy(),
@@ -1710,7 +1726,7 @@ class SAC_Base(object):
                            ep_attn_hidden_states: np.ndarray,
 
                            disable_sample: bool = False,
-                           force_rnd_if_avaiable: bool = False):
+                           force_rnd_if_available: bool = False):
         """
         Args:
             ep_indexes: [Batch, episode_len]
@@ -1741,7 +1757,7 @@ class SAC_Base(object):
         action, prob = self._choose_action([o[:, -1] for o in ep_obses_list],
                                            state,
                                            disable_sample,
-                                           force_rnd_if_avaiable)
+                                           force_rnd_if_available)
 
         return (action.detach().cpu().numpy(),
                 prob.detach().cpu().numpy(),

@@ -42,34 +42,28 @@ All default training configurations are listed below. It can also be found in `a
 
 ```yaml
 base_config:
-  env_type: UNITY # UNITY or GYM
-  scene:
-    scene # The scene name.
-    # If in Unity envs, it indicates the specific scene.
-    # If in Gym envs, it is just a readable name displayed in TensorBoard
-
-  no_graphics: true # For Unity envs, if an env does not need pixel input, set true
-
-  # Only for Unity Environments
-  build_path: # Unity executable path
-    win32: path_win32
-    linux: path_linux
-  port: 5005
-
-  # Only for Gym Enviroments
-  # build_path: GymEnv # Like CartPole-v1
+  env_type: UNITY # UNITY | GYM | DM_CONTROL
+  env_name: env_name # The environment name.
+  env_args: null
+  unity_args: # Only for Unity Environments
+    no_graphics: true # If an env does not need pixel input, set true
+    build_path: # Unity executable path
+      win32: path_win32
+      linux: path_linux
+    port: 5005
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
-  nn: nn # Neural network models file
+
   n_agents: 1 # N agents running in parallel
+
   max_iter: -1 # Max iteration
   max_step: -1 # Max step. Training will be terminated if max_iter or max_step encounters
   max_step_each_iter: -1 # Max step in each iteration
-  reset_on_iteration: true # If to force reset agent if an episode terminated
+  reset_on_iteration: true # Whether forcing reset agent if an episode terminated
 
 reset_config: null # Reset parameters sent to Unity
 
-model_config:
+nn_config:
   rep: null
   policy: null
 
@@ -82,24 +76,28 @@ replay_config:
   td_error_max: 1. # Clipped abs error
 
 sac_config:
+  nn: nn # Neural network models file
   seed: null # Random seed
   write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
-  save_model_per_step: 100000 # Save model every N steps
+  save_model_per_step: 5000 # Save model every N steps
+
+  use_replay_buffer: true # Whether using prioritized replay buffer
+  use_priority: true # Whether using PER importance ratio
 
   ensemble_q_num: 2 # Number of Qs
   ensemble_q_sample: 2 # Number of min Qs
 
   burn_in_step: 0 # Burn-in steps in R2D2
-  n_step: 1 # Update Q function by N steps
+  n_step: 1 # Update Q function by N-steps
   seq_encoder: null # RNN | ATTN
 
-  batch_size: 256
+  batch_size: 256 # Batch size for training
 
   tau: 0.005 # Coefficient of updating target network
   update_target_per_step: 1 # Update target network every N steps
 
   init_log_alpha: -2.3 # The initial log_alpha
-  use_auto_alpha: true # If using automating entropy adjustment
+  use_auto_alpha: true # Whether using automating entropy adjustment
 
   learning_rate: 0.0003 # Learning rate of all optimizers
 
@@ -109,21 +107,23 @@ sac_config:
   v_c: 1.0 # C for V-trace
   clip_epsilon: 0.2 # Epsilon for q clip
 
-  discrete_dqn_like: false # If using policy or only Q network if discrete is in action spaces
-  use_priority: true # If using PER importance ratio
-  use_n_step_is: true # If using importance sampling
+  discrete_dqn_like: false # Whether using policy or only Q network if discrete is in action spaces
+  use_n_step_is: true # Whether using importance sampling
   siamese: null # ATC | BYOL
-  siamese_use_q: false # If using contrastive q
-  siamese_use_adaptive: false # If using adaptive weights
-  use_prediction: false # If train a transition model
+  siamese_use_q: false # Whether using contrastive q
+  siamese_use_adaptive: false # Whether using adaptive weights
+  use_prediction: false # Whether training a transition model
   transition_kl: 0.8 # The coefficient of KL of transition and standard normal
-  use_extra_data: true # If using extra data to train prediction model
+  use_extra_data: true # Whether using extra data to train prediction model
   curiosity: null # FORWARD | INVERSE
   curiosity_strength: 1 # Curiosity strength if using curiosity
-  use_rnd: false # If using RND
+  use_rnd: false # Whether using RND
   rnd_n_sample: 10 # RND sample times
-  use_normalization: false # If using observation normalization
-  use_add_with_td: false
+  use_normalization: false # Whether using observation normalization
+  use_add_with_td: false # Whether add transitions in replay buffer with td-error
+  action_noise: null # [noise_min, noise_max]
+
+ma_config: null
 ```
 
 All default distributed training configurations are listed below. It can also be found in `ds/default_config.yaml`
@@ -131,28 +131,20 @@ All default distributed training configurations are listed below. It can also be
 ```yaml
 base_config:
   env_type: UNITY # UNITY or GYM
-  scene:
-    scene # The scene name.
-    # If in Unity envs, it indicates the specific scene.
-    # If in Gym envs, it is just a readable name displayed in TensorBoard
-
-  no_graphics: true # For Unity envs, if an env does not need pixel input, set true
-
-  # Only for Unity Environments
-  build_path: # Unity executable path
-    win32: path_win32
-    linux: path_linux
-  port: 5005
-
-  # Only for Gym Enviroments
-  # build_path: GymEnv # Like CartPole-v1
+  env_name: env_name # The environment name.
+  env_args: null
+  unity_args: # Only for Unity Environments
+    no_graphics: true # If an env does not need pixel input, set true
+    build_path: # Unity executable path
+      win32: path_win32
+      linux: path_linux
+    port: 5005
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
-  nn: nn # Neural network models file
   update_sac_bak_per_step: 200 # Every N step update sac_bak
   n_agents: 1 # N agents running in parallel
   max_step_each_iter: -1 # Max step in each iteration
-  reset_on_iteration: true # If to force reset agent if an episode terminated
+  reset_on_iteration: true # Whether forcing reset agent if an episode terminated
 
   evolver_enabled: true
   evolver_cem_length: 50 # Start CEM if all learners have eavluated evolver_cem_length times
@@ -173,18 +165,17 @@ base_config:
   batch_generator_process_num: 5
 
 net_config:
-  evolver_host: null
-  evolver_port: 61000
   learner_host: null
   learner_port: 61001
 
 reset_config: null # Reset parameters sent to Unity
 
-model_config:
+nn_config:
   rep: null
   policy: null
 
 sac_config:
+  nn: nn # Neural network models file
   seed: null # Random seed
   write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
   save_model_per_step: 100000 # Save model every N steps
@@ -224,21 +215,23 @@ sac_config:
   use_rnd: false # If using RND
   rnd_n_sample: 10 # RND sample times
   use_normalization: false # If using observation normalization
-
+  action_noise: null # [noise_min, noise_max]
 
   # random_params:
   #   param_name:
   #     in: [n1, n2, n3]
   #     truncated: [n1 ,n2]
   #     std: n
+
+ma_config: null
 ```
 
 ## Start Training
 
 ```
-usage: main.py [-h] [--config CONFIG] [--run] [--logger_in_file] [--render] [--editor]
-               [--additional_args ADDITIONAL_ARGS] [--port PORT] [--agents AGENTS] [--max_iter MAX_ITER] [--name NAME]
-               [--nn NN] [--use_env_nn] [--device DEVICE] [--ckpt CKPT] [--repeat REPEAT]
+usage: main.py [-h] [--config CONFIG] [--run] [--logger_in_file] [--render] [--env_args ENV_ARGS] [--agents AGENTS]
+               [--max_iter MAX_ITER] [--port PORT] [--editor] [--name NAME] [--disable_sample] [--use_env_nn]
+               [--device DEVICE] [--ckpt CKPT] [--nn NN] [--repeat REPEAT]
                env
 
 positional arguments:
@@ -251,17 +244,17 @@ optional arguments:
   --run                 inference mode
   --logger_in_file      logging into a file
   --render              render
-  --editor              running in Unity Editor
-  --additional_args ADDITIONAL_ARGS
-                        additional args for Unity
-  --port PORT, -p PORT  communication port
+  --env_args ENV_ARGS   additional args for environments
   --agents AGENTS       number of agents
   --max_iter MAX_ITER   max iteration
+  --port PORT, -p PORT  UNITY: communication port
+  --editor              UNITY: running in Unity Editor
   --name NAME, -n NAME  training name
-  --nn NN               neural network model
+  --disable_sample      disable sampling when choosing actions
   --use_env_nn          always use nn.py in env, or use saved nn_models.py if existed
   --device DEVICE       cpu or gpu
   --ckpt CKPT           ckeckpoint to restore
+  --nn NN               neural network model
   --repeat REPEAT       number of repeated experiments
 
 examples:
@@ -276,15 +269,14 @@ python main.py roller -c vanilla -n nowall_202003251644192jWy --run --agents=1
 ## Start Distributed Training
 
 ```
-usage: main_ds.py [-h] [--config CONFIG] [--run] [--logger_in_file] [--evolver_host EVOLVER_HOST]
-                  [--evolver_port EVOLVER_PORT] [--learner_host LEARNER_HOST] [--learner_port LEARNER_PORT] [--render]
-                  [--editor] [--additional_args ADDITIONAL_ARGS] [--build_port BUILD_PORT] [--agents AGENTS]
-                  [--name NAME] [--nn NN] [--device DEVICE] [--ckpt CKPT]
-                  env {learner,l,actor,a,evolver,e}
+usage: main_ds.py [-h] [--config CONFIG] [--run] [--logger_in_file] [--learner_host LEARNER_HOST]
+                  [--learner_port LEARNER_PORT] [--render] [--env_args ENV_ARGS] [--agents AGENTS]
+                  [--unity_port UNITY_PORT] [--editor] [--name NAME] [--device DEVICE] [--ckpt CKPT] [--nn NN]
+                  env {learner,l,actor,a}
 
 positional arguments:
   env
-  {learner,l,actor,a,evolver,e}
+  {learner,l,actor,a}
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -292,32 +284,22 @@ optional arguments:
                         config file
   --run                 inference mode
   --logger_in_file      logging into a file
-  --evolver_host EVOLVER_HOST
-                        evolver host
-  --evolver_port EVOLVER_PORT
-                        evolver port
   --learner_host LEARNER_HOST
                         learner host
   --learner_port LEARNER_PORT
                         learner port
   --render              render
-  --editor              running in Unity Editor
-  --additional_args ADDITIONAL_ARGS
-                        additional args for Unity
-  --build_port BUILD_PORT, -p BUILD_PORT
-                        communication port
+  --env_args ENV_ARGS   additional args for environments
   --agents AGENTS       number of agents
+  --unity_port UNITY_PORT, -p UNITY_PORT
+                        UNITY: communication port
+  --editor              UNITY: running in Unity Editor
   --name NAME, -n NAME  training name
-  --nn NN               neural network model
   --device DEVICE       cpu or gpu
   --ckpt CKPT           ckeckpoint to restore
+  --nn NN               neural network model
 
 examples:
-python main_ds.py bullet/walker evolver --evolver_host=127.0.0.1 --logger_in_file
-
-python main_ds.py bullet/walker learner --evolver_host=127.0.0.1 --logger_in_file
-
-python main_ds.py bullet/walker replay --evolver_host=127.0.0.1 --logger_in_file
-
-python main_ds.py bullet/walker actor --evolver_host=127.0.0.1 --logger_in_file
+python main_ds.py test learner --logger_in_file
+python main_ds.py test actor --logger_in_file
 ```

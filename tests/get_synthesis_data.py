@@ -19,9 +19,9 @@ def get_action(batch, seq_len, d_action_size, c_action_size):
         batch = (batch, seq_len)
 
     if d_action_size:
-        d_actoin = np.eye(d_action_size)[np.random.rand(*batch, d_action_size).argmax(axis=-1)]
+        d_action = np.eye(d_action_size)[np.random.rand(*batch, d_action_size).argmax(axis=-1)]
     else:
-        d_actoin = np.empty((*batch, 0))
+        d_action = np.empty((*batch, 0))
 
     if c_action_size:
         c_action = np.random.rand(*batch, c_action_size)
@@ -29,7 +29,7 @@ def get_action(batch, seq_len, d_action_size, c_action_size):
     else:
         c_action = np.empty((*batch, 0))
 
-    return np.concatenate([d_actoin, c_action], axis=-1).astype(np.float32)
+    return np.concatenate([d_action, c_action], axis=-1).astype(np.float32)
 
 
 def gen_batch_obs(obs_shapes, batch=10):

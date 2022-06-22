@@ -10,11 +10,10 @@ base_config:
     port: 5005
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
-  nn: nn # Neural network models file
   update_sac_bak_per_step: 200 # Every N step update sac_bak
   n_agents: 1 # N agents running in parallel
   max_step_each_iter: -1 # Max step in each iteration
-  reset_on_iteration: true # If to force reset agent if an episode terminated
+  reset_on_iteration: true # Whether forcing reset agent if an episode terminated
 
   evolver_enabled: true
   evolver_cem_length: 50 # Start CEM if all learners have eavluated evolver_cem_length times
@@ -35,18 +34,17 @@ base_config:
   batch_generator_process_num: 5
 
 net_config:
-  evolver_host: null
-  evolver_port: 61000
   learner_host: null
   learner_port: 61001
 
 reset_config: null # Reset parameters sent to Unity
 
-model_config:
+nn_config:
   rep: null
   policy: null
 
 sac_config:
+  nn: nn # Neural network models file
   seed: null # Random seed
   write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
   save_model_per_step: 100000 # Save model every N steps
@@ -88,9 +86,10 @@ sac_config:
   use_normalization: false # If using observation normalization
   action_noise: null # [noise_min, noise_max]
 
-
   # random_params:
   #   param_name:
   #     in: [n1, n2, n3]
   #     truncated: [n1 ,n2]
   #     std: n
+
+ma_config: null

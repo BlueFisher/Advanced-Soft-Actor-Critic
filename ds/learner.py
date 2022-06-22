@@ -1,4 +1,3 @@
-import copy
 import importlib
 import json
 import logging
@@ -9,6 +8,7 @@ import sys
 import threading
 import time
 from concurrent import futures
+from copy import deepcopy
 from pathlib import Path
 from typing import List
 
@@ -16,55 +16,35 @@ import grpc
 import numpy as np
 
 import algorithm.config_helper as config_helper
-from algorithm.agent import Agent
-from algorithm.utils import (ReadWriteLock, RLock, UselessEpisodeException,
-                             gen_pre_n_actions)
+from algorithm.agent import Agent, MultiAgentsManager
+from algorithm.utils import ReadWriteLock, RLock
 from algorithm.utils.enums import *
 
 from .constants import *
 from .learner_trainer import Trainer
-from .proto import evolver_pb2, evolver_pb2_grpc, learner_pb2, learner_pb2_grpc
+from .proto import learner_pb2, learner_pb2_grpc
+from .proto.ma_variables_proto import ma_variables_to_proto
 from .proto.ndarray_pb2 import Empty
 from .proto.numproto import ndarray_to_proto, proto_to_ndarray
 from .proto.pingpong_pb2 import Ping, Pong
 from .sac_ds_base import SAC_DS_Base
-from .utils import (PeerSet, SharedMemoryManager, get_episode_shapes_dtypes,
-                    rpc_error_inspector)
+from .utils import PeerSet, SharedMemoryManager, get_episode_shapes_dtypes
 
 
 class Learner:
+    _initialized = False
+    _closed = False
     _agent_class = Agent
-    _policy_variables_cache = None
+    _ma_policy_variables_cache = {}
 
     def __init__(self, root_dir, config_dir, args):
-        self._closed = False
-        self._registered = False
-
         self._logger = logging.getLogger('ds.learner')
 
-        constant_config, config_abs_dir = self._init_constant_config(root_dir, config_dir, args)
-        learner_host = constant_config['net_config']['learner_host']
-        learner_port = constant_config['net_config']['learner_port']
+        config_abs_dir = self._init_config(root_dir, config_dir, args)
+        learner_host = self.config['net_config']['learner_host']
+        learner_port = self.config['net_config']['learner_port']
+        self._initialized = True
 
-        self._evolver_stub = EvolverStubController(
-            constant_config['net_config']['evolver_host'],
-            constant_config['net_config']['evolver_port']
-        )
-
-        (_id, name,
-         reset_config,
-         model_config,
-         sac_config) = self._evolver_stub.register_to_evolver(learner_host, learner_port)
-
-        self._logger.info(f'Registered id: {_id}, name: {name}')
-
-        constant_config['base_config']['name'] = name
-        constant_config['reset_config'] = reset_config
-        constant_config['model_config'] = model_config
-        constant_config['sac_config'] = sac_config
-        self._registered = True
-
-        self._init_config(_id, root_dir, constant_config, args)
         self._init_env()
         self._init_sac(config_abs_dir)
 
@@ -74,13 +54,14 @@ class Learner:
 
         self.close()
 
-    def _init_constant_config(self, root_dir, config_dir, args):
-        default_config_abs_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
+    def _init_config(self, root_dir, config_dir, args):
         config_abs_dir = Path(root_dir).joinpath(config_dir)
         config_abs_path = config_abs_dir.joinpath('config_ds.yaml')
-        config = config_helper.initialize_config_from_yaml(default_config_abs_path,
-                                                           config_abs_path,
-                                                           args.config)
+        default_config_abs_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
+        # Merge default_config.yaml and custom config.yaml
+        config, ma_configs = config_helper.initialize_config_from_yaml(default_config_abs_path,
+                                                                       config_abs_path,
+                                                                       args.config)
 
         # Initialize config from command line arguments
         self.logger_in_file = args.logger_in_file
@@ -91,17 +72,20 @@ class Learner:
         self.device = args.device
         self.last_ckpt = args.ckpt
 
-        if args.evolver_host is not None:
-            config['net_config']['evolver_host'] = args.evolver_host
-        if args.evolver_port is not None:
-            config['net_config']['evolver_port'] = args.evolver_port
         if args.learner_host is not None:
             config['net_config']['learner_host'] = args.learner_host
         if args.learner_port is not None:
             config['net_config']['learner_port'] = args.learner_port
-
-        if config['net_config']['evolver_host'] is None:
-            self._logger.fatal('evolver_host is None')
+        if args.env_args is not None:
+            config['base_config']['env_args'] = args.env_args
+        if args.unity_port is not None:
+            config['base_config']['unity_args']['port'] = args.unity_port
+        if args.agents is not None:
+            config['base_config']['n_agents'] = args.agents
+        if args.name is not None:
+            config['base_config']['name'] = args.name
+        if args.nn is not None:
+            config['base_config']['nn'] = args.nn
 
         # If learner_host is not set, use ip as default
         if config['net_config']['learner_host'] is None:
@@ -109,40 +93,31 @@ class Learner:
             ip = socket.gethostbyname(hostname)
             config['net_config']['learner_host'] = ip
 
-        return config, config_abs_dir
-
-    def _init_config(self, _id, root_dir, config, args):
-        if args.name is not None:
-            config['base_config']['name'] = args.name
-        if args.env_args is not None:
-            config['base_config']['env_args'] = args.env_args
-        if args.build_port is not None:
-            config['base_config']['unity_args']['build_port'] = args.build_port
-
-        if args.nn is not None:
-            config['base_config']['nn'] = args.nn
-        if args.agents is not None:
-            config['base_config']['n_agents'] = args.agents
+        config['base_config']['name'] = config_helper.generate_base_name(config['base_config']['name'])
 
         model_abs_dir = Path(root_dir).joinpath('models',
                                                 config['base_config']['env_name'],
-                                                config['base_config']['name'],
-                                                f'learner{_id}')
-        model_abs_dir.mkdir(parents=True, exist_ok=True)
+                                                config['base_config']['name'])
         self.model_abs_dir = model_abs_dir
 
-        if args.logger_in_file:
+        if self.logger_in_file:
             config_helper.set_logger(Path(model_abs_dir).joinpath(f'learner.log'))
 
+        config_helper.save_config(config, model_abs_dir, 'config.yaml')
         config_helper.display_config(config, self._logger)
-
         convert_config_to_enum(config['sac_config'])
 
-        self.config = config
+        for n, ma_config in ma_configs.items():
+            config_helper.save_config(ma_config, model_abs_dir, f'config_{n}.yaml')
+            config_helper.display_config(ma_config, self._logger, n)
+            convert_config_to_enum(ma_config['sac_config'])
+
         self.base_config = config['base_config']
         self.reset_config = config['reset_config']
-        self.model_config = config['model_config']
-        self.sac_config = config['sac_config']
+        self.config = config
+        self.ma_configs = ma_configs
+
+        return config_abs_dir
 
     def _init_env(self):
         if self.base_config['env_type'] == 'UNITY':
@@ -154,7 +129,7 @@ class Learner:
             else:
                 self.env = UnityWrapper(train_mode=False,
                                         file_name=self.base_config['unity_args']['build_path'][sys.platform],
-                                        base_port=self.base_confi['unity_args']['build_port'],
+                                        base_port=self.base_config['unity_args']['port'],
                                         no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
                                         scene=self.base_config['env_name'],
                                         additional_args=self.base_config['env_args'],
@@ -169,113 +144,136 @@ class Learner:
                                   n_agents=self.base_config['n_agents'])
 
         elif self.base_config['env_type'] == 'DM_CONTROL':
-            from algorithm.env_wrapper.dm_control_wrapper import DMControlWrapper
+            from algorithm.env_wrapper.dm_control_wrapper import \
+                DMControlWrapper
 
             self.env = DMControlWrapper(train_mode=False,
                                         env_name=self.base_config['env_name'],
                                         render=self.render,
                                         n_agents=self.base_config['n_agents'])
 
+        elif self.base_config['env_type'] == 'TEST':
+            from algorithm.env_wrapper.test_wrapper import TestWrapper
+
+            self.env = TestWrapper(env_args=self.base_config['env_args'],
+                                   n_agents=self.base_config['n_agents'])
+
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
-        self.obs_shapes, self.d_action_size, self.c_action_size = self.env.init()
-        self.action_size = self.d_action_size + self.c_action_size
+        ma_obs_shapes, ma_d_action_size, ma_c_action_size = self.env.init()
+        self.ma_manager = MultiAgentsManager(self._agent_class,
+                                             ma_obs_shapes,
+                                             ma_d_action_size,
+                                             ma_c_action_size,
+                                             self.model_abs_dir)
+
+        for n, mgr in self.ma_manager:
+            if n not in self.ma_configs:
+                self._logger.warning(f'{n} not in ma_configs')
+                mgr.set_config(self.config)
+            else:
+                mgr.set_config(self.ma_configs[n])
 
         self._logger.info(f'{self.base_config["env_name"]} initialized')
 
     def _init_sac(self, config_abs_dir: Path):
-        # If nn model exists, load saved model, or copy a new one
-        nn_model_abs_path = self.model_abs_dir.joinpath('nn_models.py')
-        if nn_model_abs_path.exists():
-            spec = importlib.util.spec_from_file_location('nn', str(nn_model_abs_path))
-        else:
-            nn_abs_path = config_abs_dir.joinpath(f'{self.base_config["nn"]}.py')
-            spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
-            shutil.copyfile(nn_abs_path, nn_model_abs_path)
+        for n, mgr in self.ma_manager:
+            # If nn models exists, load saved model, or copy a new one
+            saved_nn_abs_path = mgr.model_abs_dir / 'saved_nn.py'
+            if saved_nn_abs_path.exists():
+                spec = importlib.util.spec_from_file_location('nn', str(saved_nn_abs_path))
+                self._logger.info(f'Loaded nn from existed {saved_nn_abs_path}')
+            else:
+                nn_abs_path = config_abs_dir / f'{mgr.config["sac_config"]["nn"]}.py'
 
-        custom_nn_model = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(custom_nn_model)
+                spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
+                self._logger.info(f'Loaded nn in env dir: {nn_abs_path}')
+                shutil.copyfile(nn_abs_path, saved_nn_abs_path)
 
-        self._sac_bak_lock = ReadWriteLock(None, 2, 2, logger=self._logger)
+            nn = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(nn)
+            mgr.config['sac_config']['nn'] = nn
 
-        self.sac_bak = SAC_DS_Base(obs_shapes=self.obs_shapes,
-                                   d_action_size=self.d_action_size,
-                                   c_action_size=self.c_action_size,
-                                   model_abs_dir=None,
-                                   model=custom_nn_model,
-                                   model_config=self.model_config,
-                                   device=self.device,
-                                   train_mode=False,
-                                   last_ckpt=self.last_ckpt,
+            mgr.set_sac(SAC_DS_Base(obs_shapes=mgr.obs_shapes,
+                                    d_action_size=mgr.d_action_size,
+                                    c_action_size=mgr.c_action_size,
+                                    model_abs_dir=None,
+                                    device=self.device,
+                                    ma_name=None if len(self.ma_manager) == 1 else n,
+                                    train_mode=False,
+                                    last_ckpt=self.last_ckpt,
 
-                                   **self.sac_config)
+                                    nn_config=mgr.config['nn_config'],
+                                    **mgr.config['sac_config']))
 
-        self._logger.info('SAC_BAK started')
+            mgr['lock'] = ReadWriteLock(None, 2, 2, logger=self._logger)
 
-        # Initialize all queues for learner_trainer
-        self._all_variables_buffer = SharedMemoryManager(1)
-        self._all_variables_buffer.init_from_data_buffer(self.sac_bak.get_all_variables())
+            self._logger.info(f'{n} SAC_BAK started')
 
-        max_episode_length = self.base_config['max_episode_length']
+            # Initialize all queues for learner_trainer
+            mgr['all_variables_buffer'] = SharedMemoryManager(1)
+            mgr['all_variables_buffer'].init_from_data_buffer(mgr.sac.get_all_variables())
 
-        episode_shapes, episode_dtypes = get_episode_shapes_dtypes(
-            max_episode_length,
-            self.obs_shapes,
-            self.action_size,
-            self.sac_bak.seq_hidden_state_shape if self.sac_bak.seq_encoder is not None else None)
+            max_episode_length = self.base_config['max_episode_length']
 
-        self._episode_buffer = SharedMemoryManager(self.base_config['episode_queue_size'],
-                                                   logger=self._logger,
-                                                   counter_get_shm_index_empty_log='Episode shm index is empty',
-                                                   timer_get_shm_index_log='Get an episode shm index',
-                                                   timer_get_data_log='Get an episode',
-                                                   log_repeat=ELAPSED_REPEAT)
-        self._episode_buffer.init_from_shapes(episode_shapes, episode_dtypes)
-        self._episode_length_array = mp.Array('i', range(self.base_config['episode_queue_size']))
+            episode_shapes, episode_dtypes = get_episode_shapes_dtypes(
+                max_episode_length,
+                mgr.obs_shapes,
+                mgr.action_size,
+                mgr.sac.seq_hidden_state_shape if mgr.seq_encoder is not None else None)
 
-        self.cmd_pipe_client, cmd_pipe_server = mp.Pipe()
+            mgr['episode_buffer'] = SharedMemoryManager(self.base_config['episode_queue_size'],
+                                                        logger=self._logger,
+                                                        counter_get_shm_index_empty_log='Episode shm index is empty',
+                                                        timer_get_shm_index_log='Get an episode shm index',
+                                                        timer_get_data_log='Get an episode',
+                                                        log_repeat=ELAPSED_REPEAT)
+            mgr['episode_buffer'].init_from_shapes(episode_shapes, episode_dtypes)
+            mgr['episode_length_array'] = mp.Array('i', range(self.base_config['episode_queue_size']))
 
-        self.learner_trainer_process = mp.Process(target=Trainer, kwargs={
-            'all_variables_buffer': self._all_variables_buffer,
-            'episode_buffer': self._episode_buffer,
-            'episode_length_array': self._episode_length_array,
-            'cmd_pipe_server': cmd_pipe_server,
+            mgr['cmd_pipe_client'], cmd_pipe_server = mp.Pipe()
 
-            'logger_in_file': self.logger_in_file,
-            'obs_shapes': self.obs_shapes,
-            'd_action_size': self.d_action_size,
-            'c_action_size': self.c_action_size,
-            'model_abs_dir': self.model_abs_dir,
-            'model_spec': spec,
-            'device': self.device,
-            'last_ckpt': self.last_ckpt,
-            'config': self.config
-        })
-        self.learner_trainer_process.start()
+            nn = mgr.config['sac_config']['nn']
+            mgr.config['sac_config']['nn'] = spec  # Cannot pickle module object
+            mgr['learner_trainer_process'] = mp.Process(target=Trainer, kwargs={
+                'all_variables_buffer': mgr['all_variables_buffer'],
+                'episode_buffer': mgr['episode_buffer'],
+                'episode_length_array': mgr['episode_length_array'],
+                'cmd_pipe_server': cmd_pipe_server,
 
-        nn_variables = self._evolver_stub.get_nn_variables()
-        if nn_variables:
-            self._udpate_nn_variables(nn_variables)
-            self._logger.info(f'Initialized from evolver')
+                'logger_in_file': self.logger_in_file,
+                'obs_shapes': mgr.obs_shapes,
+                'd_action_size': mgr.d_action_size,
+                'c_action_size': mgr.c_action_size,
+                'model_abs_dir': mgr.model_abs_dir,
+                'device': self.device,
+                'ma_name': None if len(self.ma_manager) == 1 else n,
+                'last_ckpt': self.last_ckpt,
 
-        self._logger.info('Waiting for updating sac_bak in first time')
+                'config': mgr.config
+            })
+            mgr['learner_trainer_process'].start()
+            mgr.config['sac_config']['nn'] = nn
+
+        self._logger.info('Waiting for updating sac_bak for the first time')
         self._update_sac_bak()
 
         threading.Thread(target=self._forever_update_sac_bak, daemon=True).start()
 
     def _update_sac_bak(self):
-        all_variables, _ = self._all_variables_buffer.get()  # Block, waiting for all variables available
+        for n, mgr in self.ma_manager:
+            all_variables, _ = mgr['all_variables_buffer'].get()  # Block, waiting for all variables available
 
-        with self._sac_bak_lock.write():
-            res = self.sac_bak.update_all_variables(all_variables)
+            with mgr['lock'].write():
+                res = mgr.sac.update_all_variables(all_variables)
 
-        if not res:
-            self._logger.warning('NAN in variables, closing...')
-            self._force_close()
-            return
+            if not res:
+                self._logger.warning('NAN in variables, closing...')
+                self._force_close()
+                return
 
-        self._policy_variables_cache = self.sac_bak.get_policy_variables()
+            self._ma_policy_variables_cache[n] = mgr.sac.get_policy_variables()
 
         self._logger.info('Updated sac_bak')
 
@@ -284,35 +282,36 @@ class Learner:
             self._update_sac_bak()
 
     def _get_actor_register_result(self, actor_id):
-        if self._registered:
+        if self._initialized:
+            actor_nn_config = deepcopy(self.config['nn_config'])
+            ma_actor_nn_configs = {n: deepcopy(c['nn_config']) for n, c in self.ma_configs}
+            actor_sac_config = deepcopy(self.config['sac_config'])
+            ma_actor_sac_configs = {n: deepcopy(c['sac_config']) for n, c in self.ma_configs}
+
             noise = self.base_config['noise_increasing_rate'] * actor_id
             noise = min(noise, self.base_config['noise_max'])
-
-            actor_sac_config = copy.deepcopy(self.sac_config)
             actor_sac_config['action_noise'] = [noise, noise]
             convert_config_to_string(actor_sac_config)
+            for n, c in ma_actor_sac_configs:
+                c['action_noise'] = [noise, noise]
+                convert_config_to_string(c)
 
-            return (str(self.model_abs_dir),
+            return (self.model_abs_dir,
                     self.reset_config,
-                    self.model_config,
-                    actor_sac_config)
+                    actor_nn_config,
+                    ma_actor_nn_configs,
+                    actor_sac_config,
+                    ma_actor_sac_configs)
 
-    def _get_policy_variables(self):
-        return self._policy_variables_cache
-
-    def _get_nn_variables(self):
-        self.cmd_pipe_client.send(('GET', None))
-        nn_variables = self.cmd_pipe_client.recv()
-
-        return nn_variables
-
-    def _udpate_nn_variables(self, variables):
-        self.cmd_pipe_client.send(('UPDATE', variables))
+    def _get_ma_policy_variables(self):
+        return self._ma_policy_variables_cache
 
     def _save_model(self):
-        self.cmd_pipe_client.send(('SAVE_MODEL', None))
+        for n, mgr in self.ma_manager:
+            mgr['cmd_pipe_client'].send(('SAVE_MODEL', None))
 
     def _add_episode(self,
+                     ma_name: str,
                      l_indexes: np.ndarray,
                      l_padding_masks: np.ndarray,
                      l_obses_list: List[np.ndarray],
@@ -324,6 +323,7 @@ class Learner:
                      l_seq_hidden_states: np.ndarray = None):
         """
         Args:
+            ma_name: str
             l_indexes: [1, episode_len]
             l_padding_masks: [1, episode_len]
             l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
@@ -334,7 +334,7 @@ class Learner:
             l_probs: [1, episode_len]
             l_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
-        episode_idx = self._episode_buffer.put([
+        episode_idx = self.ma_manager[ma_name]['episode_buffer'].put([
             l_indexes,
             l_padding_masks,
             l_obses_list,
@@ -345,178 +345,111 @@ class Learner:
             l_probs,
             l_seq_hidden_states
         ])
-        self._episode_length_array[episode_idx] = l_indexes.shape[1]
+        self.ma_manager[ma_name]['episode_length_array'][episode_idx] = l_indexes.shape[1]
 
     def _policy_evaluation(self):
-        num_agents = self.base_config['n_agents']
-        seq_encoder = self.sac_bak.seq_encoder
+        self.ma_manager.init(self.base_config['n_agents'])
 
-        obs_list = self.env.reset(reset_config=self.reset_config)
-        initial_pre_action = self.sac_bak.get_initial_action(num_agents)  # [n_agents, action_size]
-        pre_action = initial_pre_action
-        if seq_encoder is not None:
-            initial_seq_hidden_state = self.sac_bak.get_initial_seq_hidden_state(num_agents)  # [n_agents, *seq_hidden_state_shape]
-            seq_hidden_state = initial_seq_hidden_state
-
-        agents = [self._agent_class(i, self.obs_shapes, self.action_size,
-                                    seq_hidden_state_shape=self.sac_bak.seq_hidden_state_shape if seq_encoder is not None else None)
-                  for i in range(num_agents)]
+        ma_obs_list = self.env.reset(reset_config=self.reset_config)
+        self.ma_manager.set_obs_list(ma_obs_list)
 
         force_reset = False
         iteration = 0
         start_time = time.time()
 
-        while not self._closed:
-            if self.base_config['reset_on_iteration'] or any([a.max_reached for a in agents]) or force_reset:
-                obs_list = self.env.reset(reset_config=self.reset_config)
-                for agent in agents:
-                    agent.clear()
+        try:
+            while not self._closed:
+                if self.base_config['reset_on_iteration'] \
+                        or self.ma_manager.is_max_reached() \
+                        or force_reset:
+                    ma_obs_list = self.env.reset(reset_config=self.reset_config)
+                    self.ma_manager.set_obs_list(ma_obs_list)
+                    self.ma_manager.clear()
 
-                force_reset = False
-            else:
-                for agent in agents:
-                    agent.reset()
+                    force_reset = False
+                else:
+                    self.ma_manager.reset()
 
-            action = np.zeros([len(agents), self.action_size], dtype=np.float32)
-            step = 0
+                step = 0
 
-            try:
-                while not all([a.done for a in agents]) and not self._closed:
-                    # burn in padding
-                    for agent in [a for a in agents if a.is_empty()]:
-                        for _ in range(self.sac_bak.burn_in_step):
-                            agent.add_transition(
-                                obs_list=[np.zeros(t, dtype=np.float32) for t in self.obs_shapes],
-                                action=np.zeros(self.action_size),
-                                reward=0.,
-                                local_done=False,
-                                max_reached=False,
-                                next_obs_list=[np.zeros(t, dtype=np.float32) for t in self.obs_shapes],
-                                prob=0.,
-                                is_padding=True,
-                                seq_hidden_state=initial_seq_hidden_state[0]
+                while not self.ma_manager.is_done() \
+                        and not self._closed:
+                    self.ma_manager.burn_in_padding()
+
+                    for n, mgr in self.ma_manager:
+                        with mgr['lock'].read('choose_action'):
+                            mgr.get_action()
+
+                    ma_d_action = {n: mgr['d_action'] for n, mgr in self.ma_manager}
+                    ma_c_action = {n: mgr['c_action'] for n, mgr in self.ma_manager}
+
+                    (ma_next_obs_list,
+                     ma_reward,
+                     ma_local_done,
+                     ma_max_reached) = self.env.step(ma_d_action, ma_c_action)
+
+                    if ma_next_obs_list is None:
+                        force_reset = True
+
+                        self._logger.warning('Step encounters error, episode ignored')
+                        continue
+
+                    for n, mgr in self.ma_manager:
+                        if step == self.base_config['max_step_each_iter']:
+                            ma_local_done[n] = [True] * len(mgr.agents)
+                            ma_max_reached[n] = [True] * len(mgr.agents)
+
+                        for i, a in enumerate(mgr.agents):
+                            a.add_transition(
+                                obs_list=[o[i] for o in mgr['obs_list']],
+                                action=mgr['action'][i],
+                                reward=ma_reward[n][i],
+                                local_done=ma_local_done[n][i],
+                                max_reached=ma_max_reached[n][i],
+                                next_obs_list=[o[i] for o in ma_next_obs_list[n]],
+                                prob=mgr['prob'][i],
+                                is_padding=False,
+                                seq_hidden_state=mgr['seq_hidden_state'][i] if mgr.seq_encoder is not None else None,
                             )
 
-                    with self._sac_bak_lock.read('choose_action'):
-                        if seq_encoder == SEQ_ENCODER.RNN:
-                            action, prob, next_seq_hidden_state = self.sac_bak.choose_rnn_action(obs_list,
-                                                                                                 pre_action,
-                                                                                                 seq_hidden_state)
-                            if np.isnan(np.min(next_seq_hidden_state)):
-                                raise UselessEpisodeException()
-
-                        elif seq_encoder == SEQ_ENCODER.ATTN:
-                            ep_length = max(1, max([a.episode_length for a in agents]))
-
-                            all_episode_trans = [a.get_episode_trans(ep_length) for a in agents]
-                            (all_ep_indexes,
-                                all_ep_padding_masks,
-                                all_ep_obses_list,
-                                all_ep_actions,
-                                all_all_ep_rewards,
-                                all_next_obs_list,
-                                all_ep_dones,
-                                all_ep_probs,
-                                all_ep_attn_states) = zip(*all_episode_trans)
-
-                            ep_indexes = np.concatenate(all_ep_indexes)
-                            ep_padding_masks = np.concatenate(all_ep_padding_masks)
-                            ep_obses_list = [np.concatenate(o) for o in zip(*all_ep_obses_list)]
-                            ep_actions = np.concatenate(all_ep_actions)
-                            ep_attn_states = np.concatenate(all_ep_attn_states)
-
-                            ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
-                            ep_padding_masks = np.concatenate([ep_padding_masks,
-                                                               np.zeros_like(ep_padding_masks[:, -1:], dtype=bool)], axis=1)
-                            ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
-                                             for o, t_o in zip(ep_obses_list, obs_list)]
-                            ep_pre_actions = gen_pre_n_actions(ep_actions, True)
-
-                            action, prob, next_seq_hidden_state = self.sac_bak.choose_attn_action(ep_indexes,
-                                                                                                  ep_padding_masks,
-                                                                                                  ep_obses_list,
-                                                                                                  ep_pre_actions,
-                                                                                                  ep_attn_states)
-                            if np.isnan(np.min(next_seq_hidden_state)):
-                                raise UselessEpisodeException()
-
-                        else:
-                            action, prob = self.sac_bak.choose_action(obs_list)
-
-                    next_obs_list, reward, local_done, max_reached = self.env.step(action[..., :self.d_action_size],
-                                                                                   action[..., self.d_action_size:])
-
-                    if next_obs_list is None:
-                        raise UselessEpisodeException()
-
-                    if step == self.base_config['max_step_each_iter']:
-                        local_done = [True] * len(agents)
-                        max_reached = [True] * len(agents)
-
-                    for i, agent in enumerate(agents):
-                        agent.add_transition(
-                            obs_list=[o[i] for o in obs_list],
-                            action=action[i],
-                            reward=reward[i],
-                            local_done=local_done[i],
-                            max_reached=max_reached[i],
-                            next_obs_list=[o[i] for o in next_obs_list],
-                            prob=prob[i],
-                            is_padding=False,
-                            seq_hidden_state=seq_hidden_state[i] if seq_encoder is not None else None,
-                        )
-
-                    obs_list = next_obs_list
-                    pre_action = action
-                    pre_action[local_done] = initial_pre_action[local_done]
-                    if seq_encoder is not None:
-                        seq_hidden_state = next_seq_hidden_state
-                        seq_hidden_state[local_done] = initial_seq_hidden_state[local_done]
+                    self.ma_manager.post_step(ma_next_obs_list, ma_local_done)
 
                     step += 1
 
-            except UselessEpisodeException:
-                self._logger.warning('Useless episode')
-                force_reset = True
+                self._log_episode_summaries()
+                self._log_episode_info(iteration, start_time)
 
-                if self.base_config['evolver_enabled']:
-                    self._evolver_stub.post_reward(float('-inf'))
+                p = self.model_abs_dir.joinpath('save_model')
+                if p.exists():
+                    self._save_model()
+                    p.unlink()
 
-                continue
+                iteration += 1
 
-            except Exception as e:
-                self._logger.error(e)
-                self._logger.error('Exiting...')
-                break
+        finally:
+            self._save_model()
+            self.env.close()
 
-            self._log_episode_summaries(agents)
-            self._log_episode_info(iteration, start_time, agents)
+            self._logger.warning('Evaluation terminated')
 
-            if (p := self.model_abs_dir.joinpath('save_model')).exists():
-                self._save_model()
-                p.unlink()
+    def _log_episode_summaries(self):
+        for n, mgr in self.ma_manager:
+            rewards = np.array([a.reward for a in mgr.agents])
 
-            if self.base_config['evolver_enabled']:
-                self._evolver_stub.post_reward(np.mean([a.reward for a in agents]))
+            mgr['cmd_pipe_client'].send(('LOG_EPISODE_SUMMARIES', [
+                {'tag': 'reward/mean', 'simple_value': float(rewards.mean())},
+                {'tag': 'reward/max', 'simple_value': float(rewards.max())},
+                {'tag': 'reward/min', 'simple_value': float(rewards.min())}
+            ]))
 
-            iteration += 1
-
-        self._logger.warning('Evaluation exits')
-
-    def _log_episode_summaries(self, agents):
-        rewards = np.array([a.reward for a in agents])
-        self.cmd_pipe_client.send(('LOG_EPISODE_SUMMARIES', [
-            {'tag': 'reward/mean', 'simple_value': float(rewards.mean())},
-            {'tag': 'reward/max', 'simple_value': float(rewards.max())},
-            {'tag': 'reward/min', 'simple_value': float(rewards.min())}
-        ]))
-
-    def _log_episode_info(self, iteration, start_time, agents):
+    def _log_episode_info(self, iteration, start_time):
         time_elapse = (time.time() - start_time) / 60
-        rewards = [a.reward for a in agents]
-        rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-        max_step = max([a.steps for a in agents])
-        self._logger.info(f'{iteration}, {time_elapse:.2f}m, S {max_step}, R {rewards}')
+        for n, mgr in self.ma_manager:
+            rewards = [a.reward for a in mgr.agents]
+            rewards = ", ".join([f"{i:6.1f}" for i in rewards])
+            max_step = max([a.steps for a in mgr.agents])
+
+            self._logger.info(f'{n} {iteration}, {time_elapse:.2f}m, S {max_step}, R {rewards}')
 
     def _run_learner_server(self, learner_port):
         servicer = LearnerService(self)
@@ -546,23 +479,19 @@ class Learner:
         if hasattr(self, 'server'):
             self.server.stop(None)
 
-        self._evolver_stub.close()
         self.learner_trainer_process.close()
 
         self._logger.warning('Closed')
 
 
 class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
-    _policy_variables_id_cache = None
-    _proto_policy_variables_cache = None
+    _ma_policy_variables_cache = None
 
     def __init__(self, learner: Learner):
         self._get_actor_register_result = learner._get_actor_register_result
 
         self._add_episode = learner._add_episode
-        self._get_policy_variables = learner._get_policy_variables
-        self._get_nn_variables = learner._get_nn_variables
-        self._udpate_nn_variables = learner._udpate_nn_variables
+        self._get_ma_policy_variables = learner._get_ma_policy_variables
 
         self._force_close = learner._force_close
 
@@ -598,7 +527,7 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
                 actor_id = self._actor_id
 
                 self._peer_set.add_info(peer, {
-                    'policy_variables_id_cache': None
+                    'ma_policy_variables_id_cache': None
                 })
 
                 self._logger.info(f'Actor {peer} registered')
@@ -607,13 +536,17 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
                 (model_abs_dir,
                  reset_config,
-                 model_config,
-                 sac_config) = res
-                return learner_pb2.RegisterActorResponse(model_abs_dir=model_abs_dir,
+                 nn_config,
+                 ma_nn_configs,
+                 sac_config,
+                 ma_sac_configs) = res
+                return learner_pb2.RegisterActorResponse(model_abs_dir=str(model_abs_dir),
                                                          unique_id=actor_id,
                                                          reset_config_json=json.dumps(reset_config),
-                                                         model_config_json=json.dumps(model_config),
-                                                         sac_config_json=json.dumps(sac_config))
+                                                         nn_config_json=json.dumps(nn_config),
+                                                         ma_nn_configs_json={n: json.dumps(c) for n, c in ma_nn_configs.items()},
+                                                         sac_config_json=json.dumps(sac_config),
+                                                         ma_sac_configs_json={n: json.dumps(c) for n, c in ma_sac_configs.items()})
             else:
                 return learner_pb2.RegisterActorResponse(unique_id=-1)
 
@@ -621,26 +554,24 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
     def GetPolicyVariables(self, request, context):
         peer = context.peer()
 
-        variables = self._get_policy_variables()
-        if variables is None:
-            return learner_pb2.NNVariables(succeeded=False)
+        ma_policy_variables = self._get_ma_policy_variables()
+        if len(ma_policy_variables) == 0:
+            return ma_variables_to_proto(None)
 
-        if id(variables) != self._policy_variables_id_cache:
-            self._policy_variables_id_cache = id(variables)
-            self._proto_policy_variables_cache = [ndarray_to_proto(v) for v in variables]
+        self._ma_policy_variables_cache = ma_policy_variables
 
         actor_info = self._peer_set.get_info(peer)
 
-        if self._policy_variables_id_cache == actor_info['policy_variables_id_cache']:
-            return learner_pb2.NNVariables(succeeded=False)
+        if id(list(self._ma_policy_variables_cache.values())[0]) == actor_info['ma_policy_variables_id_cache']:
+            return ma_variables_to_proto(None)
 
-        actor_info['policy_variables_id_cache'] = self._policy_variables_id_cache
-        return learner_pb2.NNVariables(succeeded=True,
-                                       variables=self._proto_policy_variables_cache)
+        actor_info['ma_policy_variables_id_cache'] = id(list(self._ma_policy_variables_cache.values())[0])
+        return ma_variables_to_proto(self._ma_policy_variables_cache)
 
     # From actor
     def Add(self, request, context):
-        self._add_episode(proto_to_ndarray(request.l_indexes),
+        self._add_episode(request.ma_name,
+                          proto_to_ndarray(request.l_indexes),
                           proto_to_ndarray(request.l_padding_masks),
                           [proto_to_ndarray(l_obses) for l_obses in request.l_obses_list],
                           proto_to_ndarray(request.l_actions),
@@ -652,107 +583,6 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
 
         return Empty()
 
-    # From evolver
-    def GetNNVariables(self, request, context):
-        variables = self._get_nn_variables()
-        return learner_pb2.NNVariables(succeeded=True,
-                                       variables=[ndarray_to_proto(v) for v in variables])
-
-    # From evolver
-    def UpdateNNVariables(self, request, context):
-        variables = [proto_to_ndarray(v) for v in request.variables]
-        self._udpate_nn_variables(variables)
-        return Empty()
-
     def ForceClose(self, request, context):
         self._force_close()
         return Empty()
-
-
-class EvolverStubController:
-    _closed = False
-
-    def __init__(self, evolver_host, evolver_port):
-        self._logger = logging.getLogger('ds.learner.evolver_stub')
-
-        self._evolver_channel = grpc.insecure_channel(f'{evolver_host}:{evolver_port}', [
-            ('grpc.max_reconnect_backoff_ms', MAX_RECONNECT_BACKOFF_MS),
-            ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
-            ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH)
-        ])
-        self._evolver_stub = evolver_pb2_grpc.EvolverServiceStub(self._evolver_channel)
-        self._logger.info(f'Starting evolver stub [{evolver_host}:{evolver_port}]')
-
-        self._evolver_connected = False
-
-        t_evolver = threading.Thread(target=self._start_evolver_persistence, daemon=True)
-        t_evolver.start()
-
-    @property
-    def connected(self):
-        return not self._closed and self._evolver_connected
-
-    @rpc_error_inspector
-    def register_to_evolver(self, learner_host, learner_port):
-        self._logger.warning('Waiting for evolver connection')
-        while not self.connected:
-            time.sleep(RECONNECTION_TIME)
-            continue
-
-        response = None
-        self._logger.info('Registering to evolver...')
-        while response is None:
-            response = self._evolver_stub.RegisterLearner(
-                evolver_pb2.RegisterLearnerRequest(learner_host=learner_host,
-                                                   learner_port=learner_port))
-
-            if response:
-                self._logger.info('Registered to evolver')
-
-                return (response.id, response.name,
-                        json.loads(response.reset_config_json),
-                        json.loads(response.model_config_json),
-                        json.loads(response.sac_config_json))
-            else:
-                response = None
-                time.sleep(RECONNECTION_TIME)
-
-    @rpc_error_inspector
-    def post_reward(self, reward):
-        self._evolver_stub.PostReward(
-            evolver_pb2.PostRewardToEvolverRequest(reward=float(reward)))
-
-    @rpc_error_inspector
-    def get_nn_variables(self):
-        response = self._evolver_stub.GetNNVariables(Empty())
-        if response.succeeded:
-            variables = [proto_to_ndarray(v) for v in response.variables]
-            return variables
-        else:
-            return None
-
-    def _start_evolver_persistence(self):
-        def request_messages():
-            while not self._closed:
-                yield Ping(time=int(time.time() * 1000))
-                time.sleep(PING_INTERVAL)
-                if not self._evolver_connected:
-                    break
-
-        while not self._closed:
-            try:
-                reponse_iterator = self._evolver_stub.Persistence(request_messages())
-                for response in reponse_iterator:
-                    if not self._evolver_connected:
-                        self._evolver_connected = True
-                        self._logger.info('Evolver connected')
-            except grpc.RpcError:
-                if self._evolver_connected:
-                    self._evolver_connected = False
-                    self._logger.error('Evolver disconnected')
-            finally:
-                time.sleep(RECONNECTION_TIME)
-
-    def close(self):
-        self._evolver_channel.close()
-        self._closed = True

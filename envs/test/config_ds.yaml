@@ -1,0 +1,29 @@
+default:
+  base_config:
+    env_type: TEST
+    env_name: TEST
+
+    max_iter: 5
+    max_step_each_iter: 100
+    n_agents: 2
+
+    evolver_enabled: false
+
+    episode_queue_size: 2
+    episode_sender_process_num: 2
+    batch_queue_size: 2
+    batch_generator_process_num: 2
+
+  net_config:
+    evolver_host: 127.0.0.1
+    learner_host: 127.0.0.1
+
+rnn:
+  base_config:
+    nn: nn_rnn
+
+  sac_config:
+    burn_in_step: 2
+    seq_encoder: RNN
+
+    batch_size: 10
