@@ -1,6 +1,5 @@
 import logging
 import sys
-import time
 from itertools import chain
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -9,7 +8,7 @@ import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from algorithm.utils.enums import CURIOSITY, SIAMESE
+from algorithm.utils.enums import *
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from algorithm.sac_base import SAC_Base
@@ -20,7 +19,7 @@ class SAC_DS_Base(SAC_Base):
                  obs_shapes: List[Tuple],
                  d_action_size: int,
                  c_action_size: int,
-                 model_abs_dir: Optional[str],
+                 model_abs_dir: Optional[Path],
                  device: Optional[str] = None,
                  ma_name: Optional[str] = None,
                  summary_path: str = 'log',
@@ -29,42 +28,42 @@ class SAC_DS_Base(SAC_Base):
 
                  nn_config: Optional[dict] = None,
 
-                 nn = None,
-                 seed=None,
-                 write_summary_per_step=1e3,
-                 save_model_per_step=1e5,
+                 nn=None,
+                 seed: Optional[float] = None,
+                 write_summary_per_step: float = 1e3,
+                 save_model_per_step: float = 1e5,
 
-                 ensemble_q_num=2,
-                 ensemble_q_sample=2,
+                 ensemble_q_num: int = 2,
+                 ensemble_q_sample: int = 2,
 
-                 burn_in_step=0,
-                 n_step=1,
-                 seq_encoder=None,
+                 burn_in_step: int = 0,
+                 n_step: int = 1,
+                 seq_encoder: Optional[SEQ_ENCODER] = None,
 
-                 batch_size=256,
-                 tau=0.005,
-                 update_target_per_step=1,
-                 init_log_alpha=-2.3,
-                 use_auto_alpha=True,
-                 learning_rate=3e-4,
-                 gamma=0.99,
-                 v_lambda=0.9,
-                 v_rho=1.,
-                 v_c=1.,
-                 clip_epsilon=0.2,
+                 batch_size: int = 256,
+                 tau: float = 0.005,
+                 update_target_per_step: int = 1,
+                 init_log_alpha: float = -2.3,
+                 use_auto_alpha: bool = True,
+                 learning_rate: float = 3e-4,
+                 gamma: float = 0.99,
+                 v_lambda: float = 0.9,
+                 v_rho: float = 1.,
+                 v_c: float = 1.,
+                 clip_epsilon: float = 0.2,
 
-                 discrete_dqn_like=False,
-                 siamese: Optional[str] = None,
-                 siamese_use_q=False,
-                 siamese_use_adaptive=False,
-                 use_prediction=False,
-                 transition_kl=0.8,
-                 use_extra_data=True,
-                 curiosity: Optional[str] = None,
-                 curiosity_strength=1,
-                 use_rnd=False,
-                 rnd_n_sample=10,
-                 use_normalization=False,
+                 discrete_dqn_like: bool = False,
+                 siamese: Optional[SIAMESE] = None,
+                 siamese_use_q: bool = False,
+                 siamese_use_adaptive: bool = False,
+                 use_prediction: bool = False,
+                 transition_kl: float = 0.8,
+                 use_extra_data: bool = True,
+                 curiosity: Optional[CURIOSITY] = None,
+                 curiosity_strength: float = 1.,
+                 use_rnd: bool = False,
+                 rnd_n_sample: int = 10,
+                 use_normalization: bool = False,
                  action_noise: Optional[List[float]] = None):
 
         self.obs_shapes = obs_shapes
@@ -121,8 +120,6 @@ class SAC_DS_Base(SAC_Base):
 
         self.summary_writer = None
         if self.model_abs_dir:
-            if ma_name is not None:
-                self.model_abs_dir = self.model_abs_dir / ma_name.replace('?', '-')
             summary_path = Path(self.model_abs_dir).joinpath(summary_path)
             self.summary_writer = SummaryWriter(str(summary_path))
 

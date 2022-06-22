@@ -1,7 +1,5 @@
-import importlib
 import logging
 import math
-import shutil
 from collections import defaultdict
 from itertools import chain
 from pathlib import Path
@@ -89,48 +87,52 @@ class SAC_Base(object):
 
         nn_config: nn model config
 
-        nn: nn model
-        seed: Random seed
-        write_summary_per_step: Write summaries in TensorBoard every `write_summary_per_step` steps
-        save_model_per_step: Save model every N steps
+        nn: nn # Neural network models file
+        seed: null # Random seed
+        write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
+        save_model_per_step: 5000 # Save model every N steps
 
-        use_replay_buffer: Whether using prioritized replay buffer
-        use_priority: Whether using PER importance ratio
+        use_replay_buffer: true # Whether using prioritized replay buffer
+        use_priority: true # Whether using PER importance ratio
 
         ensemble_q_num: 2 # Number of Qs
         ensemble_q_sample: 2 # Number of min Qs
 
-        burn_in_step: Burn-in steps in R2D2
-        n_step: Update Q function by N-steps
-        seq_encoder: None | RNN | ATTN
+        burn_in_step: 0 # Burn-in steps in R2D2
+        n_step: 1 # Update Q function by N-steps
+        seq_encoder: null # RNN | ATTN
 
-        batch_size: Batch size for training
-        tau: Coefficient of updating target network
-        update_target_per_step: Update target network every 'update_target_per_step' steps
-        init_log_alpha: The initial log_alpha
-        use_auto_alpha: Whether using automating entropy adjustment
-        learning_rate: Learning rate of all optimizers
-        gamma: Discount factor
-        v_lambda: Discount factor for V-trace
-        v_rho: Rho for V-trace
-        v_c: C for V-trace
-        clip_epsilon: Epsilon for q clip
+        batch_size: 256 # Batch size for training
 
-        discrete_dqn_like: Whether using policy or only Q network if discrete is in action spaces
-        use_n_step_is: Whether using importance sampling
-        siamese: None | ATC | BYOL
-        siamese_use_q: Whether using contrastive q
-        siamese_use_adaptive: Whether using adaptive weights
-        use_prediction: Whether training a transition model
-        transition_kl: The coefficient of KL of transition and standard normal
-        use_extra_data: Whether using extra data to train prediction model
-        curiosity: None | FORWARD | INVERSE
-        curiosity_strength: Curiosity strength if using curiosity
-        use_rnd: Whether using RND
-        rnd_n_sample: RND sample times
-        use_normalization: Whether using observation normalization
-        use_add_with_td: Whether add transitions in replay buffer with td-error
-        action_noise: [noise_min, noise_max]
+        tau: 0.005 # Coefficient of updating target network
+        update_target_per_step: 1 # Update target network every N steps
+
+        init_log_alpha: -2.3 # The initial log_alpha
+        use_auto_alpha: true # Whether using automating entropy adjustment
+
+        learning_rate: 0.0003 # Learning rate of all optimizers
+
+        gamma: 0.99 # Discount factor
+        v_lambda: 1.0 # Discount factor for V-trace
+        v_rho: 1.0 # Rho for V-trace
+        v_c: 1.0 # C for V-trace
+        clip_epsilon: 0.2 # Epsilon for q clip
+
+        discrete_dqn_like: false # Whether using policy or only Q network if discrete is in action spaces
+        use_n_step_is: true # Whether using importance sampling
+        siamese: null # ATC | BYOL
+        siamese_use_q: false # Whether using contrastive q
+        siamese_use_adaptive: false # Whether using adaptive weights
+        use_prediction: false # Whether training a transition model
+        transition_kl: 0.8 # The coefficient of KL of transition and standard normal
+        use_extra_data: true # Whether using extra data to train prediction model
+        curiosity: null # FORWARD | INVERSE
+        curiosity_strength: 1 # Curiosity strength if using curiosity
+        use_rnd: false # Whether using RND
+        rnd_n_sample: 10 # RND sample times
+        use_normalization: false # Whether using observation normalization
+        use_add_with_td: false # Whether add transitions in replay buffer with td-error
+        action_noise: null # [noise_min, noise_max]
         """
         self.obs_shapes = obs_shapes
         self.d_action_size = d_action_size
