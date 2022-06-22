@@ -13,7 +13,7 @@ base_config:
   update_sac_bak_per_step: 200 # Every N step update sac_bak
   n_agents: 1 # N agents running in parallel
   max_step_each_iter: -1 # Max step in each iteration
-  reset_on_iteration: true # If to force reset agent if an episode terminated
+  reset_on_iteration: true # Whether forcing reset agent if an episode terminated
 
   evolver_enabled: true
   evolver_cem_length: 50 # Start CEM if all learners have eavluated evolver_cem_length times
