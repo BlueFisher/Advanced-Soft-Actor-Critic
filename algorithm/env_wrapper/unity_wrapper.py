@@ -82,9 +82,7 @@ class UnityWrapperProcess:
             time_scale=20 if train_mode else 1)
 
         self._env.reset()
-        bahavior_names = list(self._env.behavior_specs)
-        assert len(bahavior_names) == 1
-        self.bahavior_name = bahavior_names[0]
+        self.behavior_names = list(self._env.behavior_specs)
 
         if conn:
             try:
@@ -108,40 +106,46 @@ class UnityWrapperProcess:
             discrete action size: int, sum of all action branches
             continuous action size: int
         """
-        behavior_spec = self._env.behavior_specs[self.bahavior_name]
-        obs_names = [o.name for o in behavior_spec.observation_specs]
-        self._logger.info(f'Observation names: {obs_names}')
-        obs_shapes = [o.shape for o in behavior_spec.observation_specs]
-        self._logger.info(f'Observation shapes: {obs_shapes}')
+        ma_obs_shapes = {}
+        self.ma_d_action_size = {}
+        self.ma_c_action_size = {}
 
-        self._empty_action = behavior_spec.action_spec.empty_action
+        for n in self.behavior_names:
+            behavior_spec = self._env.behavior_specs[n]
+            obs_names = [o.name for o in behavior_spec.observation_specs]
+            self._logger.info(f'{n} Observation names: {obs_names}')
+            obs_shapes = [o.shape for o in behavior_spec.observation_specs]
+            self._logger.info(f'{n} Observation shapes: {obs_shapes}')
+            ma_obs_shapes[n] = obs_shapes
 
-        discrete_action_size = 0
-        if behavior_spec.action_spec.discrete_size > 0:
-            discrete_action_size = 1
-            action_product_list = []
-            for action, branch_size in enumerate(behavior_spec.action_spec.discrete_branches):
-                discrete_action_size *= branch_size
-                action_product_list.append(range(branch_size))
-                self._logger.info(f"Discrete action branch {action} has {branch_size} different actions")
+            self._empty_action = behavior_spec.action_spec.empty_action
 
-            self.action_product = np.array(list(itertools.product(*action_product_list)))
+            discrete_action_size = 0
+            if behavior_spec.action_spec.discrete_size > 0:
+                discrete_action_size = 1
+                action_product_list = []
+                for action, branch_size in enumerate(behavior_spec.action_spec.discrete_branches):
+                    discrete_action_size *= branch_size
+                    action_product_list.append(range(branch_size))
+                    self._logger.info(f"{n} Discrete action branch {action} has {branch_size} different actions")
 
-        continuous_action_size = behavior_spec.action_spec.continuous_size
+                self.action_product = np.array(list(itertools.product(*action_product_list)))
 
-        self._logger.info(f'Continuous action size: {continuous_action_size}')
+            continuous_action_size = behavior_spec.action_spec.continuous_size
 
-        self.d_action_size = discrete_action_size
-        self.c_action_size = continuous_action_size
+            self._logger.info(f'{n} Continuous action size: {continuous_action_size}')
 
-        for o in behavior_spec.observation_specs:
-            if len(o.shape) >= 3:
-                self.engine_configuration_channel.set_configuration_parameters(quality_level=5)
-                break
+            self.ma_d_action_size[n] = discrete_action_size
+            self.ma_c_action_size[n] = continuous_action_size
+
+            for o in behavior_spec.observation_specs:
+                if len(o.shape) >= 3:
+                    self.engine_configuration_channel.set_configuration_parameters(quality_level=5)
+                    break
 
         self._logger.info('Initialized')
 
-        return obs_shapes, discrete_action_size, continuous_action_size
+        return ma_obs_shapes, self.ma_d_action_size, self.ma_c_action_size
 
     def reset(self, reset_config=None):
         """
@@ -153,11 +157,15 @@ class UnityWrapperProcess:
             self.environment_parameters_channel.set_float_parameter(k, float(v))
 
         self._env.reset()
-        decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
 
-        return [obs.astype(np.float32) for obs in decision_steps.obs]
+        ma_obs_list = {}
+        for n in self.behavior_names:
+            decision_steps, terminal_steps = self._env.get_steps(n)
+            ma_obs_list[n] = [obs.astype(np.float32) for obs in decision_steps.obs]
 
-    def step(self, d_action, c_action):
+        return ma_obs_list
+
+    def step(self, ma_d_action, ma_c_action):
         """
         Args:
             d_action: (NAgents, discrete_action_size), one hot like action
@@ -165,47 +173,58 @@ class UnityWrapperProcess:
 
         Returns:
             observations: list[(NAgents, o1), (NAgents, o2), (NAgents, o3_1, o3_2, o3_3)]
-            rewards: (NAgents, )
-            done: (NAgents, ), np.bool
-            max_step: (NAgents, ), np.bool
+            reward: (NAgents, )
+            done: (NAgents, ), bool
+            max_step: (NAgents, ), bool
         """
+        ma_obs_list = {}
+        ma_reward = {}
+        ma_done = {}
+        ma_max_step = {}
 
-        if self.d_action_size:
-            d_action = np.argmax(d_action, axis=1)
-            d_action = self.action_product[d_action]
+        for n in self.behavior_names:
+            d_action = c_action = None
 
-        self._env.set_actions(self.bahavior_name,
-                              ActionTuple(continuous=c_action, discrete=d_action))
-        self._env.step()
+            if self.ma_d_action_size[n]:
+                d_action = ma_d_action[n]
+                d_action = np.argmax(d_action, axis=1)
+                d_action = self.action_product[d_action]
+            c_action = ma_c_action[n]
 
-        decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
-
-        tmp_terminal_steps = terminal_steps
-
-        while len(decision_steps) == 0:
-            self._env.set_actions(self.bahavior_name, self._empty_action(0))
+            self._env.set_actions(n,
+                                  ActionTuple(continuous=c_action, discrete=d_action))
             self._env.step()
-            decision_steps, terminal_steps = self._env.get_steps(self.bahavior_name)
-            tmp_terminal_steps.agent_id = np.concatenate([tmp_terminal_steps.agent_id,
-                                                          terminal_steps.agent_id])
-            tmp_terminal_steps.reward = np.concatenate([tmp_terminal_steps.reward,
-                                                        terminal_steps.reward])
-            tmp_terminal_steps.interrupted = np.concatenate([tmp_terminal_steps.interrupted,
-                                                            terminal_steps.interrupted])
 
-        reward = decision_steps.reward
-        reward[tmp_terminal_steps.agent_id] = tmp_terminal_steps.reward
+            decision_steps, terminal_steps = self._env.get_steps(n)
 
-        done = np.full([len(decision_steps), ], False, dtype=np.bool)
-        done[tmp_terminal_steps.agent_id] = True
+            tmp_terminal_steps = terminal_steps
 
-        max_step = np.full([len(decision_steps), ], False, dtype=np.bool)
-        max_step[tmp_terminal_steps.agent_id] = tmp_terminal_steps.interrupted
+            while len(decision_steps) == 0:
+                self._env.set_actions(n, self._empty_action(0))
+                self._env.step()
+                decision_steps, terminal_steps = self._env.get_steps(n)
+                tmp_terminal_steps.agent_id = np.concatenate([tmp_terminal_steps.agent_id,
+                                                              terminal_steps.agent_id])
+                tmp_terminal_steps.reward = np.concatenate([tmp_terminal_steps.reward,
+                                                            terminal_steps.reward])
+                tmp_terminal_steps.interrupted = np.concatenate([tmp_terminal_steps.interrupted,
+                                                                terminal_steps.interrupted])
 
-        return ([obs.astype(np.float32) for obs in decision_steps.obs],
-                decision_steps.reward.astype(np.float32),
-                done,
-                max_step)
+            reward = decision_steps.reward
+            reward[tmp_terminal_steps.agent_id] = tmp_terminal_steps.reward
+
+            done = np.full([len(decision_steps), ], False, dtype=bool)
+            done[tmp_terminal_steps.agent_id] = True
+
+            max_step = np.full([len(decision_steps), ], False, dtype=bool)
+            max_step[tmp_terminal_steps.agent_id] = tmp_terminal_steps.interrupted
+
+            ma_obs_list[n] = [obs.astype(np.float32) for obs in decision_steps.obs]
+            ma_reward[n] = decision_steps.reward.astype(np.float32)
+            ma_done[n] = done
+            ma_max_step[n] = max_step
+
+        return ma_obs_list, ma_reward, ma_done, ma_max_step
 
     def close(self):
         self._env.close()
@@ -304,9 +323,9 @@ class UnityWrapper:
     def init(self):
         """
         Returns:
-            observation shapes: tuple[(o1, ), (o2, ), (o3_1, o3_2, o3_3), ...]
-            discrete action size: int, sum of all action branches
-            continuous action size: int
+            observation shapes: dict[str, tuple[(o1, ), (o2, ), (o3_1, o3_2, o3_3), ...]]
+            discrete action size: dict[str, int], sum of all action branches
+            continuous action size: dict[str, int]
         """
         if self._seq_envs:
             for env in self._envs:
@@ -316,74 +335,85 @@ class UnityWrapper:
                 conn.send((INIT, None))
                 results = conn.recv()
 
+        self.behavior_names = list(results[0].keys())
+
         return results
 
     def reset(self, reset_config=None):
         """
         return:
-            observations: list[(NAgents, o1), (NAgents, o2), (NAgents, o3_1, o3_2, o3_3)]
+            observation: dict[str, list[(NAgents, o1), (NAgents, o2), (NAgents, o3_1, o3_2, o3_3)]]
         """
         if self._seq_envs:
-            all_obses_list = [env.reset(reset_config) for env in self._envs]
+            envs_ma_obs_list = [env.reset(reset_config) for env in self._envs]
         else:
             for conn in self._conns:
                 conn.send((RESET, reset_config))
 
-            all_obses_list = [conn.recv() for conn in self._conns]
+            envs_ma_obs_list = [conn.recv() for conn in self._conns]
 
-        obses_list = [np.concatenate(obses) for obses in zip(*all_obses_list)]
-        return obses_list
+        ma_obs_list = {n: [np.concatenate(env_obs_list) for env_obs_list in zip(*[ma_obs_list[n] for ma_obs_list in envs_ma_obs_list])]
+                       for n in self.behavior_names}
 
-    def step(self, d_action, c_action):
+        return ma_obs_list
+
+    def step(self, ma_d_action, ma_c_action):
         """
         Args:
-            d_action: (NAgents, discrete_action_size), one hot like action
-            c_action: (NAgents, continuous_action_size)
+            d_action: dict[str, (NAgents, discrete_action_size)], one hot like action
+            c_action: dict[str, (NAgents, continuous_action_size)]
 
         Returns:
-            observations: list[(NAgents, o1), (NAgents, o2), (NAgents, o3_1, o3_2, o3_3)]
-            rewards: (NAgents, )
-            dones: (NAgents, ), np.bool
-            max_steps: (NAgents, ), np.bool
+            observation: dict[str, list[(NAgents, o1), (NAgents, o2), (NAgents, o3_1, o3_2, o3_3)]]
+            reward: dict[str, (NAgents, )]
+            done: dict[str, (NAgents, )], bool
+            max_step: dict[str, (NAgents, )], bool
         """
-        all_obses_list = []
-        all_rewards = []
-        all_dones = []
-        all_max_steps = []
+        ma_envs_obs_list = {n: [] for n in self.behavior_names}
+        ma_envs_reward = {n: [] for n in self.behavior_names}
+        ma_envs_done = {n: [] for n in self.behavior_names}
+        ma_envs_max_step = {n: [] for n in self.behavior_names}
 
         for i in range(self.env_length):
-            actions = (
-                d_action[i * MAX_N_AGENTS_PER_PROCESS:(i + 1) * MAX_N_AGENTS_PER_PROCESS] if d_action is not None else None,
-                c_action[i * MAX_N_AGENTS_PER_PROCESS:(i + 1) * MAX_N_AGENTS_PER_PROCESS] if c_action is not None else None
-            )
+            tmp_ma_d_actions = {
+                n:
+                ma_d_action[n][i * MAX_N_AGENTS_PER_PROCESS:(i + 1) * MAX_N_AGENTS_PER_PROCESS] if ma_d_action[n] is not None else None
+                for n in self.behavior_names}
+
+            tmp_ma_c_actions = {
+                n:
+                ma_c_action[n][i * MAX_N_AGENTS_PER_PROCESS:(i + 1) * MAX_N_AGENTS_PER_PROCESS] if ma_c_action[n] is not None else None
+                for n in self.behavior_names}
 
             if self._seq_envs:
-                (obses_list,
-                 rewards,
-                 dones,
-                 max_steps) = self._envs[i].step(*actions)
+                (ma_obs_list,
+                 ma_reward,
+                 ma_done,
+                 ma_max_step) = self._envs[i].step(tmp_ma_d_actions, tmp_ma_c_actions)
 
-                all_obses_list.append(obses_list)
-                all_rewards.append(rewards)
-                all_dones.append(dones)
-                all_max_steps.append(max_steps)
+                for n in self.behavior_names:
+                    ma_envs_obs_list[n].append(ma_obs_list[n])
+                    ma_envs_reward[n].append(ma_reward[n])
+                    ma_envs_done[n].append(ma_done[n])
+                    ma_envs_max_step[n].append(ma_max_step[n])
             else:
-                self._conns[i].send((STEP, actions))
+                self._conns[i].send((STEP, (tmp_ma_d_actions, tmp_ma_c_actions)))
 
         if not self._seq_envs:
             succeeded = True
 
             for i, conn in enumerate(self._conns):
                 try:
-                    (obses_list,
-                     rewards,
-                     dones,
-                     max_steps) = conn.recv()
+                    (ma_obs_list,
+                     ma_reward,
+                     ma_done,
+                     ma_max_step) = conn.recv()
 
-                    all_obses_list.append(obses_list)
-                    all_rewards.append(rewards)
-                    all_dones.append(dones)
-                    all_max_steps.append(max_steps)
+                    for n in self.behavior_names:
+                        ma_envs_obs_list[n].append(ma_obs_list[n])
+                        ma_envs_reward[n].append(ma_reward[n])
+                        ma_envs_done[n].append(ma_done[n])
+                        ma_envs_max_step[n].append(ma_max_step[n])
                 except:
                     self._conns[i] = None
                     succeeded = False
@@ -393,12 +423,12 @@ class UnityWrapper:
 
                 return None, None, None, None
 
-        obses_list = [np.concatenate(obses) for obses in zip(*all_obses_list)]
-        rewards = np.concatenate(all_rewards)
-        dones = np.concatenate(all_dones)
-        max_steps = np.concatenate(all_max_steps)
+        ma_obs_list = {n: [np.concatenate(obs) for obs in zip(*ma_envs_obs_list[n])] for n in self.behavior_names}
+        ma_reward = {n: np.concatenate(ma_envs_reward[n]) for n in self.behavior_names}
+        ma_done = {n: np.concatenate(ma_envs_done[n]) for n in self.behavior_names}
+        ma_max_step = {n: np.concatenate(ma_envs_max_step[n]) for n in self.behavior_names}
 
-        return obses_list, rewards, dones, max_steps
+        return ma_obs_list, ma_reward, ma_done, ma_max_step
 
     def close(self):
         if self._seq_envs:
@@ -415,23 +445,32 @@ class UnityWrapper:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
+    N_AGENTS = 2
+
     env = UnityWrapper(train_mode=True,
-                       file_name=r'/data/linux-RL-Envs/RLEnvironments.x86_64',
-                       scene='3DBall',
-                       n_agents=10)
-    obs_shape_list, d_action_size, c_action_size = env.init()
+                       file_name=r'D:\Unity\win-RL-Envs\RLEnvironments.exe',
+                       scene='Roller',
+                       n_agents=N_AGENTS)
+    ma_obs_shapes, ma_d_action_size, ma_c_action_size = env.init()
+    ma_names = list(ma_obs_shapes.keys())
 
     for i in range(100):
-        obs_list = env.reset()
-        n_agents = obs_list[0].shape[0]
-        for j in range(100):
-            d_action, c_action = None, None
-            if d_action_size:
-                d_action = np.random.randint(0, d_action_size, size=n_agents)
-                d_action = np.eye(d_action_size, dtype=np.int32)[d_action]
-            if c_action_size:
-                c_action = np.random.randn(n_agents, c_action_size)
+        ma_obs_list = env.reset()
 
-            obs_list, reward, done, max_step = env.step(d_action, c_action)
+        for j in range(100):
+            ma_d_action = {}
+            ma_c_action = {}
+            for n in ma_names:
+                d_action, c_action = None, None
+                if ma_d_action_size[n]:
+                    d_action = np.random.randint(0, ma_d_action_size[n], size=N_AGENTS)
+                    d_action = np.eye(ma_d_action_size[n], dtype=np.int32)[d_action]
+                if ma_c_action_size[n]:
+                    c_action = np.random.randn(N_AGENTS, ma_c_action_size[n])
+
+            ma_d_action[n] = d_action
+            ma_c_action[n] = c_action
+
+            ma_obs_list, ma_reward, ma_done, ma_max_step = env.step(ma_d_action, ma_c_action)
 
     env.close()

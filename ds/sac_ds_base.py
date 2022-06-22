@@ -1,6 +1,5 @@
 import logging
 import sys
-import time
 from itertools import chain
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -9,7 +8,7 @@ import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from algorithm.utils.enums import CURIOSITY, SIAMESE
+from algorithm.utils.enums import *
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from algorithm.sac_base import SAC_Base
@@ -20,49 +19,51 @@ class SAC_DS_Base(SAC_Base):
                  obs_shapes: List[Tuple],
                  d_action_size: int,
                  c_action_size: int,
-                 model_abs_dir: Optional[str],
-                 model,
-                 model_config: Optional[dict] = None,
+                 model_abs_dir: Optional[Path],
                  device: Optional[str] = None,
+                 ma_name: Optional[str] = None,
                  summary_path: str = 'log',
                  train_mode: bool = True,
                  last_ckpt: Optional[str] = None,
 
-                 seed=None,
-                 write_summary_per_step=1e3,
-                 save_model_per_step=1e5,
+                 nn_config: Optional[dict] = None,
 
-                 ensemble_q_num=2,
-                 ensemble_q_sample=2,
+                 nn=None,
+                 seed: Optional[float] = None,
+                 write_summary_per_step: float = 1e3,
+                 save_model_per_step: float = 1e5,
 
-                 burn_in_step=0,
-                 n_step=1,
-                 seq_encoder=None,
+                 ensemble_q_num: int = 2,
+                 ensemble_q_sample: int = 2,
 
-                 batch_size=256,
-                 tau=0.005,
-                 update_target_per_step=1,
-                 init_log_alpha=-2.3,
-                 use_auto_alpha=True,
-                 learning_rate=3e-4,
-                 gamma=0.99,
-                 v_lambda=0.9,
-                 v_rho=1.,
-                 v_c=1.,
-                 clip_epsilon=0.2,
+                 burn_in_step: int = 0,
+                 n_step: int = 1,
+                 seq_encoder: Optional[SEQ_ENCODER] = None,
 
-                 discrete_dqn_like=False,
-                 siamese: Optional[str] = None,
-                 siamese_use_q=False,
-                 siamese_use_adaptive=False,
-                 use_prediction=False,
-                 transition_kl=0.8,
-                 use_extra_data=True,
-                 curiosity: Optional[str] = None,
-                 curiosity_strength=1,
-                 use_rnd=False,
-                 rnd_n_sample=10,
-                 use_normalization=False,
+                 batch_size: int = 256,
+                 tau: float = 0.005,
+                 update_target_per_step: int = 1,
+                 init_log_alpha: float = -2.3,
+                 use_auto_alpha: bool = True,
+                 learning_rate: float = 3e-4,
+                 gamma: float = 0.99,
+                 v_lambda: float = 0.9,
+                 v_rho: float = 1.,
+                 v_c: float = 1.,
+                 clip_epsilon: float = 0.2,
+
+                 discrete_dqn_like: bool = False,
+                 siamese: Optional[SIAMESE] = None,
+                 siamese_use_q: bool = False,
+                 siamese_use_adaptive: bool = False,
+                 use_prediction: bool = False,
+                 transition_kl: float = 0.8,
+                 use_extra_data: bool = True,
+                 curiosity: Optional[CURIOSITY] = None,
+                 curiosity_strength: float = 1.,
+                 use_rnd: bool = False,
+                 rnd_n_sample: int = 10,
+                 use_normalization: bool = False,
                  action_noise: Optional[List[float]] = None):
 
         self.obs_shapes = obs_shapes
@@ -118,13 +119,16 @@ class SAC_DS_Base(SAC_Base):
             torch.cuda.manual_seed_all(seed)
 
         self.summary_writer = None
-        if model_abs_dir:
-            summary_path = Path(model_abs_dir).joinpath(summary_path)
+        if self.model_abs_dir:
+            summary_path = Path(self.model_abs_dir).joinpath(summary_path)
             self.summary_writer = SummaryWriter(str(summary_path))
 
-        self._logger = logging.getLogger('sac.base.ds')
+        if ma_name is None:
+            self._logger = logging.getLogger('sac.base.ds')
+        else:
+            self._logger = logging.getLogger(f'sac.base.ds.{ma_name}')
 
-        self._build_model(model, model_config, init_log_alpha, learning_rate)
+        self._build_model(nn, nn_config, init_log_alpha, learning_rate)
         self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
 
     def get_policy_variables(self, get_numpy=True):
@@ -153,9 +157,6 @@ class SAC_DS_Base(SAC_Base):
             v.data.copy_(torch.from_numpy(t_v).to(self.device))
 
     def get_nn_variables(self, get_numpy=True):
-        """
-        For learner to send variables to evolver
-        """
         variables = chain(self.model_rep.parameters(),
                           self.model_policy.parameters(),
                           [self.log_d_alpha, self.log_c_alpha])
@@ -188,17 +189,6 @@ class SAC_DS_Base(SAC_Base):
             return [v.detach().cpu().numpy() for v in variables]
         else:
             return variables
-
-    def update_nn_variables(self, t_variables: List[np.ndarray]):
-        """
-        Update own network from evolver selection
-        """
-        variables = self.get_nn_variables(get_numpy=False)
-
-        for v, t_v in zip(variables, t_variables):
-            v.data.copy_(torch.from_numpy(t_v).to(self.device))
-
-        self._update_target_variables()
 
     def get_all_variables(self, get_numpy=True):
         variables = self.get_nn_variables(get_numpy=False)
