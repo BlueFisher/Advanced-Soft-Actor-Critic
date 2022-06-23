@@ -14,7 +14,7 @@ import grpc
 import numpy as np
 
 import algorithm.config_helper as config_helper
-from algorithm.agent import Agent, MultiAgentsManager
+from algorithm.sac_main import Main
 from algorithm.utils import ReadWriteLock, elapsed_timer, gen_pre_n_actions
 from algorithm.utils.enums import *
 
@@ -70,7 +70,8 @@ class EpisodeSender:
                 self._stub.add_transitions(self.ma_name, *episode)
 
 
-class Actor(object):
+class Actor(Main):
+    train_mode = False
     _agent_class = Agent
 
     def __init__(self, root_dir, config_dir, args):
@@ -150,58 +151,6 @@ class Actor(object):
         self.ma_configs = ma_configs
 
         return config_abs_dir
-
-    def _init_env(self):
-        if self.base_config['env_type'] == 'UNITY':
-            from algorithm.env_wrapper.unity_wrapper import UnityWrapper
-
-            if self.run_in_editor:
-                self.env = UnityWrapper(n_agents=self.base_config['n_agents'])
-            else:
-                self.env = UnityWrapper(file_name=self.base_config['unity_args']['build_path'][sys.platform],
-                                        base_port=self.base_config['unity_args']['port'],
-                                        no_graphics=self.base_config['unity_args']['no_graphics'],
-                                        scene=self.base_config['env_name'],
-                                        additional_args=self.base_config['env_args'],
-                                        n_agents=self.base_config['n_agents'])
-
-        elif self.base_config['env_type'] == 'GYM':
-            from algorithm.env_wrapper.gym_wrapper import GymWrapper
-
-            self.env = GymWrapper(env_name=self.base_config['env_name'],
-                                  n_agents=self.base_config['n_agents'])
-
-        elif self.base_config['env_type'] == 'DM_CONTROL':
-            from algorithm.env_wrapper.dm_control_wrapper import \
-                DMControlWrapper
-
-            self.env = DMControlWrapper(env_name=self.base_config['env_name'],
-                                        n_agents=self.base_config['n_agents'])
-
-        elif self.base_config['env_type'] == 'TEST':
-            from algorithm.env_wrapper.test_wrapper import TestWrapper
-
-            self.env = TestWrapper(env_args=self.base_config['env_args'],
-                                   n_agents=self.base_config['n_agents'])
-
-        else:
-            raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
-
-        ma_obs_shapes, ma_d_action_size, ma_c_action_size = self.env.init()
-        self.ma_manager = MultiAgentsManager(self._agent_class,
-                                             ma_obs_shapes,
-                                             ma_d_action_size,
-                                             ma_c_action_size,
-                                             self.model_abs_dir)
-
-        for n, mgr in self.ma_manager:
-            if n not in self.ma_configs:
-                self._logger.warning(f'{n} not in ma_configs')
-                mgr.set_config(self.config)
-            else:
-                mgr.set_config(self.ma_configs[n])
-
-        self._logger.info(f'{self.base_config["env_name"]} initialized')
 
     def _init_sac(self, config_abs_dir):
         for n, mgr in self.ma_manager:
