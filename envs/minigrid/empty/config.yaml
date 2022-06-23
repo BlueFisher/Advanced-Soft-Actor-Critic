@@ -1,7 +1,7 @@
 default:
   base_config:
     env_type: MINIGRID
-    env_name: MiniGrid-Empty-16x16-v0
+    env_name: MiniGrid-Empty-8x8-v0
 
     max_step: -1
     max_iter: 1000

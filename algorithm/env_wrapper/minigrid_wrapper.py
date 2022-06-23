@@ -39,14 +39,9 @@ class MiniGridWrapper(GymWrapper):
         self._logger.info(f'Observation shapes: {self.obs_shapes}')
         self._logger.info(f'Action size: {env.action_space}')
 
-        self.is_discrete = isinstance(env.action_space, gym.spaces.Discrete)
-
-        d_action_size, c_action_size = 0, 0
-
-        if self.is_discrete:
-            d_action_size = env.action_space.n
-        else:
-            c_action_size = env.action_space.shape[0]
+        d_action_size = env.action_space.n
+        if 'Empty' in self.env_name:
+            d_action_size = 3
 
         if not self._seq_envs:
             env.close()
@@ -63,7 +58,7 @@ class MiniGridWrapper(GymWrapper):
 
         return ({'gym': self.obs_shapes},
                 {'gym': d_action_size},
-                {'gym': c_action_size})
+                {'gym': 0})
 
     def reset(self, reset_config=None):
         if self._seq_envs:
@@ -87,19 +82,16 @@ class MiniGridWrapper(GymWrapper):
         return {'gym': obs_list}
 
     def step(self, ma_d_action, ma_c_action):
-        d_action, c_action = ma_d_action['gym'], ma_c_action['gym']
+        d_action = ma_d_action['gym']
 
         obs_list = [np.empty([self.n_agents, *o], dtype=np.float32) for o in self.obs_shapes]
         reward = np.empty(self.n_agents, dtype=np.float32)
         done = np.empty(self.n_agents, dtype=bool)
         max_step = np.full(self.n_agents, False)
 
-        if self.is_discrete:
-            # Convert one-hot to label
-            action = np.argmax(d_action, axis=1)
-            action = action.tolist()
-        else:
-            action = c_action
+        # Convert one-hot to label
+        action = np.argmax(d_action, axis=1)
+        action = action.tolist()
 
         if self._seq_envs:
             for i, env in enumerate(self._envs):
