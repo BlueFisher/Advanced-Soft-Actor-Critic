@@ -15,8 +15,10 @@ from .utils import format_global_step, gen_pre_n_actions
 from .utils.enums import *
 
 
-class Main(object):
+class Main:
     train_mode = True
+    render = False 
+    unity_run_in_editor = False
     _agent_class = Agent  # For different environments
 
     def __init__(self, root_dir, config_dir, args):
@@ -45,8 +47,7 @@ class Main(object):
         # Initialize config from command line arguments
         self.train_mode = not args.run
         self.render = args.render
-
-        self.run_in_editor = args.editor
+        self.unity_run_in_editor = args.editor
 
         self.disable_sample = args.disable_sample
         self.alway_use_env_nn = args.use_env_nn
@@ -59,7 +60,7 @@ class Main(object):
             config['base_config']['unity_args']['port'] = args.port
         if args.agents is not None:
             config['base_config']['n_agents'] = args.agents
-        if args.max_iter is not None: 
+        if args.max_iter is not None:
             config['base_config']['max_iter'] = args.max_iter
         if args.name is not None:
             config['base_config']['name'] = args.name
@@ -83,7 +84,7 @@ class Main(object):
             config_helper.save_config(config, model_abs_dir, 'config.yaml')
         config_helper.display_config(config, self._logger)
         convert_config_to_enum(config['sac_config'])
-        
+
         for n, ma_config in ma_configs.items():
             if self.train_mode:
                 config_helper.save_config(ma_config, model_abs_dir, f'config_{n}.yaml')
@@ -101,7 +102,7 @@ class Main(object):
         if self.base_config['env_type'] == 'UNITY':
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
 
-            if self.run_in_editor:
+            if self.unity_run_in_editor:
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         n_agents=self.base_config['n_agents'])
             else:

@@ -198,6 +198,8 @@ class GymWrapper:
                 conn.send((CLOSE, None))
 
 
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     gym_wrapper = GymWrapper(True, 'HalfCheetah-v2', n_agents=1, force_seq=True, render=True)
