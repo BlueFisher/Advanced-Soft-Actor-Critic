@@ -1,5 +1,5 @@
 base_config:
-  env_type: UNITY # UNITY | GYM | DM_CONTROL
+  env_type: UNITY # UNITY | GYM | DM_CONTROL | MINIGRID
   env_name: env_name # The environment name.
   env_args: null
   unity_args: # Only for Unity Environments
