@@ -1,88 +1,27 @@
 import logging
 import multiprocessing
-import os
 import time
 
 import gym
+import gym_minigrid
 import numpy as np
-
-try:
-    import pybullet_envs
-except:
-    pass
-
-try:
-    import gym_minigrid
-except:
-    pass
-
-VANILLA_ENVS = ['CartPole-v1', 'Pendulum-v0', 'MountainCarContinuous-v0']
-
-RESET = 0
-STEP = 1
-CLOSE = 2
+from .gym_wrapper import *
 
 
-def start_gym_process(env_name, render, conn):
-    try:
-        from algorithm import config_helper
-        config_helper.set_logger()
-    except:
-        pass
-
-    logger = logging.getLogger('GymWrapper.Process')
-
-    logger.info(f'Process {os.getpid()} created')
-
-    env = gym.make(env_name)
-    if render:
-        env.render()
-
-    try:
-        while True:
-            cmd, data = conn.recv()
-            if cmd == RESET:
-                obs = env.reset()
-                conn.send(obs)
-            elif cmd == CLOSE:
-                env.close()
-                break
-            elif cmd == STEP:
-                conn.send(env.step(data))
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        logger.error(e)
-
-    logger.warning(f'Process {os.getpid()} exits')
-
-
-class GymWrapper:
+class MiniGridWrapper(GymWrapper):
     def __init__(self,
                  train_mode=True,
                  env_name=None,
                  render=False,
                  n_agents=1,
                  force_seq=None):
-        self.train_mode = train_mode
-        self.env_name = env_name
-        self.render = render
-        self.n_agents = n_agents
+        super().__init__(train_mode,
+                         env_name,
+                         render,
+                         n_agents,
+                         force_seq)
 
-        # If use multiple processes
-        if force_seq is None:
-            self._seq_envs = n_agents == 1 or env_name in VANILLA_ENVS
-        else:
-            self._seq_envs = force_seq
-
-        if self._seq_envs:
-            # All environments are executed sequentially
-            self._envs = []
-        else:
-            # All environments are executed in parallel
-            self._conns = []
-
-        self._logger = logging.getLogger('GymWrapper')
+        self._logger = logging.getLogger('MiniGridWrapper')
 
     def init(self):
         if self._seq_envs:
@@ -95,10 +34,11 @@ class GymWrapper:
         else:
             env = gym.make(self.env_name)
 
-        self._logger.info(f'Observation shapes: {env.observation_space}')
+        self.obs_shapes = [env.observation_space['image'].shape, (1,)]
+
+        self._logger.info(f'Observation shapes: {self.obs_shapes}')
         self._logger.info(f'Action size: {env.action_space}')
 
-        self._state_dim = env.observation_space.shape[0]
         self.is_discrete = isinstance(env.action_space, gym.spaces.Discrete)
 
         d_action_size, c_action_size = 0, 0
@@ -121,30 +61,35 @@ class GymWrapper:
                                             daemon=True)
                 p.start()
 
-        return ({'gym': [(self._state_dim, )]},
+        return ({'gym': self.obs_shapes},
                 {'gym': d_action_size},
                 {'gym': c_action_size})
 
     def reset(self, reset_config=None):
         if self._seq_envs:
-            obs = np.stack([e.reset() for e in self._envs], axis=0)
-            obs = obs.astype(np.float32)
+            raw_obs_dict = [e.reset() for e in self._envs]
+            obs_list = [
+                np.stack([o['image'] for o in raw_obs_dict], axis=0),
+                np.stack([[o['direction']] for o in raw_obs_dict], axis=0)
+            ]
+            obs_list = [o.astype(np.float32) for o in obs_list]
         else:
             for conn in self._conns:
                 conn.send((RESET, None))
 
-            obs = np.empty([self.n_agents, self._state_dim], dtype=np.float32)
+            obs_list = [np.empty([self.n_agents, *o], dtype=np.float32) for o in self.obs_shapes]
 
             for i, conn in enumerate(self._conns):
-                t_obs = conn.recv()
-                obs[i] = t_obs
+                t_obs_dict = conn.recv()
+                obs_list[0][i] = t_obs_dict['image']
+                obs_list[1][i] = t_obs_dict['direction']
 
-        return {'gym': [obs]}
+        return {'gym': obs_list}
 
     def step(self, ma_d_action, ma_c_action):
         d_action, c_action = ma_d_action['gym'], ma_c_action['gym']
 
-        obs = np.empty([self.n_agents, self._state_dim], dtype=np.float32)
+        obs_list = [np.empty([self.n_agents, *o], dtype=np.float32) for o in self.obs_shapes]
         reward = np.empty(self.n_agents, dtype=np.float32)
         done = np.empty(self.n_agents, dtype=bool)
         max_step = np.full(self.n_agents, False)
@@ -158,8 +103,9 @@ class GymWrapper:
 
         if self._seq_envs:
             for i, env in enumerate(self._envs):
-                tmp_obs, tmp_reward, tmp_done, info = env.step(action[i])
-                obs[i] = tmp_obs
+                tmp_obs_dict, tmp_reward, tmp_done, info = env.step(action[i])
+                obs_list[0][i] = tmp_obs_dict['image']
+                obs_list[1][i] = tmp_obs_dict['direction']
                 reward[i] = tmp_reward
                 done[i] = tmp_done
 
@@ -167,14 +113,17 @@ class GymWrapper:
                 self._envs[0].render()
 
             for i in np.where(done)[0]:
-                obs[i] = self._envs[i].reset()
+                tmp_obs_dict = self._envs[i].reset()
+                obs_list[0][i] = tmp_obs_dict['image']
+                obs_list[1][i] = tmp_obs_dict['direction']
         else:
             for i, conn in enumerate(self._conns):
                 conn.send((STEP, action[i]))
 
             for i, conn in enumerate(self._conns):
-                tmp_obs, tmp_reward, tmp_done, info = conn.recv()
-                obs[i] = tmp_obs
+                tmp_obs_dict, tmp_reward, tmp_done, info = conn.recv()
+                obs_list[0][i] = tmp_obs_dict['image']
+                obs_list[1][i] = tmp_obs_dict['direction']
                 reward[i] = tmp_reward
                 done[i] = tmp_done
 
@@ -183,36 +132,30 @@ class GymWrapper:
                 self._conns[i].send((RESET, None))
 
             for i in done_index:
-                obs[i] = self._conns[i].recv()
+                tmp_obs_dict = self._conns[i].recv()
+                obs_list[0][i] = tmp_obs_dict['image']
+                obs_list[1][i] = tmp_obs_dict['direction']
 
-        if not self.train_mode and self.n_agents == 1 and 'Bullet' in self.env_name:
-            time.sleep(0.01)
-
-        return {'gym': [obs]}, {'gym': reward}, {'gym': done}, {'gym': max_step}
-
-    def close(self):
-        if self._seq_envs:
-            for env in self._envs:
-                env.close()
-        else:
-            for conn in self._conns:
-                conn.send((CLOSE, None))
+        return {'gym': obs_list}, {'gym': reward}, {'gym': done}, {'gym': max_step}
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    gym_wrapper = GymWrapper(True, 'HalfCheetah-v2', n_agents=1, force_seq=True, render=True)
-    gym_wrapper.init()
+    n_agents = 3
+    gym_wrapper = MiniGridWrapper(True, 'MiniGrid-Empty-16x16-v0', n_agents=n_agents, force_seq=False, render=True)
+    obs_shapes, d_action_size, c_action_size = gym_wrapper.init()
+    obs_shapes, d_action_size, c_action_size = obs_shapes['gym'], d_action_size['gym'], c_action_size['gym']
 
     tt = []
     for _ in range(3):
         t = time.time()
-        gym_wrapper.reset()
+        obs_list = gym_wrapper.reset()
         for i in range(1000):
-            gym_wrapper.step(None, np.random.randn(6,))
+            gym_wrapper.step({'gym': np.eye(d_action_size)[np.random.rand(n_agents, d_action_size).argmax(axis=-1)]},
+                             {'gym': None})
         tt.append(time.time() - t)
 
-    print(tt)
-    print(sum(tt) / len(tt))
+    # print(tt)
+    # print(sum(tt) / len(tt))
 
     gym_wrapper.close()

@@ -17,7 +17,7 @@ from .utils.enums import *
 
 class Main:
     train_mode = True
-    render = False 
+    render = False
     unity_run_in_editor = False
     _agent_class = Agent  # For different environments
 
@@ -130,6 +130,15 @@ class Main:
                                         env_name=self.base_config['env_name'],
                                         render=self.render,
                                         n_agents=self.base_config['n_agents'])
+
+        elif self.base_config['env_type'] == 'MINIGRID':
+            from algorithm.env_wrapper.minigrid_wrapper import \
+                MiniGridWrapper
+
+            self.env = MiniGridWrapper(train_mode=self.train_mode,
+                                       env_name=self.base_config['env_name'],
+                                       render=self.render,
+                                       n_agents=self.base_config['n_agents'])
 
         elif self.base_config['env_type'] == 'TEST':
             from algorithm.env_wrapper.test_wrapper import TestWrapper
