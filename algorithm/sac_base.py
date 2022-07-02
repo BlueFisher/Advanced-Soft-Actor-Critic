@@ -406,8 +406,8 @@ class SAC_Base(object):
 
         """ RANDOM NETWORK DISTILLATION """
         if self.use_rnd:
-            self.model_rnd: ModelBaseRND = nn.ModelRND(state_size, self.d_action_size + self.c_action_size).to(self.device)
-            self.model_target_rnd: ModelBaseRND = nn.ModelRND(state_size, self.d_action_size + self.c_action_size).to(self.device)
+            self.model_rnd: ModelBaseRND = nn.ModelRND(state_size, self.d_action_size, self.c_action_size).to(self.device)
+            self.model_target_rnd: ModelBaseRND = nn.ModelRND(state_size, self.d_action_size, self.c_action_size).to(self.device)
             for param in self.model_target_rnd.parameters():
                 param.requires_grad = False
             self.optimizer_rnd = adam_optimizer(self.model_rnd.parameters())
@@ -1416,16 +1416,36 @@ class SAC_Base(object):
     def _train_rnd(self, bn_states: torch.Tensor, bn_actions: torch.Tensor):
         n_states = bn_states[:, self.burn_in_step:, ...]
         n_actions = bn_actions[:, self.burn_in_step:, ...]
-        approx_f = self.model_rnd(n_states, n_actions)
-        with torch.no_grad():
-            f = self.model_target_rnd(n_states, n_actions)
-        loss_rnd = functional.mse_loss(f, approx_f)
+        d_n_actions = n_actions[..., :self.d_action_size]  # [batch, n, d_action_size]
+        c_n_actions = n_actions[..., self.d_action_size:]  # [batch, n, c_action_size]
+        
+        loss = torch.zeros((1, ), device=self.device)
+
+        if self.d_action_size:
+            d_rnd = self.model_rnd.cal_d_rnd(n_states) # [batch, n, d_action_size, f]
+            with torch.no_grad():
+                t_d_rnd = self.model_target_rnd.cal_d_rnd(n_states) # [batch, n, d_action_size, f]
+
+            _i = functional.one_hot(d_n_actions.argmax(-1), self.d_action_size).unsqueeze(-1)  # [batch, n, d_action_size, 1]
+            d_rnd = (torch.repeat_interleave(_i, d_rnd.size(-1), axis=-1) * d_rnd).sum(-2)
+            # [batch, n, d_action_size, f] -> [batch, n, f]
+            t_d_rnd = (torch.repeat_interleave(_i, t_d_rnd.size(-1), axis=-1) * t_d_rnd).sum(-2)
+            # [batch, n, d_action_size, f] -> [batch, n, f]
+
+            loss += functional.mse_loss(d_rnd, t_d_rnd)
+
+        if self.c_action_size:
+            c_rnd = self.model_rnd.cal_c_rnd(n_states, c_n_actions) # [batch, n, f]
+            with torch.no_grad():
+                t_c_rnd = self.model_target_rnd.cal_c_rnd(n_states, n_actions) # [batch, n, f]
+            
+            loss += functional.mse_loss(c_rnd, t_c_rnd)
 
         self.optimizer_rnd.zero_grad()
-        loss_rnd.backward(inputs=list(self.model_rnd.parameters()))
+        loss.backward(inputs=list(self.model_rnd.parameters()))
         self.optimizer_rnd.step()
 
-        return loss_rnd
+        return loss
 
     def _train(self,
                bn_indexes: torch.Tensor,
@@ -1551,42 +1571,70 @@ class SAC_Base(object):
             self.summary_writer.flush()
 
     @torch.no_grad()
-    def rnd_sample(self, state: torch.Tensor,
-                   d_policy: distributions.Categorical,
-                   c_policy: distributions.Normal):
+    def rnd_sample_d_action(self, state: torch.Tensor,
+                            d_policy: distributions.Categorical):
         """
         Sample action `self.rnd_n_sample` times, 
-        choose the action that has the max (model_rnd(state, action) - model_target_rnd(state, action))**2
+        choose the action that has the max (model_rnd(s, a) - model_target_rnd(s, a))**2
 
         Args:
             state: [Batch, state_size]
             d_policy: [Batch, d_action_size]
-            c_policy: [Batch, c_action_size]
 
         Returns:
-            action: [Batch, d_action_size + c_action_size]
+            d_action: [Batch, d_action_size]
         """
         batch = state.shape[0]
         n_sample = self.rnd_n_sample
 
-        d_action = d_policy.sample((n_sample,)) if self.d_action_size \
-            else torch.empty(0, device=self.device)
-        c_action = torch.tanh(c_policy.sample((n_sample,))) if self.c_action_size \
-            else torch.empty(0, device=self.device)
+        d_actions = d_policy.sample((n_sample,))  # [n_sample, batch, d_action_size]
+        d_actions = d_actions.transpose(0, 1)  # [batch, n_sample, d_action_size]
 
-        actions = torch.cat([d_action, c_action], dim=-1)  # [n_sample, batch, action_size]
+        d_rnd = self.model_rnd.cal_d_rnd(state)  # [batch, d_action_size, f]
+        t_d_rnd = self.model_target_rnd.cal_d_rnd(state)  # [batch, d_action_size, f]
+        d_rnd = torch.repeat_interleave(torch.unsqueeze(d_rnd, 1), n_sample, dim=1)  # [batch, n_sample, d_action_size, f]
+        t_d_rnd = torch.repeat_interleave(torch.unsqueeze(t_d_rnd, 1), n_sample, dim=1)  # [batch, n_sample, d_action_size, f]
 
-        actions = actions.transpose(0, 1)  # [batch, n_sample, action_size]
+        _i = functional.one_hot(d_actions.argmax(-1), self.d_action_size).unsqueeze(-1)  # [batch, n_sample, d_action_size, 1]
+        d_rnd = (torch.repeat_interleave(_i, d_rnd.size(-1), axis=-1) * d_rnd).sum(-2)
+        # [batch, n_sample, d_action_size, f] -> [batch, n_sample, f]
+        t_d_rnd = (torch.repeat_interleave(_i, t_d_rnd.size(-1), axis=-1) * t_d_rnd).sum(-2)
+        # [batch, n_sample, d_action_size, f] -> [batch, n_sample, f]
+
+        d_loss = torch.sum(torch.pow(d_rnd - t_d_rnd, 2), dim=-1)  # [batch, n_sample]
+        d_idx = torch.argmax(d_loss, dim=1)  # [batch, ]
+
+        return d_actions[torch.arange(batch), d_idx]
+
+    @torch.no_grad()
+    def rnd_sample_c_action(self, state: torch.Tensor,
+                            c_policy: distributions.Normal):
+        """
+        Sample action `self.rnd_n_sample` times, 
+        choose the action that has the max (model_rnd(s, a) - model_target_rnd(s, a))**2
+
+        Args:
+            state: [Batch, state_size]
+            c_policy: [Batch, c_action_size]
+
+        Returns:
+            c_action: [Batch, c_action_size]
+        """
+        batch = state.shape[0]
+        n_sample = self.rnd_n_sample
+
+        c_actions = torch.tanh(c_policy.sample((n_sample,)))  # [n_sample, batch, c_action_size]
+        c_actions = c_actions.transpose(0, 1)  # [batch, n_sample, c_action_size]
+
         states = torch.repeat_interleave(torch.unsqueeze(state, 1), n_sample, dim=1)
         # [batch, state_size] -> [batch, 1, state_size] -> [batch, n_sample, state_size]
-        approx_f = self.model_rnd(states, actions)  # [batch, n_sample, f]
-        f = self.model_target_rnd(states, actions)  # [batch, n_sample, f]
-        loss = torch.sum(torch.pow(f - approx_f, 2), dim=-1)  # [batch, n_sample]
+        c_rnd = self.model_rnd.cal_c_rnd(states, c_actions)  # [batch, n_sample, f]
+        t_c_rnd = self.model_target_rnd.cal_c_rnd(states, c_actions)  # [batch, n_sample, f]
 
-        idx = torch.argmax(loss, dim=1)  # [batch, ]
+        c_loss = torch.sum(torch.pow(c_rnd - t_c_rnd, 2), dim=-1)  # [batch, n_sample]
+        c_idx = torch.argmax(c_loss, dim=1)  # [batch, ]
 
-        # return torch.index_select(actions, 1, idx)
-        return actions[torch.tensor(range(batch)), idx]
+        return c_actions[torch.arange(batch), c_idx]
 
     @torch.no_grad()
     def _random_action(self, d_action, c_action):
@@ -1624,36 +1672,35 @@ class SAC_Base(object):
         batch = state.shape[0]
         d_policy, c_policy = self.model_policy(state, obs_list)
 
-        if self.use_rnd and (self.train_mode or force_rnd_if_available):
-            action = self.rnd_sample(state, d_policy, c_policy)
-            d_action = action[..., :self.d_action_size]
-            c_action = action[..., self.d_action_size:]
-        else:
-            if self.d_action_size:
-                if self.discrete_dqn_like:
-                    if torch.rand(1) < 0.2 and self.train_mode:
-                        d_action = distributions.OneHotCategorical(
-                            logits=torch.ones(batch, self.d_action_size)).sample().to(self.device)
-                    else:
-                        d_q, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None)
-                        d_action = torch.argmax(d_q, dim=-1)
-                        d_action = functional.one_hot(d_action, self.d_action_size)
+        if self.d_action_size:
+            if self.discrete_dqn_like:
+                if torch.rand(1) < 0.2 and self.train_mode:
+                    d_action = distributions.OneHotCategorical(
+                        logits=torch.ones(batch, self.d_action_size)).sample().to(self.device)
                 else:
-                    if disable_sample:
-                        d_action = functional.one_hot(d_policy.logits.argmax(dim=-1),
-                                                      self.d_action_size)
-                    else:
-                        d_action = d_policy.sample()
+                    d_q, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None)
+                    d_action = torch.argmax(d_q, dim=-1)
+                    d_action = functional.one_hot(d_action, self.d_action_size)
             else:
-                d_action = torch.empty(0, device=self.device)
-
-            if self.c_action_size:
                 if disable_sample:
-                    c_action = torch.tanh(c_policy.mean)
+                    d_action = functional.one_hot(d_policy.logits.argmax(dim=-1),
+                                                self.d_action_size)
+                elif self.use_rnd and (self.train_mode or force_rnd_if_available):
+                    d_action = self.rnd_sample_d_action(state, d_policy)
                 else:
-                    c_action = torch.tanh(c_policy.sample())
+                    d_action = d_policy.sample()
+        else:
+            d_action = torch.empty(0, device=self.device)
+
+        if self.c_action_size:
+            if disable_sample:
+                c_action = torch.tanh(c_policy.mean)
+            elif self.use_rnd and (self.train_mode or force_rnd_if_available):
+                c_action = self.rnd_sample_c_action(state, c_policy)
             else:
-                c_action = torch.empty(0, device=self.device)
+                c_action = torch.tanh(c_policy.sample())
+        else:
+            c_action = torch.empty(0, device=self.device)
 
         d_action, c_action = self._random_action(d_action, c_action)
 

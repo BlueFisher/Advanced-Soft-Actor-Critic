@@ -1,17 +1,16 @@
 default:
   base_config:
     env_type: MINIGRID
-    env_name: MiniGrid-Empty-8x8-v0
+    env_name: MiniGrid-Empty-16x16-v0
 
     max_step: -1
     max_iter: 1000
     n_agents: 10
 
   sac_config:
-    save_model_per_step: 1000 # Save model every N steps
-
-    batch_size: 128
-
     n_step: 3
 
-    discrete_dqn_like: true
+    discrete_dqn_like: false
+
+    use_rnd: true
+    rnd_n_sample: 3
