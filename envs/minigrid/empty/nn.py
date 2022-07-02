@@ -22,9 +22,14 @@ class ModelRep(m.ModelBaseSimpleRep):
 
 class ModelQ(m.ModelQ):
     def _build_model(self):
-        return super()._build_model(d_dense_n=64, d_dense_depth=2)
+        return super()._build_model(d_dense_depth=1)
 
 
 class ModelPolicy(m.ModelPolicy):
     def _build_model(self):
-        return super()._build_model(d_dense_depth=64)
+        return super()._build_model(d_dense_depth=1)
+
+
+class ModelRND(m.ModelRND):
+    def _build_model(self):
+        return super()._build_model(output_size=64)
