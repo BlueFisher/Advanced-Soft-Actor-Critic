@@ -99,6 +99,7 @@ class Learner(Main):
         model_abs_dir = Path(root_dir).joinpath('models',
                                                 config['base_config']['env_name'],
                                                 config['base_config']['name'])
+        model_abs_dir.mkdir(parents=True, exist_ok=True)
         self.model_abs_dir = model_abs_dir
 
         if self.logger_in_file:

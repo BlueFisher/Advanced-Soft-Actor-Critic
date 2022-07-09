@@ -1,0 +1,23 @@
+default:
+  base_config:
+    env_type: MINIGRID
+    env_name: MiniGrid-FourRooms-v0
+
+    max_step: -1
+    max_iter: 1000
+    n_agents: 10
+
+  replay_config:
+    capacity: 100000
+    alpha: 0.
+    beta_increment_per_sampling: 0
+
+  sac_config:
+    batch_size: 128
+    n_step: 1
+    clip_epsilon: -1
+
+    discrete_dqn_like: true
+
+    # use_rnd: true
+    # rnd_n_sample: 3

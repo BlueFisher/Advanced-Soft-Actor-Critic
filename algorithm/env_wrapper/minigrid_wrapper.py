@@ -40,7 +40,7 @@ class MiniGridWrapper(GymWrapper):
         self._logger.info(f'Action size: {env.action_space}')
 
         d_action_size = env.action_space.n
-        if 'Empty' in self.env_name:
+        if 'Empty' in self.env_name or 'FourRooms' in self.env_name:
             d_action_size = 3
 
         if not self._seq_envs:
