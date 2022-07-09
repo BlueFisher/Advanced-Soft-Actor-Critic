@@ -103,10 +103,10 @@ def set_logger(logger_file=None):
         logger.addHandler(fh)
 
 
-def save_config(config, model_root_path: Path, config_name):
-    model_root_path.mkdir(parents=True, exist_ok=True)
+def save_config(config, model_root_dir: Path, config_name):
+    model_root_dir.mkdir(parents=True, exist_ok=True)
 
-    with open(model_root_path.joinpath(config_name), 'w') as f:
+    with open(model_root_dir.joinpath(config_name), 'w') as f:
         yaml.dump(config, f, default_flow_style=False)
 
 

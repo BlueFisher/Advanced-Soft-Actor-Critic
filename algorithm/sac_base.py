@@ -511,7 +511,10 @@ class SAC_Base(object):
                     if isinstance(model, torch.Tensor):
                         model.data = ckpt_restore[name]
                     else:
-                        model.load_state_dict(ckpt_restore[name])
+                        try:
+                            model.load_state_dict(ckpt_restore[name])
+                        except RuntimeError as e:
+                            self._logger.error(e)
                         if isinstance(model, nn.Module):
                             if self.train_mode:
                                 model.train()

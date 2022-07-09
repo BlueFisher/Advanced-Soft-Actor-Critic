@@ -10,7 +10,7 @@ default:
   sac_config:
     n_step: 3
 
-    discrete_dqn_like: false
+    discrete_dqn_like: true
 
-    use_rnd: true
-    rnd_n_sample: 3
+#    use_rnd: true
+#    rnd_n_sample: 3

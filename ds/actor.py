@@ -12,6 +12,7 @@ from typing import List
 
 import grpc
 import numpy as np
+from algorithm.agent import Agent
 
 import algorithm.config_helper as config_helper
 from algorithm.sac_main import Main
