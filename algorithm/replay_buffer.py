@@ -75,6 +75,9 @@ class DataStorage:
         np.savez(path, **self._buffer, p_size=self._size, p_id=self._id)
 
     def load(self, path: Path):
+        if not path.exists():
+            return
+
         saved = np.load(path)
         self._size = saved['p_size']
         self._id = saved['p_id']
@@ -187,6 +190,9 @@ class SumTree:
         np.save(path, self._tree)
 
     def load(self, path: Path):
+        if not path.exists():
+            return
+            
         self._tree = np.load(path)
 
     def copy(self, src):
@@ -313,6 +319,10 @@ class PrioritizedReplayBuffer:
             self._trans_storage.update(data_ids, key, data)
 
     def save(self, save_dir: Path, ckpt: int):
+        # for p in p.glob('*-rb_tree.npy'):
+        #     p.unlink()
+        # for p in p.glob('*-rb_storage.npz'):
+        #     p.unlink()
         self._sum_tree.save(save_dir.joinpath(f'{ckpt}-rb_tree.npy'))
         self._trans_storage.save(save_dir.joinpath(f'{ckpt}-rb_storage.npz'))
 
