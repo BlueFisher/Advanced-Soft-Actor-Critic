@@ -285,7 +285,7 @@ class Main:
 
                 p = self.model_abs_dir.joinpath('save_model')
                 if self.train_mode and p.exists():
-                    self.ma_manager.save_model()
+                    self.ma_manager.save_model(True)
                     p.unlink()
 
                 iteration += 1

@@ -421,9 +421,9 @@ class MultiAgentsManager:
                 mgr['seq_hidden_state'] = mgr['next_seq_hidden_state']
                 mgr['seq_hidden_state'][ma_local_done[n]] = mgr['initial_seq_hidden_state'][ma_local_done[n]]
 
-    def save_model(self):
+    def save_model(self, save_replay_buffer=False):
         for n, mgr in self:
-            mgr.sac.save_model()
+            mgr.sac.save_model(save_replay_buffer)
 
 
 if __name__ == "__main__":

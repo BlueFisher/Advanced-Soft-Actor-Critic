@@ -536,7 +536,7 @@ class SAC_Base(object):
                 self._logger.info('Initializing from scratch')
                 self._update_target_variables()
 
-    def save_model(self):
+    def save_model(self, save_replay_buffer=False):
         if self.ckpt_dir:
             global_step = self.get_global_step()
             ckpt_path = self.ckpt_dir.joinpath(f'{global_step}.pth')
@@ -547,7 +547,7 @@ class SAC_Base(object):
             }, ckpt_path)
             self._logger.info(f"Model saved at {ckpt_path}")
 
-            if self.use_replay_buffer:
+            if self.use_replay_buffer and save_replay_buffer:
                 self.replay_buffer.save(self.ckpt_dir, global_step)
 
     def write_constant_summaries(self, constant_summaries, iteration=None):
