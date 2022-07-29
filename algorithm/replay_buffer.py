@@ -1,6 +1,6 @@
 import logging
 import math
-import threading
+from pathlib import Path
 
 import numpy as np
 
@@ -70,6 +70,20 @@ class DataStorage:
         Get true data ids
         """
         return self._buffer['_id'][ids % self.capacity]
+
+    def save(self, path: Path):
+        np.savez(path, **self._buffer, p_size=self._size, p_id=self._id)
+
+    def load(self, path: Path):
+        saved = np.load(path)
+        self._size = saved['p_size']
+        self._id = saved['p_id']
+
+        if self._buffer is None:
+            self._buffer = dict()
+        for k, v in saved.items():
+            if k not in ('p_size', 'p_id'):
+                self._buffer[k] = v
 
     def copy(self, src):
         src: DataStorage = src
@@ -168,6 +182,12 @@ class SumTree:
     def display(self):
         for i in range(self.depth):
             print(self._tree[2**i - 1:2**(i + 1) - 1])
+
+    def save(self, path: Path):
+        np.save(path, self._tree)
+
+    def load(self, path: Path):
+        self._tree = np.load(path)
 
     def copy(self, src):
         src: SumTree = src
@@ -291,6 +311,14 @@ class PrioritizedReplayBuffer:
     def update_transitions(self, data_ids, key, data):
         with self._lock.write():
             self._trans_storage.update(data_ids, key, data)
+
+    def save(self, save_dir: Path, ckpt: int):
+        self._sum_tree.save(save_dir.joinpath(f'{ckpt}-rb_tree.npy'))
+        self._trans_storage.save(save_dir.joinpath(f'{ckpt}-rb_storage.npz'))
+
+    def load(self, save_dir: Path, ckpt: int):
+        self._sum_tree.load(save_dir.joinpath(f'{ckpt}-rb_tree.npy'))
+        self._trans_storage.load(save_dir.joinpath(f'{ckpt}-rb_storage.npz'))
 
     def clear(self):
         self._trans_storage.clear()
