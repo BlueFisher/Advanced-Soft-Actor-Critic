@@ -11,7 +11,7 @@ import algorithm.config_helper as config_helper
 
 from .agent import Agent, MultiAgentsManager
 from .sac_base import SAC_Base
-from .utils import format_global_step, gen_pre_n_actions
+from .utils import format_global_step
 from .utils.enums import *
 
 
@@ -133,8 +133,7 @@ class Main:
                                         n_agents=self.base_config['n_agents'])
 
         elif self.base_config['env_type'] == 'MINIGRID':
-            from algorithm.env_wrapper.minigrid_wrapper import \
-                MiniGridWrapper
+            from algorithm.env_wrapper.minigrid_wrapper import MiniGridWrapper
 
             self.env = MiniGridWrapper(train_mode=self.train_mode,
                                        env_name=self.base_config['env_name'],

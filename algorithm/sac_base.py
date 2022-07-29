@@ -521,7 +521,17 @@ class SAC_Base(object):
                             else:
                                 model.eval()
 
+                    # https://github.com/pytorch/pytorch/issues/80809
+                    if 'opt' in name:
+                        for g in model.param_groups:
+                            g['capturable'] = True
+
                 self._logger.info(f'Restored from {ckpt_restore_path}')
+
+                if self.train_mode and self.use_replay_buffer:
+                    self.replay_buffer.load(ckpt_dir, last_ckpt)
+
+                    self._logger.info(f'Replay buffer restored')
             else:
                 self._logger.info('Initializing from scratch')
                 self._update_target_variables()
@@ -536,6 +546,9 @@ class SAC_Base(object):
                 for k, v in self.ckpt_dict.items()
             }, ckpt_path)
             self._logger.info(f"Model saved at {ckpt_path}")
+
+            if self.use_replay_buffer:
+                self.replay_buffer.save(self.ckpt_dir, global_step)
 
     def write_constant_summaries(self, constant_summaries, iteration=None):
         """
@@ -1421,13 +1434,13 @@ class SAC_Base(object):
         n_actions = bn_actions[:, self.burn_in_step:, ...]
         d_n_actions = n_actions[..., :self.d_action_size]  # [batch, n, d_action_size]
         c_n_actions = n_actions[..., self.d_action_size:]  # [batch, n, c_action_size]
-        
+
         loss = torch.zeros((1, ), device=self.device)
 
         if self.d_action_size:
-            d_rnd = self.model_rnd.cal_d_rnd(n_states) # [batch, n, d_action_size, f]
+            d_rnd = self.model_rnd.cal_d_rnd(n_states)  # [batch, n, d_action_size, f]
             with torch.no_grad():
-                t_d_rnd = self.model_target_rnd.cal_d_rnd(n_states) # [batch, n, d_action_size, f]
+                t_d_rnd = self.model_target_rnd.cal_d_rnd(n_states)  # [batch, n, d_action_size, f]
 
             _i = functional.one_hot(d_n_actions.argmax(-1), self.d_action_size).unsqueeze(-1)  # [batch, n, d_action_size, 1]
             d_rnd = (torch.repeat_interleave(_i, d_rnd.size(-1), axis=-1) * d_rnd).sum(-2)
@@ -1438,10 +1451,10 @@ class SAC_Base(object):
             loss += functional.mse_loss(d_rnd, t_d_rnd)
 
         if self.c_action_size:
-            c_rnd = self.model_rnd.cal_c_rnd(n_states, c_n_actions) # [batch, n, f]
+            c_rnd = self.model_rnd.cal_c_rnd(n_states, c_n_actions)  # [batch, n, f]
             with torch.no_grad():
-                t_c_rnd = self.model_target_rnd.cal_c_rnd(n_states, n_actions) # [batch, n, f]
-            
+                t_c_rnd = self.model_target_rnd.cal_c_rnd(n_states, n_actions)  # [batch, n, f]
+
             loss += functional.mse_loss(c_rnd, t_c_rnd)
 
         self.optimizer_rnd.zero_grad()
@@ -1687,7 +1700,7 @@ class SAC_Base(object):
             else:
                 if disable_sample:
                     d_action = functional.one_hot(d_policy.logits.argmax(dim=-1),
-                                                self.d_action_size)
+                                                  self.d_action_size)
                 elif self.use_rnd and (self.train_mode or force_rnd_if_available):
                     d_action = self.rnd_sample_d_action(state, d_policy)
                 else:

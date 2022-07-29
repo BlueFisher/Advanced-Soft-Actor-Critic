@@ -12,9 +12,9 @@ from typing import List
 
 import grpc
 import numpy as np
-from algorithm.agent import Agent
 
 import algorithm.config_helper as config_helper
+from algorithm.agent import Agent
 from algorithm.sac_main import Main
 from algorithm.utils import ReadWriteLock, elapsed_timer, gen_pre_n_actions
 from algorithm.utils.enums import *
