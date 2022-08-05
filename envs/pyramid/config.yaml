@@ -14,10 +14,6 @@ default:
     force_reset: true
     ray_length: 20
 
-  model_config:
-    rep:
-      pe: add
-
   sac_config:
     save_model_per_step: 10000
 
@@ -31,29 +27,42 @@ default:
 
     action_noise: [0., 1.]
 
+ray_rnn:
+  base_config:
+    name: "rnn_{time}"
+  sac_config:
+    nn: nn_rnn
+    seq_encoder: RNN
+    burn_in_step: 32
+
 ray_nope:
   base_config:
-    nn: nn_attn
     name: "attn_nope_{time}"
-  model_config:
+  nn_config:
     rep:
       pe: nope
+  sac_config:
+    nn: nn_attn
 
 ray_peadd:
   base_config:
     nn: nn_attn
     name: "attn_peadd_{time}"
-  model_config:
+  nn_config:
     rep:
       pe: add
+  sac_config:
+    nn: nn_attn
 
 ray_pecat:
   base_config:
     nn: nn_attn
     name: "attn_pecat_{time}"
-  model_config:
+  nn_config:
     rep:
       pe: cat
+  sac_config:
+    nn: nn_attn
 
 ray_nornn:
   base_config:

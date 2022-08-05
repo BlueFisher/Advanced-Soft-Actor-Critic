@@ -4,6 +4,7 @@ import numpy as np
 
 from algorithm.utils import format_global_step
 
+from . import agent
 from .agent import Agent
 from .sac_main import Main
 
@@ -33,8 +34,6 @@ class AgentHitted(Agent):
 
 
 class MainHitted(Main):
-    _agent_class = AgentHitted
-
     def _run(self):
         for n, mgr in self.ma_manager:
             mgr['evaluation_data'] = {
@@ -92,3 +91,6 @@ class MainHitted(Main):
                             mgr['evaluation_data']['failed_steps'] += agent.steps
 
             self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}, hitted {hitted}')
+
+
+agent.Agent = AgentHitted

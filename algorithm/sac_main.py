@@ -9,7 +9,7 @@ import numpy as np
 
 import algorithm.config_helper as config_helper
 
-from .agent import Agent, MultiAgentsManager
+from .agent import MultiAgentsManager
 from .sac_base import SAC_Base
 from .utils import format_global_step
 from .utils.enums import *
@@ -19,7 +19,6 @@ class Main:
     train_mode = True
     render = False
     unity_run_in_editor = False
-    _agent_class = Agent  # For different environments
 
     def __init__(self, root_dir, config_dir, args):
         """
@@ -150,8 +149,7 @@ class Main:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
         ma_obs_shapes, ma_d_action_size, ma_c_action_size = self.env.init()
-        self.ma_manager = MultiAgentsManager(self._agent_class,
-                                             ma_obs_shapes,
+        self.ma_manager = MultiAgentsManager(ma_obs_shapes,
                                              ma_d_action_size,
                                              ma_c_action_size,
                                              self.model_abs_dir)
@@ -201,7 +199,7 @@ class Main:
                                  replay_config=mgr.config['replay_config']))
 
     def _run(self):
-        self.ma_manager.init(self.base_config['n_agents'])
+        self.ma_manager.pre_run(self.base_config['n_agents'])
 
         ma_obs_list = self.env.reset(reset_config=self.reset_config)
         self.ma_manager.set_obs_list(ma_obs_list)
@@ -250,29 +248,13 @@ class Main:
                             ma_local_done[n] = [True] * len(mgr.agents)
                             ma_max_reached[n] = [True] * len(mgr.agents)
 
-                        episode_trans_list = [
-                            a.add_transition(
-                                obs_list=[o[i] for o in mgr['obs_list']],
-                                action=mgr['action'][i],
-                                reward=ma_reward[n][i],
-                                local_done=ma_local_done[n][i],
-                                max_reached=ma_max_reached[n][i],
-                                next_obs_list=[o[i] for o in ma_next_obs_list[n]],
-                                prob=mgr['prob'][i],
-                                is_padding=False,
-                                seq_hidden_state=mgr['seq_hidden_state'][i] if mgr.seq_encoder is not None else None,
-                            ) for i, a in enumerate(mgr.agents)
-                        ]
+                    self.ma_manager.set_ma_env_step(ma_next_obs_list,
+                                                    ma_reward,
+                                                    ma_local_done,
+                                                    ma_max_reached)
 
-                        if self.train_mode:
-                            episode_trans_list = [t for t in episode_trans_list if t is not None]
-                            if len(episode_trans_list) != 0:
-                                # ep_indexes, ep_padding_masks,
-                                # ep_obses_list, ep_actions, ep_rewards, next_obs_list, ep_dones, ep_probs,
-                                # ep_seq_hidden_states
-                                for episode_trans in episode_trans_list:
-                                    mgr.sac.put_episode(*episode_trans)
-                            trained_steps = max(trained_steps, mgr.sac.train())
+                    if self.train_mode:
+                        trained_steps = self.ma_manager.train(trained_steps)
 
                     self.ma_manager.post_step(ma_next_obs_list, ma_local_done)
 
