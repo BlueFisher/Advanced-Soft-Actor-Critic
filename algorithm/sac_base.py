@@ -53,7 +53,7 @@ class SAC_Base(object):
                  use_auto_alpha: bool = True,
                  learning_rate: float = 3e-4,
                  gamma: float = 0.99,
-                 v_lambda: float = 0.9,
+                 v_lambda: float = 1.,
                  v_rho: float = 1.,
                  v_c: float = 1.,
                  clip_epsilon: float = 0.2,
@@ -1720,7 +1720,7 @@ class SAC_Base(object):
 
         d_action, c_action = self._random_action(d_action, c_action)
 
-        policy_prob = torch.ones((state.shape[:1]), device=self.device)  # [Batch, ]
+        policy_prob = torch.ones(state.shape[:1], device=self.device)  # [Batch, ]
         if self.d_action_size:
             policy_prob *= torch.exp(d_policy.log_prob(d_action))  # [Batch, ]
         if self.c_action_size:

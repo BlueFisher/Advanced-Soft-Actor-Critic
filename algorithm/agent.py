@@ -228,12 +228,9 @@ class Agent:
 
 class AgentManager:
     def __init__(self,
-                 agent_class: Agent,
                  obs_shapes: List[Tuple[int]],
                  d_action_size: int,
                  c_action_size: int):
-        self._agent_class = agent_class
-
         self.obs_shapes = obs_shapes
         self.d_action_size = d_action_size
         self.c_action_size = c_action_size
@@ -258,11 +255,17 @@ class AgentManager:
         self.sac = sac
         self.seq_encoder = sac.seq_encoder
 
-    def set_agents(self, num_agents: int):
+    def pre_run(self, num_agents: int):
+        self['initial_pre_action'] = self.sac.get_initial_action(num_agents)  # [n_agents, action_size]
+        self['pre_action'] = self['initial_pre_action']
+        if self.seq_encoder is not None:
+            self['initial_seq_hidden_state'] = self.sac.get_initial_seq_hidden_state(num_agents)  # [n_agents, *seq_hidden_state_shape]
+            self['seq_hidden_state'] = self['initial_seq_hidden_state']
+
         self.agents: List[Agent] = [
-            self._agent_class(i, self.obs_shapes, self.action_size,
-                              seq_hidden_state_shape=self.sac.seq_hidden_state_shape
-                              if self.seq_encoder is not None else None)
+            Agent(i, self.obs_shapes, self.action_size,
+                  seq_hidden_state_shape=self.sac.seq_hidden_state_shape
+                  if self.seq_encoder is not None else None)
             for i in range(num_agents)
         ]
 
@@ -323,20 +326,58 @@ class AgentManager:
         self['prob'] = prob
         self['next_seq_hidden_state'] = next_seq_hidden_state
 
+    def set_env_step(self,
+                     next_obs_list,
+                     reward,
+                     local_done,
+                     max_reached):
+        episode_trans_list = [
+            a.add_transition(
+                obs_list=[o[i] for o in self['obs_list']],
+                action=self['action'][i],
+                reward=reward[i],
+                local_done=local_done[i],
+                max_reached=max_reached[i],
+                next_obs_list=[o[i] for o in next_obs_list],
+                prob=self['prob'][i],
+                is_padding=False,
+                seq_hidden_state=self['seq_hidden_state'][i] if self.seq_encoder is not None else None,
+            ) for i, a in enumerate(self.agents)
+        ]
+
+        self['episode_trans_list'] = [t for t in episode_trans_list if t is not None]
+
+    def train(self):
+        trained_steps = 0
+
+        if len(self['episode_trans_list']) != 0:
+            # ep_indexes, ep_padding_masks,
+            # ep_obses_list, ep_actions, ep_rewards, next_obs_list, ep_dones, ep_probs,
+            # ep_seq_hidden_states
+            for episode_trans in self['episode_trans_list']:
+                self.sac.put_episode(*episode_trans)
+
+            trained_steps = self.sac.train()
+
+        return trained_steps
+
+    def post_step(self, local_done):
+        self['pre_action'] = self['action']
+        self['pre_action'][local_done] = self['initial_pre_action'][local_done]
+        if self.seq_encoder is not None:
+            self['seq_hidden_state'] = self['next_seq_hidden_state']
+            self['seq_hidden_state'][local_done] = self['initial_seq_hidden_state'][local_done]
+
 
 class MultiAgentsManager:
     def __init__(self,
-                 agent_class: Agent,
                  ma_obs_shapes: dict,
                  ma_d_action_size: dict,
                  ma_c_action_size: dict,
                  model_abs_dir: Path):
-        self._agent_class = agent_class
-
         self._ma_manager: Dict[str, AgentManager] = {}
         for n in ma_obs_shapes:
-            self._ma_manager[n] = AgentManager(agent_class,
-                                               ma_obs_shapes[n],
+            self._ma_manager[n] = AgentManager(ma_obs_shapes[n],
                                                ma_d_action_size[n],
                                                ma_c_action_size[n])
 
@@ -354,15 +395,9 @@ class MultiAgentsManager:
     def __len__(self):
         return len(self._ma_manager)
 
-    def init(self, num_agents):
+    def pre_run(self, num_agents):
         for n, mgr in self:
-            mgr['initial_pre_action'] = mgr.sac.get_initial_action(num_agents)  # [n_agents, action_size]
-            mgr['pre_action'] = mgr['initial_pre_action']
-            if mgr.seq_encoder is not None:
-                mgr['initial_seq_hidden_state'] = mgr.sac.get_initial_seq_hidden_state(num_agents)  # [n_agents, *seq_hidden_state_shape]
-                mgr['seq_hidden_state'] = mgr['initial_seq_hidden_state']
-
-            mgr.set_agents(num_agents)
+            mgr.pre_run(num_agents)
 
     def is_max_reached(self):
         return any([any([a.max_reached for a in mgr.agents]) for n, mgr in self])
@@ -411,15 +446,28 @@ class MultiAgentsManager:
 
         return ma_d_action, ma_c_action
 
+    def set_ma_env_step(self,
+                        ma_next_obs_list,
+                        ma_reward,
+                        ma_local_done,
+                        ma_max_reached):
+        for n, mgr in self:
+            mgr.set_env_step(ma_next_obs_list[n],
+                             ma_reward[n],
+                             ma_local_done[n],
+                             ma_max_reached[n])
+
+    def train(self, trained_steps: int):
+        for n, mgr in self:
+            trained_steps = max(mgr.train(), trained_steps)
+
+        return trained_steps
+
     def post_step(self, ma_next_obs_list, ma_local_done):
         self.set_obs_list(ma_next_obs_list)
 
         for n, mgr in self:
-            mgr['pre_action'] = mgr['action']
-            mgr['pre_action'][ma_local_done[n]] = mgr['initial_pre_action'][ma_local_done[n]]
-            if mgr.seq_encoder is not None:
-                mgr['seq_hidden_state'] = mgr['next_seq_hidden_state']
-                mgr['seq_hidden_state'][ma_local_done[n]] = mgr['initial_seq_hidden_state'][ma_local_done[n]]
+            mgr.post_step(ma_local_done[n])
 
     def save_model(self, save_replay_buffer=False):
         for n, mgr in self:

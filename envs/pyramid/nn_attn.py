@@ -36,7 +36,7 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         x = torch.concat([ray_obs, vec_obs, pre_action], dim=-1)
         x = self.mlp(x)
-        
+
         if self.pe == 'cat':
             pe = self.pos(index)
             x = torch.concat([x, pe], dim=-1)
