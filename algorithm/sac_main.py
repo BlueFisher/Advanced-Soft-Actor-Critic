@@ -184,19 +184,19 @@ class Main:
             spec.loader.exec_module(nn)
             mgr.config['sac_config']['nn'] = nn
 
-            mgr.set_sac(SAC_Base(obs_shapes=mgr.obs_shapes,
-                                 d_action_size=mgr.d_action_size,
-                                 c_action_size=mgr.c_action_size,
-                                 model_abs_dir=mgr.model_abs_dir,
-                                 device=self.device,
-                                 ma_name=None if len(self.ma_manager) == 1 else n,
-                                 train_mode=self.train_mode,
-                                 last_ckpt=self.last_ckpt,
+            mgr.set_rl(SAC_Base(obs_shapes=mgr.obs_shapes,
+                                d_action_size=mgr.d_action_size,
+                                c_action_size=mgr.c_action_size,
+                                model_abs_dir=mgr.model_abs_dir,
+                                device=self.device,
+                                ma_name=None if len(self.ma_manager) == 1 else n,
+                                train_mode=self.train_mode,
+                                last_ckpt=self.last_ckpt,
 
-                                 nn_config=mgr.config['nn_config'],
-                                 **mgr.config['sac_config'],
+                                nn_config=mgr.config['nn_config'],
+                                **mgr.config['sac_config'],
 
-                                 replay_config=mgr.config['replay_config']))
+                                replay_config=mgr.config['replay_config']))
 
     def _run(self):
         self.ma_manager.pre_run(self.base_config['n_agents'])
@@ -282,7 +282,7 @@ class Main:
     def _log_episode_summaries(self):
         for n, mgr in self.ma_manager:
             rewards = np.array([a.reward for a in mgr.agents])
-            mgr.sac.write_constant_summaries([
+            mgr.rl.write_constant_summaries([
                 {'tag': 'reward/mean', 'simple_value': rewards.mean()},
                 {'tag': 'reward/max', 'simple_value': rewards.max()},
                 {'tag': 'reward/min', 'simple_value': rewards.min()}
@@ -290,7 +290,7 @@ class Main:
 
     def _log_episode_info(self, iteration, iter_time):
         for n, mgr in self.ma_manager:
-            global_step = format_global_step(mgr.sac.get_global_step())
+            global_step = format_global_step(mgr.rl.get_global_step())
             rewards = [a.reward for a in mgr.agents]
             rewards = ", ".join([f"{i:6.1f}" for i in rewards])
             max_step = max([a.steps for a in mgr.agents])
