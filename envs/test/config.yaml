@@ -17,6 +17,9 @@ default:
         nn: nn
         n_step: 10
 
+  replay_config:
+    capacity: 65536
+
 rnn:
   base_config:
     nn: nn_rnn

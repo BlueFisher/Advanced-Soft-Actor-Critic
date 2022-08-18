@@ -521,11 +521,6 @@ class SAC_Base(object):
                             else:
                                 model.eval()
 
-                    # https://github.com/pytorch/pytorch/issues/80809
-                    if 'opt' in name:
-                        for g in model.param_groups:
-                            g['capturable'] = True
-
                 self._logger.info(f'Restored from {ckpt_restore_path}')
 
                 if self.train_mode and self.use_replay_buffer:

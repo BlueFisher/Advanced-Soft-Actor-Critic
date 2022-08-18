@@ -251,20 +251,20 @@ class AgentManager:
         model_abs_dir.mkdir(parents=True, exist_ok=True)
         self.model_abs_dir = model_abs_dir
 
-    def set_sac(self, sac: SAC_Base):
-        self.sac = sac
-        self.seq_encoder = sac.seq_encoder
+    def set_rl(self, rl: SAC_Base):
+        self.rl = rl
+        self.seq_encoder = rl.seq_encoder
 
     def pre_run(self, num_agents: int):
-        self['initial_pre_action'] = self.sac.get_initial_action(num_agents)  # [n_agents, action_size]
+        self['initial_pre_action'] = self.rl.get_initial_action(num_agents)  # [n_agents, action_size]
         self['pre_action'] = self['initial_pre_action']
         if self.seq_encoder is not None:
-            self['initial_seq_hidden_state'] = self.sac.get_initial_seq_hidden_state(num_agents)  # [n_agents, *seq_hidden_state_shape]
+            self['initial_seq_hidden_state'] = self.rl.get_initial_seq_hidden_state(num_agents)  # [n_agents, *seq_hidden_state_shape]
             self['seq_hidden_state'] = self['initial_seq_hidden_state']
 
         self.agents: List[Agent] = [
             Agent(i, self.obs_shapes, self.action_size,
-                  seq_hidden_state_shape=self.sac.seq_hidden_state_shape
+                  seq_hidden_state_shape=self.rl.seq_hidden_state_shape
                   if self.seq_encoder is not None else None)
             for i in range(num_agents)
         ]
@@ -273,11 +273,11 @@ class AgentManager:
                    disable_sample: bool = False,
                    force_rnd_if_available: bool = False):
         if self.seq_encoder == SEQ_ENCODER.RNN:
-            action, prob, next_seq_hidden_state = self.sac.choose_rnn_action(self['obs_list'],
-                                                                             self['pre_action'],
-                                                                             self['seq_hidden_state'],
-                                                                             disable_sample=disable_sample,
-                                                                             force_rnd_if_available=force_rnd_if_available)
+            action, prob, next_seq_hidden_state = self.rl.choose_rnn_action(self['obs_list'],
+                                                                            self['pre_action'],
+                                                                            self['seq_hidden_state'],
+                                                                            disable_sample=disable_sample,
+                                                                            force_rnd_if_available=force_rnd_if_available)
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN:
             ep_length = min(512, max([a.episode_length for a in self.agents]))
@@ -306,18 +306,18 @@ class AgentManager:
                              for o, t_o in zip(ep_obses_list, self['obs_list'])]
             ep_pre_actions = gen_pre_n_actions(ep_actions, True)
 
-            action, prob, next_seq_hidden_state = self.sac.choose_attn_action(ep_indexes,
-                                                                              ep_padding_masks,
-                                                                              ep_obses_list,
-                                                                              ep_pre_actions,
-                                                                              ep_attn_states,
-                                                                              disable_sample=disable_sample,
-                                                                              force_rnd_if_available=force_rnd_if_available)
+            action, prob, next_seq_hidden_state = self.rl.choose_attn_action(ep_indexes,
+                                                                             ep_padding_masks,
+                                                                             ep_obses_list,
+                                                                             ep_pre_actions,
+                                                                             ep_attn_states,
+                                                                             disable_sample=disable_sample,
+                                                                             force_rnd_if_available=force_rnd_if_available)
 
         else:
-            action, prob = self.sac.choose_action(self['obs_list'],
-                                                  disable_sample=disable_sample,
-                                                  force_rnd_if_available=force_rnd_if_available)
+            action, prob = self.rl.choose_action(self['obs_list'],
+                                                 disable_sample=disable_sample,
+                                                 force_rnd_if_available=force_rnd_if_available)
             next_seq_hidden_state = None
 
         self['action'] = action
@@ -355,13 +355,14 @@ class AgentManager:
             # ep_obses_list, ep_actions, ep_rewards, next_obs_list, ep_dones, ep_probs,
             # ep_seq_hidden_states
             for episode_trans in self['episode_trans_list']:
-                self.sac.put_episode(*episode_trans)
+                self.rl.put_episode(*episode_trans)
 
-            trained_steps = self.sac.train()
+            trained_steps = self.rl.train()
 
         return trained_steps
 
-    def post_step(self, local_done):
+    def post_step(self, next_obs_list, local_done):
+        self['obs_list'] = next_obs_list
         self['pre_action'] = self['action']
         self['pre_action'][local_done] = self['initial_pre_action'][local_done]
         if self.seq_encoder is not None:
@@ -422,7 +423,7 @@ class MultiAgentsManager:
     def burn_in_padding(self):
         for n, mgr in self:
             for a in [a for a in mgr.agents if a.is_empty()]:
-                for _ in range(mgr.sac.burn_in_step):
+                for _ in range(mgr.rl.burn_in_step):
                     a.add_transition(
                         obs_list=[np.zeros(t, dtype=np.float32) for t in mgr.obs_shapes],
                         action=mgr['initial_pre_action'][0],
@@ -464,14 +465,12 @@ class MultiAgentsManager:
         return trained_steps
 
     def post_step(self, ma_next_obs_list, ma_local_done):
-        self.set_obs_list(ma_next_obs_list)
-
         for n, mgr in self:
-            mgr.post_step(ma_local_done[n])
+            mgr.post_step(ma_next_obs_list[n], ma_local_done[n])
 
     def save_model(self, save_replay_buffer=False):
         for n, mgr in self:
-            mgr.sac.save_model(save_replay_buffer)
+            mgr.rl.save_model(save_replay_buffer)
 
 
 if __name__ == "__main__":

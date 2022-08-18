@@ -11,18 +11,23 @@ AUG_RAY_RANDOM_SIZE = 250
 
 
 class ModelRep(m.ModelBaseRNNRep):
-    def _build_model(self, blur, brightness, ray_random, need_speed):
+    def _build_model(self, blur, brightness, depth_blur, depth_brightness, ray_random, need_speed):
         assert self.obs_shapes[0] == (84, 84, 3)
         assert self.obs_shapes[1] == (84, 84, 1)
         assert self.obs_shapes[2] == (802,)  # ray (1 + 200 + 200) * 2
         assert self.obs_shapes[3] == (6,)  # vector
 
-        self.ray_random = ray_random
         if blur != 0:
             self.blurrer = m.Transform(T.GaussianBlur(blur, sigma=blur))
         else:
             self.blurrer = None
         self.brightness = m.Transform(T.ColorJitter(brightness=(brightness, brightness)))
+        if depth_blur != 0:
+            self.depth_blurrer = m.Transform(T.GaussianBlur(depth_blur, sigma=depth_blur))
+        else:
+            self.depth_blurrer = None
+        self.depth_brightness = m.Transform(T.ColorJitter(brightness=(depth_brightness, depth_brightness)))
+        self.ray_random = ray_random
         self.need_speed = need_speed
 
         self.ray_index = generate_unity_to_nn_ray_index(RAY_SIZE)
@@ -65,6 +70,10 @@ class ModelRep(m.ModelBaseRNNRep):
         if self.blurrer:
             vis_cam = self.blurrer(vis_cam)
         vis_cam = self.brightness(vis_cam)
+
+        if self.depth_blurrer:
+            vis_depth = self.depth_blurrer(vis_depth)
+        vis_depth = self.depth_brightness(vis_depth)
 
         vis_cam = self.conv(vis_cam)
         vis_depth = self.depth_conv(vis_depth)
