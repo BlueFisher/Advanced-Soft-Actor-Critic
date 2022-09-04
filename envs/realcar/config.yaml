@@ -83,6 +83,58 @@ byol_q_ada:
     siamese_use_q: true
     siamese_use_adaptive: true
 
+ignore_depth:
+  sac_config:
+    nn: nn_ignore_depth
+
+atc_ignore_depth:
+  base_config:
+    name: "atc_{time}"
+  sac_config:
+    nn: nn_ignore_depth
+    siamese: ATC
+
+byol_ignore_depth:
+  base_config:
+    name: "byol_{time}"
+  sac_config:
+    nn: nn_ignore_depth
+    siamese: BYOL
+
+atc_q_ignore_depth:
+  base_config:
+    name: "atc_q_{time}"
+  sac_config:
+    nn: nn_ignore_depth
+    siamese: ATC
+    siamese_use_q: true
+
+byol_q_ignore_depth:
+  base_config:
+    name: "byol_q_{time}"
+  sac_config:
+    nn: nn_ignore_depth
+    siamese: BYOL
+    siamese_use_q: true
+
+atc_q_ada_ignore_depth:
+  base_config:
+    name: "atc_q_ada_{time}"
+  sac_config:
+    nn: nn_ignore_depth
+    siamese: ATC
+    siamese_use_q: true
+    siamese_use_adaptive: true
+
+byol_q_ada_ignore_depth:
+  base_config:
+    name: "byol_q_ada_{time}"
+  sac_config:
+    nn: nn_ignore_depth
+    siamese: BYOL
+    siamese_use_q: true
+    siamese_use_adaptive: true
+
 blur_0_brightness_0.5_depthblur_0_depthbrightness_0.5_ray_0:
   nn_config:
     rep:
