@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 /etc/bootstrap.sh
 export DISPLAY=:0
