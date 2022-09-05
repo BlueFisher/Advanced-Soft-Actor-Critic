@@ -228,9 +228,11 @@ class Agent:
 
 class AgentManager:
     def __init__(self,
+                 name: str,
                  obs_shapes: List[Tuple[int]],
                  d_action_size: int,
                  c_action_size: int):
+        self.name = name
         self.obs_shapes = obs_shapes
         self.d_action_size = d_action_size
         self.c_action_size = c_action_size
@@ -357,7 +359,7 @@ class AgentManager:
             for episode_trans in self['episode_trans_list']:
                 self.rl.put_episode(*episode_trans)
 
-            trained_steps = self.rl.train()
+        trained_steps = self.rl.train()
 
         return trained_steps
 
@@ -378,7 +380,8 @@ class MultiAgentsManager:
                  model_abs_dir: Path):
         self._ma_manager: Dict[str, AgentManager] = {}
         for n in ma_obs_shapes:
-            self._ma_manager[n] = AgentManager(ma_obs_shapes[n],
+            self._ma_manager[n] = AgentManager(n,
+                                               ma_obs_shapes[n],
                                                ma_d_action_size[n],
                                                ma_c_action_size[n])
 

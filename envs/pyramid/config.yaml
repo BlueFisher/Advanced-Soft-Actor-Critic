@@ -46,7 +46,6 @@ ray_nope:
 
 ray_peadd:
   base_config:
-    nn: nn_attn
     name: "attn_peadd_{time}"
   nn_config:
     rep:
@@ -56,7 +55,6 @@ ray_peadd:
 
 ray_pecat:
   base_config:
-    nn: nn_attn
     name: "attn_pecat_{time}"
   nn_config:
     rep:
@@ -66,10 +64,10 @@ ray_pecat:
 
 ray_nornn:
   base_config:
-    nn: nn_nornn
     name: "nornn_{time}"
   reset_config:
     ray_length: 20
   sac_config:
+    nn: nn_nornn
     burn_in_step: 0
     seq_encoder: null

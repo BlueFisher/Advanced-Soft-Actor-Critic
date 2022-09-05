@@ -1,6 +1,3 @@
-import math
-from turtle import forward
-
 import torch
 from torch import nn
 
