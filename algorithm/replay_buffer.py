@@ -192,7 +192,7 @@ class SumTree:
     def load(self, path: Path):
         if not path.exists():
             return
-            
+
         self._tree = np.load(path)
 
     def copy(self, src):

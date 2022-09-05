@@ -1,8 +1,18 @@
-import os
-import shutil
+from glob import glob
+from pathlib import Path
 
-for root, dirs, files in os.walk('models_bak'):
-    for name in dirs:
-        if name == 'model':
-            print(os.path.join(root, name))
-            shutil.rmtree(os.path.join(root, name))
+root = 'models'
+
+for model in glob(root + '/**/model', recursive=True):
+    print(model)
+    pth_list = []
+    for pth in glob(model + '/*.pth'):
+        pth_list.append(int(Path(pth).stem))
+
+    max_pth = str(max(pth_list))
+
+    for pth in glob(model + '/*.pth'):
+        pth = Path(pth)
+        if pth.stem != max_pth:
+            print('remove', pth.stem)
+            pth.unlink()

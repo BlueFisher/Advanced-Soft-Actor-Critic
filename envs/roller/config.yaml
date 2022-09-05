@@ -7,7 +7,7 @@ default:
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
     n_agents: 10
-    max_iter: 200
+    max_iter: 2000
     reset_on_iteration: false
 
   reset_config:
