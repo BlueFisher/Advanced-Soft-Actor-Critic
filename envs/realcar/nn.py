@@ -30,6 +30,7 @@ class ModelRep(m.ModelBaseRNNRep):
         self.ray_random = ray_random
         self.need_speed = need_speed
 
+        # self._image_visual = ImageVisual()
         self.ray_index = generate_unity_to_nn_ray_index(RAY_SIZE)
         # self._ray_visual = RayVisual()
 
@@ -45,7 +46,7 @@ class ModelRep(m.ModelBaseRNNRep):
         self.vis_ray_dense = m.LinearLayers(self.conv.output_size + self.depth_conv.output_size + self.ray_conv.output_size,
                                             dense_n=128, dense_depth=1)
 
-        self.rnn = m.GRU(128 + self.c_action_size, 64, 1)
+        self.rnn = m.GRU(128 + self.c_action_size, 128, 1)
 
         cropper = torch.nn.Sequential(
             T.RandomCrop(size=(50, 50)),
@@ -70,6 +71,7 @@ class ModelRep(m.ModelBaseRNNRep):
         if self.blurrer:
             vis_cam = self.blurrer(vis_cam)
         vis_cam = self.brightness(vis_cam)
+        # self._image_visual(vis_cam)
 
         if self.depth_blurrer:
             vis_depth = self.depth_blurrer(vis_depth)
