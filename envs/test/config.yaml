@@ -21,11 +21,17 @@ default:
     capacity: 65536
 
 rnn:
-  base_config:
-    nn: nn_rnn
-
   sac_config:
+
     burn_in_step: 2
     seq_encoder: RNN
 
     batch_size: 10
+
+  ma_config:
+    test0:
+      sac_config:
+        nn: nn_rnn
+    test1:
+      sac_config:
+        nn: nn_rnn

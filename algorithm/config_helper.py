@@ -27,6 +27,13 @@ def initialize_config_from_yaml(default_config_path, config_file_path,
         config_file = yaml.load(f, Loader=yaml.FullLoader)
 
     def _tra_dict(dict_ori: dict, dict_new: dict):
+        if 'inherited' in dict_new:
+            if isinstance(dict_new['inherited'], str):
+                _tra_dict(dict_ori, config_file[dict_new['inherited']])
+            elif isinstance(dict_new['inherited'], list):
+                for inherited_config_cat in dict_new['inherited']:
+                    _tra_dict(dict_ori, config_file[inherited_config_cat])
+
         for k, v in dict_new.items():
             if k not in dict_ori:
                 dict_ori[k] = v

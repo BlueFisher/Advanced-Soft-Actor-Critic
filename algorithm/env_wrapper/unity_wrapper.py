@@ -4,6 +4,7 @@ import math
 import multiprocessing
 import multiprocessing.connection
 import os
+import uuid
 from typing import List
 
 import numpy as np
@@ -13,12 +14,30 @@ from mlagents_envs.side_channel.engine_configuration_channel import (
     EngineConfig, EngineConfigurationChannel)
 from mlagents_envs.side_channel.environment_parameters_channel import \
     EnvironmentParametersChannel
+from mlagents_envs.side_channel.side_channel import (IncomingMessage,
+                                                     OutgoingMessage,
+                                                     SideChannel)
 
 INIT = 0
 RESET = 1
 STEP = 2
 CLOSE = 3
 MAX_N_AGENTS_PER_PROCESS = 10
+
+
+class OptionChannel(SideChannel):
+    def __init__(self) -> None:
+        super().__init__(uuid.UUID("621f0a70-4f87-11ea-a6bf-784f4387d1f7"))
+
+    def send_option(self, data: int) -> None:
+        # Add the string to an OutgoingMessage
+        msg = OutgoingMessage()
+        msg.write_int32(data)
+        # We call this method to queue the data we want to send
+        super().queue_message_to_send(msg)
+
+    def on_message_received(self, msg: IncomingMessage) -> None:
+        pass
 
 
 class UnityWrapperProcess:
@@ -55,6 +74,8 @@ class UnityWrapperProcess:
 
         self.environment_parameters_channel.set_float_parameter('env_copys', float(n_agents))
 
+        self.option_channel = OptionChannel()
+
         if conn:
             try:
                 from algorithm import config_helper
@@ -73,7 +94,8 @@ class UnityWrapperProcess:
                                      seed=seed,
                                      additional_args=['--scene', scene] + additional_args,
                                      side_channels=[self.engine_configuration_channel,
-                                                    self.environment_parameters_channel])
+                                                    self.environment_parameters_channel,
+                                                    self.option_channel])
 
         self.engine_configuration_channel.set_configuration_parameters(
             width=200 if train_mode else 1280,
@@ -319,6 +341,9 @@ class UnityWrapper:
                     parent_conn.recv()
 
                 self._process_id += 1
+
+    def send_option(self, option: int):
+        self._envs[0].option_channel.send_option(option)
 
     def init(self):
         """

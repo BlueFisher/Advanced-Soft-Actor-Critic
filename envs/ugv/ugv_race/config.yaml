@@ -1,6 +1,6 @@
 default:
   base_config:
-    env_name: UGV
+    env_name: UGVRace
     unity_args:
       build_path:
         win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
@@ -9,30 +9,18 @@ default:
 
     n_agents: 50
     max_step: 300000
-    reset_on_iteration: false
-
-  reset_config:
-    force_reset: true
-    bounding_box_random: 0
-    semantic_segmentation_random: 0
-    success_reward: 10
-    failure_reward: -1
-    failure_backward_reward: -10
 
   nn_config:
     rep:
       blur: 0
       brightness: 1
       ray_random: 100
-      need_speed: true
 
   sac_config:
     write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
-    save_model_per_step: 10000 # Save model every N steps
+    save_model_per_step: 5000 # Save model every N steps
 
     n_step: 3
-    burn_in_step: 10
-    seq_encoder: RNN
 
     v_lambda: 1
 
@@ -80,45 +68,3 @@ byol_q_ada:
     siamese: BYOL
     siamese_use_q: true
     siamese_use_adaptive: true
-
-depth:
-  nn_config:
-    rep:
-      blur: 0
-      brightness: 1
-      depth_blur: 0
-      depth_brightness: 1
-      ray_random: 100
-      need_speed: true
-  sac_config:
-    nn: nn_depth
-
-depth_atc:
-  inherited:
-    - atc
-    - depth
-
-depth_byol:
-  inherited:
-    - byol
-    - depth
-
-depth_atc_q:
-  inherited:
-    - atc_q
-    - depth
-
-depth_byol_q:
-  inherited:
-    - byol_q
-    - depth
-
-depth_atc_q_ada:
-  inherited:
-    - atc_q_ada
-    - depth
-
-depth_byol_q_ada:
-  inherited:
-    - byol_q_ada
-    - depth

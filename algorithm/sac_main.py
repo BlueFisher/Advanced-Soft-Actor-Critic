@@ -265,10 +265,16 @@ class Main:
 
                 self._log_episode_info(iteration, time.time() - iter_time)
 
-                p = self.model_abs_dir.joinpath('save_model')
-                if self.train_mode and p.exists():
-                    self.ma_manager.save_model(True)
-                    p.unlink()
+                p_model = self.model_abs_dir.joinpath('save_model')
+                if self.train_mode and p_model.exists():
+                    p_replay_buffer = self.model_abs_dir.joinpath('save_replay_buffer')
+                    if p_replay_buffer.exists():
+                        self.ma_manager.save_model(p_replay_buffer.exists())
+                        p_replay_buffer.unlink()
+                    else:
+                        self.ma_manager.save_model(False)
+
+                    p_model.unlink()
 
                 iteration += 1
 
