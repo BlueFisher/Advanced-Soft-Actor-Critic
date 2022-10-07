@@ -312,6 +312,7 @@ class SAC_Base(object):
         for param in self.model_target_rep.parameters():
             param.requires_grad = False
 
+        self.state_size = state_size
         self._logger.info(f'State size: {state_size}')
 
         if len(list(self.model_rep.parameters())) > 0:

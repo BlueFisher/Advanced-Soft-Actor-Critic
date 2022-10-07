@@ -32,10 +32,10 @@ default:
 hard_rnn:
   base_config:
     name: "hard_rnn_{time}"
-    nn: nn_hard_rnn
     max_iter: 500
 
   sac_config:
+    nn: nn_hard_rnn
     burn_in_step: 10
     n_step: 5
     seq_encoder: RNN
@@ -45,10 +45,10 @@ hard_rnn:
 hard_attn:
   base_config:
     name: "hard_attn_{time}"
-    nn: nn_hard_attn
     max_iter: 500
 
   sac_config:
+    nn: nn_hard_attn
     burn_in_step: 128
     n_step: 5
     seq_encoder: ATTN
@@ -62,13 +62,13 @@ visual:
     no_graphics: false
 
     name: "{time}"
-    nn: nn_visual
 
   replay_config:
     beta: 0.4
     beta_increment_per_sampling: 0.001
 
   sac_config:
+    nn: nn_visual
     n_step: 3
 
     tau: 0.005

@@ -16,35 +16,3 @@ default:
     burn_in_step: 10
     n_step: 5
     seq_encoder: RNN
-
-wall:
-  base_config: &wall_base
-    name: "ray5_wall_nopre_{time}"
-    max_iter: 200
-  reset_config: &wall_reset
-    avoid_wall: false
-    ray_length: 5
-
-wall_pre:
-  base_config:
-    <<: *wall_base
-    name: "ray5_wall_pre_{time}"
-  reset_config: *wall_reset
-  sac_config:
-    use_prediction: true
-
-nowall:
-  base_config: &nowall_base
-    name: "ray5_nowall_nopre_{time}"
-    max_iter: 200
-  reset_config: &nowall_reset
-    avoid_wall: true
-    ray_length: 5
-
-nowall_pre:
-  base_config:
-    <<: *nowall_base
-    name: "ray5_nowall_pre_{time}"
-  reset_config: *nowall_reset
-  sac_config:
-    use_prediction: true
