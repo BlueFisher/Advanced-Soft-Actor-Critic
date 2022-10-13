@@ -23,7 +23,7 @@ default:
     rep:
       blur: 0
       brightness: 1
-      ray_random: 100
+      ray_random: 0
       need_speed: true
 
   sac_config:
@@ -88,7 +88,7 @@ depth:
       brightness: 1
       depth_blur: 0
       depth_brightness: 1
-      ray_random: 100
+      ray_random: 0
       need_speed: true
   sac_config:
     nn: nn_depth
