@@ -4,7 +4,7 @@ from torchvision import transforms as T
 import algorithm.nn_models as m
 from algorithm.utils.image_visual import ImageVisual
 from algorithm.utils.ray import RayVisual, generate_unity_to_nn_ray_index
-from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
+from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise, DepthNoise, DepthSaltAndPepperNoise
 
 RAY_SIZE = 400
 AUG_RAY_RANDOM_SIZE = 250
@@ -28,9 +28,11 @@ class ModelRep(m.ModelBaseRNNRep):
             self.depth_blurrer = None
         self.depth_brightness = m.Transform(T.ColorJitter(brightness=(depth_brightness, depth_brightness)))
         self.ray_random = ray_random
+        if self.train_mode:
+            self.ray_random = 100
         self.need_speed = need_speed
 
-        # self._image_visual = ImageVisual()
+        self._image_visual = ImageVisual()
         self.ray_index = generate_unity_to_nn_ray_index(RAY_SIZE)
         # self._ray_visual = RayVisual()
 
@@ -59,8 +61,8 @@ class ModelRep(m.ModelBaseRNNRep):
             m.Transform(cropper)
         ])
         self.vis_depth_random_transformers = T.RandomChoice([
-            m.Transform(T.ColorJitter(brightness=0.5)),
-            m.Transform(T.GaussianBlur(9, sigma=9)),
+            m.Transform(DepthNoise((0., 0.2))),
+            m.Transform(DepthSaltAndPepperNoise()),
             m.Transform(cropper)
         ])
 
@@ -71,11 +73,12 @@ class ModelRep(m.ModelBaseRNNRep):
         if self.blurrer:
             vis_cam = self.blurrer(vis_cam)
         vis_cam = self.brightness(vis_cam)
-        # self._image_visual(vis_cam)
 
         if self.depth_blurrer:
             vis_depth = self.depth_blurrer(vis_depth)
         vis_depth = self.depth_brightness(vis_depth)
+        # self._image_visual(vis_cam, vis_depth)
+        # vis_depth = torch.ones_like(vis_depth)
 
         vis_cam = self.conv(vis_cam)
         vis_depth = self.depth_conv(vis_depth)

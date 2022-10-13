@@ -42,6 +42,7 @@ class ModelRep(m.ModelBaseSimpleRep):
             m.Transform(SaltAndPepperNoise(0.2, 0.5)),
             m.Transform(GaussianNoise()),
             m.Transform(T.GaussianBlur(9, sigma=9)),
+            m.Transform(T.ColorJitter(brightness=(1, 2))),
             m.Transform(cropper)
         ])
 

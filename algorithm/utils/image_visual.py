@@ -17,6 +17,8 @@ class ImageVisual:
 
     def __call__(self, *images: Union[np.ndarray, torch.Tensor], save_name=None):
         """
+        Supporting RGB and gray images
+        Only supporting images with batch size less than 5
         Args:
             *images: [Batch, H, W, C]
         """
@@ -38,7 +40,10 @@ class ImageVisual:
             for i in range(batch_size):
                 for j, image in enumerate(images):
                     self.axes[i][j].axis('off')
-                    self.ims[i].append(self.axes[i][j].imshow(image[i]))
+                    if image.shape[-1] > 1:
+                        self.ims[i].append(self.axes[i][j].imshow(image[i]))
+                    else:
+                        self.ims[i].append(self.axes[i][j].imshow(image[i], cmap='gray', vmin=0, vmax=1))
         else:
             for i in range(batch_size):
                 for j, image in enumerate(images):
