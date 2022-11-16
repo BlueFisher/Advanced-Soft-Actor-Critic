@@ -31,7 +31,7 @@ default:
     save_model_per_step: 10000 # Save model every N steps
 
     n_step: 3
-    burn_in_step: 10
+    burn_in_step: 30
     seq_encoder: RNN
 
     v_lambda: 1
