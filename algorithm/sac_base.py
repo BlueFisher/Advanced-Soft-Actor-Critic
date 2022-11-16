@@ -828,7 +828,7 @@ class SAC_Base(object):
     @torch.no_grad()
     def _v_trace(self, n_rewards: torch.Tensor, n_dones: torch.Tensor,
                  n_mu_probs: torch.Tensor, n_pi_probs: torch.Tensor,
-                 v: torch.Tensor, next_v: torch.Tensor):
+                 n_vs: torch.Tensor, next_n_vs: torch.Tensor):
         """
         Args:
             n_rewards: [Batch, n]
@@ -842,7 +842,7 @@ class SAC_Base(object):
             y: [Batch, 1]
         """
 
-        td_error = n_rewards + self.gamma * ~n_dones * next_v - v  # [Batch, n]
+        td_error = n_rewards + self.gamma * ~n_dones * next_n_vs - n_vs  # [Batch, n]
         td_error = self._gamma_ratio * td_error
 
         if self.use_n_step_is:
@@ -865,7 +865,7 @@ class SAC_Base(object):
         r = torch.sum(td_error, dim=1, keepdim=True)  # [Batch, 1]
 
         # V_s + \sum{td_error}
-        y = v[:, 0:1] + r  # [Batch, 1]
+        y = n_vs[:, 0:1] + r  # [Batch, 1]
 
         return y
 
@@ -1927,7 +1927,7 @@ class SAC_Base(object):
                                next_state=next_target_state,
                                n_dones=bn_dones[:, self.burn_in_step:],
                                n_mu_probs=bn_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
-        # [Batch, 1]
+        # [Batch, 1], [Batch, 1]
 
         q_td_error_list = [torch.zeros((state.shape[0], 1), device=self.device) for _ in range(self.ensemble_q_num)]
         # [Batch, 1]
@@ -2312,16 +2312,17 @@ class SAC_Base(object):
             if self.use_replay_buffer and self.use_priority:
                 priority_is = torch.from_numpy(priority_is).to(self.device)
 
-            m_target_states = self._train(bn_indexes=bn_indexes,
-                                          bn_padding_masks=bn_padding_masks,
-                                          bn_obses_list=bn_obses_list,
-                                          bn_actions=bn_actions,
-                                          bn_rewards=bn_rewards,
-                                          next_obs_list=next_obs_list,
-                                          bn_dones=bn_dones,
-                                          bn_mu_probs=bn_mu_probs if self.use_n_step_is else None,
-                                          f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None,
-                                          priority_is=priority_is if self.use_replay_buffer and self.use_priority else None)
+            m_target_states = self._train(
+                bn_indexes=bn_indexes,
+                bn_padding_masks=bn_padding_masks,
+                bn_obses_list=bn_obses_list,
+                bn_actions=bn_actions,
+                bn_rewards=bn_rewards,
+                next_obs_list=next_obs_list,
+                bn_dones=bn_dones,
+                bn_mu_probs=bn_mu_probs if self.use_n_step_is else None,
+                f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None,
+                priority_is=priority_is if self.use_replay_buffer and self.use_priority else None)
 
             if step % self.save_model_per_step == 0:
                 self.save_model()

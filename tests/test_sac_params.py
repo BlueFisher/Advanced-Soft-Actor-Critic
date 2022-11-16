@@ -16,7 +16,7 @@ class TestVanillaModel(unittest.TestCase):
         sac = SAC_Base(
             obs_shapes=OBS_SHAPES,
             model_abs_dir=None,
-            model=nn_conv,
+            nn=nn_conv,
             **param_dict
         )
 
@@ -48,7 +48,7 @@ class TestSeqEncoderModel(unittest.TestCase):
         sac = SAC_Base(
             obs_shapes=OBS_SHAPES,
             model_abs_dir=None,
-            model=nn_conv,
+            nn=nn_conv,
             **param_dict
         )
 
