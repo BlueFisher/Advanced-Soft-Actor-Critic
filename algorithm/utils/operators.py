@@ -69,7 +69,6 @@ def episode_to_batch(bn: int,
                      l_indexes: np.ndarray,
                      l_padding_masks: np.ndarray,
                      l_obses_list: List[np.ndarray],
-                     l_options: List[np.ndarray],
                      l_actions: np.ndarray,
                      l_rewards: np.ndarray,
                      next_obs_list: List[np.ndarray],
@@ -109,8 +108,6 @@ def episode_to_batch(bn: int,
     for j, l_obses in enumerate(l_obses_list):
         tmp_bn_obses_list[j] = np.concatenate([l_obses[:, i:i + bn]
                                               for i in range(episode_length - bn + 1)], axis=0)
-    bn_options = np.concatenate([l_options[:, i:i + bn]
-                                for i in range(episode_length - bn + 1)], axis=0)
     bn_actions = np.concatenate([l_actions[:, i:i + bn]
                                 for i in range(episode_length - bn + 1)], axis=0)
     bn_rewards = np.concatenate([l_rewards[:, i:i + bn]
@@ -135,7 +132,6 @@ def episode_to_batch(bn: int,
     return [bn_indexes,
             bn_padding_masks,
             tmp_bn_obses_list,
-            bn_options,
             bn_actions,
             bn_rewards,
             tmp_next_obs_list,
