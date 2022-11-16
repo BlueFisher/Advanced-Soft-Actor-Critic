@@ -10,8 +10,6 @@ class ImageVisual:
     def __init__(self, model_abs_dir: Optional[Path] = None) -> None:
         self.model_abs_dir = model_abs_dir
 
-        plt.ion()
-
         self.fig = None
         self.idx = 0
 
@@ -44,13 +42,22 @@ class ImageVisual:
                         self.ims[i].append(self.axes[i][j].imshow(image[i]))
                     else:
                         self.ims[i].append(self.axes[i][j].imshow(image[i], cmap='gray', vmin=0, vmax=1))
-        else:
-            for i in range(batch_size):
-                for j, image in enumerate(images):
-                    self.ims[i][j].set_data(image[i])
 
-        self.fig.canvas.draw()
+            plt.show(block=False)
+
+            plt.pause(0.1)
+
+            self._bg = self.fig.canvas.copy_from_bbox(self.fig.bbox)
+
+        self.fig.canvas.restore_region(self._bg)
+        for i in range(batch_size):
+            for j, image in enumerate(images):
+                self.ims[i][j].set_data(image[i])
+                self.axes[i][j].draw_artist(self.ims[i][j])
+
+        self.fig.canvas.blit(self.fig.bbox)
         self.fig.canvas.flush_events()
+
         if self.model_abs_dir:
             save_name = '' if save_name is None else save_name + '-'
             self.fig.savefig(self.model_abs_dir.joinpath(f'{save_name}{self.idx}.jpg'), bbox_inches='tight')

@@ -23,8 +23,6 @@ class RayVisual:
     def __init__(self, model_abs_dir: Optional[Path] = None) -> None:
         self.model_abs_dir = model_abs_dir
 
-        plt.ion()
-
         self.fig = None
         self.idx = 0
 
@@ -32,8 +30,8 @@ class RayVisual:
         """
         Args:
             *rays: [Batch, ray_size, C]
-                ray[..., -1] = 0 if has_hit else 1
-                ray[..., -2] = hit_fraction if has_hit else 1
+                ray[..., -2] = 0 if has_hit else 1
+                ray[..., -1] = hit_fraction if has_hit else 1
         """
         if len(rays[0].shape) > 3:
             rays = [ray[:, 0, ...] for ray in rays]
@@ -61,16 +59,23 @@ class RayVisual:
                     self.axes[i][j].set_ylim(-1, 1)
                     self.scs[i].append(self.axes[i][j].scatter([], [], s=1))
 
-            self.fig.canvas.draw()
+            plt.show(block=False)
 
+            plt.pause(0.1)
+
+            self._bg = self.fig.canvas.copy_from_bbox(self.fig.bbox)
+
+        self.fig.canvas.restore_region(self._bg)
         for i in range(batch_size):
             for j, ray in enumerate(rays):
                 mask = ray[i, :, -2] == 0.
-                ray_rad = np.linspace(0, np.pi, 400)[mask]
+                ray_rad = np.linspace(0, np.pi, len(ray[i]))[mask]
                 ray_x = np.cos(ray_rad) * ray[i, :, -1][mask]
                 ray_y = np.sin(ray_rad) * ray[i, :, -1][mask]
                 self.scs[i][j].set_offsets(np.c_[ray_x, ray_y])
+                self.axes[i][j].draw_artist(self.scs[i][j])
 
+        self.fig.canvas.blit(self.fig.bbox)
         self.fig.canvas.flush_events()
         self.idx += 1
 
