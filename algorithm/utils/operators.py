@@ -129,7 +129,7 @@ def episode_to_batch(bn: int,
         f_seq_hidden_states = np.concatenate([l_seq_hidden_states[:, i:i + 1]
                                              for i in range(episode_length - bn + 1)], axis=0)
 
-    return [bn_indexes,
+    return (bn_indexes,
             bn_padding_masks,
             tmp_bn_obses_list,
             bn_actions,
@@ -137,4 +137,4 @@ def episode_to_batch(bn: int,
             tmp_next_obs_list,
             bn_dones,
             bn_probs if l_probs is not None else None,
-            f_seq_hidden_states if l_seq_hidden_states is not None else None]
+            f_seq_hidden_states if l_seq_hidden_states is not None else None)

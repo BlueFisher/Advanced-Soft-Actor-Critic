@@ -25,7 +25,7 @@ class SAC_Base(object):
                  model_abs_dir: Optional[Path],
                  device: Optional[str] = None,
                  ma_name: Optional[str] = None,
-                 summary_path: str = 'log',
+                 summary_path: Optional[str] = 'log',
                  train_mode: bool = True,
                  last_ckpt: Optional[str] = None,
 
@@ -140,6 +140,7 @@ class SAC_Base(object):
         self.d_action_size = d_action_size
         self.c_action_size = c_action_size
         self.model_abs_dir = model_abs_dir
+        self.ma_name = ma_name
         self.train_mode = train_mode
 
         self.use_replay_buffer = use_replay_buffer
@@ -190,7 +191,7 @@ class SAC_Base(object):
             torch.cuda.manual_seed_all(seed)
 
         self.summary_writer = None
-        if self.model_abs_dir and self.train_mode:
+        if summary_path and self.model_abs_dir and self.train_mode:
             summary_path = Path(self.model_abs_dir).joinpath(summary_path)
             self.summary_writer = SummaryWriter(str(summary_path))
             self.summary_available = True
@@ -203,7 +204,6 @@ class SAC_Base(object):
                 self.batch_buffer = BatchBuffer(self.burn_in_step,
                                                 self.n_step,
                                                 self.batch_size)
-
         if ma_name is None:
             self._logger = logging.getLogger('sac.base')
         else:
@@ -826,17 +826,21 @@ class SAC_Base(object):
         return y
 
     @torch.no_grad()
-    def _v_trace(self, n_rewards: torch.Tensor, n_dones: torch.Tensor,
-                 n_mu_probs: torch.Tensor, n_pi_probs: torch.Tensor,
-                 n_vs: torch.Tensor, next_n_vs: torch.Tensor):
+    def _v_trace(self,
+                 n_rewards: torch.Tensor,
+                 n_dones: torch.Tensor,
+                 n_mu_probs: torch.Tensor,
+                 n_pi_probs: torch.Tensor,
+                 n_vs: torch.Tensor,
+                 next_n_vs: torch.Tensor):
         """
         Args:
             n_rewards: [Batch, n]
             n_dones: [Batch, n], dtype=torch.bool
             n_mu_probs: [Batch, n]
             n_pi_probs: [Batch, n]
-            v: [Batch, n]
-            next_v: [Batch, n]
+            n_vs: [Batch, n]
+            next_n_vs: [Batch, n]
 
         Returns:
             y: [Batch, 1]
@@ -983,11 +987,11 @@ class SAC_Base(object):
 
             min_n_c_qs, _ = stacked_n_c_qs.min(dim=0)
             min_n_c_qs = min_n_c_qs.squeeze(dim=-1)  # [Batch, n]
-            min_next_n_qs, _ = stacked_next_n_c_qs.min(dim=0)
-            min_next_n_qs = min_next_n_qs.squeeze(dim=-1)  # [Batch, n]
+            min_next_n_c_qs, _ = stacked_next_n_c_qs.min(dim=0)
+            min_next_n_c_qs = min_next_n_c_qs.squeeze(dim=-1)  # [Batch, n]
 
             n_vs = min_n_c_qs - c_alpha * n_actions_log_prob  # [Batch, n]
-            next_n_vs = min_next_n_qs - c_alpha * next_n_actions_log_prob  # [Batch, n]
+            next_n_vs = min_next_n_c_qs - c_alpha * next_n_actions_log_prob  # [Batch, n]
 
             # v = scale_inverse_h(v)
             # next_v = scale_inverse_h(next_v)
@@ -999,7 +1003,7 @@ class SAC_Base(object):
                 n_pi_probs = n_pi_probs.prod(axis=-1)  # [Batch, n]
 
             c_y = self._v_trace(n_rewards, n_dones,
-                                n_mu_probs,
+                                n_mu_probs if self.use_n_step_is else None,
                                 n_pi_probs if self.use_n_step_is else None,
                                 n_vs, next_n_vs)
 
@@ -1979,15 +1983,15 @@ class SAC_Base(object):
          next_obs_list,
          bn_dones,
          bn_mu_probs,
-         f_seq_hidden_states) = episode_to_batch(self.burn_in_step + self.n_step,
-                                                 l_indexes.shape[1],
-                                                 l_indexes,
-                                                 l_padding_masks,
-                                                 l_obses_list,
-                                                 l_actions,
-                                                 l_rewards,
-                                                 next_obs_list,
-                                                 l_dones,
+         f_seq_hidden_states) = episode_to_batch(bn=self.burn_in_step + self.n_step,
+                                                 episode_length=l_indexes.shape[1],
+                                                 l_indexes=l_indexes,
+                                                 l_padding_masks=l_padding_masks,
+                                                 l_obses_list=l_obses_list,
+                                                 l_actions=l_actions,
+                                                 l_rewards=l_rewards,
+                                                 next_obs_list=next_obs_list,
+                                                 l_dones=l_dones,
                                                  l_probs=l_mu_probs,
                                                  l_seq_hidden_states=l_seq_hidden_states)
 

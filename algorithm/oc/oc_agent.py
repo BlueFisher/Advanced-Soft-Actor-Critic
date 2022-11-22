@@ -4,13 +4,13 @@ from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
+from algorithm.oc.option_selector_base import OptionSelectorBase
 
 from algorithm.utils.enums import *
 from algorithm.utils.operators import gen_pre_n_actions
 
 from .. import agent
 from ..agent import Agent, AgentManager, MultiAgentsManager
-from .oc_base import OC_Base
 
 
 class OC_Agent(Agent):
@@ -18,8 +18,12 @@ class OC_Agent(Agent):
                  obs_shapes: List[Tuple],
                  action_size: int,
                  seq_hidden_state_shape=None,
+                 low_seq_hidden_state_shape=None,
                  max_return_episode_trans=-1):
         self.option_index_count = defaultdict(int)
+
+        self.low_seq_hidden_state_shape = low_seq_hidden_state_shape
+
         super().__init__(agent_id,
                          obs_shapes,
                          action_size,
@@ -39,6 +43,7 @@ class OC_Agent(Agent):
             'next_obs_list': [np.zeros(s, dtype=np.float32) for s in self.obs_shapes],
             'prob': np.zeros((episode_length, ), dtype=np.float32),
             'seq_hidden_state': np.zeros((episode_length, *self.seq_hidden_state_shape), dtype=np.float32) if self.seq_hidden_state_shape is not None else None,
+            'low_seq_hidden_state': np.zeros((episode_length, *self.low_seq_hidden_state_shape), dtype=np.float32) if self.low_seq_hidden_state_shape is not None else None,
         }
 
     def add_transition(self,
@@ -51,7 +56,8 @@ class OC_Agent(Agent):
                        next_obs_list: List[np.ndarray],
                        prob: float,
                        is_padding: bool = False,
-                       seq_hidden_state: Optional[np.ndarray] = None):
+                       seq_hidden_state: Optional[np.ndarray] = None,
+                       low_seq_hidden_state: Optional[np.ndarray] = None):
         """
         Args:
             obs_list: List([*obs_shapes_i], ...)
@@ -87,6 +93,7 @@ class OC_Agent(Agent):
             'next_obs_list': [o.astype(np.float32) for o in next_obs_list],
             'prob': np.expand_dims(prob, 0).astype(np.float32),
             'seq_hidden_state': np.expand_dims(seq_hidden_state, 0).astype(np.float32) if seq_hidden_state is not None else None,
+            'low_seq_hidden_state': np.expand_dims(low_seq_hidden_state, 0).astype(np.float32) if low_seq_hidden_state is not None else None,
         }
 
         for k in self._tmp_episode_trans:
@@ -142,6 +149,7 @@ class OC_Agent(Agent):
             ep_dones: [1, episode_len], bool
             ep_probs: [1, episode_len], np.float32
             ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape], np.float32
+            ep_low_seq_hidden_states: [1, episode_len, *low_seq_hidden_state_shape], np.float32
         """
         tmp = self._tmp_episode_trans.copy()
 
@@ -182,6 +190,8 @@ class OC_Agent(Agent):
         ep_probs = np.expand_dims(tmp['prob'], 0)  # [1, episode_len]
         ep_seq_hidden_states = np.expand_dims(tmp['seq_hidden_state'], 0) if tmp['seq_hidden_state'] is not None else None
         # [1, episode_len, *seq_hidden_state_shape]
+        ep_low_seq_hidden_states = np.expand_dims(tmp['low_seq_hidden_state'], 0) if tmp['low_seq_hidden_state'] is not None else None
+        # [1, episode_len, *seq_hidden_state_shape]
 
         return (ep_indexes,
                 ep_padding_masks,
@@ -192,7 +202,8 @@ class OC_Agent(Agent):
                 next_obs_list,
                 ep_dones,
                 ep_probs,
-                ep_seq_hidden_states)
+                ep_seq_hidden_states,
+                ep_low_seq_hidden_states)
 
     def clear(self):
         for k in self.option_index_count:
@@ -206,7 +217,7 @@ class OC_Agent(Agent):
 
 
 class OC_AgentManager(AgentManager):
-    def set_rl(self, rl: OC_Base):
+    def set_rl(self, rl: OptionSelectorBase):
         self.rl = rl
         self.seq_encoder = rl.seq_encoder
 
@@ -219,9 +230,14 @@ class OC_AgentManager(AgentManager):
             self['initial_seq_hidden_state'] = self.rl.get_initial_seq_hidden_state(num_agents)  # [n_agents, *seq_hidden_state_shape]
             self['seq_hidden_state'] = self['initial_seq_hidden_state']
 
+            self['initial_low_seq_hidden_state'] = self.rl.get_initial_low_seq_hidden_state(num_agents)  # [n_agents, *los_seq_hidden_state_shape]
+            self['low_seq_hidden_state'] = self['initial_low_seq_hidden_state']
+
         self.agents: List[OC_Agent] = [
             OC_Agent(i, self.obs_shapes, self.action_size,
                      seq_hidden_state_shape=self.rl.seq_hidden_state_shape
+                     if self.seq_encoder is not None else None,
+                     low_seq_hidden_state_shape=self.rl.low_seq_hidden_state_shape
                      if self.seq_encoder is not None else None)
             for i in range(num_agents)
         ]
@@ -233,15 +249,18 @@ class OC_AgentManager(AgentManager):
             (option_index,
              action,
              prob,
-             next_seq_hidden_state) = self.rl.choose_rnn_action(self['obs_list'],
-                                                                pre_option_index=self['pre_option_index'],
-                                                                pre_action=self['pre_action'],
-                                                                rnn_state=self['seq_hidden_state'])
+             next_seq_hidden_state,
+             next_low_seq_hidden_state) = self.rl.choose_rnn_action(self['obs_list'],
+                                                                    pre_option_index=self['pre_option_index'],
+                                                                    pre_action=self['pre_action'],
+                                                                    rnn_state=self['seq_hidden_state'],
+                                                                    low_rnn_state=self['low_seq_hidden_state'])
 
         else:
             option_index, action, prob = self.rl.choose_action(self['obs_list'],
                                                                pre_option_index=self['pre_option_index'])
             next_seq_hidden_state = None
+            next_low_seq_hidden_state = None
 
         self['option_index'] = option_index
         self['action'] = action
@@ -249,6 +268,7 @@ class OC_AgentManager(AgentManager):
         self['c_action'] = action[..., self.d_action_size:]
         self['prob'] = prob
         self['next_seq_hidden_state'] = next_seq_hidden_state
+        self['next_low_seq_hidden_state'] = next_low_seq_hidden_state
 
     def set_env_step(self,
                      next_obs_list,
@@ -268,6 +288,7 @@ class OC_AgentManager(AgentManager):
                 prob=self['prob'][i],
                 is_padding=False,
                 seq_hidden_state=self['seq_hidden_state'][i] if self.seq_encoder is not None else None,
+                low_seq_hidden_state=self['low_seq_hidden_state'][i] if self.seq_encoder is not None else None,
             ) for i, a in enumerate(self.agents)
         ]
 
@@ -277,6 +298,8 @@ class OC_AgentManager(AgentManager):
         super().post_step(next_obs_list, local_done)
 
         self['pre_option_index'] = self['option_index']
+        if self.seq_encoder is not None:
+            self['low_seq_hidden_state'] = self['next_low_seq_hidden_state']
 
 
 class OC_MultiAgentsManager(MultiAgentsManager):
@@ -294,11 +317,13 @@ class OC_MultiAgentsManager(MultiAgentsManager):
                         next_obs_list=[np.zeros(t, dtype=np.float32) for t in mgr.obs_shapes],
                         prob=0.,
                         is_padding=True,
-                        seq_hidden_state=mgr['initial_seq_hidden_state'][0]
+                        seq_hidden_state=mgr['initial_seq_hidden_state'][0],
+                        low_seq_hidden_state=mgr['initial_low_seq_hidden_state'][0]
                     )
 
     def get_option(self):
         return {n: mgr['option_index'] for n, mgr in self}
+
 
 agent.Agent = OC_Agent
 agent.AgentManager = OC_AgentManager

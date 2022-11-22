@@ -1,6 +1,7 @@
 import algorithm.nn_models as m
 
 ModelRep = m.ModelSimpleRep
+ModelOptionRep = m.ModelSimpleRep
 
 class ModelQ(m.ModelQ):
     def _build_model(self):

@@ -15,5 +15,9 @@ class ModelRep(m.ModelBaseRNNRep):
         return state, hn
 
 
+class ModelOptionRep(ModelRep):
+    pass
+
+
 ModelQ = m.ModelQ
 ModelPolicy = m.ModelPolicy

@@ -26,6 +26,30 @@ class ModelRep(m.ModelBaseRNNRep):
 
         return state, hn
 
+    
+class ModelOptionRep(ModelRep):
+    def _build_model(self):
+        assert self.obs_shapes[0] == (32, )
+        assert self.obs_shapes[1] == (6, )
+
+        self.rnn = m.GRU(self.obs_shapes[1][0] - EXTRA_SIZE + self.c_action_size, 32, 1)
+
+        self.dense = nn.Sequential(
+            nn.Linear(32, 32),
+            nn.Tanh()
+        )
+
+    def forward(self, obs_list, pre_action, rnn_state=None):
+        high_rep, obs = obs_list
+        obs = obs[..., :-EXTRA_SIZE]
+
+        output, hn = self.rnn(torch.cat([obs, pre_action], dim=-1), rnn_state)
+
+        state = self.dense(output)
+
+        state = torch.cat([high_rep, state], dim=-1)
+
+        return state, hn
 
 class ModelTransition(m.ModelTransition):
     def _build_model(self):
