@@ -6,6 +6,8 @@ import numpy as np
 import torch
 from torch import nn, optim
 
+from envs.test.nn_rnn import ModelOptionRep
+
 from ..nn_models import *
 from ..sac_base import SAC_Base
 from ..utils import *
@@ -111,6 +113,7 @@ class OC_Base(SAC_Base):
         self.optimizer_v_list = [adam_optimizer(self.model_v_over_options_list[i].parameters()) for i in range(self.ensemble_q_num)]
 
         self.model_termination_over_options = ModelTerminationOverOption(state_size, NUM_OPTIONS).to(self.device)
+        self.model_option_rep_list = [ModelOptionRep(state_size, self.d_action_size, self.c_action_size, False, self.train_mode) for _ in range(NUM_OPTIONS)]
         self.model_q_list = [nn.ModelQ(state_size, self.d_action_size, self.c_action_size,
                                        False, self.train_mode).to(self.device) for _ in range(NUM_OPTIONS)]
         self.model_target_q_list = [nn.ModelQ(state_size, self.d_action_size, self.c_action_size,
@@ -412,6 +415,7 @@ class OC_Base(SAC_Base):
         return y
 
     def _choose_action(self,
+                       obs_list: List[np.ndarray],
                        state: torch.Tensor,
                        option_index: np.ndarray):
         v_over_options = self.model_v_over_options_list[0](state)  # [Batch, num_options]
@@ -436,7 +440,10 @@ class OC_Base(SAC_Base):
             if not torch.any(mask):
                 continue
 
-            o_d_policy, o_c_policy = model_option(state[mask], None)
+            o_obs_list = [obs[mask] for obs in obs_list]
+            o_state = self.model_option_rep_list[i](o_obs_list)
+
+            o_d_policy, o_c_policy = model_option(o_state, None)
             if self.d_action_size:
                 o_d_action = o_d_policy.sample()
 
@@ -451,6 +458,63 @@ class OC_Base(SAC_Base):
                 policy_prob[mask] *= torch.prod(o_c_policy_prob, dim=-1)  # [Batch, ]
 
         return option_index, torch.cat([d_action, c_action], dim=-1), policy_prob
+
+    def _choose_rnn_action(self,
+                           obs_list: List[np.ndarray],
+                           state: torch.Tensor,
+                           option_index: np.ndarray,
+                           pre_action: np.ndarray,
+                           low_rnn_state: np.ndarray):
+        """
+        Args:
+            obs_list: list([Batch, 1, *obs_shapes_i], ...)
+            state: [Batch, 1, d_action_size + c_action_size]
+            option_index: [Batch, ]
+            pre_action: [Batch, 1, action_size]
+            low_rnn_state: [Batch, *seq_hidden_state_shape]
+        """
+        v_over_options = self.model_v_over_options_list[0](state)  # [Batch, num_options]
+        new_option_index = v_over_options.argmax(dim=-1)  # [Batch, ]
+
+        none_option_mask = option_index == -1
+        option_index[none_option_mask] = new_option_index[none_option_mask]
+
+        termination_over_options = self.model_termination_over_options(state)  # [Batch, num_options]
+        termination = termination_over_options.gather(1, option_index.unsqueeze(-1))  # [Batch, 1]
+        termination = termination.squeeze(-1)
+        termination_mask = termination > .5
+        option_index[termination_mask] = new_option_index[termination_mask]
+
+        batch = state.shape[0]
+        policy_prob = torch.ones(batch, device=self.device)
+        d_action = torch.zeros(batch, self.d_action_size, device=self.device)
+        c_action = torch.zeros(batch, self.c_action_size, device=self.device)
+        next_low_rnn_state = torch.zeros_like(low_rnn_state)
+
+        for i, model_option in enumerate(self.model_option_list):
+            mask = (option_index == i)
+            if not torch.any(mask):
+                continue
+
+            o_obs_list = [obs[mask] for obs in obs_list]
+            o_state, o_low_rnn_state = self.model_option_rep_list[i](o_obs_list, pre_action[mask], low_rnn_state[mask])
+            next_low_rnn_state[mask] = o_low_rnn_state
+
+            o_d_policy, o_c_policy = model_option(o_state, None)
+            if self.d_action_size:
+                o_d_action = o_d_policy.sample()
+
+                d_action[mask] = o_d_action
+                policy_prob[mask] *= torch.exp(o_d_policy.log_prob(o_d_action))  # [Batch, ]
+
+            if self.c_action_size:
+                o_c_action = torch.tanh(o_c_policy.sample())
+                c_action[mask] = o_c_action
+
+                o_c_policy_prob = squash_correction_prob(o_c_policy, torch.atanh(o_c_action))
+                policy_prob[mask] *= torch.prod(o_c_policy_prob, dim=-1)  # [Batch, ]
+
+        return option_index, torch.cat([d_action, c_action], dim=-1), policy_prob, next_low_rnn_state
 
     def choose_action(self,
                       obs_list: List[np.ndarray],
@@ -480,24 +544,34 @@ class OC_Base(SAC_Base):
                           obs_list: List[np.ndarray],
                           pre_option_index: np.ndarray,
                           pre_action: np.ndarray,
-                          rnn_state: np.ndarray,):
+                          rnn_state: np.ndarray,
+                          low_rnn_state: np.ndarray):
+        """
+        Args:
+            rnn_state: [Batch, *seq_hidden_state_shape]
+        """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         option_index = torch.from_numpy(pre_option_index).type(torch.int64).to(self.device)  # [Batch, ]
         pre_action = torch.from_numpy(pre_action).to(self.device)
         rnn_state = torch.from_numpy(rnn_state).to(self.device)
+        low_rnn_state = torch.from_numpy(low_rnn_state).to(self.device)
 
         obs_list = [obs.unsqueeze(1) for obs in obs_list]
         pre_action = pre_action.unsqueeze(1)
-        state, next_rnn_state = self.model_rep(obs_list, pre_action, rnn_state)
-        state = state.squeeze(1)
-        obs_list = [obs.squeeze(1) for obs in obs_list]
 
-        option_index, action, prob = self._choose_action(state, option_index)
+        state, next_rnn_state = self.model_rep(obs_list, pre_action, rnn_state)  # state: [Batch, 1, state_size]
+
+        option_index, action, prob, next_low_rnn_state = self._choose_rnn_action(obs_list,
+                                                                                 state,
+                                                                                 option_index,
+                                                                                 pre_action,
+                                                                                 low_rnn_state)
 
         return (option_index.detach().cpu().numpy(),
                 action.detach().cpu().numpy(),
                 prob.detach().cpu().numpy(),
-                next_rnn_state.detach().cpu().numpy())
+                next_rnn_state.detach().cpu().numpy(),
+                next_low_rnn_state.detach().cpu().numpy())
 
     @torch.no_grad()
     def _get_td_error(self,

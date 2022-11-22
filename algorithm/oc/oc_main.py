@@ -10,7 +10,7 @@ from ..sac_main import Main
 from ..utils import format_global_step
 from ..utils.enums import *
 from .oc_agent import OC_MultiAgentsManager
-from .oc_base import OC_Base
+from .option_selector_base import OptionSelectorBase
 
 
 class OC_Main(Main):
@@ -47,19 +47,19 @@ class OC_Main(Main):
             spec.loader.exec_module(nn)
             mgr.config['sac_config']['nn'] = nn
 
-            mgr.set_rl(OC_Base(obs_shapes=mgr.obs_shapes,
-                               d_action_size=mgr.d_action_size,
-                               c_action_size=mgr.c_action_size,
-                               model_abs_dir=mgr.model_abs_dir,
-                               device=self.device,
-                               ma_name=None if len(self.ma_manager) == 1 else n,
-                               train_mode=self.train_mode,
-                               last_ckpt=self.last_ckpt,
+            mgr.set_rl(OptionSelectorBase(obs_shapes=mgr.obs_shapes,
+                                          d_action_size=mgr.d_action_size,
+                                          c_action_size=mgr.c_action_size,
+                                          model_abs_dir=mgr.model_abs_dir,
+                                          device=self.device,
+                                          ma_name=None if len(self.ma_manager) == 1 else n,
+                                          train_mode=self.train_mode,
+                                          last_ckpt=self.last_ckpt,
 
-                               nn_config=mgr.config['nn_config'],
-                               **mgr.config['sac_config'],
+                                          nn_config=mgr.config['nn_config'],
+                                          **mgr.config['sac_config'],
 
-                               replay_config=mgr.config['replay_config']))
+                                          replay_config=mgr.config['replay_config']))
 
     def _run(self):
         self.ma_manager.pre_run(self.base_config['n_agents'])
@@ -94,9 +94,9 @@ class OC_Main(Main):
                     self.ma_manager.burn_in_padding()
 
                     ma_d_action, ma_c_action = self.ma_manager.get_ma_action(disable_sample=self.disable_sample)
-                    ma_option_index = self.ma_manager.get_option()
-                    k = list(ma_option_index.keys())[0]
-                    self.env.send_option(int(ma_option_index[k][0]))
+                    # ma_option_index = self.ma_manager.get_option()
+                    # k = list(ma_option_index.keys())[0]
+                    # self.env.send_option(int(ma_option_index[k][0]))
 
                     (ma_next_obs_list,
                      ma_reward,
