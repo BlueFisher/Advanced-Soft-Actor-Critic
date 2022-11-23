@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
-from algorithm.oc.option_selector_base import OptionSelectorBase
 
+from algorithm.oc.option_selector_base import OptionSelectorBase
 from algorithm.utils.enums import *
 from algorithm.utils.operators import gen_pre_n_actions
 
