@@ -1,8 +1,7 @@
-from typing import List, Optional, Tuple
+from typing import List
 
 import torch
 from torch import nn
-
 
 from ..nn_models import *
 from ..sac_base import SAC_Base
@@ -120,11 +119,11 @@ class OptionBase(SAC_Base):
 
         d_y, c_y = None, None
 
-        if self.d_action_size:  # TODO
+        if self.d_action_size:
             stacked_next_n_d_qs = torch.stack(next_n_d_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
             # [ensemble_q_num, Batch, n, d_action_size] -> [ensemble_q_sample, Batch, n, d_action_size]
 
-            if self.discrete_dqn_like:
+            if self.discrete_dqn_like:  # TODO
                 next_n_d_eval_qs_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled))[0] for q in self.model_q_list]
                 stacked_next_n_d_eval_qs = torch.stack(next_n_d_eval_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
                 # [ensemble_q_num, Batch, n, d_action_size] -> [ensemble_q_sample, Batch, n, d_action_size]
@@ -136,18 +135,20 @@ class OptionBase(SAC_Base):
                 stacked_n_d_qs = torch.stack(n_d_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
                 # [ensemble_q_num, Batch, n, d_action_size] -> [ensemble_q_sample, Batch, n, d_action_size]
 
-                min_n_qs, _ = torch.min(stacked_n_d_qs, dim=0)  # [Batch, n, d_action_size]
-                min_next_n_qs, _ = torch.min(stacked_next_n_d_qs, dim=0)  # [Batch, n, d_action_size]
+                min_n_d_qs, _ = torch.min(stacked_n_d_qs, dim=0)  # [Batch, n, d_action_size]
+                min_next_n_d_qs, _ = torch.min(stacked_next_n_d_qs, dim=0)  # [Batch, n, d_action_size]
 
-                probs = d_policy.probs  # [Batch, n, action_size]
-                next_probs = next_d_policy.probs  # [Batch, n, action_size]
-                clipped_probs = probs.clamp(min=1e-8)
-                clipped_next_probs = next_probs.clamp(min=1e-8)
-                tmp_n_vs = min_n_qs - d_alpha * torch.log(clipped_probs)  # [Batch, n, action_size]
-                tmp_next_n_vs = min_next_n_qs - d_alpha * torch.log(clipped_next_probs)  # [Batch, n, action_size]
+                n_probs = d_policy.probs  # [Batch, n, action_size]
+                next_n_probs = next_d_policy.probs  # [Batch, n, action_size]
+                clipped_n_probs = n_probs.clamp(min=1e-8)  # [Batch, n, action_size]
+                clipped_next_n_probs = next_n_probs.clamp(min=1e-8)  # [Batch, n, action_size]
+                tmp_n_vs = min_n_d_qs - d_alpha * torch.log(clipped_n_probs)  # [Batch, n, action_size]
 
-                n_vs = torch.sum(probs * tmp_n_vs, dim=-1)  # [Batch, n]
-                next_n_vs = torch.sum(next_probs * tmp_next_n_vs, dim=-1)  # [Batch, n]
+                tmp_next_n_vs = (1 - next_n_terminations) * (min_next_n_d_qs - d_alpha * torch.log(clipped_next_n_probs)) + \
+                    next_n_terminations * min_next_n_max_vs.unsqueeze(-1)  # [Batch, n, action_size]
+
+                n_vs = torch.sum(n_probs * tmp_n_vs, dim=-1)  # [Batch, n]
+                next_n_vs = torch.sum(next_n_probs * tmp_next_n_vs, dim=-1)  # [Batch, n]
 
                 if self.use_n_step_is:
                     n_d_actions = n_actions[..., :self.d_action_size]
@@ -338,17 +339,48 @@ class OptionBase(SAC_Base):
             m_states = torch.cat([bn_states, next_state], dim=1)
             m_target_states = torch.cat([bn_target_states, next_target_state], dim=1)
 
-            loss_predictions = self.    pm(grads_rep_main=grads_rep_main,
-                                           m_obses_list=m_obses_list,
-                                           m_states=m_states,
-                                           m_target_states=m_target_states,
-                                           bn_actions=bn_actions,
-                                           bn_rewards=bn_rewards)
+            loss_predictions = self._train_rpm(grads_rep_main=grads_rep_main,
+                                               m_obses_list=m_obses_list,
+                                               m_states=m_states,
+                                               m_target_states=m_target_states,
+                                               bn_actions=bn_actions,
+                                               bn_rewards=bn_rewards)
 
         if self.optimizer_rep:
             self.optimizer_rep.step()
 
-        return loss_q_list[0], loss_siamese, loss_siamese_q, loss_predictions
+        loss_q = loss_q_list[0]
+
+        if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
+            self.summary_available = True
+
+            self.summary_writer.add_scalar('loss/q', loss_q, self.global_step)
+            if self.siamese is not None:
+                self.summary_writer.add_scalar('loss/siamese',
+                                               loss_siamese,
+                                               self.global_step)
+                if self.siamese_use_q:
+                    self.summary_writer.add_scalar('loss/siamese_q',
+                                                   loss_siamese_q,
+                                                   self.global_step)
+
+            if self.use_prediction:
+                approx_next_state_dist_entropy, loss_reward, loss_obs = loss_predictions
+                self.summary_writer.add_scalar('loss/transition',
+                                               approx_next_state_dist_entropy,
+                                               self.global_step)
+                self.summary_writer.add_scalar('loss/reward', loss_reward, self.global_step)
+                self.summary_writer.add_scalar('loss/observation', loss_obs, self.global_step)
+
+                approx_obs_list = self.model_observation(m_states[0:1, 0, ...])
+                if not isinstance(approx_obs_list, (list, tuple)):
+                    approx_obs_list = [approx_obs_list]
+                for approx_obs in approx_obs_list:
+                    if len(approx_obs.shape) > 3:
+                        self.summary_writer.add_images('observation',
+                                                       approx_obs.permute([0, 3, 1, 2]),
+                                                       self.global_step)
+            self.summary_writer.flush()
 
     def train_policy_alpha(self,
                            bn_obses_list: List[torch.Tensor],
@@ -366,7 +398,19 @@ class OptionBase(SAC_Base):
         if self.use_auto_alpha and ((self.d_action_size and not self.discrete_dqn_like) or self.c_action_size):
             d_alpha, c_alpha = self._train_alpha(obs_list, state)
 
-        return d_policy_entropy, c_policy_entropy, d_alpha, c_alpha
+        if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
+            self.summary_available = True
+
+            if self.d_action_size:
+                self.summary_writer.add_scalar('loss/d_entropy', d_policy_entropy, self.global_step)
+                if self.use_auto_alpha and not self.discrete_dqn_like:
+                    self.summary_writer.add_scalar('loss/d_alpha', d_alpha, self.global_step)
+            if self.c_action_size:
+                self.summary_writer.add_scalar('loss/c_entropy', c_policy_entropy, self.global_step)
+                if self.use_auto_alpha:
+                    self.summary_writer.add_scalar('loss/c_alpha', c_alpha, self.global_step)
+
+            self.summary_writer.flush()
 
     @torch.no_grad()
     def _get_td_error(self,
@@ -415,6 +459,10 @@ class OptionBase(SAC_Base):
         d_q_list = [q[0] for q in q_list]  # [Batch, action_size]
         c_q_list = [q[1] for q in q_list]  # [Batch, 1]
 
+        if self.d_action_size:
+            d_q_list = [torch.sum(d_action * q, dim=-1, keepdim=True) for q in d_q_list]
+            # [Batch, 1]
+
         d_y, c_y = self._get_y(next_n_terminations=next_n_terminations,
 
                                next_n_v_over_options_list=next_n_v_over_options_list,
@@ -431,9 +479,10 @@ class OptionBase(SAC_Base):
 
         q_td_error_list = [torch.zeros((batch, 1), device=self.device) for _ in range(self.ensemble_q_num)]
         # [Batch, 1]
-        # if self.d_action_size:
-        #     for i in range(self.ensemble_q_num):
-        #         q_td_error_list[i] += torch.abs(d_q_list[i] - d_y)
+
+        if self.d_action_size:
+            for i in range(self.ensemble_q_num):
+                q_td_error_list[i] += torch.abs(d_q_list[i] - d_y)
 
         if self.c_action_size:
             for i in range(self.ensemble_q_num):

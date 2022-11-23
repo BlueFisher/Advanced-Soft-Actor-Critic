@@ -1,6 +1,6 @@
 from collections import defaultdict
 from itertools import chain
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import numpy as np
 import torch
@@ -8,11 +8,11 @@ from torch import nn, optim
 
 from algorithm.oc.option_base import OptionBase
 
+from .. import batch_buffer
+from ..batch_buffer import BatchBuffer
 from ..nn_models import *
 from ..sac_base import SAC_Base
 from ..utils import *
-from .. import batch_buffer
-from ..batch_buffer import BatchBuffer
 
 NUM_OPTIONS = 2
 
@@ -277,6 +277,7 @@ class OptionSelectorBase(SAC_Base):
         self.option_list: List[OptionBase] = [None] * NUM_OPTIONS
         for i in range(NUM_OPTIONS):
             option_kwargs['model_abs_dir'] = self.model_abs_dir / f'option_{i}'
+            option_kwargs['model_abs_dir'].mkdir(parents=True, exist_ok=True)
             if self.ma_name is not None:
                 option_kwargs['ma_name'] = f'{self.ma_name}_option_{i}'
             else:
@@ -938,11 +939,6 @@ class OptionSelectorBase(SAC_Base):
         m_low_states = None
         m_low_target_states = None
 
-        loss_q_list = [None] * NUM_OPTIONS
-        loss_siamese_list = [None] * NUM_OPTIONS
-        loss_siamese_q_list = [None] * NUM_OPTIONS
-        loss_predictions_list = [None] * NUM_OPTIONS
-
         for i, option in enumerate(self.option_list):
             mask = (option_index == i)
             if not torch.any(mask):
@@ -990,10 +986,7 @@ class OptionSelectorBase(SAC_Base):
             m_low_states[mask] = o_m_low_states
             m_low_target_states[mask] = o_m_low_target_states
 
-            (o_loss_q,
-             o_loss_siamese,
-             o_loss_siamese_q,
-             o_loss_predictions) = option.train_rep_q(next_n_terminations=next_n_terminations[mask],
+            option.train_rep_q(next_n_terminations=next_n_terminations[mask],
 
                                                       next_n_v_over_options_list=[next_n_v_over_options[mask] for next_n_v_over_options in next_n_v_over_options_list],
 
@@ -1017,32 +1010,10 @@ class OptionSelectorBase(SAC_Base):
                                                       bn_mu_probs=bn_mu_probs[mask],
                                                       priority_is=priority_is[mask])
 
-            loss_q_list[i] = o_loss_q
-            loss_siamese_list[i] = o_loss_siamese
-            loss_siamese_q_list[i] = o_loss_siamese_q
-            loss_predictions_list[i] = o_loss_predictions
-
         if self.optimizer_rep:
             self.optimizer_rep.step()
 
-        loss_q = torch.mean(torch.stack([l for l in loss_q_list if l is not None]))
-        loss_siamese = None
-        loss_siamese_q = None
-        loss_predictions = None
-
-        if self.siamese is not None:
-            loss_siamese = torch.mean(torch.stack([l for l in loss_siamese_list if l is not None]))
-            if self.siaese_use_q:
-                loss_siamese_q = torch.mean(torch.stack([l for l in loss_siamese_q_list if l is not None]))
-
-        if self.use_prediction:
-            loss_predictions_list = [l for l in loss_predictions_list if l is not None]
-            loss_predictions = [torch.mean(torch.stack(p)) for p in zip(loss_predictions_list)]
-
-        return (loss_q,
-                loss_siamese,
-                loss_siamese_q,
-                loss_predictions), m_low_states, m_low_target_states
+        return m_low_states, m_low_target_states
 
     def _train_v_terminations(self,
                               state: torch.Tensor,
@@ -1165,11 +1136,7 @@ class OptionSelectorBase(SAC_Base):
         m_low_target_obses_list = self.get_l_low_obses_list(l_obses_list=m_obses_list,
                                                             l_states=m_target_states)
 
-        ((loss_q,
-          loss_siamese,
-          loss_siamese_q,
-          loss_predictions),
-         m_low_states,
+        (m_low_states,
          m_low_target_states) = self._train_rep_q(next_n_terminations=next_n_terminations,
                                                   next_n_v_over_options_list=next_n_v_over_options_list,
 
@@ -1198,11 +1165,6 @@ class OptionSelectorBase(SAC_Base):
         m_low_obses_list = self.get_l_low_obses_list(l_obses_list=m_obses_list,
                                                      l_states=m_states)
 
-        d_policy_entropy_list = [None] * NUM_OPTIONS
-        d_alpha_list = [None] * NUM_OPTIONS
-        c_policy_entropy_list = [None] * NUM_OPTIONS
-        c_alpha_list = [None] * NUM_OPTIONS
-
         for i, option in enumerate(self.option_list):
             mask = (option_index == i)
             if not torch.any(mask):
@@ -1229,18 +1191,10 @@ class OptionSelectorBase(SAC_Base):
                                                     is_target=False)
             m_low_states[mask] = o_m_low_states
 
-            (o_d_policy_entropy,
-             o_c_policy_entropy,
-             o_d_alpha,
-             o_c_alpha) = option.train_policy_alpha(bn_obses_list=[o_m_obses[:, :-1, ...]
-                                                                   for o_m_obses in o_m_low_obses_list],
-                                                    bn_states=o_m_low_states[:, :-1, ...],
-                                                    bn_actions=o_bn_actions)
-
-            d_policy_entropy_list[i] = o_d_policy_entropy
-            d_alpha_list[i] = o_d_alpha
-            c_policy_entropy_list[i] = o_c_policy_entropy
-            c_alpha_list[i] = o_c_alpha
+            option.train_policy_alpha(bn_obses_list=[o_m_obses[:, :-1, ...]
+                                                     for o_m_obses in o_m_low_obses_list],
+                                      bn_states=o_m_low_states[:, :-1, ...],
+                                      bn_actions=o_bn_actions)
 
         loss_v, loss_termination = self._train_v_terminations(state=m_states[:, self.burn_in_step, ...],
                                                               option_index=bn_option_indexes[:, self.burn_in_step],
@@ -1255,39 +1209,7 @@ class OptionSelectorBase(SAC_Base):
             self.summary_available = True
 
             self.summary_writer.add_scalar('loss/v', loss_v, self.global_step)
-            for i, ent in enumerate(c_policy_entropy_list):
-                if ent is not None:
-                    self.summary_writer.add_scalar(f'loss/c_entropy{i}', ent, self.global_step)
-            for i, c_alpha in enumerate(c_alpha_list):
-                if c_alpha is not None:
-                    self.summary_writer.add_scalar(f'loss/c_alpha_{i}', c_alpha, self.global_step)
 
-            self.summary_writer.add_scalar('loss/q', loss_q, self.global_step)
-            if self.siamese is not None:
-                self.summary_writer.add_scalar('loss/siamese',
-                                               loss_siamese,
-                                               self.global_step)
-                if self.siamese_use_q:
-                    self.summary_writer.add_scalar('loss/siamese_q',
-                                                   loss_siamese_q,
-                                                   self.global_step)
-
-            if self.use_prediction:
-                approx_next_state_dist_entropy, loss_reward, loss_obs = loss_predictions
-                self.summary_writer.add_scalar('loss/transition',
-                                               approx_next_state_dist_entropy,
-                                               self.global_step)
-                self.summary_writer.add_scalar('loss/reward', loss_reward, self.global_step)
-                self.summary_writer.add_scalar('loss/observation', loss_obs, self.global_step)
-
-                approx_obs_list = self.model_observation(m_states[0:1, 0, ...])
-                if not isinstance(approx_obs_list, (list, tuple)):
-                    approx_obs_list = [approx_obs_list]
-                for approx_obs in approx_obs_list:
-                    if len(approx_obs.shape) > 3:
-                        self.summary_writer.add_images('observation',
-                                                       approx_obs.permute([0, 3, 1, 2]),
-                                                       self.global_step)
             self.summary_writer.flush()
 
         return m_target_states, m_low_target_obses_list, m_low_target_states
