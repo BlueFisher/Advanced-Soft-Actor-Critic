@@ -1187,10 +1187,9 @@ class SAC_Base(object):
             _target_encoder_list = [t_e.reshape(batch * n, -1) for t_e in target_encoder_list]  # [Batch * n, f], ...
             logits_list = [torch.mm(e, weight) for e, weight in zip(_encoder_list, self.contrastive_weight_list)]
             logits_list = [torch.mm(logits, t_e.t()) for logits, t_e in zip(logits_list, _target_encoder_list)]  # [Batch * n, Batch * n], ...
-            if not hasattr(self, '_contrastive_labels'):
-                self._contrastive_labels = torch.block_diag(*torch.ones(batch, n, n, device=self.device))
+            contrastive_labels = torch.block_diag(*torch.ones(batch, n, n, device=self.device))
 
-            loss_siamese_list = [functional.binary_cross_entropy_with_logits(logits, self._contrastive_labels)
+            loss_siamese_list = [functional.binary_cross_entropy_with_logits(logits, contrastive_labels)
                                  for logits in logits_list]
 
         elif self.siamese == SIAMESE.BYOL:
@@ -2060,15 +2059,15 @@ class SAC_Base(object):
                                    np.zeros(ignore_size, dtype=np.float32)])
         return td_error
 
-    def put_episode(self, *episode_trans):
+    def put_episode(self, **episode_trans):
         # Ignore episodes which length is too short
-        if episode_trans[0].shape[1] < self.burn_in_step + self.n_step:
+        if episode_trans['l_indexes'].shape[1] < self.burn_in_step + self.n_step:
             return
 
         if self.use_replay_buffer:
-            self._fill_replay_buffer(*episode_trans)
+            self._fill_replay_buffer(**episode_trans)
         else:
-            self.batch_buffer.put_episode(*episode_trans)
+            self.batch_buffer.put_episode(**episode_trans)
 
     def _fill_replay_buffer(self,
                             l_indexes: np.ndarray,

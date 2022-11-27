@@ -196,15 +196,17 @@ class Agent:
         ep_seq_hidden_states = np.expand_dims(tmp['seq_hidden_state'], 0) if tmp['seq_hidden_state'] is not None else None
         # [1, episode_len, *seq_hidden_state_shape]
 
-        return (ep_indexes,
-                ep_padding_masks,
-                ep_obses_list,
-                ep_actions,
-                ep_rewards,
-                next_obs_list,
-                ep_dones,
-                ep_probs,
-                ep_seq_hidden_states)
+        return {
+            'l_indexes': ep_indexes,
+            'l_padding_masks': ep_padding_masks,
+            'l_obses_list': ep_obses_list,
+            'l_actions': ep_actions,
+            'l_rewards': ep_rewards,
+            'next_obs_list': next_obs_list,
+            'l_dones': ep_dones,
+            'l_probs': ep_probs,
+            'l_seq_hidden_states': ep_seq_hidden_states
+        }
 
     def is_empty(self):
         return self.episode_length == 0
@@ -357,7 +359,7 @@ class AgentManager:
             # ep_obses_list, ep_actions, ep_rewards, next_obs_list, ep_dones, ep_probs,
             # ep_seq_hidden_states
             for episode_trans in self['episode_trans_list']:
-                self.rl.put_episode(*episode_trans)
+                self.rl.put_episode(**episode_trans)
 
         trained_steps = self.rl.train()
 
