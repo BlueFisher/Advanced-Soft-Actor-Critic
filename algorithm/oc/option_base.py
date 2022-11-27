@@ -68,7 +68,7 @@ class OptionBase(SAC_Base):
                n_mu_probs):
         """
         Args:
-            next_n_terminations: [Batch, n, num_options]
+            next_n_terminations: [Batch, n]
 
             next_n_v_over_options_list: [Batch, n, num_options], ...
 
@@ -144,8 +144,8 @@ class OptionBase(SAC_Base):
                 clipped_next_n_probs = next_n_probs.clamp(min=1e-8)  # [Batch, n, action_size]
                 tmp_n_vs = min_n_d_qs - d_alpha * torch.log(clipped_n_probs)  # [Batch, n, action_size]
 
-                tmp_next_n_vs = (1 - next_n_terminations) * (min_next_n_d_qs - d_alpha * torch.log(clipped_next_n_probs)) + \
-                    next_n_terminations * min_next_n_max_vs.unsqueeze(-1)  # [Batch, n, action_size]
+                tmp_next_n_vs = (1 - next_n_terminations.unsqueeze(-1)) * (min_next_n_d_qs - d_alpha * torch.log(clipped_next_n_probs)) + \
+                    next_n_terminations.unsqueeze(-1) * min_next_n_max_vs.unsqueeze(-1)  # [Batch, n, action_size]
 
                 n_vs = torch.sum(n_probs * tmp_n_vs, dim=-1)  # [Batch, n]
                 next_n_vs = torch.sum(next_n_probs * tmp_next_n_vs, dim=-1)  # [Batch, n]

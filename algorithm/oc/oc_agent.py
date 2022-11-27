@@ -179,7 +179,7 @@ class OC_Agent(Agent):
         # [1, episode_len]
         ep_obses_list = [np.expand_dims(o, 0) for o in tmp['obs_list']]
         # List([1, episode_len, *obs_shape_si], ...)
-        ep_option_index = np.expand_dims(tmp['option_index'], 0)  # [1, episode_len]
+        ep_option_indexes = np.expand_dims(tmp['option_index'], 0)  # [1, episode_len]
         ep_actions = np.expand_dims(tmp['action'], 0)  # [1, episode_len, action_size]
         ep_rewards = np.expand_dims(tmp['reward'], 0)  # [1, episode_len]
         next_obs_list = [np.expand_dims(o, 0) for o in tmp['next_obs_list']]
@@ -193,17 +193,19 @@ class OC_Agent(Agent):
         ep_low_seq_hidden_states = np.expand_dims(tmp['low_seq_hidden_state'], 0) if tmp['low_seq_hidden_state'] is not None else None
         # [1, episode_len, *seq_hidden_state_shape]
 
-        return (ep_indexes,
-                ep_padding_masks,
-                ep_obses_list,
-                ep_option_index,
-                ep_actions,
-                ep_rewards,
-                next_obs_list,
-                ep_dones,
-                ep_probs,
-                ep_seq_hidden_states,
-                ep_low_seq_hidden_states)
+        return {
+            'l_indexes': ep_indexes,
+            'l_padding_masks': ep_padding_masks,
+            'l_obses_list': ep_obses_list,
+            'l_option_indexes': ep_option_indexes,
+            'l_actions': ep_actions,
+            'l_rewards': ep_rewards,
+            'next_obs_list': next_obs_list,
+            'l_dones': ep_dones,
+            'l_probs': ep_probs,
+            'l_seq_hidden_states': ep_seq_hidden_states,
+            'l_low_seq_hidden_states': ep_low_seq_hidden_states
+        }
 
     def clear(self):
         for k in self.option_index_count:

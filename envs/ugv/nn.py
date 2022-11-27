@@ -34,8 +34,7 @@ class ModelRep(m.ModelBaseRNNRep):
         self.ray_conv = m.Conv1dLayers(RAY_SIZE, 2, 'default',
                                        out_dense_n=64, out_dense_depth=2)
 
-        self.vis_ray_dense = m.LinearLayers(self.conv.output_size + self.ray_conv.output_size,
-                                            dense_n=64, dense_depth=1)
+        self.vis_ray_dense = m.LinearLayers(64, dense_n=64, dense_depth=1)
 
         self.rnn = m.GRU(64 + self.c_action_size, 64, 1)
 
@@ -64,10 +63,10 @@ class ModelRep(m.ModelBaseRNNRep):
         random_index = torch.randperm(RAY_SIZE)[:self.ray_random]
         ray[..., random_index, 0] = 1.
         ray[..., random_index, 1] = 1.
-        self._ray_visual(ray)
+        # self._ray_visual(ray)
         ray = self.ray_conv(ray)
 
-        vis_ray_concat = self.vis_ray_dense(torch.cat([vis, ray], dim=-1))
+        vis_ray_concat = self.vis_ray_dense(vis + ray)
         state, hn = self.rnn(torch.cat([vis_ray_concat, pre_action], dim=-1), rnn_state)
 
         state = torch.cat([state, vec], dim=-1)
@@ -78,7 +77,7 @@ class ModelRep(m.ModelBaseRNNRep):
         vis_cam, ray, vec = obs_list
         vis_cam_encoder, ray_encoder = encoders
 
-        vis_ray_concat = self.vis_ray_dense(torch.cat([vis_cam_encoder, ray_encoder], dim=-1))
+        vis_ray_concat = self.vis_ray_dense(vis_cam_encoder + ray_encoder)
         state, _ = self.rnn(torch.cat([vis_ray_concat, pre_action], dim=-1), rnn_state)
 
         state = torch.cat([state, vec], dim=-1)
