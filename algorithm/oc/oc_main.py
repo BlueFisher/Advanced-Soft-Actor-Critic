@@ -156,13 +156,12 @@ class OC_Main(Main):
             global_step = format_global_step(mgr.rl.get_global_step())
             rewards = [a.reward for a in mgr.agents]
             rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-            option_index_count = defaultdict(list)
-            for oic in [a.option_index_count for a in mgr.agents]:
-                for k, v in oic.items():
-                    option_index_count[k].append(v)
 
-            for k, v in option_index_count.items():
-                print(k, v)
+            option_index_count = defaultdict(int)
+            for oic in [a.option_index_count for a in mgr.agents]:
+                for option_index, count in oic.items():
+                    option_index_count[option_index] += count
+            self._logger.info(', '.join([f'{k}: {v}' for k, v in option_index_count.items()]))
 
             max_step = max([a.steps for a in mgr.agents])
             self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}')
