@@ -104,8 +104,8 @@ class OptionBase(SAC_Base):
             n_c_actions_sampled = c_policy.rsample()  # [Batch, n, action_size]
             next_n_c_actions_sampled = next_c_policy.rsample()  # [Batch, n, action_size]
         else:
-            n_c_actions_sampled = torch.empty(0, device=self.device)
-            next_n_c_actions_sampled = torch.empty(0, device=self.device)
+            n_c_actions_sampled = torch.zeros(0, device=self.device)
+            next_n_c_actions_sampled = torch.zeros(0, device=self.device)
 
         # ([Batch, n, action_size], [Batch, n, 1])
         n_qs_list = [q(n_states, torch.tanh(n_c_actions_sampled)) for q in self.model_target_q_list]

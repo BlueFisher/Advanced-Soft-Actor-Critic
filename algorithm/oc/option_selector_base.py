@@ -14,8 +14,6 @@ from ..nn_models import *
 from ..sac_base import SAC_Base
 from ..utils import *
 
-NUM_OPTIONS = 2
-
 
 def episode_to_batch(bn: int,
                      episode_length: int,
@@ -173,6 +171,116 @@ sac_base.BatchBuffer = BatchBuffer
 
 
 class OptionSelectorBase(SAC_Base):
+    def __init__(self,
+                 obs_shapes: List[Tuple],
+                 d_action_size: int,
+                 c_action_size: int,
+                 model_abs_dir: Optional[Path],
+                 device: Optional[str] = None,
+                 ma_name: Optional[str] = None,
+                 summary_path: Optional[str] = 'log',
+                 train_mode: bool = True,
+                 last_ckpt: Optional[str] = None,
+
+                 nn_config: Optional[dict] = None,
+
+                 nn=None,
+                 seed: Optional[float] = None,
+                 write_summary_per_step: float = 1e3,
+                 save_model_per_step: float = 1e5,
+
+                 use_replay_buffer: bool = True,
+                 use_priority: bool = True,
+
+                 ensemble_q_num: int = 2,
+                 ensemble_q_sample: int = 2,
+
+                 burn_in_step: int = 0,
+                 n_step: int = 1,
+                 seq_encoder: Optional[SEQ_ENCODER] = None,
+
+                 batch_size: int = 256,
+                 tau: float = 0.005,
+                 update_target_per_step: int = 1,
+                 init_log_alpha: float = -2.3,
+                 use_auto_alpha: bool = True,
+                 learning_rate: float = 3e-4,
+                 gamma: float = 0.99,
+                 v_lambda: float = 1.,
+                 v_rho: float = 1.,
+                 v_c: float = 1.,
+                 clip_epsilon: float = 0.2,
+
+                 discrete_dqn_like: bool = False,
+                 use_n_step_is: bool = True,
+                 siamese: Optional[SIAMESE] = None,
+                 siamese_use_q: bool = False,
+                 siamese_use_adaptive: bool = False,
+                 use_prediction: bool = False,
+                 transition_kl: float = 0.8,
+                 use_extra_data: bool = True,
+                 curiosity: Optional[CURIOSITY] = None,
+                 curiosity_strength: float = 1.,
+                 use_rnd: bool = False,
+                 rnd_n_sample: int = 10,
+                 use_normalization: bool = False,
+                 use_add_with_td: bool = False,
+                 action_noise: Optional[List[float]] = None,
+
+                 replay_config: Optional[dict] = None,
+
+                 num_options=4):
+
+        self.num_options = num_options
+
+        super().__init__(obs_shapes,
+                         d_action_size,
+                         c_action_size,
+                         model_abs_dir,
+                         device, ma_name,
+                         summary_path,
+                         train_mode,
+                         last_ckpt,
+                         nn_config,
+                         nn,
+                         seed,
+                         write_summary_per_step,
+                         save_model_per_step,
+                         use_replay_buffer,
+                         use_priority,
+                         ensemble_q_num,
+                         ensemble_q_sample,
+                         burn_in_step,
+                         n_step,
+                         seq_encoder,
+                         batch_size,
+                         tau,
+                         update_target_per_step,
+                         init_log_alpha,
+                         use_auto_alpha,
+                         learning_rate,
+                         gamma,
+                         v_lambda,
+                         v_rho,
+                         v_c,
+                         clip_epsilon,
+                         discrete_dqn_like,
+                         use_n_step_is,
+                         siamese,
+                         siamese_use_q,
+                         siamese_use_adaptive,
+                         use_prediction,
+                         transition_kl,
+                         use_extra_data,
+                         curiosity,
+                         curiosity_strength,
+                         use_rnd,
+                         rnd_n_sample,
+                         use_normalization,
+                         use_add_with_td,
+                         action_noise,
+                         replay_config)
+
     def _build_model(self, nn, nn_config: Optional[dict], init_log_alpha: float, learning_rate: float):
         """
         Initialize variables, network models and optimizers
@@ -260,22 +368,22 @@ class OptionSelectorBase(SAC_Base):
         else:
             self.optimizer_rep = None
 
-        self.model_v_over_options_list = [ModelQOverOption(state_size, NUM_OPTIONS).to(self.device) for _ in range(self.ensemble_q_num)]
-        self.model_target_v_over_options_list = [ModelQOverOption(state_size, NUM_OPTIONS).to(self.device) for _ in range(self.ensemble_q_num)]
+        self.model_v_over_options_list = [ModelQOverOption(state_size, self.num_options).to(self.device) for _ in range(self.ensemble_q_num)]
+        self.model_target_v_over_options_list = [ModelQOverOption(state_size, self.num_options).to(self.device) for _ in range(self.ensemble_q_num)]
         for model_target_v_over_options in self.model_target_v_over_options_list:
             for param in model_target_v_over_options.parameters():
                 param.requires_grad = False
         self.optimizer_v_list = [adam_optimizer(self.model_v_over_options_list[i].parameters()) for i in range(self.ensemble_q_num)]
 
-        self.model_termination_over_options = ModelTerminationOverOption(state_size, NUM_OPTIONS).to(self.device)
+        self.model_termination_over_options = ModelTerminationOverOption(state_size, self.num_options).to(self.device)
         self.optimizer_termination = adam_optimizer(self.model_termination_over_options.parameters())
 
         option_kwargs = self._kwargs
         del option_kwargs['self']
         option_kwargs['obs_shapes'] = [(self.state_size, ), *self.obs_shapes]
         _tmp_ModelRep, option_kwargs['nn'].ModelRep = option_kwargs['nn'].ModelRep, option_kwargs['nn'].ModelOptionRep
-        self.option_list: List[OptionBase] = [None] * NUM_OPTIONS
-        for i in range(NUM_OPTIONS):
+        self.option_list: List[OptionBase] = [None] * self.num_options
+        for i in range(self.num_options):
             if self.model_abs_dir is not None:
                 option_kwargs['model_abs_dir'] = self.model_abs_dir / f'option_{i}'
                 option_kwargs['model_abs_dir'].mkdir(parents=True, exist_ok=True)
@@ -404,6 +512,11 @@ class OptionSelectorBase(SAC_Base):
     def _choose_option_index(self,
                              state: torch.Tensor,
                              option_index: torch.Tensor):
+        """
+        Args:
+            state: [Batch, state_size]
+            option_index: [Batch, ]
+        """
         v_over_options = self.model_v_over_options_list[0](state)  # [Batch, num_options]
         new_option_index = v_over_options.argmax(dim=-1)  # [Batch, ]
 
@@ -416,12 +529,21 @@ class OptionSelectorBase(SAC_Base):
         termination_mask = termination > .5
         option_index[termination_mask] = new_option_index[termination_mask]
 
-        return option_index, torch.logical_or(none_option_mask, termination_mask)
+        random_mask = torch.rand_like(option_index, dtype=torch.float32) < 0.2
+        option_index[random_mask] = new_option_index[random_mask]
+
+        return option_index, torch.logical_or(torch.logical_or(none_option_mask, termination_mask), random_mask)
 
     def _choose_action(self,
                        obs_list: List[torch.Tensor],
                        state: torch.Tensor,
                        option_index: torch.Tensor):
+        """
+        Args:
+            obs_list: list([Batch, 1, *obs_shapes_i], ...)
+            state: [Batch, 1, d_action_size + c_action_size]
+            option_index: [Batch, ]
+        """
 
         option_index, _ = self._choose_option_index(state=state,
                                                     option_index=option_index)
@@ -494,11 +616,11 @@ class OptionSelectorBase(SAC_Base):
         """
         Args:
             obs_list: list([Batch, *obs_shapes_i], ...)
-            pre_action: [Batch, d_action_size + c_action_size]
-            rnn_state: [Batch, *seq_hidden_state_shape]
+            pre_option_index: [Batch, ]
         Returns:
+            option_index: [Batch, ]
             action: [Batch, d_action_size + c_action_size] (numpy)
-            rnn_state: [Batch, *seq_hidden_state_shape] (numpy)
+            prob: [Batch, ] (numpy)
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         option_index = torch.from_numpy(pre_option_index).type(torch.int64).to(self.device)  # [Batch, ]
@@ -520,7 +642,17 @@ class OptionSelectorBase(SAC_Base):
                           low_rnn_state: np.ndarray):
         """
         Args:
+            obs_list: list([Batch, *obs_shapes_i], ...)
+            pre_option_index: [Batch, ]
+            pre_action: [Batch, d_action_size + c_action_size]
             rnn_state: [Batch, *seq_hidden_state_shape]
+            low_rnn_state: [Batch, *los_seq_hidden_state_shape]
+        Returns:
+            option_index: [Batch, ] (numpy)
+            action: [Batch, d_action_size + c_action_size] (numpy)
+            prob: [Batch, ] (numpy)
+            next_rnn_state: [Batch, *seq_hidden_state_shape] (numpy)
+            next_low_rnn_state: [Batch, *los_seq_hidden_state_shape] (numpy)
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         option_index = torch.from_numpy(pre_option_index).type(torch.int64).to(self.device)  # [Batch, ]
@@ -593,7 +725,7 @@ class OptionSelectorBase(SAC_Base):
             option_index = l_option_indexes[:, t]  # [Batch, ]
 
             if self.seq_encoder is not None:
-                next_l_low_seq_hidden_states = torch.empty((batch, l, *f_low_seq_hidden_states.shape[2:]), device=self.device)
+                next_l_low_seq_hidden_states = torch.zeros((batch, l, *f_low_seq_hidden_states.shape[2:]), device=self.device)
 
             if t > 0 and self.seq_encoder is not None:
                 mask = l_option_indexes[:, t - 1] != option_index
@@ -622,7 +754,7 @@ class OptionSelectorBase(SAC_Base):
                                                                               is_target=is_target)
 
                 if l_low_states is None:
-                    l_low_states = torch.empty((batch, l, *o_f_states.shape[2:]), device=self.device)
+                    l_low_states = torch.zeros((batch, l, *o_f_states.shape[2:]), device=self.device)
                 l_low_states[mask, t:t + 1] = o_f_states
 
                 if self.seq_encoder == SEQ_ENCODER.RNN:
@@ -676,7 +808,7 @@ class OptionSelectorBase(SAC_Base):
                                                l_states=o_f_states,
                                                l_actions=o_f_actions)
                 if l_low_probs is None:
-                    l_low_probs = torch.empty((batch, l, *o_f_probs.shape[2:]), device=self.device)
+                    l_low_probs = torch.zeros((batch, l, *o_f_probs.shape[2:]), device=self.device)
                 l_low_probs[mask, t:t + 1] = o_f_probs
 
         return l_low_probs
@@ -1270,7 +1402,7 @@ class OptionSelectorBase(SAC_Base):
                                        np.zeros([1], dtype=bool)])
         obs_list = [np.concatenate([obs, next_obs]) for obs, next_obs in zip(obs_list, next_obs_list)]
         action = np.concatenate([action,
-                                 np.empty([1, action.shape[-1]], dtype=np.float32)])
+                                 np.zeros([1, action.shape[-1]], dtype=np.float32)])
         option_index = np.concatenate([option_index,
                                        np.full([1], -1, dtype=np.int8)])
         reward = np.concatenate([reward,
@@ -1292,18 +1424,18 @@ class OptionSelectorBase(SAC_Base):
             l_mu_probs = l_probs
             mu_prob = l_mu_probs.squeeze(0)
             mu_prob = np.concatenate([mu_prob,
-                                      np.empty([1], dtype=np.float32)])
+                                      np.zeros([1], dtype=np.float32)])
             storage_data['mu_prob'] = mu_prob
 
         if self.seq_encoder is not None:
             seq_hidden_state = l_seq_hidden_states.squeeze(0)
             seq_hidden_state = np.concatenate([seq_hidden_state,
-                                               np.empty([1, *seq_hidden_state.shape[1:]], dtype=np.float32)])
+                                               np.zeros([1, *seq_hidden_state.shape[1:]], dtype=np.float32)])
             storage_data['seq_hidden_state'] = seq_hidden_state
 
             low_seq_hidden_state = l_low_seq_hidden_states.squeeze(0)
             low_seq_hidden_state = np.concatenate([low_seq_hidden_state,
-                                                   np.empty([1, *low_seq_hidden_state.shape[1:]], dtype=np.float32)])
+                                                   np.zeros([1, *low_seq_hidden_state.shape[1:]], dtype=np.float32)])
             storage_data['low_seq_hidden_state'] = low_seq_hidden_state
 
         # n_step transitions except the first one and the last obs_, n_step - 1 + 1

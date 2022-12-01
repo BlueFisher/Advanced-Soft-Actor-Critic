@@ -26,7 +26,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
         return state, hn
 
-    
+
 class ModelOptionRep(ModelRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (32, )
@@ -50,6 +50,7 @@ class ModelOptionRep(ModelRep):
         state = torch.cat([high_rep, state], dim=-1)
 
         return state, hn
+
 
 class ModelTransition(m.ModelTransition):
     def _build_model(self):

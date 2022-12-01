@@ -48,7 +48,7 @@ class SharedMemoryManager:
 
     def init_from_shapes(self, data_shapes, data_dtypes):
         self.buffer = traverse_lists((data_shapes, data_dtypes),
-                                     lambda shape, dtype: np.empty(shape, dtype=dtype))
+                                     lambda shape, dtype: np.zeros(shape, dtype=dtype))
 
         self.shms = traverse_lists(self.buffer,
                                    lambda b: [SharedMemory(create=True, size=b.nbytes) for _ in range(self.queue_size)])
