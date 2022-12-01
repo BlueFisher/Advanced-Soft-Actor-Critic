@@ -69,7 +69,7 @@ def get_fitted_xy(x, y):
     max_len = 2000
     x_new = np.linspace(min_x, max_x, max_len)
 
-    y_new = np.empty([len(y), max_len])
+    y_new = np.zeros([len(y), max_len])
 
     for i, xx in enumerate(x):
         yy = y[i]

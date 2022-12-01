@@ -133,7 +133,7 @@ class GymWrapper:
             for conn in self._conns:
                 conn.send((RESET, None))
 
-            obs = np.empty([self.n_agents, self._state_dim], dtype=np.float32)
+            obs = np.zeros([self.n_agents, self._state_dim], dtype=np.float32)
 
             for i, conn in enumerate(self._conns):
                 t_obs = conn.recv()
@@ -144,9 +144,9 @@ class GymWrapper:
     def step(self, ma_d_action, ma_c_action):
         d_action, c_action = ma_d_action['gym'], ma_c_action['gym']
 
-        obs = np.empty([self.n_agents, self._state_dim], dtype=np.float32)
-        reward = np.empty(self.n_agents, dtype=np.float32)
-        done = np.empty(self.n_agents, dtype=bool)
+        obs = np.zeros([self.n_agents, self._state_dim], dtype=np.float32)
+        reward = np.zeros(self.n_agents, dtype=np.float32)
+        done = np.zeros(self.n_agents, dtype=bool)
         max_step = np.full(self.n_agents, False)
 
         if self.is_discrete:

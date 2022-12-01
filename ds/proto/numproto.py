@@ -7,7 +7,7 @@ import ndarray_pb2
 
 def ndarray_to_proto(nda: np.ndarray) -> ndarray_pb2.NDarray:
     if nda is None:
-        nda = np.empty(0)
+        nda = np.zeros(0)
 
     nda_bytes = BytesIO()
     np.save(nda_bytes, nda, allow_pickle=False)

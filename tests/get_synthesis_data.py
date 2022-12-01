@@ -21,13 +21,13 @@ def get_action(batch, seq_len, d_action_size, c_action_size):
     if d_action_size:
         d_action = np.eye(d_action_size)[np.random.rand(*batch, d_action_size).argmax(axis=-1)]
     else:
-        d_action = np.empty((*batch, 0))
+        d_action = np.zeros((*batch, 0))
 
     if c_action_size:
         c_action = np.random.rand(*batch, c_action_size)
         c_action = np.clip(c_action, -.99, 99.)
     else:
-        c_action = np.empty((*batch, 0))
+        c_action = np.zeros((*batch, 0))
 
     return np.concatenate([d_action, c_action], axis=-1).astype(np.float32)
 

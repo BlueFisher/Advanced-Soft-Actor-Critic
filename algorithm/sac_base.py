@@ -571,7 +571,7 @@ class SAC_Base(object):
         if self.d_action_size:
             d_action = np.eye(self.d_action_size)[np.random.rand(batch_size, self.d_action_size).argmax(axis=-1)].astype(np.float32)
         else:
-            d_action = np.empty((batch_size, 0), dtype=np.float32)
+            d_action = np.zeros((batch_size, 0), dtype=np.float32)
 
         c_action = np.zeros([batch_size, self.c_action_size], dtype=np.float32)
 
@@ -698,7 +698,7 @@ class SAC_Base(object):
 
         elif self.seq_encoder == SEQ_ENCODER.RNN:
             l_states = None
-            next_l_rnn_states = torch.empty((batch, l, *f_seq_hidden_states.shape[2:]), device=self.device)
+            next_l_rnn_states = torch.zeros((batch, l, *f_seq_hidden_states.shape[2:]), device=self.device)
 
             rnn_state = f_seq_hidden_states[:, 0]
             for t in range(l):
@@ -707,7 +707,7 @@ class SAC_Base(object):
                                                      rnn_state)
 
                 if l_states is None:
-                    l_states = torch.empty((batch, l, *f_states.shape[2:]), device=self.device)
+                    l_states = torch.zeros((batch, l, *f_states.shape[2:]), device=self.device)
                 l_states[:, t:t + 1] = f_states
 
                 next_l_rnn_states[:, t] = rnn_state
@@ -923,8 +923,8 @@ class SAC_Base(object):
             n_c_actions_sampled = c_policy.rsample()  # [Batch, n, action_size]
             next_n_c_actions_sampled = next_c_policy.rsample()  # [Batch, n, action_size]
         else:
-            n_c_actions_sampled = torch.empty(0, device=self.device)
-            next_n_c_actions_sampled = torch.empty(0, device=self.device)
+            n_c_actions_sampled = torch.zeros(0, device=self.device)
+            next_n_c_actions_sampled = torch.zeros(0, device=self.device)
 
         # ([Batch, n, action_size], [Batch, n, 1])
         n_qs_list = [q(n_states, torch.tanh(n_c_actions_sampled)) for q in self.model_target_q_list]
@@ -1762,7 +1762,7 @@ class SAC_Base(object):
                 else:
                     d_action = d_policy.sample()
         else:
-            d_action = torch.empty(0, device=self.device)
+            d_action = torch.zeros(0, device=self.device)
 
         if self.c_action_size:
             if disable_sample:
@@ -1772,7 +1772,7 @@ class SAC_Base(object):
             else:
                 c_action = torch.tanh(c_policy.sample())
         else:
-            c_action = torch.empty(0, device=self.device)
+            c_action = torch.zeros(0, device=self.device)
 
         d_action, c_action = self._random_action(d_action, c_action)
 
@@ -1797,6 +1797,7 @@ class SAC_Base(object):
 
         Returns:
             action: [Batch, d_action_size + c_action_size] (numpy)
+            prob: [Batch, ] (numpy)
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         state = self.model_rep(obs_list)
@@ -1818,6 +1819,7 @@ class SAC_Base(object):
             rnn_state: [Batch, *seq_hidden_state_shape]
         Returns:
             action: [Batch, d_action_size + c_action_size] (numpy)
+            prob: [Batch, ] (numpy)
             rnn_state: [Batch, *seq_hidden_state_shape] (numpy)
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
@@ -1856,6 +1858,7 @@ class SAC_Base(object):
 
         Returns:
             action: [Batch, d_action_size + c_action_size] (numpy)
+            prob: [Batch, ] (numpy)
             attn_hidden_state: [Batch, *rnn_state_shape] (numpy)
         """
         ep_indexes = torch.from_numpy(ep_indexes).to(self.device)
@@ -2108,7 +2111,7 @@ class SAC_Base(object):
                                        np.zeros([1], dtype=bool)])
         obs_list = [np.concatenate([obs, next_obs]) for obs, next_obs in zip(obs_list, next_obs_list)]
         action = np.concatenate([action,
-                                 np.empty([1, action.shape[-1]], dtype=np.float32)])
+                                 np.zeros([1, action.shape[-1]], dtype=np.float32)])
         reward = np.concatenate([reward,
                                  np.zeros([1], dtype=np.float32)])
         done = np.concatenate([done,
@@ -2127,13 +2130,13 @@ class SAC_Base(object):
             l_mu_probs = l_probs
             mu_prob = l_mu_probs.squeeze(0)
             mu_prob = np.concatenate([mu_prob,
-                                      np.empty([1], dtype=np.float32)])
+                                      np.zeros([1], dtype=np.float32)])
             storage_data['mu_prob'] = mu_prob
 
         if self.seq_encoder is not None:
             seq_hidden_state = l_seq_hidden_states.squeeze(0)
             seq_hidden_state = np.concatenate([seq_hidden_state,
-                                               np.empty([1, *seq_hidden_state.shape[1:]], dtype=np.float32)])
+                                               np.zeros([1, *seq_hidden_state.shape[1:]], dtype=np.float32)])
             storage_data['seq_hidden_state'] = seq_hidden_state
 
         # n_step transitions except the first one and the last obs_, n_step - 1 + 1

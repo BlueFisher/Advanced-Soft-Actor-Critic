@@ -73,7 +73,7 @@ class MiniGridWrapper(GymWrapper):
             for conn in self._conns:
                 conn.send((RESET, None))
 
-            obs_list = [np.empty([self.n_agents, *o], dtype=np.float32) for o in self.obs_shapes]
+            obs_list = [np.zeros([self.n_agents, *o], dtype=np.float32) for o in self.obs_shapes]
 
             for i, conn in enumerate(self._conns):
                 t_obs_dict = conn.recv()
@@ -85,9 +85,9 @@ class MiniGridWrapper(GymWrapper):
     def step(self, ma_d_action, ma_c_action):
         d_action = ma_d_action['gym']
 
-        obs_list = [np.empty([self.n_agents, *o], dtype=np.float32) for o in self.obs_shapes]
-        reward = np.empty(self.n_agents, dtype=np.float32)
-        done = np.empty(self.n_agents, dtype=bool)
+        obs_list = [np.zeros([self.n_agents, *o], dtype=np.float32) for o in self.obs_shapes]
+        reward = np.zeros(self.n_agents, dtype=np.float32)
+        done = np.zeros(self.n_agents, dtype=bool)
         max_step = np.full(self.n_agents, False)
 
         # Convert one-hot to label

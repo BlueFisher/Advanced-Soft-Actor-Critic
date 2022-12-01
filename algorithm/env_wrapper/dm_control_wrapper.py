@@ -135,7 +135,7 @@ class DMControlWrapper:
             for conn in self._conns:
                 conn.send((RESET, None))
 
-            obs_list = [np.empty([self.n_agents, *s], dtype=np.float32) for s in self.observation_shapes]
+            obs_list = [np.zeros([self.n_agents, *s], dtype=np.float32) for s in self.observation_shapes]
 
             for i, conn in enumerate(self._conns):
                 _obs_list = conn.recv()
@@ -147,9 +147,9 @@ class DMControlWrapper:
     def step(self, ma_d_action, ma_c_action):
         d_action, c_action = ma_d_action['gym'], ma_c_action['gym']
 
-        obs_list = [np.empty([self.n_agents, *s], dtype=np.float32) for s in self.observation_shapes]
-        reward = np.empty(self.n_agents, dtype=np.float32)
-        done = np.empty(self.n_agents, dtype=bool)
+        obs_list = [np.zeros([self.n_agents, *s], dtype=np.float32) for s in self.observation_shapes]
+        reward = np.zeros(self.n_agents, dtype=np.float32)
+        done = np.zeros(self.n_agents, dtype=bool)
         max_step = np.full(self.n_agents, False)
 
         action = c_action
