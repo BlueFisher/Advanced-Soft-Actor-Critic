@@ -99,7 +99,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
 class ModelOptionRep(m.ModelBaseRNNRep):
     def _build_model(self, blur, brightness, ray_random, need_speed):
-        assert self.obs_shapes[0] == (64 + 6,)
+        assert self.obs_shapes[0] == (64,)
         assert self.obs_shapes[1] == (84, 84, 3)
         assert self.obs_shapes[2] == (802,)  # ray (1 + 200 + 200) * 2
         assert self.obs_shapes[3] == (6,)  # vector
@@ -124,7 +124,7 @@ class ModelOptionRep(m.ModelBaseRNNRep):
 
         self.vis_ray_dense = m.LinearLayers(64, dense_n=64, dense_depth=1)
 
-        self.rnn = m.GRU(64 + self.c_action_size, 64, 1)
+        self.rnn = m.GRU(64 + self.obs_shapes[3][0] + self.c_action_size, 64, 1)
 
         cropper = torch.nn.Sequential(
             T.RandomCrop(size=(50, 50)),
@@ -154,10 +154,8 @@ class ModelOptionRep(m.ModelBaseRNNRep):
         # self._ray_visual(ray)
         ray = self.ray_conv(ray)
 
-        vis_ray_concat = self.vis_ray_dense(vis + ray)
-        state, hn = self.rnn(torch.cat([vis_ray_concat, pre_action], dim=-1), rnn_state)
-
-        state = torch.cat([high_state, state, vec], dim=-1)
+        vis_ray_concat = self.vis_ray_dense(vis + ray) + high_state
+        state, hn = self.rnn(torch.cat([vis_ray_concat, vec, pre_action], dim=-1), rnn_state)
 
         return state, hn
 
@@ -165,10 +163,8 @@ class ModelOptionRep(m.ModelBaseRNNRep):
         high_state, vis_cam, ray, vec = obs_list
         vis_cam_encoder, ray_encoder = encoders
 
-        vis_ray_concat = self.vis_ray_dense(vis_cam_encoder + ray_encoder)
-        state, _ = self.rnn(torch.cat([vis_ray_concat, pre_action], dim=-1), rnn_state)
-
-        state = torch.cat([high_state, state, vec], dim=-1)
+        vis_ray_concat = self.vis_ray_dense(vis_cam_encoder + ray_encoder) + high_state
+        state, _ = self.rnn(torch.cat([vis_ray_concat, vec, pre_action], dim=-1), rnn_state)
 
         return state
 

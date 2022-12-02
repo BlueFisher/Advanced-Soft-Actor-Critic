@@ -74,11 +74,11 @@ class OptionBase(SAC_Base):
 
             n_obses_list: list([Batch, n, *obs_shapes_i], ...)
             n_states: [Batch, n, state_size]
-            n_option_indexes: [Batch, n]
+            n_option_indexes (torch.int64): [Batch, n]
             n_actions: [Batch, n, action_size]
             n_rewards: [Batch, n]
             next_state: [Batch, state_size]
-            n_dones: [Batch, n], dtype=torch.bool
+            n_dones (torch.bool): [Batch, n]
             n_mu_probs: [Batch, n]
 
         """

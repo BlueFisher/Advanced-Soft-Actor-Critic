@@ -15,9 +15,9 @@ default:
     force_reset: true
     bounding_box_random: 0
     semantic_segmentation_random: 0
-    success_reward: 1
+    success_reward: 3
     failure_reward: -1
-    failure_backward_reward: -1
+    failure_backward_reward: -4
 
   nn_config:
     rep:

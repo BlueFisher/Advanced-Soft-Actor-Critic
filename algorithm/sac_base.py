@@ -623,6 +623,249 @@ class SAC_Base(object):
         for t_p, p in zip(self.running_means + self.running_variances, new_means + new_variances):
             t_p.copy_(p)
 
+    @torch.no_grad()
+    def rnd_sample_d_action(self, state: torch.Tensor,
+                            d_policy: distributions.Categorical):
+        """
+        Sample action `self.rnd_n_sample` times, 
+        choose the action that has the max (model_rnd(s, a) - model_target_rnd(s, a))**2
+
+        Args:
+            state: [Batch, state_size]
+            d_policy: [Batch, d_action_size]
+
+        Returns:
+            d_action: [Batch, d_action_size]
+        """
+        batch = state.shape[0]
+        n_sample = self.rnd_n_sample
+
+        d_actions = d_policy.sample((n_sample,))  # [n_sample, batch, d_action_size]
+        d_actions = d_actions.transpose(0, 1)  # [batch, n_sample, d_action_size]
+
+        d_rnd = self.model_rnd.cal_d_rnd(state)  # [batch, d_action_size, f]
+        t_d_rnd = self.model_target_rnd.cal_d_rnd(state)  # [batch, d_action_size, f]
+        d_rnd = torch.repeat_interleave(torch.unsqueeze(d_rnd, 1), n_sample, dim=1)  # [batch, n_sample, d_action_size, f]
+        t_d_rnd = torch.repeat_interleave(torch.unsqueeze(t_d_rnd, 1), n_sample, dim=1)  # [batch, n_sample, d_action_size, f]
+
+        _i = functional.one_hot(d_actions.argmax(-1), self.d_action_size).unsqueeze(-1)  # [batch, n_sample, d_action_size, 1]
+        d_rnd = (torch.repeat_interleave(_i, d_rnd.size(-1), axis=-1) * d_rnd).sum(-2)
+        # [batch, n_sample, d_action_size, f] -> [batch, n_sample, f]
+        t_d_rnd = (torch.repeat_interleave(_i, t_d_rnd.size(-1), axis=-1) * t_d_rnd).sum(-2)
+        # [batch, n_sample, d_action_size, f] -> [batch, n_sample, f]
+
+        d_loss = torch.sum(torch.pow(d_rnd - t_d_rnd, 2), dim=-1)  # [batch, n_sample]
+        d_idx = torch.argmax(d_loss, dim=1)  # [batch, ]
+
+        return d_actions[torch.arange(batch), d_idx]
+
+    @torch.no_grad()
+    def rnd_sample_c_action(self, state: torch.Tensor,
+                            c_policy: distributions.Normal):
+        """
+        Sample action `self.rnd_n_sample` times, 
+        choose the action that has the max (model_rnd(s, a) - model_target_rnd(s, a))**2
+
+        Args:
+            state: [Batch, state_size]
+            c_policy: [Batch, c_action_size]
+
+        Returns:
+            c_action: [Batch, c_action_size]
+        """
+        batch = state.shape[0]
+        n_sample = self.rnd_n_sample
+
+        c_actions = torch.tanh(c_policy.sample((n_sample,)))  # [n_sample, batch, c_action_size]
+        c_actions = c_actions.transpose(0, 1)  # [batch, n_sample, c_action_size]
+
+        states = torch.repeat_interleave(torch.unsqueeze(state, 1), n_sample, dim=1)
+        # [batch, state_size] -> [batch, 1, state_size] -> [batch, n_sample, state_size]
+        c_rnd = self.model_rnd.cal_c_rnd(states, c_actions)  # [batch, n_sample, f]
+        t_c_rnd = self.model_target_rnd.cal_c_rnd(states, c_actions)  # [batch, n_sample, f]
+
+        c_loss = torch.sum(torch.pow(c_rnd - t_c_rnd, 2), dim=-1)  # [batch, n_sample]
+        c_idx = torch.argmax(c_loss, dim=1)  # [batch, ]
+
+        return c_actions[torch.arange(batch), c_idx]
+
+    @torch.no_grad()
+    def _random_action(self, d_action, c_action):
+        if self.action_noise is None:
+            return d_action, c_action
+
+        batch = max(d_action.shape[0], c_action.shape[0])
+
+        action_noise = torch.linspace(*self.action_noise, steps=batch, device=self.device)  # [Batch, ]
+
+        if self.d_action_size:
+            action_random = torch.eye(self.d_action_size, device=self.device)[torch.randint(0, self.d_action_size, size=(batch, ))]
+            mask = torch.rand(batch, device=self.device) < action_noise
+            d_action[mask] = action_random[mask]
+
+        if self.c_action_size:
+            c_action = torch.tanh(torch.atanh(c_action) + torch.randn(batch, self.c_action_size, device=self.device) * action_noise.unsqueeze(1))
+
+        return d_action, c_action
+
+    @torch.no_grad()
+    def _choose_action(self,
+                       obs_list: List[torch.Tensor],
+                       state: torch.Tensor,
+                       disable_sample: bool = False,
+                       force_rnd_if_available: bool = False):
+        """
+        Args:
+            state: [Batch, state_size]
+
+        Returns:
+            action: [Batch, d_action_size + c_action_size]
+            prob: [Batch, ]
+        """
+        batch = state.shape[0]
+        d_policy, c_policy = self.model_policy(state, obs_list)
+
+        if self.d_action_size:
+            if self.discrete_dqn_like:
+                if torch.rand(1) < 0.2 and self.train_mode:
+                    d_action = distributions.OneHotCategorical(
+                        logits=torch.ones(batch, self.d_action_size)).sample().to(self.device)
+                else:
+                    d_q, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None)
+                    d_action = torch.argmax(d_q, dim=-1)
+                    d_action = functional.one_hot(d_action, self.d_action_size)
+            else:
+                if disable_sample:
+                    d_action = functional.one_hot(d_policy.logits.argmax(dim=-1),
+                                                  self.d_action_size)
+                elif self.use_rnd and (self.train_mode or force_rnd_if_available):
+                    d_action = self.rnd_sample_d_action(state, d_policy)
+                else:
+                    d_action = d_policy.sample()
+        else:
+            d_action = torch.zeros(0, device=self.device)
+
+        if self.c_action_size:
+            if disable_sample:
+                c_action = torch.tanh(c_policy.mean)
+            elif self.use_rnd and (self.train_mode or force_rnd_if_available):
+                c_action = self.rnd_sample_c_action(state, c_policy)
+            else:
+                c_action = torch.tanh(c_policy.sample())
+        else:
+            c_action = torch.zeros(0, device=self.device)
+
+        d_action, c_action = self._random_action(d_action, c_action)
+
+        policy_prob = torch.ones(state.shape[:1], device=self.device)  # [Batch, ]
+        if self.d_action_size:
+            policy_prob *= torch.exp(d_policy.log_prob(d_action))  # [Batch, ]
+        if self.c_action_size:
+            c_policy_prob = squash_correction_prob(c_policy, torch.atanh(c_action))
+            # [Batch, action_size]
+            policy_prob *= torch.prod(c_policy_prob, dim=-1)  # [Batch, ]
+
+        return torch.cat([d_action, c_action], dim=-1), policy_prob
+
+    @torch.no_grad()
+    def choose_action(self,
+                      obs_list: List[np.ndarray],
+                      disable_sample: bool = False,
+                      force_rnd_if_available: bool = False):
+        """
+        Args:
+            obs_list: list([Batch, *obs_shapes_i], ...)
+
+        Returns:
+            action: [Batch, d_action_size + c_action_size] (numpy)
+            prob: [Batch, ] (numpy)
+        """
+        obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
+        state = self.model_rep(obs_list)
+
+        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_available)
+        return action.detach().cpu().numpy(), prob.detach().cpu().numpy()
+
+    @torch.no_grad()
+    def choose_rnn_action(self,
+                          obs_list: List[np.ndarray],
+                          pre_action: np.ndarray,
+                          rnn_state: np.ndarray,
+                          disable_sample: bool = False,
+                          force_rnd_if_available: bool = False):
+        """
+        Args:
+            obs_list: list([Batch, *obs_shapes_i], ...)
+            pre_action: [Batch, d_action_size + c_action_size]
+            rnn_state: [Batch, *seq_hidden_state_shape]
+        Returns:
+            action: [Batch, d_action_size + c_action_size] (numpy)
+            prob: [Batch, ] (numpy)
+            rnn_state: [Batch, *seq_hidden_state_shape] (numpy)
+        """
+        obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
+        pre_action = torch.from_numpy(pre_action).to(self.device)
+        rnn_state = torch.from_numpy(rnn_state).to(self.device)
+
+        obs_list = [obs.unsqueeze(1) for obs in obs_list]
+        pre_action = pre_action.unsqueeze(1)
+        state, next_rnn_state = self.model_rep(obs_list, pre_action, rnn_state)
+        state = state.squeeze(1)
+        obs_list = [obs.squeeze(1) for obs in obs_list]
+
+        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_available)
+
+        return (action.detach().cpu().numpy(),
+                prob.detach().cpu().numpy(),
+                next_rnn_state.detach().cpu().numpy())
+
+    @torch.no_grad()
+    def choose_attn_action(self,
+                           ep_indexes: np.ndarray,
+                           ep_padding_masks: np.ndarray,
+                           ep_obses_list: List[np.ndarray],
+                           ep_pre_actions: np.ndarray,
+                           ep_attn_hidden_states: np.ndarray,
+
+                           disable_sample: bool = False,
+                           force_rnd_if_available: bool = False):
+        """
+        Args:
+            ep_indexes: [Batch, episode_len]
+            ep_padding_masks: [Batch, episode_len]
+            ep_obses_list: list([Batch, episode_len, *obs_shapes_i], ...)
+            ep_pre_actions: [Batch, episode_len, d_action_size + c_action_size]
+            ep_attn_hidden_states: [Batch, episode_len, *seq_hidden_state_shape]
+
+        Returns:
+            action: [Batch, d_action_size + c_action_size] (numpy)
+            prob: [Batch, ] (numpy)
+            attn_hidden_state: [Batch, *rnn_state_shape] (numpy)
+        """
+        ep_indexes = torch.from_numpy(ep_indexes).to(self.device)
+        ep_padding_masks = torch.from_numpy(ep_padding_masks).to(self.device)
+        ep_obses_list = [torch.from_numpy(obs).to(self.device) for obs in ep_obses_list]
+        ep_pre_actions = torch.from_numpy(ep_pre_actions).to(self.device)
+        ep_attn_hidden_states = torch.from_numpy(ep_attn_hidden_states).to(self.device)
+
+        state, next_attn_hidden_state, _ = self.model_rep(ep_indexes,
+                                                          ep_obses_list, ep_pre_actions,
+                                                          query_length=1,
+                                                          hidden_state=ep_attn_hidden_states,
+                                                          is_prev_hidden_state=False,
+                                                          padding_mask=ep_padding_masks)
+        state = state.squeeze(1)
+        next_attn_hidden_state = next_attn_hidden_state.squeeze(1)
+
+        action, prob = self._choose_action([o[:, -1] for o in ep_obses_list],
+                                           state,
+                                           disable_sample,
+                                           force_rnd_if_available)
+
+        return (action.detach().cpu().numpy(),
+                prob.detach().cpu().numpy(),
+                next_attn_hidden_state.detach().cpu().numpy())
+
     def get_l_states(self,
                      l_indexes: torch.Tensor,
                      l_padding_masks: torch.Tensor,
@@ -795,7 +1038,7 @@ class SAC_Base(object):
         """
         Args:
             n_rewards: [Batch, n]
-            n_dones: [Batch, n], dtype=torch.bool
+            n_dones (torch.bool): [Batch, n]
             stacked_next_q: [ensemble_q_sample, Batch, n, d_action_size]
             stacked_next_target_q: [ensemble_q_sample, Batch, n, d_action_size]
 
@@ -836,7 +1079,7 @@ class SAC_Base(object):
         """
         Args:
             n_rewards: [Batch, n]
-            n_dones: [Batch, n], dtype=torch.bool
+            n_dones (torch.bool): [Batch, n]
             n_mu_probs: [Batch, n]
             n_pi_probs: [Batch, n]
             n_vs: [Batch, n]
@@ -890,7 +1133,7 @@ class SAC_Base(object):
             n_actions: [Batch, n, action_size]
             n_rewards: [Batch, n]
             state_: [Batch, state_size]
-            n_dones: [Batch, n], dtype=torch.bool
+            n_dones (torch.bool): [Batch, n]
             n_mu_probs: [Batch, n]
 
         Returns:
@@ -1025,6 +1268,8 @@ class SAC_Base(object):
                      priority_is: Optional[torch.Tensor] = None,):
         """
         Args:
+            bn_indexes (torch.int32): [Batch, b + n],
+            bn_padding_masks (torch.bool): [Batch, b + n],
             bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
             bn_states: [Batch, b + n, state_size]
             bn_target_states: [Batch, b + n, state_size]
@@ -1033,9 +1278,15 @@ class SAC_Base(object):
             next_obs_list: list([Batch, *obs_shapes_i], ...)
             next_state: [Batch, state_size]
             next_target_state: [Batch, state_size]
-            bn_dones: [Batch, b + n], dtype=torch.bool
+            bn_dones (torch.bool): [Batch, b + n]
             bn_mu_probs: [Batch, b + n]
             priority_is: [Batch, 1]
+
+        Returns:
+            loss_q: torch.float32
+            loss_siamese: torch.float32
+            loss_siamese_q: torch.float32
+            loss_predictions: tuple(torch.float32, torch.float32, torch.float32)
         """
 
         state = bn_states[:, self.burn_in_step, ...]
@@ -1513,13 +1764,13 @@ class SAC_Base(object):
                priority_is: torch.Tensor = None):
         """
         Args:
-            bn_indexes: [Batch, b + n], dtype=torch.int32
-            bn_padding_masks: [Batch, b + n], dtype=torch.bool
+            bn_indexes (torch.int32): [Batch, b + n]
+            bn_padding_masks (torch.bool): [Batch, b + n]
             bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
             bn_actions: [Batch, b + n, action_size]
             bn_rewards: [Batch, b + n]
             next_obs_list: list([Batch, *obs_shapes_i], ...)
-            bn_dones: [Batch, b + n], dtype=torch.bool
+            bn_dones (torch.bool): [Batch, b + n]
             bn_mu_probs: [Batch, b + n]
             f_seq_hidden_states: [Batch, 1, *seq_hidden_state_shape]
             priority_is: [Batch, 1]
@@ -1643,249 +1894,6 @@ class SAC_Base(object):
         return m_target_states
 
     @torch.no_grad()
-    def rnd_sample_d_action(self, state: torch.Tensor,
-                            d_policy: distributions.Categorical):
-        """
-        Sample action `self.rnd_n_sample` times, 
-        choose the action that has the max (model_rnd(s, a) - model_target_rnd(s, a))**2
-
-        Args:
-            state: [Batch, state_size]
-            d_policy: [Batch, d_action_size]
-
-        Returns:
-            d_action: [Batch, d_action_size]
-        """
-        batch = state.shape[0]
-        n_sample = self.rnd_n_sample
-
-        d_actions = d_policy.sample((n_sample,))  # [n_sample, batch, d_action_size]
-        d_actions = d_actions.transpose(0, 1)  # [batch, n_sample, d_action_size]
-
-        d_rnd = self.model_rnd.cal_d_rnd(state)  # [batch, d_action_size, f]
-        t_d_rnd = self.model_target_rnd.cal_d_rnd(state)  # [batch, d_action_size, f]
-        d_rnd = torch.repeat_interleave(torch.unsqueeze(d_rnd, 1), n_sample, dim=1)  # [batch, n_sample, d_action_size, f]
-        t_d_rnd = torch.repeat_interleave(torch.unsqueeze(t_d_rnd, 1), n_sample, dim=1)  # [batch, n_sample, d_action_size, f]
-
-        _i = functional.one_hot(d_actions.argmax(-1), self.d_action_size).unsqueeze(-1)  # [batch, n_sample, d_action_size, 1]
-        d_rnd = (torch.repeat_interleave(_i, d_rnd.size(-1), axis=-1) * d_rnd).sum(-2)
-        # [batch, n_sample, d_action_size, f] -> [batch, n_sample, f]
-        t_d_rnd = (torch.repeat_interleave(_i, t_d_rnd.size(-1), axis=-1) * t_d_rnd).sum(-2)
-        # [batch, n_sample, d_action_size, f] -> [batch, n_sample, f]
-
-        d_loss = torch.sum(torch.pow(d_rnd - t_d_rnd, 2), dim=-1)  # [batch, n_sample]
-        d_idx = torch.argmax(d_loss, dim=1)  # [batch, ]
-
-        return d_actions[torch.arange(batch), d_idx]
-
-    @torch.no_grad()
-    def rnd_sample_c_action(self, state: torch.Tensor,
-                            c_policy: distributions.Normal):
-        """
-        Sample action `self.rnd_n_sample` times, 
-        choose the action that has the max (model_rnd(s, a) - model_target_rnd(s, a))**2
-
-        Args:
-            state: [Batch, state_size]
-            c_policy: [Batch, c_action_size]
-
-        Returns:
-            c_action: [Batch, c_action_size]
-        """
-        batch = state.shape[0]
-        n_sample = self.rnd_n_sample
-
-        c_actions = torch.tanh(c_policy.sample((n_sample,)))  # [n_sample, batch, c_action_size]
-        c_actions = c_actions.transpose(0, 1)  # [batch, n_sample, c_action_size]
-
-        states = torch.repeat_interleave(torch.unsqueeze(state, 1), n_sample, dim=1)
-        # [batch, state_size] -> [batch, 1, state_size] -> [batch, n_sample, state_size]
-        c_rnd = self.model_rnd.cal_c_rnd(states, c_actions)  # [batch, n_sample, f]
-        t_c_rnd = self.model_target_rnd.cal_c_rnd(states, c_actions)  # [batch, n_sample, f]
-
-        c_loss = torch.sum(torch.pow(c_rnd - t_c_rnd, 2), dim=-1)  # [batch, n_sample]
-        c_idx = torch.argmax(c_loss, dim=1)  # [batch, ]
-
-        return c_actions[torch.arange(batch), c_idx]
-
-    @torch.no_grad()
-    def _random_action(self, d_action, c_action):
-        if self.action_noise is None:
-            return d_action, c_action
-
-        batch = max(d_action.shape[0], c_action.shape[0])
-
-        action_noise = torch.linspace(*self.action_noise, steps=batch, device=self.device)  # [Batch, ]
-
-        if self.d_action_size:
-            action_random = torch.eye(self.d_action_size, device=self.device)[torch.randint(0, self.d_action_size, size=(batch, ))]
-            mask = torch.rand(batch, device=self.device) < action_noise
-            d_action[mask] = action_random[mask]
-
-        if self.c_action_size:
-            c_action = torch.tanh(torch.atanh(c_action) + torch.randn(batch, self.c_action_size, device=self.device) * action_noise.unsqueeze(1))
-
-        return d_action, c_action
-
-    @torch.no_grad()
-    def _choose_action(self,
-                       obs_list: List[torch.Tensor],
-                       state: torch.Tensor,
-                       disable_sample: bool = False,
-                       force_rnd_if_available: bool = False):
-        """
-        Args:
-            state: [Batch, state_size]
-
-        Returns:
-            action: [Batch, d_action_size + c_action_size]
-            prob: [Batch, ]
-        """
-        batch = state.shape[0]
-        d_policy, c_policy = self.model_policy(state, obs_list)
-
-        if self.d_action_size:
-            if self.discrete_dqn_like:
-                if torch.rand(1) < 0.2 and self.train_mode:
-                    d_action = distributions.OneHotCategorical(
-                        logits=torch.ones(batch, self.d_action_size)).sample().to(self.device)
-                else:
-                    d_q, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None)
-                    d_action = torch.argmax(d_q, dim=-1)
-                    d_action = functional.one_hot(d_action, self.d_action_size)
-            else:
-                if disable_sample:
-                    d_action = functional.one_hot(d_policy.logits.argmax(dim=-1),
-                                                  self.d_action_size)
-                elif self.use_rnd and (self.train_mode or force_rnd_if_available):
-                    d_action = self.rnd_sample_d_action(state, d_policy)
-                else:
-                    d_action = d_policy.sample()
-        else:
-            d_action = torch.zeros(0, device=self.device)
-
-        if self.c_action_size:
-            if disable_sample:
-                c_action = torch.tanh(c_policy.mean)
-            elif self.use_rnd and (self.train_mode or force_rnd_if_available):
-                c_action = self.rnd_sample_c_action(state, c_policy)
-            else:
-                c_action = torch.tanh(c_policy.sample())
-        else:
-            c_action = torch.zeros(0, device=self.device)
-
-        d_action, c_action = self._random_action(d_action, c_action)
-
-        policy_prob = torch.ones(state.shape[:1], device=self.device)  # [Batch, ]
-        if self.d_action_size:
-            policy_prob *= torch.exp(d_policy.log_prob(d_action))  # [Batch, ]
-        if self.c_action_size:
-            c_policy_prob = squash_correction_prob(c_policy, torch.atanh(c_action))
-            # [Batch, action_size]
-            policy_prob *= torch.prod(c_policy_prob, dim=-1)  # [Batch, ]
-
-        return torch.cat([d_action, c_action], dim=-1), policy_prob
-
-    @torch.no_grad()
-    def choose_action(self,
-                      obs_list: List[np.ndarray],
-                      disable_sample: bool = False,
-                      force_rnd_if_available: bool = False):
-        """
-        Args:
-            obs_list: list([Batch, *obs_shapes_i], ...)
-
-        Returns:
-            action: [Batch, d_action_size + c_action_size] (numpy)
-            prob: [Batch, ] (numpy)
-        """
-        obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
-        state = self.model_rep(obs_list)
-
-        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_available)
-        return action.detach().cpu().numpy(), prob.detach().cpu().numpy()
-
-    @torch.no_grad()
-    def choose_rnn_action(self,
-                          obs_list: List[np.ndarray],
-                          pre_action: np.ndarray,
-                          rnn_state: np.ndarray,
-                          disable_sample: bool = False,
-                          force_rnd_if_available: bool = False):
-        """
-        Args:
-            obs_list: list([Batch, *obs_shapes_i], ...)
-            pre_action: [Batch, d_action_size + c_action_size]
-            rnn_state: [Batch, *seq_hidden_state_shape]
-        Returns:
-            action: [Batch, d_action_size + c_action_size] (numpy)
-            prob: [Batch, ] (numpy)
-            rnn_state: [Batch, *seq_hidden_state_shape] (numpy)
-        """
-        obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
-        pre_action = torch.from_numpy(pre_action).to(self.device)
-        rnn_state = torch.from_numpy(rnn_state).to(self.device)
-
-        obs_list = [obs.unsqueeze(1) for obs in obs_list]
-        pre_action = pre_action.unsqueeze(1)
-        state, next_rnn_state = self.model_rep(obs_list, pre_action, rnn_state)
-        state = state.squeeze(1)
-        obs_list = [obs.squeeze(1) for obs in obs_list]
-
-        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_available)
-
-        return (action.detach().cpu().numpy(),
-                prob.detach().cpu().numpy(),
-                next_rnn_state.detach().cpu().numpy())
-
-    @torch.no_grad()
-    def choose_attn_action(self,
-                           ep_indexes: np.ndarray,
-                           ep_padding_masks: np.ndarray,
-                           ep_obses_list: List[np.ndarray],
-                           ep_pre_actions: np.ndarray,
-                           ep_attn_hidden_states: np.ndarray,
-
-                           disable_sample: bool = False,
-                           force_rnd_if_available: bool = False):
-        """
-        Args:
-            ep_indexes: [Batch, episode_len]
-            ep_padding_masks: [Batch, episode_len]
-            ep_obses_list: list([Batch, episode_len, *obs_shapes_i], ...)
-            ep_pre_actions: [Batch, episode_len, d_action_size + c_action_size]
-            ep_attn_hidden_states: [Batch, episode_len, *seq_hidden_state_shape]
-
-        Returns:
-            action: [Batch, d_action_size + c_action_size] (numpy)
-            prob: [Batch, ] (numpy)
-            attn_hidden_state: [Batch, *rnn_state_shape] (numpy)
-        """
-        ep_indexes = torch.from_numpy(ep_indexes).to(self.device)
-        ep_padding_masks = torch.from_numpy(ep_padding_masks).to(self.device)
-        ep_obses_list = [torch.from_numpy(obs).to(self.device) for obs in ep_obses_list]
-        ep_pre_actions = torch.from_numpy(ep_pre_actions).to(self.device)
-        ep_attn_hidden_states = torch.from_numpy(ep_attn_hidden_states).to(self.device)
-
-        state, next_attn_hidden_state, _ = self.model_rep(ep_indexes,
-                                                          ep_obses_list, ep_pre_actions,
-                                                          query_length=1,
-                                                          hidden_state=ep_attn_hidden_states,
-                                                          is_prev_hidden_state=False,
-                                                          padding_mask=ep_padding_masks)
-        state = state.squeeze(1)
-        next_attn_hidden_state = next_attn_hidden_state.squeeze(1)
-
-        action, prob = self._choose_action([o[:, -1] for o in ep_obses_list],
-                                           state,
-                                           disable_sample,
-                                           force_rnd_if_available)
-
-        return (action.detach().cpu().numpy(),
-                prob.detach().cpu().numpy(),
-                next_attn_hidden_state.detach().cpu().numpy())
-
-    @torch.no_grad()
     def _get_td_error(self,
                       bn_obses_list: List[torch.Tensor],
                       bn_states: torch.Tensor,
@@ -1905,7 +1913,7 @@ class SAC_Base(object):
             bn_rewards: [Batch, b + n]
             next_obs_list: list([Batch, *obs_shapes_i], ...)
             next_target_state: [Batch, state_size]
-            bn_dones: [Batch, b + n]
+            bn_dones (torch.bool): [Batch, b + n]
             bn_mu_probs: [Batch, b + n]
 
         Returns:
@@ -2081,18 +2089,18 @@ class SAC_Base(object):
                             next_obs_list: List[np.ndarray],
                             l_dones: np.ndarray,
                             l_probs: List[np.ndarray],
-                            l_seq_hidden_states: np.ndarray = None):
+                            l_seq_hidden_states: Optional[np.ndarray] = None):
         """
         Args:
-            l_indexes: [1, episode_len]
-            l_padding_masks: [1, episode_len]
-            l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-            l_actions: [1, episode_len, action_size]
-            l_rewards: [1, episode_len]
-            next_obs_list: list([1, *obs_shapes_i], ...)
-            l_dones: [1, episode_len]
-            l_probs: [1, episode_len]
-            l_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
+            l_indexes (np.int32): [1, episode_len]
+            l_padding_masks (bool): [1, episode_len]
+            l_obses_list (np): list([1, episode_len, *obs_shapes_i], ...)
+            l_actions (np): [1, episode_len, action_size]
+            l_rewards (np): [1, episode_len]
+            next_obs_list (np): list([1, *obs_shapes_i], ...)
+            l_dones (bool): [1, episode_len]
+            l_probs (np): [1, episode_len]
+            l_seq_hidden_states (np): [1, episode_len, *seq_hidden_state_shape]
         """
         # Reshape [1, episode_len, ...] to [episode_len, ...]
         index = l_indexes.squeeze(0)
@@ -2180,16 +2188,16 @@ class SAC_Base(object):
         Returns:
             pointers: [Batch, ]
             (
-                bn_indexes: [Batch, b + n]
-                bn_padding_masks: [Batch, b + n]
-                bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
-                bn_actions: [Batch, b + n, action_size]
-                bn_rewards: [Batch, b + n]
-                next_obs_list: list([Batch, *obs_shapes_i], ...)
-                bn_dones: [Batch, b + n]
-                bn_mu_probs: [Batch, b + n]
-                bn_seq_hidden_states: [Batch, b + n, *seq_hidden_state_shape],
-                priority_is: [Batch, 1]
+                bn_indexes (np.int32): [Batch, b + n]
+                bn_padding_masks (bool): [Batch, b + n]
+                bn_obses_list (np): list([Batch, b + n, *obs_shapes_i], ...)
+                bn_actions (np): [Batch, b + n, action_size]
+                bn_rewards (np): [Batch, b + n]
+                next_obs_list (np): list([Batch, *obs_shapes_i], ...)
+                bn_dones (np): [Batch, b + n]
+                bn_mu_probs (np): [Batch, b + n]
+                bn_seq_hidden_states (np): [Batch, b + n, *seq_hidden_state_shape],
+                priority_is (np): [Batch, 1]
             )
         """
         sampled = self.replay_buffer.sample()
@@ -2198,14 +2206,14 @@ class SAC_Base(object):
 
         """
         trans:
-            index: [Batch, ]
-            padding_mask: [Batch, ]
+            index (np.int32): [Batch, ]
+            padding_mask (bool): [Batch, ]
             obs_i: [Batch, *obs_shapes_i]
             action: [Batch, action_size]
             reward: [Batch, ]
-            done: [Batch, ]
+            done (bool): [Batch, ]
             mu_prob: [Batch, ]
-            seq_hidden_state: [Batch, *seq_hidden_state_shape],
+            seq_hidden_state: [Batch, *seq_hidden_state_shape]
         """
         pointers, trans, priority_is = sampled
 
@@ -2221,12 +2229,12 @@ class SAC_Base(object):
             trans[k] = np.concatenate([np.expand_dims(t, 1) for t in v], axis=1)
 
         """
-        m_indexes: [Batch, N + 1]
-        m_padding_masks: [Batch, N + 1]
+        m_indexes (np.int32): [Batch, N + 1]
+        m_padding_masks (bool): [Batch, N + 1]
         m_obses_list: list([Batch, N + 1, *obs_shapes_i], ...)
         m_actions: [Batch, N + 1, action_size]
         m_rewards: [Batch, N + 1]
-        m_dones: [Batch, N + 1]
+        m_dones (bool): [Batch, N + 1]
         m_mu_probs: [Batch, N + 1]
         m_seq_hidden_state: [Batch, N + 1, *seq_hidden_state_shape]
         """
@@ -2291,18 +2299,17 @@ class SAC_Base(object):
              priority_is) = batch
 
             """
-            bn_indexes: [Batch, b + n]
-            bn_padding_masks: [Batch, b + n]
+            bn_indexes (np.int32): [Batch, b + n]
+            bn_padding_masks (bool): [Batch, b + n]
             bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
             bn_actions: [Batch, b + n, action_size]
             bn_rewards: [Batch, b + n]
             next_obs_list: list([Batch, *obs_shapes_i], ...)
-            bn_dones: [Batch, b + n]
+            bn_dones (bool): [Batch, b + n]
             bn_mu_probs: [Batch, b + n]
             bn_seq_hidden_states: [Batch, b + n, *seq_hidden_state_shape]
             priority_is: [Batch, 1]
             """
-
             bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
             bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
             bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
