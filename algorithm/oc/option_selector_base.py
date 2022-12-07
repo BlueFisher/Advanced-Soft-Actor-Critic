@@ -408,7 +408,11 @@ class OptionSelectorBase(SAC_Base):
         del option_kwargs['self']
         option_kwargs['obs_shapes'] = [(self.state_size, ), *self.obs_shapes]
         option_kwargs['seq_encoder'] = SEQ_ENCODER.RNN if self.seq_encoder == SEQ_ENCODER.ATTN else self.seq_encoder
-        option_kwargs['nn_config']['rep'] = self.option_nn_config['rep']
+        
+        if self.option_nn_config is None:
+            self.option_nn_config = {}
+        self.option_nn_config = defaultdict(dict, self.option_nn_config)
+        option_kwargs['nn_config'] = self.option_nn_config
 
         _tmp_ModelRep, option_kwargs['nn'].ModelRep = option_kwargs['nn'].ModelRep, option_kwargs['nn'].ModelOptionRep
 
