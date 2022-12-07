@@ -1,6 +1,7 @@
 from typing import List
 
 import torch
+from torch.nn import functional
 from torch import nn
 
 from ..nn_models import *
@@ -19,7 +20,7 @@ class OptionBase(SAC_Base):
             obs_list: list([Batch, *obs_shapes_i], ...)
 
         Returns:
-            action: [Batch, d_action_size + c_action_size] (numpy)
+            action: [Batch, d_action_size + c_action_size]
         """
         state = self.model_rep(obs_list)
 
@@ -38,9 +39,10 @@ class OptionBase(SAC_Base):
             obs_list: list([Batch, *obs_shapes_i], ...)
             pre_action: [Batch, d_action_size + c_action_size]
             rnn_state: [Batch, *seq_hidden_state_shape]
+
         Returns:
-            action: [Batch, d_action_size + c_action_size] (numpy)
-            rnn_state: [Batch, *seq_hidden_state_shape] (numpy)
+            action: [Batch, d_action_size + c_action_size]
+            rnn_state: [Batch, *seq_hidden_state_shape]
         """
         obs_list = [obs.unsqueeze(1) for obs in obs_list]
         pre_action = pre_action.unsqueeze(1)
@@ -51,6 +53,98 @@ class OptionBase(SAC_Base):
         action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_available)
 
         return action, prob, next_rnn_state
+
+    @torch.no_grad()
+    def choose_attn_action(self,
+                           ep_indexes: torch.Tensor,
+                           ep_padding_masks: torch.Tensor,
+                           ep_obses_list: List[torch.Tensor],
+                           ep_pre_actions: torch.Tensor,
+                           ep_attn_hidden_states: torch.Tensor,
+
+                           disable_sample: bool = False,
+                           force_rnd_if_available: bool = False):
+        """
+        Args:
+            ep_indexes: [Batch, episode_len]
+            ep_padding_masks: [Batch, episode_len]
+            ep_obses_list: list([Batch, episode_len, *obs_shapes_i], ...)
+            ep_pre_actions: [Batch, episode_len, d_action_size + c_action_size]
+            ep_attn_hidden_states: [Batch, episode_len, *seq_hidden_state_shape]
+
+        Returns:
+            action: [Batch, d_action_size + c_action_size]
+            prob: [Batch, ]
+            attn_hidden_state: [Batch, *rnn_state_shape]
+        """
+        state, next_attn_hidden_state, _ = self.model_rep(ep_indexes,
+                                                          ep_obses_list, ep_pre_actions,
+                                                          query_length=1,
+                                                          hidden_state=ep_attn_hidden_states,
+                                                          is_prev_hidden_state=False,
+                                                          padding_mask=ep_padding_masks)
+        state = state.squeeze(1)
+        next_attn_hidden_state = next_attn_hidden_state.squeeze(1)
+
+        action, prob = self._choose_action([o[:, -1] for o in ep_obses_list],
+                                           state,
+                                           disable_sample,
+                                           force_rnd_if_available)
+
+        return (action.detach().cpu().numpy(),
+                prob.detach().cpu().numpy(),
+                next_attn_hidden_state.detach().cpu().numpy())
+
+    @torch.no_grad()
+    def get_dqn_like_d_y(self,
+                         next_n_terminations: torch.Tensor,
+
+                         min_next_n_max_vs: torch.Tensor,
+
+                         n_rewards: torch.Tensor,
+                         n_dones: torch.Tensor,
+                         stacked_next_n_d_qs: torch.Tensor,
+                         stacked_next_target_n_d_qs: torch.Tensor):
+        """
+        Args:
+            next_n_terminations: [Batch, n]
+            min_next_n_max_vs: [Batch, n]
+            n_rewards: [Batch, n]
+            n_dones (torch.bool): [Batch, n]
+            stacked_next_n_d_qs: [ensemble_q_sample, Batch, n, d_action_size]
+            stacked_next_target_n_d_qs: [ensemble_q_sample, Batch, n, d_action_size]
+
+        Returns:
+            y: [Batch, 1]
+        """
+
+        stacked_next_q = stacked_next_n_d_qs[..., -1, :]  # [ensemble_q_sample, Batch, d_action_size]
+        stacked_next_target_q = stacked_next_target_n_d_qs[..., -1, :]  # [ensemble_q_sample, Batch, d_action_size]
+
+        done = n_dones[:, -1:]  # [Batch, 1]
+
+        mask_stacked_q = functional.one_hot(torch.argmax(stacked_next_q, dim=-1),
+                                            self.d_action_size)
+        # [ensemble_q_sample, Batch, d_action_size]
+
+        stacked_max_next_target_q = torch.sum(stacked_next_target_q * mask_stacked_q,
+                                              dim=-1,
+                                              keepdim=True)
+        # [ensemble_q_sample, Batch, 1]
+
+        next_q, _ = torch.min(stacked_max_next_target_q, dim=0)
+        # [Batch, 1]
+
+        next_termination = next_n_terminations[:, -1:]
+        min_next_max_v = min_next_n_max_vs[:, -1:]
+
+        next_q = (1 - next_termination) * next_q + \
+            next_termination * min_next_max_v  # [Batch, 1]
+
+        g = torch.sum(self._gamma_ratio * n_rewards, dim=-1, keepdim=True)  # [Batch, 1]
+        y = g + self.gamma**self.n_step * next_q * ~done  # [Batch, 1]
+
+        return y
 
     @torch.no_grad()
     def _get_y(self,
@@ -123,14 +217,17 @@ class OptionBase(SAC_Base):
             stacked_next_n_d_qs = torch.stack(next_n_d_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
             # [ensemble_q_num, Batch, n, d_action_size] -> [ensemble_q_sample, Batch, n, d_action_size]
 
-            if self.discrete_dqn_like:  # TODO
+            if self.discrete_dqn_like:
                 next_n_d_eval_qs_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled))[0] for q in self.model_q_list]
                 stacked_next_n_d_eval_qs = torch.stack(next_n_d_eval_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
                 # [ensemble_q_num, Batch, n, d_action_size] -> [ensemble_q_sample, Batch, n, d_action_size]
 
-                d_y = self.get_dqn_like_d_y(n_rewards, n_dones,
-                                            stacked_next_n_d_eval_qs,
-                                            stacked_next_n_d_qs)
+                d_y = self.get_dqn_like_d_y(next_n_terminations=next_n_terminations,
+                                            min_next_n_max_vs=min_next_n_max_vs,
+                                            n_rewards=n_rewards,
+                                            n_dones=n_dones,
+                                            stacked_next_n_d_qs=stacked_next_n_d_eval_qs,
+                                            stacked_next_target_n_d_qs=stacked_next_n_d_qs)
             else:
                 stacked_n_d_qs = torch.stack(n_d_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
                 # [ensemble_q_num, Batch, n, d_action_size] -> [ensemble_q_sample, Batch, n, d_action_size]

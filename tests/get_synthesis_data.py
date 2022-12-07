@@ -78,6 +78,20 @@ def gen_batch_oc_obs_for_rnn(obs_shapes, d_action_size, c_action_size,
     }
 
 
+def gen_batch_obs_for_attn(obs_shapes, d_action_size, c_action_size, seq_hidden_state_shape,
+                           num_options=2,
+                           batch=10):
+    episode_len = random.randint(1, 100)
+
+    return {
+        'ep_indexes': np.expand_dims(np.arange(episode_len), 0).repeat(batch, 0),
+        'ep_padding_masks': np.random.randint(0, 2, size=(batch, episode_len), dtype=bool),
+        'ep_obses_list': [np.random.randn(batch, episode_len, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
+        'ep_pre_actions': get_action(batch, episode_len, d_action_size, c_action_size),
+        'ep_attn_states': np.random.randn(batch, episode_len, *seq_hidden_state_shape).astype(np.float32)
+    }
+
+
 def gen_episode_trans(obs_shapes, d_action_size, c_action_size, seq_hidden_state_shape=None, episode_len=None):
     if episode_len is None:
         episode_len = random.randint(1, 100)

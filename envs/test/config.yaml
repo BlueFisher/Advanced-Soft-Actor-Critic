@@ -22,7 +22,6 @@ default:
 
 rnn:
   sac_config:
-
     burn_in_step: 2
     seq_encoder: RNN
 
@@ -35,3 +34,22 @@ rnn:
     test1:
       sac_config:
         nn: nn_rnn
+
+attn:
+  sac_config:
+    burn_in_step: 2
+    seq_encoder: ATTN
+
+    batch_size: 10
+
+  nn_config:
+    rep:
+      pe: nope
+
+  ma_config:
+    test0:
+      sac_config:
+        nn: nn_attn
+    test1:
+      sac_config:
+        nn: nn_attn

@@ -12,6 +12,8 @@ from ..utils.enums import *
 from .oc_agent import OC_MultiAgentsManager
 from .option_selector_base import OptionSelectorBase
 
+sac_main.MultiAgentsManager = OC_MultiAgentsManager
+
 
 class OC_Main(Main):
     def __init__(self, root_dir, config_dir, args):
@@ -47,7 +49,10 @@ class OC_Main(Main):
             spec.loader.exec_module(nn)
             mgr.config['sac_config']['nn'] = nn
 
-            mgr.set_rl(OptionSelectorBase(obs_shapes=mgr.obs_shapes,
+            mgr.set_rl(OptionSelectorBase(num_options=mgr.config['oc_config']['num_options'],
+                                          option_nn_config=mgr.config['oc_config']['nn_config'],
+
+                                          obs_shapes=mgr.obs_shapes,
                                           d_action_size=mgr.d_action_size,
                                           c_action_size=mgr.c_action_size,
                                           model_abs_dir=mgr.model_abs_dir,
@@ -165,6 +170,3 @@ class OC_Main(Main):
 
             max_step = max([a.steps for a in mgr.agents])
             self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}')
-
-
-sac_main.MultiAgentsManager = OC_MultiAgentsManager

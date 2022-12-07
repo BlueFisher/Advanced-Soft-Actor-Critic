@@ -17,6 +17,8 @@ class ModelRep(m.ModelBaseRNNRep):
         assert self.obs_shapes[2] == (6,)  # vector
 
         self.ray_random = ray_random
+        if self.train_mode:
+            self.ray_random = 150
         self.need_speed = need_speed
         if blur != 0:
             self.blurrer = m.Transform(T.GaussianBlur(blur, sigma=blur))
@@ -27,6 +29,8 @@ class ModelRep(m.ModelBaseRNNRep):
 
         self.ray_index = generate_unity_to_nn_ray_index(RAY_SIZE)
         self._ray_visual = RayVisual()
+
+        self._image_visual = ImageVisual()
 
         self.conv = m.ConvLayers(84, 84, 3, 'simple',
                                  out_dense_n=64, out_dense_depth=2)
@@ -42,7 +46,7 @@ class ModelRep(m.ModelBaseRNNRep):
             T.RandomCrop(size=(50, 50)),
             T.Resize(size=(84, 84))
         )
-        self.random_transformers = T.RandomChoice([
+        self.vis_cam_random_transformers = T.RandomChoice([
             m.Transform(SaltAndPepperNoise(0.2, 0.5)),
             m.Transform(GaussianNoise()),
             m.Transform(T.GaussianBlur(9, sigma=9)),
@@ -56,6 +60,7 @@ class ModelRep(m.ModelBaseRNNRep):
         if self.blurrer:
             vis_cam = self.blurrer(vis_cam)
         vis_cam = self.brightness(vis_cam)
+        # self._image_visual(vis_cam)
 
         vis = self.conv(vis_cam)
 
@@ -84,7 +89,7 @@ class ModelRep(m.ModelBaseRNNRep):
         vis_cam, ray, vec = obs_list
         ray = ray[..., self.ray_index]
 
-        aug_vis_cam = self.random_transformers(vis_cam)
+        aug_vis_cam = self.vis_cam_random_transformers(vis_cam)
         vis_cam_encoder = self.conv(aug_vis_cam)
 
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
@@ -105,6 +110,8 @@ class ModelOptionRep(m.ModelBaseRNNRep):
         assert self.obs_shapes[3] == (6,)  # vector
 
         self.ray_random = ray_random
+        if self.train_mode:
+            self.ray_random = 150
         self.need_speed = need_speed
         if blur != 0:
             self.blurrer = m.Transform(T.GaussianBlur(blur, sigma=blur))
@@ -114,7 +121,6 @@ class ModelOptionRep(m.ModelBaseRNNRep):
         self.brightness = m.Transform(T.ColorJitter(brightness=(brightness, brightness)))
 
         self.ray_index = generate_unity_to_nn_ray_index(RAY_SIZE)
-        self._ray_visual = RayVisual()
 
         self.conv = m.ConvLayers(84, 84, 3, 'simple',
                                  out_dense_n=64, out_dense_depth=2)
@@ -130,7 +136,7 @@ class ModelOptionRep(m.ModelBaseRNNRep):
             T.RandomCrop(size=(50, 50)),
             T.Resize(size=(84, 84))
         )
-        self.random_transformers = T.RandomChoice([
+        self.vis_cam_random_transformers = T.RandomChoice([
             m.Transform(SaltAndPepperNoise(0.2, 0.5)),
             m.Transform(GaussianNoise()),
             m.Transform(T.GaussianBlur(9, sigma=9)),
@@ -172,7 +178,7 @@ class ModelOptionRep(m.ModelBaseRNNRep):
         high_state, vis_cam, ray, vec = obs_list
         ray = ray[..., self.ray_index]
 
-        aug_vis_cam = self.random_transformers(vis_cam)
+        aug_vis_cam = self.vis_cam_random_transformers(vis_cam)
         vis_cam_encoder = self.conv(aug_vis_cam)
 
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
