@@ -54,14 +54,14 @@ def gen_batch_obs_for_attn(obs_shapes, d_action_size, c_action_size, seq_hidden_
         'ep_padding_masks': np.random.randint(0, 2, size=(batch, episode_len), dtype=bool),
         'ep_obses_list': [np.random.randn(batch, episode_len, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
         'ep_pre_actions': get_action(batch, episode_len, d_action_size, c_action_size),
-        'ep_attn_hidden_states': np.random.randn(batch, episode_len, *seq_hidden_state_shape).astype(np.float32)
+        'ep_attn_states': np.random.randn(batch, episode_len, *seq_hidden_state_shape).astype(np.float32)
     }
 
 
 def gen_batch_oc_obs(obs_shapes, num_options=2, batch=10):
     return {
         **gen_batch_obs(obs_shapes, batch),
-        'pre_option_index': np.random.randint(0, num_options, size=(batch, ), dtype=np.int64)
+        'pre_option_index': np.random.randint(0, num_options, size=(batch, ), dtype=np.int8)
     }
 
 
@@ -71,16 +71,17 @@ def gen_batch_oc_obs_for_rnn(obs_shapes, d_action_size, c_action_size,
                              batch=10):
     return {
         'obs_list': [np.random.randn(batch, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
-        'pre_option_index': np.random.randint(0, num_options, size=(batch, ), dtype=np.int64),
+        'pre_option_index': np.random.randint(0, num_options, size=(batch, ), dtype=np.int8),
         'pre_action': get_action(batch, None, d_action_size, c_action_size),
         'rnn_state': np.random.randn(batch, *seq_hidden_state_shape).astype(np.float32),
         'low_rnn_state': np.random.randn(batch, *low_seq_hidden_state_shape).astype(np.float32)
     }
 
 
-def gen_batch_obs_for_attn(obs_shapes, d_action_size, c_action_size, seq_hidden_state_shape,
-                           num_options=2,
-                           batch=10):
+def gen_batch_oc_obs_for_attn(obs_shapes, d_action_size, c_action_size,
+                              seq_hidden_state_shape, low_seq_hidden_state_shape,
+                              num_options=2,
+                              batch=10):
     episode_len = random.randint(1, 100)
 
     return {
@@ -88,7 +89,10 @@ def gen_batch_obs_for_attn(obs_shapes, d_action_size, c_action_size, seq_hidden_
         'ep_padding_masks': np.random.randint(0, 2, size=(batch, episode_len), dtype=bool),
         'ep_obses_list': [np.random.randn(batch, episode_len, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
         'ep_pre_actions': get_action(batch, episode_len, d_action_size, c_action_size),
-        'ep_attn_states': np.random.randn(batch, episode_len, *seq_hidden_state_shape).astype(np.float32)
+        'ep_attn_states': np.random.randn(batch, episode_len, *seq_hidden_state_shape).astype(np.float32),
+
+        'pre_option_index': np.random.randint(0, num_options, size=(batch, ), dtype=np.int8),
+        'low_rnn_state': np.random.randn(batch, *low_seq_hidden_state_shape).astype(np.float32)
     }
 
 

@@ -5,6 +5,7 @@ from algorithm.utils.enums import *
 from tests.get_synthesis_data import *
 
 OBS_SHAPES = [(10,), (30, 30, 3)]
+NUM_OPTIONS = 4
 
 
 class TestOCVanillaModel(unittest.TestCase):
@@ -14,6 +15,9 @@ class TestOCVanillaModel(unittest.TestCase):
         import tests.nn_conv_vanilla as nn_conv
 
         sac = OptionSelectorBase(
+            num_options=NUM_OPTIONS,
+            option_nn_config=None,
+
             obs_shapes=OBS_SHAPES,
             model_abs_dir=None,
             nn=nn_conv,
@@ -24,9 +28,9 @@ class TestOCVanillaModel(unittest.TestCase):
         while step < 10:
             sac.choose_action(**gen_batch_oc_obs(OBS_SHAPES))
             sac.put_episode(**gen_episode_oc_trans(OBS_SHAPES,
-                                                  d_action_size=param_dict['d_action_size'],
-                                                  c_action_size=param_dict['c_action_size'],
-                                                  episode_len=10))
+                                                   d_action_size=param_dict['d_action_size'],
+                                                   c_action_size=param_dict['c_action_size'],
+                                                   episode_len=10))
             step = sac.train()
 
     @staticmethod
@@ -46,6 +50,9 @@ class TestOCSeqEncoderModel(unittest.TestCase):
             import tests.nn_conv_attn as nn_conv
 
         sac = OptionSelectorBase(
+            num_options=NUM_OPTIONS,
+            option_nn_config=None,
+
             obs_shapes=OBS_SHAPES,
             model_abs_dir=None,
             nn=nn_conv,
@@ -64,10 +71,11 @@ class TestOCSeqEncoderModel(unittest.TestCase):
                                                                  seq_hidden_state_shape=seq_hidden_state_shape,
                                                                  low_seq_hidden_state_shape=low_seq_hidden_state_shape))
             elif param_dict['seq_encoder'] == SEQ_ENCODER.ATTN:
-                sac.choose_attn_action(**gen_batch_obs_for_attn(OBS_SHAPES,
-                                                                d_action_size=param_dict['d_action_size'],
-                                                                c_action_size=param_dict['c_action_size'],
-                                                                seq_hidden_state_shape=seq_hidden_state_shape))
+                sac.choose_attn_action(**gen_batch_oc_obs_for_attn(OBS_SHAPES,
+                                                                   d_action_size=param_dict['d_action_size'],
+                                                                   c_action_size=param_dict['c_action_size'],
+                                                                   seq_hidden_state_shape=seq_hidden_state_shape,
+                                                                   low_seq_hidden_state_shape=low_seq_hidden_state_shape))
             sac.put_episode(**gen_episode_oc_trans(OBS_SHAPES,
                                                    d_action_size=param_dict['d_action_size'],
                                                    c_action_size=param_dict['c_action_size'],
@@ -121,9 +129,9 @@ def __gen_seq_encoder():
         'use_replay_buffer': [True, False],
         'burn_in_step': [5],
         'n_step': [3],
-        'seq_encoder': ['RNN'],
+        # 'seq_encoder': ['RNN'],
         'discrete_dqn_like': [True, False],
-        # 'seq_encoder': ['RNN', 'ATTN'],
+        'seq_encoder': ['RNN', 'ATTN'],
         # 'use_prediction': [True, False],
         # 'use_extra_data': [True, False],
         'siamese': [None, 'ATC', 'BYOL'],
