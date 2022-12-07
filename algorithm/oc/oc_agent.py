@@ -5,10 +5,10 @@ import numpy as np
 
 from algorithm.oc.option_selector_base import OptionSelectorBase
 from algorithm.utils.enums import *
+from algorithm.utils.operators import gen_pre_n_actions
 
 from .. import agent
 from ..agent import Agent, AgentManager, MultiAgentsManager
-from algorithm.utils.operators import gen_pre_n_actions
 
 
 class OC_Agent(Agent):

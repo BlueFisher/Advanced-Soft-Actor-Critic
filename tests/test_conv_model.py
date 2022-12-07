@@ -1,3 +1,4 @@
+import importlib
 import unittest
 
 from algorithm.sac_base import SAC_Base
@@ -10,6 +11,9 @@ class TestConvModel(unittest.TestCase):
     def _test(self, param_dict):
         import algorithm.nn_models as m
         import tests.nn_conv_vanilla as nn_conv
+
+        importlib.reload(m)
+        importlib.reload(nn_conv)
 
         conv_name = param_dict['conv']
         del param_dict['conv']
@@ -25,16 +29,16 @@ class TestConvModel(unittest.TestCase):
             d_action_size=4,
             c_action_size=4,
             model_abs_dir=None,
-            model=nn_conv
+            nn=nn_conv
         )
 
         step = 0
         while step < 10:
-            sac.choose_action(*gen_batch_obs(OBS_SHAPES))
-            sac.fill_replay_buffer(*gen_episode_trans(OBS_SHAPES,
-                                                      d_action_size=4,
-                                                      c_action_size=4,
-                                                      episode_len=10))
+            sac.choose_action(**gen_batch_obs(OBS_SHAPES))
+            sac.put_episode(**gen_episode_trans(OBS_SHAPES,
+                                                d_action_size=4,
+                                                c_action_size=4,
+                                                episode_len=10))
             step = sac.train()
 
     @staticmethod

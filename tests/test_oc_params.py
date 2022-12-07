@@ -1,3 +1,4 @@
+import importlib
 import unittest
 
 from algorithm.oc.option_selector_base import OptionSelectorBase
@@ -13,6 +14,8 @@ class TestOCVanillaModel(unittest.TestCase):
         convert_config_to_enum(param_dict)
 
         import tests.nn_conv_vanilla as nn_conv
+
+        importlib.reload(nn_conv)
 
         sac = OptionSelectorBase(
             num_options=NUM_OPTIONS,
@@ -48,6 +51,8 @@ class TestOCSeqEncoderModel(unittest.TestCase):
             import tests.nn_conv_rnn as nn_conv
         elif param_dict['seq_encoder'] == SEQ_ENCODER.ATTN:
             import tests.nn_conv_attn as nn_conv
+        
+        importlib.reload(nn_conv)
 
         sac = OptionSelectorBase(
             num_options=NUM_OPTIONS,

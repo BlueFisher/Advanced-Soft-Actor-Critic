@@ -1,8 +1,8 @@
 from typing import List
 
 import torch
-from torch.nn import functional
 from torch import nn
+from torch.nn import functional
 
 from ..nn_models import *
 from ..sac_base import SAC_Base

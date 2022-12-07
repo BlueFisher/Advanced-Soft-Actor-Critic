@@ -27,16 +27,16 @@ class TestNNModel(unittest.TestCase):
             d_action_size=4,
             c_action_size=4,
             model_abs_dir=None,
-            model=nn_vanilla,
+            nn=nn_vanilla,
         )
 
         step = 0
         while step < 5:
-            sac.choose_action(*gen_batch_obs(OBS_SHAPES))
-            sac.fill_replay_buffer(*gen_episode_trans(OBS_SHAPES,
-                                                      d_action_size=4,
-                                                      c_action_size=4,
-                                                      episode_len=10))
+            sac.choose_action(**gen_batch_obs(OBS_SHAPES))
+            sac.put_episode(**gen_episode_trans(OBS_SHAPES,
+                                                d_action_size=4,
+                                                c_action_size=4,
+                                                episode_len=10))
             step = sac.train()
 
     @staticmethod

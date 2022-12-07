@@ -1,3 +1,4 @@
+import importlib
 import unittest
 
 from algorithm.sac_base import SAC_Base
@@ -13,6 +14,8 @@ class TestVanillaModel(unittest.TestCase):
 
         import tests.nn_conv_vanilla as nn_conv
 
+        importlib.reload(nn_conv)
+
         sac = SAC_Base(
             obs_shapes=OBS_SHAPES,
             model_abs_dir=None,
@@ -24,9 +27,9 @@ class TestVanillaModel(unittest.TestCase):
         while step < 10:
             sac.choose_action(**gen_batch_obs(OBS_SHAPES))
             sac.put_episode(**gen_episode_trans(OBS_SHAPES,
-                                               d_action_size=param_dict['d_action_size'],
-                                               c_action_size=param_dict['c_action_size'],
-                                               episode_len=10))
+                                                d_action_size=param_dict['d_action_size'],
+                                                c_action_size=param_dict['c_action_size'],
+                                                episode_len=10))
             step = sac.train()
 
     @staticmethod
@@ -44,6 +47,8 @@ class TestSeqEncoderModel(unittest.TestCase):
             import tests.nn_conv_rnn as nn_conv
         elif param_dict['seq_encoder'] == SEQ_ENCODER.ATTN:
             import tests.nn_conv_attn as nn_conv
+
+        importlib.reload(nn_conv)
 
         sac = SAC_Base(
             obs_shapes=OBS_SHAPES,
