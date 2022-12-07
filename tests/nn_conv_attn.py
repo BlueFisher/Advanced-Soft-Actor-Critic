@@ -2,6 +2,7 @@ import torch
 from torch import nn
 
 import algorithm.nn_models as m
+
 from .nn_conv_rnn import ModelOptionRep
 
 EXTRA_SIZE = 3
