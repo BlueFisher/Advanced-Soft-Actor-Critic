@@ -80,4 +80,9 @@ sac_config:
   use_add_with_td: false # Whether add transitions in replay buffer with td-error
   action_noise: null # [noise_min, noise_max]
 
+oc_config:
+  num_options: 4
+  nn_config:
+    rep: null
+
 ma_config: null

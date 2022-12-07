@@ -8,6 +8,7 @@ from algorithm.utils.enums import *
 
 from .. import agent
 from ..agent import Agent, AgentManager, MultiAgentsManager
+from algorithm.utils.operators import gen_pre_n_actions
 
 
 class OC_Agent(Agent):
@@ -140,6 +141,7 @@ class OC_Agent(Agent):
             ep_indexes: [1, episode_len], int
             ep_padding_masks: [1, episode_len], bool
             ep_obses_list: List([1, episode_len, *obs_shapes_i], ...), np.float32
+            ep_option_indexes: [1, episode_len], np.int8
             ep_actions: [1, episode_len, action_size], np.float32
             ep_rewards: [1, episode_len], np.float32
             next_obs_list: List([1, *obs_shapes_i], ...), np.float32
@@ -249,15 +251,66 @@ class OC_AgentManager(AgentManager):
              action,
              prob,
              next_seq_hidden_state,
-             next_low_seq_hidden_state) = self.rl.choose_rnn_action(self['obs_list'],
-                                                                    pre_option_index=self['pre_option_index'],
-                                                                    pre_action=self['pre_action'],
-                                                                    rnn_state=self['seq_hidden_state'],
-                                                                    low_rnn_state=self['low_seq_hidden_state'])
+             next_low_seq_hidden_state) = self.rl.choose_rnn_action(
+                obs_list=self['obs_list'],
+                pre_option_index=self['pre_option_index'],
+                pre_action=self['pre_action'],
+                rnn_state=self['seq_hidden_state'],
+                low_rnn_state=self['low_seq_hidden_state']
+            )
+
+        elif self.seq_encoder == SEQ_ENCODER.ATTN:
+            ep_length = min(512, max([a.episode_length for a in self.agents]))
+
+            all_episode_trans = [a.get_episode_trans(ep_length).values() for a in self.agents]
+            (all_ep_indexes,
+             all_ep_padding_masks,
+             all_ep_obses_list,
+             all_option_indexes,
+             all_ep_actions,
+             all_all_ep_rewards,
+             all_next_obs_list,
+             all_ep_dones,
+             all_ep_probs,
+             all_ep_attn_states,
+             all_ep_low_rnn_states) = zip(*all_episode_trans)
+
+            ep_indexes = np.concatenate(all_ep_indexes)
+            ep_padding_masks = np.concatenate(all_ep_padding_masks)
+            ep_obses_list = [np.concatenate(o) for o in zip(*all_ep_obses_list)]
+            ep_actions = np.concatenate(all_ep_actions)
+            ep_attn_states = np.concatenate(all_ep_attn_states)
+
+            ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
+            ep_padding_masks = np.concatenate([ep_padding_masks,
+                                               np.ones_like(ep_padding_masks[:, -1:], dtype=bool)], axis=1)
+            ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
+                             for o, t_o in zip(ep_obses_list, self['obs_list'])]
+            ep_pre_actions = gen_pre_n_actions(ep_actions, True)
+
+            (option_index,
+             action,
+             prob,
+             next_seq_hidden_state,
+             next_low_seq_hidden_state) = self.rl.choose_attn_action(
+                ep_indexes=ep_indexes,
+                ep_padding_masks=ep_padding_masks,
+                ep_obses_list=ep_obses_list,
+                ep_pre_actions=ep_pre_actions,
+                ep_attn_states=ep_attn_states,
+
+                pre_option_index=self['pre_option_index'],
+                low_rnn_state=self['low_seq_hidden_state'],
+
+                disable_sample=disable_sample,
+                force_rnd_if_available=force_rnd_if_available
+            )
 
         else:
-            option_index, action, prob = self.rl.choose_action(self['obs_list'],
-                                                               pre_option_index=self['pre_option_index'])
+            option_index, action, prob = self.rl.choose_action(
+                obs_list=self['obs_list'],
+                pre_option_index=self['pre_option_index']
+            )
             next_seq_hidden_state = None
             next_low_seq_hidden_state = None
 
