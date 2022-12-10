@@ -39,6 +39,14 @@ default:
     use_rnd: true
     rnd_n_sample: 50
 
+  oc_config:
+    nn_config:
+      rep:
+        blur: 0
+        brightness: 1
+        ray_random: 0
+        need_speed: true
+
 atc:
   base_config:
     name: "atc_{time}"

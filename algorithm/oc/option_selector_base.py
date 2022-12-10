@@ -9,168 +9,12 @@ from torch import nn, optim
 from algorithm.oc.option_base import OptionBase
 
 from .. import sac_base
-from ..batch_buffer import BatchBuffer
 from ..nn_models import *
 from ..sac_base import SAC_Base
 from ..utils import *
-
-
-def episode_to_batch(bn: int,
-                     episode_length: int,
-                     l_indexes: np.ndarray,
-                     l_padding_masks: np.ndarray,
-                     l_obses_list: List[np.ndarray],
-                     l_option_indexes: np.ndarray,
-                     l_actions: np.ndarray,
-                     l_rewards: np.ndarray,
-                     next_obs_list: List[np.ndarray],
-                     l_dones: np.ndarray,
-                     l_probs: Optional[np.ndarray] = None,
-                     l_seq_hidden_states: Optional[np.ndarray] = None,
-                     l_low_seq_hidden_states: np.ndarray = None):
-    """
-    Args:
-        bn: int, burn_in_step + n_step
-        episode_length: int, Indicates true episode_len, not MAX_EPISODE_LENGTH
-        l_indexes: [1, episode_len]
-        l_padding_masks: [1, episode_len]
-        l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-        l_option_indexes: [1, episode_len]
-        l_actions: [1, episode_len, action_size]
-        l_rewards: [1, episode_len]
-        next_obs_list: list([1, *obs_shapes_i], ...)
-        l_dones: [1, episode_len]
-        l_probs: [1, episode_len]
-        l_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
-        l_low_seq_hidden_states: [1, episode_len, *low_seq_hidden_state_shape]
-
-    Returns:
-        bn_indexes: [episode_len - bn + 1, bn]
-        bn_padding_masks: [episode_len - bn + 1, bn]
-        bn_obses_list: list([episode_len - bn + 1, bn, *obs_shapes_i], ...)
-        bn_options: [episode_len - bn + 1, bn]
-        bn_actions: [episode_len - bn + 1, bn, action_size]
-        bn_rewards: [episode_len - bn + 1, bn]
-        next_obs_list: list([episode_len - bn + 1, *obs_shapes_i], ...)
-        bn_dones: [episode_len - bn + 1, bn]
-        bn_probs: [episode_len - bn + 1, bn]
-        f_seq_hidden_states: [episode_len - bn + 1, 1, *seq_hidden_state_shape]
-        f_low_seq_hidden_states: [episode_len - bn + 1, 1, *low_seq_hidden_state_shape]
-    """
-    bn_indexes = np.concatenate([l_indexes[:, i:i + bn]
-                                for i in range(episode_length - bn + 1)], axis=0)
-    bn_padding_masks = np.concatenate([l_padding_masks[:, i:i + bn]
-                                       for i in range(episode_length - bn + 1)], axis=0)
-    tmp_bn_obses_list = [None] * len(l_obses_list)
-    for j, l_obses in enumerate(l_obses_list):
-        tmp_bn_obses_list[j] = np.concatenate([l_obses[:, i:i + bn]
-                                              for i in range(episode_length - bn + 1)], axis=0)
-    bn_options = np.concatenate([l_option_indexes[:, i:i + bn]
-                                 for i in range(episode_length - bn + 1)], axis=0)
-    bn_actions = np.concatenate([l_actions[:, i:i + bn]
-                                for i in range(episode_length - bn + 1)], axis=0)
-    bn_rewards = np.concatenate([l_rewards[:, i:i + bn]
-                                for i in range(episode_length - bn + 1)], axis=0)
-    tmp_next_obs_list = [None] * len(next_obs_list)
-    for j, l_obses in enumerate(l_obses_list):
-        tmp_next_obs_list[j] = np.concatenate([l_obses[:, i + bn]
-                                               for i in range(episode_length - bn)]
-                                              + [next_obs_list[j]],
-                                              axis=0)
-    bn_dones = np.concatenate([l_dones[:, i:i + bn]
-                              for i in range(episode_length - bn + 1)], axis=0)
-
-    if l_probs is not None:
-        bn_probs = np.concatenate([l_probs[:, i:i + bn]
-                                   for i in range(episode_length - bn + 1)], axis=0)
-
-    if l_seq_hidden_states is not None:
-        f_seq_hidden_states = np.concatenate([l_seq_hidden_states[:, i:i + 1]
-                                             for i in range(episode_length - bn + 1)], axis=0)
-
-    if l_low_seq_hidden_states is not None:
-        f_low_seq_hidden_states = np.concatenate([l_low_seq_hidden_states[:, i:i + 1]
-                                                  for i in range(episode_length - bn + 1)], axis=0)
-
-    return [bn_indexes,
-            bn_padding_masks,
-            tmp_bn_obses_list,
-            bn_options,
-            bn_actions,
-            bn_rewards,
-            tmp_next_obs_list,
-            bn_dones,
-            bn_probs if l_probs is not None else None,
-            f_seq_hidden_states if l_seq_hidden_states is not None else None,
-            f_low_seq_hidden_states if l_seq_hidden_states is not None else None]
-
-
-class BatchBuffer(BatchBuffer):
-    def put_episode(self,
-                    l_indexes: np.ndarray,
-                    l_padding_masks: np.ndarray,
-                    l_obses_list: List[np.ndarray],
-                    l_option_indexes: np.ndarray,
-                    l_actions: np.ndarray,
-                    l_rewards: np.ndarray,
-                    next_obs_list: List[np.ndarray],
-                    l_dones: np.ndarray,
-                    l_probs: List[np.ndarray],
-                    l_seq_hidden_states: np.ndarray = None,
-                    l_low_seq_hidden_states: np.ndarray = None):
-        """
-        Args:
-            l_indexes: [1, episode_len]
-            l_padding_masks: [1, episode_len]
-            l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-            l_option_indexes: [1, episode_len]
-            l_actions: [1, episode_len, action_size]
-            l_rewards: [1, episode_len]
-            next_obs_list: list([1, *obs_shapes_i], ...)
-            l_dones: [1, episode_len]
-            l_probs: [1, episode_len]
-            l_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
-            l_low_seq_hidden_states: [1, episode_len, *low_seq_hidden_state_shape]
-        """
-        self._batch_list.clear()
-
-        ori_batch = episode_to_batch(bn=self.burn_in_step + self.n_step,
-                                     episode_length=l_indexes.shape[1],
-                                     l_indexes=l_indexes,
-                                     l_padding_masks=l_padding_masks,
-                                     l_obses_list=l_obses_list,
-                                     l_option_indexes=l_option_indexes,
-                                     l_actions=l_actions,
-                                     l_rewards=l_rewards,
-                                     next_obs_list=next_obs_list,
-                                     l_dones=l_dones,
-                                     l_probs=l_probs,
-                                     l_seq_hidden_states=l_seq_hidden_states,
-                                     l_low_seq_hidden_states=l_low_seq_hidden_states)
-
-        if self._rest_batch is not None:
-            ori_batch = traverse_lists((self._rest_batch, ori_batch), lambda rb, b: np.concatenate([rb, b]))
-            self._rest_batch = None
-
-        ori_batch_size = ori_batch[0].shape[0]
-        idx = np.random.permutation(ori_batch_size)
-        ori_batch = traverse_lists(ori_batch, lambda b: b[idx])
-
-        for i in range(math.ceil(ori_batch_size / self.batch_size)):
-            b_i, b_j = i * self.batch_size, (i + 1) * self.batch_size
-
-            batch = traverse_lists(ori_batch, lambda b: b[b_i:b_j, :])
-
-            if b_j > ori_batch_size:
-                self._rest_batch = batch
-            else:
-                self._batch_list.append(batch)
-
+from .oc_batch_buffer import BatchBuffer, episode_to_batch
 
 sac_base.BatchBuffer = BatchBuffer
-
-print('1', sac_base)
-print('1', BatchBuffer)
 
 
 class OptionSelectorBase(SAC_Base):
@@ -411,7 +255,7 @@ class OptionSelectorBase(SAC_Base):
         del option_kwargs['self']
         option_kwargs['obs_shapes'] = [(self.state_size, ), *self.obs_shapes]
         option_kwargs['seq_encoder'] = SEQ_ENCODER.RNN if self.seq_encoder == SEQ_ENCODER.ATTN else self.seq_encoder
-        
+
         if self.option_nn_config is None:
             self.option_nn_config = {}
         self.option_nn_config = defaultdict(dict, self.option_nn_config)
@@ -549,7 +393,8 @@ class OptionSelectorBase(SAC_Base):
 
     def _choose_option_index(self,
                              state: torch.Tensor,
-                             option_index: torch.Tensor):
+                             option_index: torch.Tensor,
+                             disable_sample: bool = False):
         """
         Args:
             state: [Batch, state_size]
@@ -571,15 +416,21 @@ class OptionSelectorBase(SAC_Base):
         termination_mask = termination > .5
         option_index[termination_mask] = new_option_index[termination_mask]
 
-        random_mask = torch.rand_like(option_index, dtype=torch.float32) < 0.2
-        option_index[random_mask] = new_option_index[random_mask]
+        mask = torch.logical_or(none_option_mask, termination_mask)
+        if not disable_sample:
+            random_mask = torch.rand_like(option_index, dtype=torch.float32) < 0.2
+            option_index[random_mask] = new_option_index[random_mask]
+            mask = torch.logical_or(mask, random_mask)
 
-        return option_index, torch.logical_or(torch.logical_or(none_option_mask, termination_mask), random_mask)
+        return option_index, mask
 
     def _choose_action(self,
                        obs_list: List[torch.Tensor],
                        state: torch.Tensor,
-                       option_index: torch.Tensor):
+                       option_index: torch.Tensor,
+
+                       disable_sample: bool = False,
+                       force_rnd_if_available: bool = False):
         """
         Args:
             obs_list: list([Batch, 1, *obs_shapes_i], ...)
@@ -593,7 +444,8 @@ class OptionSelectorBase(SAC_Base):
         """
 
         option_index, _ = self._choose_option_index(state=state,
-                                                    option_index=option_index)
+                                                    option_index=option_index,
+                                                    disable_sample=disable_sample)
 
         batch = state.shape[0]
         action = torch.zeros(batch, self.d_action_size + self.c_action_size, device=self.device)
@@ -607,7 +459,9 @@ class OptionSelectorBase(SAC_Base):
 
             o_obs_list = [obs[mask] for obs in obs_list]
 
-            o_action, o_prob = option.choose_action(o_obs_list)
+            o_action, o_prob = option.choose_action(o_obs_list,
+                                                    disable_sample=disable_sample,
+                                                    force_rnd_if_available=force_rnd_if_available)
             action[mask] = o_action
             policy_prob[mask] = o_prob
 
@@ -618,7 +472,10 @@ class OptionSelectorBase(SAC_Base):
                            state: torch.Tensor,
                            option_index: torch.Tensor,
                            pre_action: torch.Tensor,
-                           low_rnn_state: torch.Tensor):
+                           low_rnn_state: torch.Tensor,
+
+                           disable_sample: bool = False,
+                           force_rnd_if_available: bool = False):
         """
         Args:
             obs_list: list([Batch, 1, *obs_shapes_i], ...)
@@ -635,7 +492,8 @@ class OptionSelectorBase(SAC_Base):
         """
 
         option_index, new_option_index_mask = self._choose_option_index(state=state,
-                                                                        option_index=option_index)
+                                                                        option_index=option_index,
+                                                                        disable_sample=disable_sample)
 
         batch = state.shape[0]
         initial_low_seq_hidden_state = self.get_initial_low_seq_hidden_state(batch, get_numpy=False)
@@ -656,7 +514,9 @@ class OptionSelectorBase(SAC_Base):
 
             o_action, o_prob, o_next_low_rnn_state = option.choose_rnn_action(o_obs_list,
                                                                               pre_action[mask],
-                                                                              low_rnn_state[mask])
+                                                                              low_rnn_state[mask],
+                                                                              disable_sample=disable_sample,
+                                                                              force_rnd_if_available=force_rnd_if_available)
             action[mask] = o_action
             policy_prob[mask] = o_prob
             next_low_rnn_state[mask] = o_next_low_rnn_state
@@ -665,7 +525,10 @@ class OptionSelectorBase(SAC_Base):
 
     def choose_action(self,
                       obs_list: List[np.ndarray],
-                      pre_option_index: np.ndarray):
+                      pre_option_index: np.ndarray,
+
+                      disable_sample: bool = False,
+                      force_rnd_if_available: bool = False):
         """
         Args:
             obs_list (np): list([Batch, *obs_shapes_i], ...)
@@ -677,11 +540,15 @@ class OptionSelectorBase(SAC_Base):
             prob (np): [Batch, ]
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
-        option_index = torch.from_numpy(pre_option_index).type(torch.int64).to(self.device)
+        pre_option_index = torch.from_numpy(pre_option_index).type(torch.int64).to(self.device)
 
         state = self.model_rep(obs_list)
 
-        option_index, action, prob = self._choose_action(obs_list, state, option_index)
+        option_index, action, prob = self._choose_action(obs_list,
+                                                         state,
+                                                         pre_option_index,
+                                                         disable_sample=disable_sample,
+                                                         force_rnd_if_available=force_rnd_if_available)
 
         return (option_index.detach().cpu().numpy().astype(np.int8),
                 action.detach().cpu().numpy(),
@@ -692,7 +559,10 @@ class OptionSelectorBase(SAC_Base):
                           pre_option_index: np.ndarray,
                           pre_action: np.ndarray,
                           rnn_state: np.ndarray,
-                          low_rnn_state: np.ndarray):
+                          low_rnn_state: np.ndarray,
+
+                          disable_sample: bool = False,
+                          force_rnd_if_available: bool = False):
         """
         Args:
             obs_list (np): list([Batch, *obs_shapes_i], ...)
@@ -709,7 +579,7 @@ class OptionSelectorBase(SAC_Base):
             next_low_rnn_state (np): [Batch, *low_seq_hidden_state_shape]
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
-        option_index = torch.from_numpy(pre_option_index).type(torch.int64).to(self.device)
+        pre_option_index = torch.from_numpy(pre_option_index).type(torch.int64).to(self.device)
         pre_action = torch.from_numpy(pre_action).to(self.device)
         rnn_state = torch.from_numpy(rnn_state).to(self.device)
         low_rnn_state = torch.from_numpy(low_rnn_state).to(self.device)
@@ -724,11 +594,16 @@ class OptionSelectorBase(SAC_Base):
         state = state.squeeze(1)
         pre_action = pre_action.squeeze(1)
 
-        option_index, action, prob, next_low_rnn_state = self._choose_rnn_action(obs_list,
-                                                                                 state,
-                                                                                 option_index,
-                                                                                 pre_action,
-                                                                                 low_rnn_state)
+        (option_index,
+         action,
+         prob,
+         next_low_rnn_state) = self._choose_rnn_action(obs_list,
+                                                       state,
+                                                       pre_option_index,
+                                                       pre_action,
+                                                       low_rnn_state,
+                                                       disable_sample=disable_sample,
+                                                       force_rnd_if_available=force_rnd_if_available)
 
         return (option_index.detach().cpu().numpy().astype(np.int8),
                 action.detach().cpu().numpy(),
@@ -754,7 +629,6 @@ class OptionSelectorBase(SAC_Base):
             ep_indexes (np.int32): [Batch, episode_len]
             ep_padding_masks (np.bool): [Batch, episode_len]
             ep_obses_list (np): list([Batch, episode_len, *obs_shapes_i], ...)
-            ep_pre_option_indexes (np.int8): [Batch, episode_len]
             ep_pre_actions (np): [Batch, episode_len, d_action_size + c_action_size]
             ep_attn_states (np): [Batch, episode_len, *seq_hidden_state_shape]
 
@@ -773,7 +647,7 @@ class OptionSelectorBase(SAC_Base):
         ep_pre_actions = torch.from_numpy(ep_pre_actions).to(self.device)
         ep_attn_states = torch.from_numpy(ep_attn_states).to(self.device)
 
-        option_index = torch.from_numpy(pre_option_index).type(torch.int64).to(self.device)
+        pre_option_index = torch.from_numpy(pre_option_index).type(torch.int64).to(self.device)
         low_rnn_state = torch.from_numpy(low_rnn_state).to(self.device)
 
         state, next_attn_state, _ = self.model_rep(ep_indexes,
@@ -790,11 +664,16 @@ class OptionSelectorBase(SAC_Base):
         pre_action = ep_pre_actions[:, -1, ...]
         next_attn_state = next_attn_state.squeeze(1)
 
-        option_index, action, prob, next_low_rnn_state = self._choose_rnn_action(obs_list,
-                                                                                 state,
-                                                                                 option_index,
-                                                                                 pre_action,
-                                                                                 low_rnn_state)
+        (option_index,
+         action,
+         prob,
+         next_low_rnn_state) = self._choose_rnn_action(obs_list,
+                                                       state,
+                                                       pre_option_index,
+                                                       pre_action,
+                                                       low_rnn_state,
+                                                       disable_sample=disable_sample,
+                                                       force_rnd_if_available=force_rnd_if_available)
 
         return (option_index.detach().cpu().numpy().astype(np.int8),
                 action.detach().cpu().numpy(),
@@ -875,20 +754,22 @@ class OptionSelectorBase(SAC_Base):
                     o_f_pre_actions = None
                     o_f_low_seq_hidden_states = None
 
-                o_f_states, o_tmp_low_seq_hidden_states = option.get_l_states(l_indexes=o_f_indexes,
-                                                                              l_padding_masks=o_f_padding_masks,
-                                                                              l_obses_list=o_f_obses_list,
-                                                                              l_pre_actions=o_f_pre_actions,
-                                                                              f_seq_hidden_states=o_f_low_seq_hidden_states,
-                                                                              is_target=is_target)
+                o_f_states, o_tmp_f_low_seq_hidden_states = option.get_l_states(
+                    l_indexes=o_f_indexes,
+                    l_padding_masks=o_f_padding_masks,
+                    l_obses_list=o_f_obses_list,
+                    l_pre_actions=o_f_pre_actions,
+                    f_seq_hidden_states=o_f_low_seq_hidden_states,
+                    is_target=is_target
+                )
 
                 if l_low_states is None:
                     l_low_states = torch.zeros((batch, l, *o_f_states.shape[2:]), device=self.device)
                 l_low_states[mask, t:t + 1] = o_f_states
 
                 if self.seq_encoder is not None:
-                    f_low_seq_hidden_states[mask] = o_tmp_low_seq_hidden_states
-                    next_l_low_seq_hidden_states[mask, t:t + 1] = o_tmp_low_seq_hidden_states
+                    f_low_seq_hidden_states[mask] = o_tmp_f_low_seq_hidden_states
+                    next_l_low_seq_hidden_states[mask, t:t + 1] = o_tmp_f_low_seq_hidden_states
 
         return l_low_states, next_l_low_seq_hidden_states
 
@@ -1505,6 +1386,7 @@ class OptionSelectorBase(SAC_Base):
             self.summary_available = True
 
             self.summary_writer.add_scalar('loss/v', loss_v, self.global_step)
+            self.summary_writer.add_scalar('loss/loss_termination', loss_termination, self.global_step)
 
             self.summary_writer.flush()
 

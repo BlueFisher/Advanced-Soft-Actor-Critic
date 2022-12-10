@@ -861,7 +861,7 @@ class SAC_Base(object):
         state = state.squeeze(1)
         next_attn_state = next_attn_state.squeeze(1)
 
-        action, prob = self._choose_action([o[:, -1] for o in ep_obses_list],
+        action, prob = self._choose_action([ep_obses[:, -1] for ep_obses in ep_obses_list],
                                            state,
                                            disable_sample,
                                            force_rnd_if_available)

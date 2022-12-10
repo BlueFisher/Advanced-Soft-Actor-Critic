@@ -29,6 +29,9 @@ default:
     v_lambda: 0.99
     clip_epsilon: 1.
 
+  oc_config:
+    num_options: 2
+
 hard_rnn:
   base_config:
     name: "hard_rnn_{time}"

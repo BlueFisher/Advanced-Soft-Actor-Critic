@@ -33,7 +33,7 @@ class Agent:
     def _generate_empty_episode_trans(self, episode_length: int = 0):
         return {
             'index': -np.ones((episode_length, ), dtype=int),
-            'padding_mask': np.ones((episode_length, ), dtype=bool),
+            'padding_mask': np.ones((episode_length, ), dtype=bool),  # `True` indicates ignored
             'obs_list': [np.zeros((episode_length, *s), dtype=np.float32) for s in self.obs_shapes],
             'action': np.zeros((episode_length, self.action_size), dtype=np.float32),
             'reward': np.zeros((episode_length, ), dtype=np.float32),
@@ -63,18 +63,19 @@ class Agent:
             max_reached: bool
             next_obs_list: List([*obs_shapes_i], ...)
             prob: float
+            is_padding: bool
             seq_hidden_state: [*seq_hidden_state_shape]
 
         Returns:
-            ep_indexes: [1, episode_len], int
-            ep_padding_masks: [1, episode_len], bool
-            ep_obses_list: List([1, episode_len, *obs_shapes_i], ...), np.float32
-            ep_actions: [1, episode_len, action_size], np.float32
-            ep_rewards: [1, episode_len], np.float32
-            next_obs_list: List([1, *obs_shapes_i], ...), np.float32
-            ep_dones: [1, episode_len], bool
-            ep_probs: [1, episode_len], np.float32
-            ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape], np.float32
+            ep_indexes (np.int32): [1, episode_len], int
+            ep_padding_masks (np.bool): [1, episode_len]
+            ep_obses_list: List([1, episode_len, *obs_shapes_i], ...)
+            ep_actions: [1, episode_len, action_size]
+            ep_rewards: [1, episode_len]
+            next_obs_list: List([1, *obs_shapes_i], ...)
+            ep_dones (np.bool): [1, episode_len], bool
+            ep_probs: [1, episode_len]
+            ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
         expaned_transition = {
             'index': np.expand_dims(self._last_steps if not is_padding else -1, 0),
@@ -147,15 +148,15 @@ class Agent:
     def get_episode_trans(self, force_length: int = None):
         """
         Returns:
-            ep_indexes: [1, episode_len], int
-            ep_padding_masks: [1, episode_len], bool
-            ep_obses_list: List([1, episode_len, *obs_shapes_i], ...), np.float32
-            ep_actions: [1, episode_len, action_size], np.float32
-            ep_rewards: [1, episode_len], np.float32
-            next_obs_list: List([1, *obs_shapes_i], ...), np.float32
-            ep_dones: [1, episode_len], bool
-            ep_probs: [1, episode_len], np.float32
-            ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape], np.float32
+            ep_indexes (np.int32): [1, episode_len]
+            ep_padding_masks (np.bool): [1, episode_len]
+            ep_obses_list: List([1, episode_len, *obs_shapes_i], ...)
+            ep_actions: [1, episode_len, action_size]
+            ep_rewards: [1, episode_len]
+            next_obs_list: List([1, *obs_shapes_i], ...)
+            ep_dones (np.bool): [1, episode_len]
+            ep_probs: [1, episode_len]
+            ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
         tmp = self._tmp_episode_trans.copy()
 
@@ -277,11 +278,13 @@ class AgentManager:
                    disable_sample: bool = False,
                    force_rnd_if_available: bool = False):
         if self.seq_encoder == SEQ_ENCODER.RNN:
-            action, prob, next_seq_hidden_state = self.rl.choose_rnn_action(obs_list=self['obs_list'],
-                                                                            pre_action=self['pre_action'],
-                                                                            rnn_state=self['seq_hidden_state'],
-                                                                            disable_sample=disable_sample,
-                                                                            force_rnd_if_available=force_rnd_if_available)
+            action, prob, next_seq_hidden_state = self.rl.choose_rnn_action(
+                obs_list=self['obs_list'],
+                pre_action=self['pre_action'],
+                rnn_state=self['seq_hidden_state'],
+                disable_sample=disable_sample,
+                force_rnd_if_available=force_rnd_if_available
+            )
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN:
             ep_length = min(512, max([a.episode_length for a in self.agents]))
@@ -305,18 +308,21 @@ class AgentManager:
 
             ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
             ep_padding_masks = np.concatenate([ep_padding_masks,
-                                               np.ones_like(ep_padding_masks[:, -1:], dtype=bool)], axis=1)
+                                               np.zeros_like(ep_padding_masks[:, -1:], dtype=bool)], axis=1)
+            # `False` indicates not ignored
             ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
                              for o, t_o in zip(ep_obses_list, self['obs_list'])]
             ep_pre_actions = gen_pre_n_actions(ep_actions, True)
 
-            action, prob, next_seq_hidden_state = self.rl.choose_attn_action(ep_indexes=ep_indexes,
-                                                                             ep_padding_masks=ep_padding_masks,
-                                                                             ep_obses_list=ep_obses_list,
-                                                                             ep_pre_actions=ep_pre_actions,
-                                                                             ep_attn_states=ep_attn_states,
-                                                                             disable_sample=disable_sample,
-                                                                             force_rnd_if_available=force_rnd_if_available)
+            action, prob, next_seq_hidden_state = self.rl.choose_attn_action(
+                ep_indexes=ep_indexes,
+                ep_padding_masks=ep_padding_masks,
+                ep_obses_list=ep_obses_list,
+                ep_pre_actions=ep_pre_actions,
+                ep_attn_states=ep_attn_states,
+                disable_sample=disable_sample,
+                force_rnd_if_available=force_rnd_if_available
+            )
 
         else:
             action, prob = self.rl.choose_action(self['obs_list'],

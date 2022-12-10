@@ -31,7 +31,7 @@ class OC_Agent(Agent):
     def _generate_empty_episode_trans(self, episode_length: int = 0):
         return {
             'index': -np.ones((episode_length, ), dtype=int),
-            'padding_mask': np.ones((episode_length, ), dtype=bool),
+            'padding_mask': np.ones((episode_length, ), dtype=bool),  # `True` indicates ignored
             'obs_list': [np.zeros((episode_length, *s), dtype=np.float32) for s in self.obs_shapes],
             'option_index': np.full((episode_length, ), -1, dtype=np.int8),
             'action': np.zeros((episode_length, self.action_size), dtype=np.float32),
@@ -46,7 +46,7 @@ class OC_Agent(Agent):
 
     def add_transition(self,
                        obs_list: List[np.ndarray],
-                       option_index: np.ndarray,
+                       option_index: int,
                        action: np.ndarray,
                        reward: float,
                        local_done: bool,
@@ -59,24 +59,29 @@ class OC_Agent(Agent):
         """
         Args:
             obs_list: List([*obs_shapes_i], ...)
+            option_index: int
             action: [action_size, ]
             reward: float
             local_done: bool
             max_reached: bool
             next_obs_list: List([*obs_shapes_i], ...)
             prob: float
+            is_padding: bool
             seq_hidden_state: [*seq_hidden_state_shape]
+            low_seq_hidden_state: [*low_seq_hidden_state_shape]
 
         Returns:
-            ep_indexes: [1, episode_len], int
-            ep_padding_masks: [1, episode_len], bool
-            ep_obses_list: List([1, episode_len, *obs_shapes_i], ...), np.float32
-            ep_actions: [1, episode_len, action_size], np.float32
-            ep_rewards: [1, episode_len], np.float32
-            next_obs_list: List([1, *obs_shapes_i], ...), np.float32
-            ep_dones: [1, episode_len], bool
-            ep_probs: [1, episode_len], np.float32
-            ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape], np.float32
+            ep_indexes (np.int32): [1, episode_len], int
+            ep_padding_masks (np.bool): [1, episode_len]bukan
+            ep_obses_list: List([1, episode_len, *obs_shapes_i], ...)
+            ep_option_indexes (np.int8): [1, episode_len]
+            ep_actions: [1, episode_len, action_size]
+            ep_rewards: [1, episode_len]
+            next_obs_list: List([1, *obs_shapes_i], ...)
+            ep_dones (np.bool): [1, episode_len], bool
+            ep_probs: [1, episode_len]
+            ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
+            ep_low_seq_hidden_states: [1, episode_len, *low_seq_hidden_state_shape]
         """
         expaned_transition = {
             'index': np.expand_dims(self._last_steps if not is_padding else -1, 0),
@@ -138,17 +143,17 @@ class OC_Agent(Agent):
     def get_episode_trans(self, force_length: int = None):
         """
         Returns:
-            ep_indexes: [1, episode_len], int
-            ep_padding_masks: [1, episode_len], bool
-            ep_obses_list: List([1, episode_len, *obs_shapes_i], ...), np.float32
-            ep_option_indexes: [1, episode_len], np.int8
-            ep_actions: [1, episode_len, action_size], np.float32
-            ep_rewards: [1, episode_len], np.float32
-            next_obs_list: List([1, *obs_shapes_i], ...), np.float32
-            ep_dones: [1, episode_len], bool
-            ep_probs: [1, episode_len], np.float32
-            ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape], np.float32
-            ep_low_seq_hidden_states: [1, episode_len, *low_seq_hidden_state_shape], np.float32
+            ep_indexes (np.int32): [1, episode_len]
+            ep_padding_masks (np.bool): [1, episode_len]
+            ep_obses_list: List([1, episode_len, *obs_shapes_i], ...)
+            ep_option_indexes (np.int8): [1, episode_len]
+            ep_actions: [1, episode_len, action_size]
+            ep_rewards: [1, episode_len]
+            next_obs_list: List([1, *obs_shapes_i], ...)
+            ep_dones (np.bool): [1, episode_len]
+            ep_probs: [1, episode_len]
+            ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
+            ep_low_seq_hidden_states: [1, episode_len, *low_seq_hidden_state_shape]
         """
         tmp = self._tmp_episode_trans.copy()
 
@@ -283,7 +288,8 @@ class OC_AgentManager(AgentManager):
 
             ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
             ep_padding_masks = np.concatenate([ep_padding_masks,
-                                               np.ones_like(ep_padding_masks[:, -1:], dtype=bool)], axis=1)
+                                               np.zeros_like(ep_padding_masks[:, -1:], dtype=bool)], axis=1)
+            # `False` indicates not ignored
             ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
                              for o, t_o in zip(ep_obses_list, self['obs_list'])]
             ep_pre_actions = gen_pre_n_actions(ep_actions, True)
