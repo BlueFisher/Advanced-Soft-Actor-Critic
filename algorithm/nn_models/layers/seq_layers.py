@@ -74,6 +74,8 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
             key_length: int
             query_length: int
             key_padding_mask: [Batch, key_length]
+                A `True` value indicates that the corresponding key value will be ignored 
+                for the purpose of attention.
         """
         triu = torch.triu(torch.ones(key_length, key_length, dtype=bool, device=device), diagonal=1)
         attn_mask = triu[-query_length:]  # [query_length, key_length]
@@ -100,7 +102,10 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
         Args:
             key: [Batch, key_length, embed_dim]
             query_length: int
-            key_padding_mask: [Batch, key_padding_mask_length], key_padding_mask_length could be shorter than key_length
+            key_padding_mask: [Batch, key_padding_mask_length]
+                A `True` value indicates that the corresponding key value will be ignored 
+                for the purpose of attention.
+                `key_padding_mask_length` could be shorter than key_length.
         """
         key_length = key.shape[1]
 

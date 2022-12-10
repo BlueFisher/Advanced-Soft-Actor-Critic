@@ -38,6 +38,24 @@ class ModelRep(m.ModelBaseAttentionRep):
         return output, hn, attn_weights_list
 
 
+class ModelOptionRep(ModelRep):
+    def _build_model(self):
+        assert self.obs_shapes[0] == (32, )
+        assert self.obs_shapes[1] == (6, )
+
+        self.rnn = m.GRU(self.obs_shapes[1][0] - EXTRA_SIZE + self.c_action_size, 32, 1)
+
+    def forward(self, obs_list, pre_action, rnn_state=None):
+        high_rep, obs = obs_list
+        obs = obs[..., :-EXTRA_SIZE]
+
+        state, hn = self.rnn(torch.cat([obs, pre_action], dim=-1), rnn_state)
+
+        state = high_rep + state
+
+        return state, hn
+
+
 class ModelQ(m.ModelQ):
     def _build_model(self):
         return super()._build_model(c_dense_n=64, c_dense_depth=2)
