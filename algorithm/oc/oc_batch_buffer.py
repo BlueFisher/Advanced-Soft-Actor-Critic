@@ -77,11 +77,11 @@ def episode_to_batch(bn: int,
                                    for i in range(episode_length - bn + 1)], axis=0)
 
     if l_seq_hidden_states is not None:
-        f_seq_hidden_states = np.concatenate([l_seq_hidden_states[:, i:i + 1]
+        f_seq_hidden_states = np.concatenate([l_seq_hidden_states[:, i:i + bn]
                                              for i in range(episode_length - bn + 1)], axis=0)
 
     if l_low_seq_hidden_states is not None:
-        f_low_seq_hidden_states = np.concatenate([l_low_seq_hidden_states[:, i:i + 1]
+        f_low_seq_hidden_states = np.concatenate([l_low_seq_hidden_states[:, i:i + bn]
                                                   for i in range(episode_length - bn + 1)], axis=0)
 
     return [bn_indexes,
