@@ -58,6 +58,9 @@ hard_attn:
 
     tau: 0.005
 
+  oc_config:
+    option_burn_in_step: 10
+
 visual:
   base_config:
     scene: VisualRoller

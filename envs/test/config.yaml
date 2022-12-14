@@ -37,7 +37,7 @@ rnn:
 
 attn:
   sac_config:
-    burn_in_step: 2
+    burn_in_step: 8
     seq_encoder: ATTN
 
     batch_size: 10
@@ -45,6 +45,9 @@ attn:
   nn_config:
     rep:
       pe: nope
+
+  oc_config:
+    option_burn_in_step: 2
 
   ma_config:
     test0:

@@ -19,6 +19,7 @@ class TestOCVanillaModel(unittest.TestCase):
 
         sac = OptionSelectorBase(
             num_options=NUM_OPTIONS,
+            option_burn_in_step=-1,
             option_nn_config=None,
 
             obs_shapes=OBS_SHAPES,
@@ -133,6 +134,7 @@ def __gen_seq_encoder():
         'c_action_size': [4],
         'use_replay_buffer': [True, False],
         'burn_in_step': [5],
+        'option_burn_in_step': [-1, 2],
         'n_step': [3],
         # 'seq_encoder': ['RNN'],
         'discrete_dqn_like': [True, False],

@@ -2389,17 +2389,16 @@ class SAC_Base(object):
 
                 # Update seq_hidden_states
                 if self.seq_encoder is not None:
-                    pointers_list = [pointers + i for i in range(1, self.burn_in_step + self.n_step + 1)]
+                    pointers_list = [pointers + 1 + i for i in range(self.burn_in_step + self.n_step)]
                     tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
 
                     next_bn_seq_hidden_states = next_bn_seq_hidden_states.detach().cpu().numpy()
-                    bn_seq_hidden_states[:, 1:, ...] = next_bn_seq_hidden_states[:, :-1, ...]
-                    seq_hidden_state = bn_seq_hidden_states.reshape(-1, *bn_seq_hidden_states.shape[2:])
+                    seq_hidden_state = next_bn_seq_hidden_states.reshape(-1, *next_bn_seq_hidden_states.shape[2:])
                     self.replay_buffer.update_transitions(tmp_pointers, 'seq_hidden_state', seq_hidden_state)
 
                 # Update n_mu_probs
                 if self.use_n_step_is:
-                    pointers_list = [pointers + i for i in range(0, self.burn_in_step + self.n_step)]
+                    pointers_list = [pointers + i for i in range(self.burn_in_step + self.n_step)]
                     tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
                     pi_probs = bn_pi_probs_tensor.detach().cpu().numpy().reshape(-1)
                     self.replay_buffer.update_transitions(tmp_pointers, 'mu_prob', pi_probs)
