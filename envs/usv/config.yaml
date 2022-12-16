@@ -16,7 +16,7 @@ default:
     bounding_box_random: 0
     semantic_segmentation_random: 0
 
-  model_config:
+  nn_config:
     rep:
       blur: 0
       brightness: 1

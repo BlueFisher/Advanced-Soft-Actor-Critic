@@ -241,6 +241,9 @@ class AgentManager:
         self.c_action_size = c_action_size
         self.action_size = d_action_size + c_action_size
 
+        self.rl = None
+        self.seq_encoder = None
+
         self._data = {}
 
     def __getitem__(self, k):
@@ -261,11 +264,12 @@ class AgentManager:
         self.seq_encoder = rl.seq_encoder
 
     def pre_run(self, num_agents: int):
-        self['initial_pre_action'] = self.rl.get_initial_action(num_agents)  # [n_agents, action_size]
-        self['pre_action'] = self['initial_pre_action']
-        if self.seq_encoder is not None:
-            self['initial_seq_hidden_state'] = self.rl.get_initial_seq_hidden_state(num_agents)  # [n_agents, *seq_hidden_state_shape]
-            self['seq_hidden_state'] = self['initial_seq_hidden_state']
+        if self.rl is not None:
+            self['initial_pre_action'] = self.rl.get_initial_action(num_agents)  # [n_agents, action_size]
+            self['pre_action'] = self['initial_pre_action']
+            if self.seq_encoder is not None:
+                self['initial_seq_hidden_state'] = self.rl.get_initial_seq_hidden_state(num_agents)  # [n_agents, *seq_hidden_state_shape]
+                self['seq_hidden_state'] = self['initial_seq_hidden_state']
 
         self.agents: List[Agent] = [
             Agent(i, self.obs_shapes, self.action_size,
@@ -335,6 +339,13 @@ class AgentManager:
         self['c_action'] = action[..., self.d_action_size:]
         self['prob'] = prob
         self['next_seq_hidden_state'] = next_seq_hidden_state
+
+    def get_test_action(self):
+        action = np.random.rand(len(self.agents), self.action_size)
+        self['action'] = action
+        self['d_action'] = action[..., :self.d_action_size]
+        self['c_action'] = action[..., self.d_action_size:]
+        self['prob'] = np.random.rand(len(self.agents))
 
     def set_env_step(self,
                      next_obs_list,
@@ -452,6 +463,15 @@ class MultiAgentsManager:
                       force_rnd_if_available: bool = False):
         for n, mgr in self:
             mgr.get_action(disable_sample, force_rnd_if_available)
+
+        ma_d_action = {n: mgr['d_action'] for n, mgr in self}
+        ma_c_action = {n: mgr['c_action'] for n, mgr in self}
+
+        return ma_d_action, ma_c_action
+
+    def get_test_ma_action(self):
+        for n, mgr in self:
+            mgr.get_test_action()
 
         ma_d_action = {n: mgr['d_action'] for n, mgr in self}
         ma_c_action = {n: mgr['c_action'] for n, mgr in self}

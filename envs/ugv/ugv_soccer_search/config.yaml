@@ -1,6 +1,6 @@
 default:
   base_config:
-    env_name: UGV
+    env_name: UGVSoccerSearch
     unity_args:
       build_path:
         win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
@@ -8,7 +8,7 @@ default:
       no_graphics: false
 
     n_agents: 50
-    max_step: 150000
+    max_step: 300000
     reset_on_iteration: false
 
   reset_config:
@@ -17,7 +17,7 @@ default:
     semantic_segmentation_random: 0
     success_reward: 3
     failure_reward: -1
-    failure_backward_reward: -4
+    failure_backward_reward: -1
 
   nn_config:
     rep:
@@ -88,45 +88,3 @@ byol_q_ada:
     siamese: BYOL
     siamese_use_q: true
     siamese_use_adaptive: true
-
-depth:
-  nn_config:
-    rep:
-      blur: 0
-      brightness: 1
-      depth_blur: 0
-      depth_brightness: 1
-      ray_random: 0
-      need_speed: true
-  sac_config:
-    nn: nn_depth
-
-depth_atc:
-  inherited:
-    - atc
-    - depth
-
-depth_byol:
-  inherited:
-    - byol
-    - depth
-
-depth_atc_q:
-  inherited:
-    - atc_q
-    - depth
-
-depth_byol_q:
-  inherited:
-    - byol_q
-    - depth
-
-depth_atc_q_ada:
-  inherited:
-    - atc_q_ada
-    - depth
-
-depth_byol_q_ada:
-  inherited:
-    - byol_q_ada
-    - depth
