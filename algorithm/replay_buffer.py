@@ -57,12 +57,6 @@ class DataStorage:
         Get data from buffer without verifying whether ids in buffer
         """
         data = {k: v[ids % self.capacity] for k, v in self._buffer.items() if k != '_id'}
-
-        for k in data:
-            # Restore float [0, 1] if data is image
-            if len(self._buffer[k].shape[1:]) == 3:
-                data[k] = data[k].astype(np.float32) / 255.
-
         return data
 
     def get_ids(self, ids):

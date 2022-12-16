@@ -1427,7 +1427,6 @@ class SAC_Base(object):
                                                bn_padding_masks: torch.Tensor,
                                                bn_obses_list: List[torch.Tensor],
                                                bn_actions: torch.Tensor):
-
         """
         Args:
             grads_rep_main list(torch.Tensor)
@@ -2332,6 +2331,9 @@ class SAC_Base(object):
             bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
             bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
             bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
+            for i, bn_obses in enumerate(bn_obses_list):
+                if bn_obses.dtype == torch.uint8:
+                    bn_obses_list[i] = bn_obses.type(torch.float32) / 255.
             bn_actions = torch.from_numpy(bn_actions).to(self.device)
             bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
             next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]

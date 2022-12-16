@@ -128,7 +128,8 @@ class UnityWrapperProcess:
             discrete action size: int, sum of all action branches
             continuous action size: int
         """
-        ma_obs_shapes = {}
+        self.ma_obs_names = {}
+        self.ma_obs_shapes = {}
         self.ma_d_action_size = {}
         self.ma_c_action_size = {}
 
@@ -136,9 +137,10 @@ class UnityWrapperProcess:
             behavior_spec = self._env.behavior_specs[n]
             obs_names = [o.name for o in behavior_spec.observation_specs]
             self._logger.info(f'{n} Observation names: {obs_names}')
+            self.ma_obs_names[n] = obs_names
             obs_shapes = [o.shape for o in behavior_spec.observation_specs]
             self._logger.info(f'{n} Observation shapes: {obs_shapes}')
-            ma_obs_shapes[n] = obs_shapes
+            self.ma_obs_shapes[n] = obs_shapes
 
             self._empty_action = behavior_spec.action_spec.empty_action
 
@@ -167,7 +169,7 @@ class UnityWrapperProcess:
 
         self._logger.info('Initialized')
 
-        return ma_obs_shapes, self.ma_d_action_size, self.ma_c_action_size
+        return self.ma_obs_shapes, self.ma_d_action_size, self.ma_c_action_size
 
     def reset(self, reset_config=None):
         """
