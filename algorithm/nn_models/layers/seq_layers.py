@@ -52,6 +52,38 @@ class MultiheadAttention(nn.MultiheadAttention):
                          device=device,
                          dtype=dtype)
 
+    def forward(self,
+                query: torch.Tensor,
+                key: torch.Tensor,
+                value: torch.Tensor,
+                key_padding_mask: Optional[torch.Tensor] = None,
+                need_weights: bool = True,
+                attn_mask: Optional[torch.Tensor] = None,
+                average_attn_weights: bool = True) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+
+        if len(query.shape) >= 3:
+            batch = query.shape[:-2]
+            query = query.reshape(-1, *query.shape[-2:])
+            key = key.reshape(-1, *key.shape[-2:])
+            value = value.reshape(-1, *value.shape[-2:])
+            if key_padding_mask is not None:
+                key_padding_mask = key_padding_mask.reshape(-1, key_padding_mask.shape[-1])
+
+            attn_output, attn_output_weights = super().forward(query,
+                                                               key,
+                                                               value,
+                                                               key_padding_mask,
+                                                               need_weights,
+                                                               attn_mask,
+                                                               average_attn_weights)
+
+            attn_output = attn_output.reshape(*batch, *attn_output.shape[1:])
+            attn_output_weights = attn_output_weights.reshape(*batch, *attn_output_weights.shape[1:])
+
+            return attn_output, attn_output_weights
+        else:
+            raise Exception('The dimension of input should be greater than or equal to 3')
+
 
 class EpisodeMultiheadAttentionBlock(nn.Module):
     def __init__(self, embed_dim: int, num_heads: int,
