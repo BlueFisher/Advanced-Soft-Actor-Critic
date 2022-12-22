@@ -22,12 +22,13 @@ class ModelRep(m.ModelBaseRNNRep):
         self.bbox_attn = m.MultiheadAttention(6, 1)
 
         self.conv = m.ConvLayers(84, 84, 3 * 2, 'simple',
-                                 out_dense_n=64, out_dense_depth=2)
+                                 out_dense_n=64, out_dense_depth=1,
+                                 output_size=16)
 
         self.dense = m.LinearLayers(6 + self.conv.output_size + 7,
                                     dense_n=64, dense_depth=1)
 
-        self.rnn = m.GRU(64 + self.c_action_size, 64, 1)
+        self.rnn = m.GRU(self.dense.output_size + self.c_action_size, 64, 1)
 
         cropper = torch.nn.Sequential(
             T.RandomCrop(size=(50, 50)),

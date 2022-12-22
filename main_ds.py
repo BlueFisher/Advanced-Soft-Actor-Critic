@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--unity_port', '-p', type=int, default=5005, help='UNITY: communication port')
     parser.add_argument('--editor', action='store_true', help='UNITY: running in Unity Editor')
-    
+
     parser.add_argument('--name', '-n', help='training name')
     parser.add_argument('--device', help='cpu or gpu')
     parser.add_argument('--ckpt', help='ckeckpoint to restore')
