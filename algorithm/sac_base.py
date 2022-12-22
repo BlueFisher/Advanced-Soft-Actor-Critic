@@ -2337,6 +2337,9 @@ class SAC_Base(object):
             bn_actions = torch.from_numpy(bn_actions).to(self.device)
             bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
             next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
+            for i, next_obs in enumerate(next_obs_list):
+                if next_obs.dtype == torch.uint8:
+                    next_obs_list[i] = next_obs.type(torch.float32) / 255.
             bn_dones = torch.from_numpy(bn_dones).to(self.device)
             if self.use_n_step_is:
                 bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
