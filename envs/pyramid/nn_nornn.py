@@ -5,12 +5,14 @@ import algorithm.nn_models as m
 
 EXTRA_SIZE = 4
 
+
 class ModelRep(m.ModelBaseSimpleRep):
     def forward(self, obs_list):
         ray_obs, vec_obs = obs_list
         vec_obs = vec_obs[..., :-EXTRA_SIZE]
 
         return torch.concat([vec_obs, ray_obs], dim=-1)
+
 
 class ModelRND(m.ModelRND):
     def _build_model(self):

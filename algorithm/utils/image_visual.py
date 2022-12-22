@@ -21,12 +21,11 @@ class ImageVisual:
             *images: [Batch, H, W, C]
         """
         if len(images[0].shape) > 4:
-            images = [image[:, 0, ...] for image in images]
+            images = [image[:, -1, ...] for image in images]
+        images = [image[:5] for image in images]
         images = [i.detach().cpu().numpy() if isinstance(i, torch.Tensor) else i for i in images]
 
         batch_size = images[0].shape[0]
-        if batch_size >= 5:
-            return
 
         fig_size = len(images)
 
@@ -39,7 +38,7 @@ class ImageVisual:
                 for j, image in enumerate(images):
                     self.axes[i][j].axis('off')
                     if image.shape[-1] > 1:
-                        self.ims[i].append(self.axes[i][j].imshow(image[i]))
+                        self.ims[i].append(self.axes[i][j].imshow(image[i], vmin=0, vmax=1))
                     else:
                         self.ims[i].append(self.axes[i][j].imshow(image[i], cmap='gray', vmin=0, vmax=1))
 

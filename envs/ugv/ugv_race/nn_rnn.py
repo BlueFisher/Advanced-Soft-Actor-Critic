@@ -35,7 +35,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
         self.vis_ray_dense = m.LinearLayers(self.conv.output_size + self.ray_conv.output_size,
                                             dense_n=64, dense_depth=1)
-        
+
         self._ray_visual = RayVisual()
         self._image_visual = ImageVisual()
 

@@ -34,5 +34,5 @@ def convert_config_to_string(config):
     if 'siamese' in config and config['siamese'] is not None:
         config['siamese'] = config['siamese'].name
 
-    if'curiosity' in config and config['curiosity'] is not None:
+    if 'curiosity' in config and config['curiosity'] is not None:
         config['curiosity'] = config['curiosity'].name

@@ -52,7 +52,7 @@ class TestOCSeqEncoderModel(unittest.TestCase):
             import tests.nn_conv_rnn as nn_conv
         elif param_dict['seq_encoder'] == SEQ_ENCODER.ATTN:
             import tests.nn_conv_attn as nn_conv
-        
+
         importlib.reload(nn_conv)
 
         sac = OptionSelectorBase(
