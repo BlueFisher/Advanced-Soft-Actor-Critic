@@ -28,28 +28,28 @@ class ModelRep(m.ModelBaseRNNRep):
             self.blurrer = m.Transform(T.GaussianBlur(blur, sigma=blur))
         else:
             self.blurrer = None
-
         self.brightness = m.Transform(T.ColorJitter(brightness=(brightness, brightness)))
 
-        self.ray_index = generate_unity_to_nn_ray_index(RAY_SIZE)
-
         self.bbox_attn = m.MultiheadAttention(7, 1)
-        self.tp_bbox_attn = m.MultiheadAttention(7, 1)
-        self.bbox_dense = m.LinearLayers(7, output_size=64)
-        self.tp_bbox_dense = m.LinearLayers(7, output_size=64)
+        self.bbox_attn_tp = m.MultiheadAttention(7, 1)
+        self.bbox_dense = m.LinearLayers(7, output_size=32)
+        self.bbox_dense_tp = m.LinearLayers(7, output_size=32)
 
         self.conv = m.ConvLayers(84, 84, 3, 'simple',
-                                 out_dense_n=64, out_dense_depth=2)
-        self.tp_conv = m.ConvLayers(84, 84, 3, 'simple',
-                                    out_dense_n=64, out_dense_depth=2)
+                                 out_dense_n=64, out_dense_depth=1,
+                                 output_size=32)
+        self.conv_tp = m.ConvLayers(84, 84, 3, 'simple',
+                                    out_dense_n=64, out_dense_depth=1,
+                                    output_size=32)
 
         self.ray_conv = m.Conv1dLayers(RAY_SIZE, 2, 'default',
-                                       out_dense_n=64, out_dense_depth=2)
+                                       out_dense_n=64, out_dense_depth=1,
+                                       output_size=32)
 
-        self.vis_ray_dense = m.LinearLayers(64, dense_n=64, dense_depth=1)
-        self.tp_vis_dense = m.LinearLayers(64, dense_n=64, dense_depth=1)
+        self.vis_ray_dense = m.LinearLayers(32, dense_n=32, dense_depth=1)
+        self.vis_tp_dense = m.LinearLayers(32, dense_n=32, dense_depth=1)
 
-        self.rnn = m.GRU(64 + self.obs_shapes[5][0] + self.c_action_size, 64, 1)
+        self.rnn = m.GRU(32 + self.obs_shapes[5][0] + self.c_action_size, 64, 1)
 
         cropper = torch.nn.Sequential(
             T.RandomCrop(size=(50, 50)),
@@ -64,26 +64,28 @@ class ModelRep(m.ModelBaseRNNRep):
 
         self._timer = unified_elapsed_timer()
 
+    def _handle_bbox(self, bbox, attn):
+        bbox_mask = ~bbox.any(dim=-1)
+        bbox_mask[..., 0] = False
+        bbox, _ = attn(bbox, bbox, bbox, key_padding_mask=bbox_mask)
+        return bbox.mean(-2)
+
     def forward(self, obs_list, pre_action, rnn_state=None):
-        bbox, vis_cam, ray, tp_bbox, vis_tp_cam, vec = obs_list
-        ray = ray[..., self.ray_index]
+        bbox_cam, vis_cam, ray, bbox_tp_cam, vis_tp_cam, vec = obs_list
+        ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
 
         for v in [vis_cam, vis_tp_cam]:
             if self.blurrer:
                 v = self.blurrer(v)
             v = self.brightness(v)
 
-        bbox_mask = ~bbox.any(dim=-1)
-        tp_bbox_mask = ~tp_bbox.any(dim=-1)
-        bbox_mask[..., 0] = False
-        tp_bbox_mask[..., 0] = False
-        bbox, _ = self.bbox_attn(bbox, bbox, bbox, key_padding_mask=bbox_mask)
-        tp_bbox, _ = self.bbox_attn(tp_bbox, tp_bbox, tp_bbox, key_padding_mask=tp_bbox_mask)
-        bbox = self.bbox_dense(bbox.mean(-2))
-        tp_bbox = self.bbox_dense(tp_bbox.mean(-2))
+        bbox_cam = self._handle_bbox(bbox_cam, self.bbox_attn)
+        bbox_tp_cam = self._handle_bbox(bbox_tp_cam, self.bbox_attn_tp)
+        bbox_cam = self.bbox_dense(bbox_cam)
+        bbox_tp_cam = self.bbox_dense_tp(bbox_tp_cam)
 
         vis_cam = self.conv(vis_cam)
-        vis_tp_cam = self.conv(vis_tp_cam)
+        vis_tp_cam = self.conv_tp(vis_tp_cam)
 
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
         random_index = torch.randperm(RAY_SIZE)[:self.ray_random]
@@ -91,29 +93,33 @@ class ModelRep(m.ModelBaseRNNRep):
         ray[..., random_index, 1] = 1.
         ray = self.ray_conv(ray)
 
-        vis_ray_concat = self.vis_ray_dense(vis_cam + ray)
-        tp_vis_concat = self.tp_vis_dense(vis_tp_cam)
+        vis_ray_encoder = self.vis_ray_dense(vis_cam + ray)
+        vis_tp_encoder = self.vis_tp_dense(vis_tp_cam)
 
-        state, hn = self.rnn(torch.cat([vis_ray_concat + tp_vis_concat + bbox + tp_bbox, vec, pre_action], dim=-1), rnn_state)
+        state, hn = self.rnn(torch.cat([vis_ray_encoder + vis_tp_encoder + bbox_cam + bbox_tp_cam, vec, pre_action], dim=-1),
+                             rnn_state)
 
         return state, hn
 
     def get_state_from_encoders(self, obs_list, encoders, pre_action, rnn_state=None):
-        vis_bbox, vis_cam, ray, vis_tp_bbox, vis_tp_cam, vec = obs_list
+        bbox_cam, vis_cam, ray, bbox_tp_cam, vis_tp_cam, vec = obs_list
         vis_cam_encoder, vis_tp_cam_encoder, ray_encoder = encoders
 
-        vis_bbox = self.conv(vis_bbox)
-        vis_tp_bbox = self.conv(vis_tp_bbox)
+        bbox_cam = self._handle_bbox(bbox_cam, self.bbox_attn)
+        bbox_tp_cam = self._handle_bbox(bbox_tp_cam, self.bbox_attn_tp)
+        bbox_cam = self.bbox_dense(bbox_cam)
+        bbox_tp_cam = self.bbox_dense_tp(bbox_tp_cam)
 
-        vis_ray_concat = self.vis_ray_dense(vis_bbox + vis_cam_encoder + ray_encoder)
-        tp_vis_concat = self.tp_vis_dense(vis_tp_bbox + vis_tp_cam_encoder)
+        vis_ray_encoder = self.vis_ray_dense(vis_cam_encoder + ray_encoder)
+        vis_tp_encoder = self.vis_tp_dense(vis_tp_cam_encoder)
 
-        state, _ = self.rnn(torch.cat([vis_ray_concat + tp_vis_concat, vec, pre_action], dim=-1), rnn_state)
+        state, _ = self.rnn(torch.cat([vis_ray_encoder + vis_tp_encoder + bbox_cam + bbox_tp_cam, vec, pre_action], dim=-1),
+                            rnn_state)
 
         return state
 
     def get_augmented_encoders(self, obs_list):
-        vis_bbox, vis_cam, ray, vis_tp_bbox, vis_tp_cam, vec = obs_list
+        bbox_cam, vis_cam, ray, bbox_tp_cam, vis_tp_cam, vec = obs_list
         ray = ray[..., self.ray_index]
 
         aug_vis_cam = self.vis_cam_random_transformers(vis_cam)

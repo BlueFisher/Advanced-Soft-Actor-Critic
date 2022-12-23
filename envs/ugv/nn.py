@@ -3,7 +3,7 @@ from torchvision import transforms as T
 
 import algorithm.nn_models as m
 from algorithm.utils.image_visual import ImageVisual
-from algorithm.utils.ray import RayVisual, generate_unity_to_nn_ray_index
+from algorithm.utils.ray import RayVisual
 from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
 
 RAY_SIZE = 400
@@ -27,9 +27,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
         self.brightness = m.Transform(T.ColorJitter(brightness=(brightness, brightness)))
 
-        self.ray_index = generate_unity_to_nn_ray_index(RAY_SIZE)
         self._ray_visual = RayVisual()
-
         self._image_visual = ImageVisual()
 
         self.conv = m.ConvLayers(84, 84, 3, 'simple',
@@ -55,7 +53,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
     def forward(self, obs_list, pre_action, rnn_state=None):
         vis_cam, ray, vec = obs_list
-        ray = ray[..., self.ray_index]
+        ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
 
         if self.blurrer:
             vis_cam = self.blurrer(vis_cam)
@@ -71,8 +69,8 @@ class ModelRep(m.ModelBaseRNNRep):
         # self._ray_visual(ray)
         ray = self.ray_conv(ray)
 
-        vis_ray_concat = self.vis_ray_dense(vis + ray)
-        state, hn = self.rnn(torch.cat([vis_ray_concat, vec, pre_action], dim=-1), rnn_state)
+        vis_ray = self.vis_ray_dense(vis + ray)
+        state, hn = self.rnn(torch.cat([vis_ray, vec, pre_action], dim=-1), rnn_state)
 
         return state, hn
 
@@ -80,14 +78,14 @@ class ModelRep(m.ModelBaseRNNRep):
         vis_cam, ray, vec = obs_list
         vis_cam_encoder, ray_encoder = encoders
 
-        vis_ray_concat = self.vis_ray_dense(vis_cam_encoder + ray_encoder)
-        state, _ = self.rnn(torch.cat([vis_ray_concat, vec, pre_action], dim=-1), rnn_state)
+        vis_ray = self.vis_ray_dense(vis_cam_encoder + ray_encoder)
+        state, _ = self.rnn(torch.cat([vis_ray, vec, pre_action], dim=-1), rnn_state)
 
         return state
 
     def get_augmented_encoders(self, obs_list):
         vis_cam, ray, vec = obs_list
-        ray = ray[..., self.ray_index]
+        ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
 
         aug_vis_cam = self.vis_cam_random_transformers(vis_cam)
         vis_cam_encoder = self.conv(aug_vis_cam)
@@ -119,8 +117,6 @@ class ModelOptionRep(m.ModelBaseRNNRep):
             self.blurrer = None
 
         self.brightness = m.Transform(T.ColorJitter(brightness=(brightness, brightness)))
-
-        self.ray_index = generate_unity_to_nn_ray_index(RAY_SIZE)
 
         self.conv = m.ConvLayers(84, 84, 3, 'simple',
                                  out_dense_n=64, out_dense_depth=2)

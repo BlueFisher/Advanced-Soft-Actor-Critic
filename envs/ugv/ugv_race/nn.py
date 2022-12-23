@@ -3,7 +3,7 @@ from torchvision import transforms as T
 
 import algorithm.nn_models as m
 from algorithm.utils.image_visual import ImageVisual
-from algorithm.utils.ray import RayVisual, generate_unity_to_nn_ray_index
+from algorithm.utils.ray import RayVisual
 from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
 
 RAY_SIZE = 400
@@ -26,7 +26,6 @@ class ModelRep(m.ModelBaseSimpleRep):
 
         self.brightness = m.Transform(T.ColorJitter(brightness=(brightness, brightness)))
 
-        self.ray_index = generate_unity_to_nn_ray_index(RAY_SIZE)
         self._ray_visual = RayVisual()
 
         self._image_visual = ImageVisual()
@@ -52,7 +51,7 @@ class ModelRep(m.ModelBaseSimpleRep):
 
     def forward(self, obs_list):
         vis_cam, ray, vec = obs_list
-        ray = ray[..., self.ray_index]
+        ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
 
         if self.blurrer:
             vis_cam = self.blurrer(vis_cam)
@@ -76,13 +75,13 @@ class ModelRep(m.ModelBaseSimpleRep):
         vis_cam, ray, vec = obs_list
         vis_cam_encoder, ray_encoder = encoders
 
-        vis_ray_concat = self.vis_ray_dense(vis_cam_encoder + ray_encoder)
+        vis_ray = self.vis_ray_dense(vis_cam_encoder + ray_encoder)
 
-        return torch.concat([vis_ray_concat, vec], dim=-1)
+        return torch.concat([vis_ray, vec], dim=-1)
 
     def get_augmented_encoders(self, obs_list):
         vis_cam, ray, vec = obs_list
-        ray = ray[..., self.ray_index]
+        ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
 
         aug_vis_cam = self.vis_cam_random_transformers(vis_cam)
         vis_cam_encoder = self.conv(aug_vis_cam)

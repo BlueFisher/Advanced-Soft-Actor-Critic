@@ -6,19 +6,6 @@ import numpy as np
 import torch
 
 
-def generate_unity_to_nn_ray_index(ray_size):
-    ray_index = []
-
-    for i in reversed(range(ray_size // 2)):
-        ray_index.append((i * 2 + 1) * 2)
-        ray_index.append((i * 2 + 1) * 2 + 1)
-    for i in range(ray_size // 2):
-        ray_index.append((i * 2 + 2) * 2)
-        ray_index.append((i * 2 + 2) * 2 + 1)
-
-    return ray_index
-
-
 class RayVisual:
     def __init__(self, model_abs_dir: Optional[Path] = None) -> None:
         self.model_abs_dir = model_abs_dir
