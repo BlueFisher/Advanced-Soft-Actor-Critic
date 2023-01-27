@@ -4,7 +4,7 @@ from pathlib import Path
 
 from algorithm.config_helper import set_logger
 
-HITTED_ENVS = {'roller', 'square', 'pyramid', 'uav', 'ugv', 'usv'}
+HITTED_ENVS = {'roller', 'square', 'pyramid', 'uav', 'ugv', 'ugv/ugv_soccer_search', 'usv'}
 
 if __name__ == '__main__':
     set_logger()

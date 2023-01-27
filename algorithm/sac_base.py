@@ -505,7 +505,6 @@ class SAC_Base(object):
 
                 ckpt_restore_path = ckpt_dir.joinpath(f'{last_ckpt}.pth')
                 ckpt_restore = torch.load(ckpt_restore_path, map_location=self.device)
-                self.global_step = self.global_step.to('cpu')
                 for name, model in ckpt_dict.items():
                     if name not in ckpt_restore:
                         self._logger.warning(f'{name} not in {last_ckpt}.pth')
@@ -523,6 +522,8 @@ class SAC_Base(object):
                                 model.train()
                             else:
                                 model.eval()
+
+                self.global_step = self.global_step.to('cpu')
 
                 self._logger.info(f'Restored from {ckpt_restore_path}')
 
