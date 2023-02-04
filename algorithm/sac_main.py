@@ -87,7 +87,7 @@ class Main:
 
         for n, ma_config in ma_configs.items():
             if self.train_mode:
-                config_helper.save_config(ma_config, model_abs_dir, f'config_{n}.yaml')
+                config_helper.save_config(ma_config, model_abs_dir, f'config_{n.replace("?", "-")}.yaml')
             config_helper.display_config(ma_config, self._logger, n)
             convert_config_to_enum(ma_config['sac_config'])
 

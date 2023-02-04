@@ -341,10 +341,23 @@ class AgentManager:
         self['next_seq_hidden_state'] = next_seq_hidden_state
 
     def get_test_action(self):
-        action = np.random.rand(len(self.agents), self.action_size)
+        action = np.zeros((len(self.agents), self.action_size), dtype=np.float32)
+        d_action = c_action = None
+
+        if self.d_action_size:
+            d_action = np.random.randint(0, self.d_action_size, size=len(self.agents))
+            # d_action = np.zeros((len(self.agents),), dtype=np.int64) + 5
+            d_action = np.eye(self.d_action_size, dtype=np.int32)[d_action]
+            action[:, :self.d_action_size] = d_action
+
+        if self.c_action_size:
+            c_action = np.random.randn(len(self.agents), self.c_action_size)
+            # c_action = np.ones((len(self.agents), self.c_action_size), dtype=np.float32)
+            action[:, self.d_action_size:] = c_action
+
         self['action'] = action
-        self['d_action'] = action[..., :self.d_action_size]
-        self['c_action'] = action[..., self.d_action_size:]
+        self['d_action'] = d_action
+        self['c_action'] = c_action
         self['prob'] = np.random.rand(len(self.agents))
 
     def set_env_step(self,
