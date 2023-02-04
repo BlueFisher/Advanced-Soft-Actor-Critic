@@ -8,7 +8,8 @@ import uuid
 from typing import List
 
 import numpy as np
-from mlagents_envs.environment import ActionTuple, UnityEnvironment
+from mlagents_envs.environment import (ActionTuple, DecisionSteps,
+                                       TerminalSteps, UnityEnvironment)
 from mlagents_envs.exception import UnityTimeOutException
 from mlagents_envs.side_channel.engine_configuration_channel import (
     EngineConfig, EngineConfigurationChannel)
@@ -217,34 +218,56 @@ class UnityWrapperProcess:
 
             self._env.set_actions(n,
                                   ActionTuple(continuous=c_action, discrete=d_action))
+
+        self._env.step()
+
+        tmp_ma_decision_steps = {}
+        tmp_ma_terminal_steps = {}
+
+        for n in self.behavior_names:
+            decision_steps, terminal_steps = self._env.get_steps(n)
+            tmp_ma_decision_steps[n] = decision_steps
+            tmp_ma_terminal_steps[n] = terminal_steps
+
+        while any([len(decision_steps) == 0 for decision_steps in tmp_ma_decision_steps.values()]):
+            for n in self.behavior_names:
+                if len(tmp_ma_decision_steps[n]) > 0:
+                    continue
+                self._env.set_actions(n, self._empty_action(0))
+
             self._env.step()
 
-            decision_steps, terminal_steps = self._env.get_steps(n)
-
-            tmp_terminal_steps = terminal_steps
-
-            while len(decision_steps) == 0:
-                self._env.set_actions(n, self._empty_action(0))
-                self._env.step()
+            for n in self.behavior_names:
+                if len(tmp_ma_decision_steps[n]) > 0:
+                    continue
                 decision_steps, terminal_steps = self._env.get_steps(n)
-                tmp_terminal_steps.agent_id = np.concatenate([tmp_terminal_steps.agent_id,
-                                                              terminal_steps.agent_id])
-                tmp_terminal_steps.reward = np.concatenate([tmp_terminal_steps.reward,
-                                                            terminal_steps.reward])
-                tmp_terminal_steps.interrupted = np.concatenate([tmp_terminal_steps.interrupted,
-                                                                terminal_steps.interrupted])
+                tmp_ma_decision_steps[n] = decision_steps
+                tmp_ma_terminal_steps[n].agent_id = np.concatenate([tmp_ma_terminal_steps[n].agent_id,
+                                                                    terminal_steps.agent_id])
+
+                tmp_ma_terminal_steps[n].reward = np.concatenate([tmp_ma_terminal_steps[n].reward,
+                                                                  terminal_steps.reward])
+                tmp_ma_terminal_steps[n].interrupted = np.concatenate([tmp_ma_terminal_steps[n].interrupted,
+                                                                       terminal_steps.interrupted])
+
+        for n in self.behavior_names:
+            decision_steps: DecisionSteps = tmp_ma_decision_steps[n]
+            terminal_steps: TerminalSteps = tmp_ma_terminal_steps[n]
 
             reward = decision_steps.reward
-            reward[tmp_terminal_steps.agent_id] = tmp_terminal_steps.reward
+            for i, agent_id in enumerate(terminal_steps.agent_id):
+                reward[decision_steps.agent_id_to_index[agent_id]] = terminal_steps.reward[i]
 
             done = np.full([len(decision_steps), ], False, dtype=bool)
-            done[tmp_terminal_steps.agent_id] = True
+            for i, agent_id in enumerate(terminal_steps.agent_id):
+                done[decision_steps.agent_id_to_index[agent_id]] = True
 
             max_step = np.full([len(decision_steps), ], False, dtype=bool)
-            max_step[tmp_terminal_steps.agent_id] = tmp_terminal_steps.interrupted
+            for i, agent_id in enumerate(terminal_steps.agent_id):
+                max_step[decision_steps.agent_id_to_index[agent_id]] = terminal_steps.interrupted[i]
 
             ma_obs_list[n] = [obs.astype(np.float32) for obs in decision_steps.obs]
-            ma_reward[n] = decision_steps.reward.astype(np.float32)
+            ma_reward[n] = reward.astype(np.float32)
             ma_done[n] = done
             ma_max_step[n] = max_step
 
