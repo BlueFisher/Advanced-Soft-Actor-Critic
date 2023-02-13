@@ -10,9 +10,10 @@ RAY_SIZE = 400
 AUG_RAY_RANDOM_SIZE = 250
 
 
+
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self, blur, brightness, ray_random, need_speed):
-        assert self.obs_shapes[0] == (6, 7)  # BoundingBoxSensor
+        assert self.obs_shapes[0] == (84, 84, 3)
         assert self.obs_shapes[1] == (802,)  # ray (1 + 200 + 200) * 2
         assert self.obs_shapes[2] == (6,)  # vector
 
@@ -28,9 +29,10 @@ class ModelRep(m.ModelBaseRNNRep):
         self.brightness = m.Transform(T.ColorJitter(brightness=(brightness, brightness)))
 
         self._ray_visual = RayVisual()
+        self._image_visual = ImageVisual()
 
-        self.bbox_attn = m.MultiheadAttention(7, 1)
-        self.bbox_dense = m.LinearLayers(7, output_size=64)
+        self.conv = m.ConvLayers(84, 84, 3, 'simple',
+                                 out_dense_n=64, out_dense_depth=2)
 
         self.ray_conv = m.Conv1dLayers(RAY_SIZE, 2, 'default',
                                        out_dense_n=64, out_dense_depth=2)
@@ -50,18 +52,16 @@ class ModelRep(m.ModelBaseRNNRep):
             m.Transform(cropper)
         ])
 
-    def _handle_bbox(self, bbox, attn):
-        bbox_mask = ~bbox.any(dim=-1)
-        bbox_mask[..., 0] = False
-        bbox, _ = attn(bbox, bbox, bbox, key_padding_mask=bbox_mask)
-        return bbox.mean(-2)
-
     def forward(self, obs_list, pre_action, rnn_state=None):
-        bbox_cam, ray, vec = obs_list
+        vis_cam, ray, vec = obs_list
         ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
 
-        bbox_cam = self._handle_bbox(bbox_cam, self.bbox_attn)
-        bbox_cam = self.bbox_dense(bbox_cam)
+        if self.blurrer:
+            vis_cam = self.blurrer(vis_cam)
+        vis_cam = self.brightness(vis_cam)
+        # self._image_visual(vis_cam)
+
+        vis = self.conv(vis_cam)
 
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
         random_index = torch.randperm(RAY_SIZE)[:self.ray_random]
@@ -70,7 +70,7 @@ class ModelRep(m.ModelBaseRNNRep):
         # self._ray_visual(ray)
         ray = self.ray_conv(ray)
 
-        vis_ray = self.vis_ray_dense(bbox_cam + ray)
+        vis_ray = self.vis_ray_dense(vis + ray)
         state, hn = self.rnn(torch.cat([vis_ray, vec, pre_action], dim=-1), rnn_state)
 
         return state, hn
@@ -127,7 +127,7 @@ class ModelOptionRep(m.ModelBaseRNNRep):
 
         self.vis_ray_dense = m.LinearLayers(64, dense_n=64, dense_depth=1)
 
-        self.rnn = m.GRU(64 + self.obs_shapes[3][0] + self.c_action_size, 64, 1)
+        self.rnn = m.GRU(64 + self.obs_shapes[3][0] + self.d_action_size, 64, 1)
 
         cropper = torch.nn.Sequential(
             T.RandomCrop(size=(50, 50)),
@@ -190,12 +190,12 @@ class ModelOptionRep(m.ModelBaseRNNRep):
 
 class ModelQ(m.ModelQ):
     def _build_model(self):
-        return super()._build_model(d_dense_n=128, d_dense_depth=2)
+        return super()._build_model(c_dense_n=128, c_dense_depth=2)
 
 
 class ModelPolicy(m.ModelPolicy):
     def _build_model(self):
-        return super()._build_model(d_dense_n=128, d_dense_depth=2)
+        return super()._build_model(c_dense_n=128, c_dense_depth=2)
 
 
 class ModelRND(m.ModelRND):

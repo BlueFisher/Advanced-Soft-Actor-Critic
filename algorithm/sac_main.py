@@ -199,9 +199,11 @@ class Main:
                                 replay_config=mgr.config['replay_config']))
 
     def _run(self):
-        self.ma_manager.pre_run(self.base_config['n_agents'])
-
         ma_obs_list = self.env.reset(reset_config=self.reset_config)
+
+        self.ma_manager.pre_run({
+            n: obs_list[0].shape[0] for n, obs_list in ma_obs_list.items()
+        })
         self.ma_manager.set_obs_list(ma_obs_list)
 
         force_reset = False

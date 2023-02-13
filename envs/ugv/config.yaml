@@ -17,7 +17,7 @@ default:
     semantic_segmentation_random: 0
     success_reward: 3
     failure_reward: -1
-    failure_backward_reward: -4
+    failure_backward_reward: -3
 
   nn_config:
     rep:
@@ -46,6 +46,12 @@ default:
         brightness: 1
         ray_random: 0
         need_speed: true
+
+nornd:
+  base_config:
+    name: nornd_{time}
+  sac_config:
+    use_rnd: false
 
 atc:
   base_config:

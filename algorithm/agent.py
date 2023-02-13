@@ -431,9 +431,9 @@ class MultiAgentsManager:
     def __len__(self):
         return len(self._ma_manager)
 
-    def pre_run(self, num_agents):
+    def pre_run(self, ma_num_agents):
         for n, mgr in self:
-            mgr.pre_run(num_agents)
+            mgr.pre_run(ma_num_agents[n])
 
     def is_max_reached(self):
         return any([any([a.max_reached for a in mgr.agents]) for n, mgr in self])
