@@ -7,7 +7,7 @@ default:
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
       no_graphics: true
 
-    n_agents: 2
+    n_agents: 50
     max_step: 300000
     reset_on_iteration: false
 
@@ -21,3 +21,6 @@ default:
     n_step: 3
     burn_in_step: 10
     seq_encoder: RNN
+
+    use_rnd: true
+    rnd_n_sample: 50

@@ -183,9 +183,17 @@ class UnityWrapperProcess:
 
         self._env.reset()
 
+        self._ma_agents_ids = {}
+        self._ma_agent_id_to_index = {}
+
         ma_obs_list = {}
         for n in self.behavior_names:
             decision_steps, terminal_steps = self._env.get_steps(n)
+            self._ma_agents_ids[n] = decision_steps.agent_id
+            self._ma_agent_id_to_index[n] = {
+                a_id: a_idx
+                for a_idx, a_id in enumerate(decision_steps.agent_id)
+            }
             ma_obs_list[n] = [obs.astype(np.float32) for obs in decision_steps.obs]
 
         return ma_obs_list
@@ -202,10 +210,21 @@ class UnityWrapperProcess:
             done: (NAgents, ), bool
             max_step: (NAgents, ), bool
         """
+
         ma_obs_list = {}
         ma_reward = {}
         ma_done = {}
         ma_max_step = {}
+
+        for n in self.behavior_names:
+            agents_len = len(self._ma_agents_ids[n])
+            ma_obs_list[n] = [np.zeros((agents_len, *obs_shape), dtype=np.float32) for obs_shape in self.ma_obs_shapes[n]]
+            ma_reward[n] = np.zeros(agents_len, dtype=np.float32)
+            ma_done[n] = np.zeros(len(self._ma_agents_ids[n]), dtype=bool)
+            ma_max_step[n] = np.zeros(len(self._ma_agents_ids[n]), dtype=bool)
+
+        visited_ma_agent_ids = {n: set() for n in self.behavior_names}
+        ma_decision_steps_len = {n: 0 for n in self.behavior_names}
 
         for n in self.behavior_names:
             d_action = c_action = None
@@ -221,55 +240,65 @@ class UnityWrapperProcess:
 
         self._env.step()
 
-        tmp_ma_decision_steps = {}
-        tmp_ma_terminal_steps = {}
-
         for n in self.behavior_names:
             decision_steps, terminal_steps = self._env.get_steps(n)
-            tmp_ma_decision_steps[n] = decision_steps
-            tmp_ma_terminal_steps[n] = terminal_steps
 
-        while any([len(decision_steps) == 0 for decision_steps in tmp_ma_decision_steps.values()]):
+            agent_id_to_index = self._ma_agent_id_to_index[n]
+            ma_decision_steps_len[n] = len(decision_steps)
+
+            for agent_id in decision_steps:
+                agent_idx = agent_id_to_index[agent_id]
+                info = decision_steps[agent_id]
+                for obs, _obs in zip(ma_obs_list[n], info.obs):
+                    obs[agent_idx] = _obs
+                ma_reward[n][agent_idx] = info.reward
+
+                visited_ma_agent_ids[n].add(agent_id)
+
+            for agent_id in terminal_steps:
+                agent_idx = agent_id_to_index[agent_id]
+                info = terminal_steps[agent_id]
+                for obs, _obs in zip(ma_obs_list[n], info.obs):
+                    obs[agent_idx] = _obs
+                ma_reward[n][agent_idx] = info.reward
+                ma_done[n][agent_idx] = True
+                ma_max_step[n][agent_idx] = info.interrupted
+
+                visited_ma_agent_ids[n].add(agent_id)
+
+        while any([ma_decision_steps_len[n] != len(self._ma_agents_ids[n]) for n in self.behavior_names]):
             for n in self.behavior_names:
-                if len(tmp_ma_decision_steps[n]) > 0:
-                    continue
-                self._env.set_actions(n, self._empty_action(0))
+                self._env.set_actions(n, self._empty_action(ma_decision_steps_len[n]))
 
             self._env.step()
 
             for n in self.behavior_names:
-                if len(tmp_ma_decision_steps[n]) > 0:
-                    continue
                 decision_steps, terminal_steps = self._env.get_steps(n)
-                tmp_ma_decision_steps[n] = decision_steps
-                tmp_ma_terminal_steps[n].agent_id = np.concatenate([tmp_ma_terminal_steps[n].agent_id,
-                                                                    terminal_steps.agent_id])
 
-                tmp_ma_terminal_steps[n].reward = np.concatenate([tmp_ma_terminal_steps[n].reward,
-                                                                  terminal_steps.reward])
-                tmp_ma_terminal_steps[n].interrupted = np.concatenate([tmp_ma_terminal_steps[n].interrupted,
-                                                                       terminal_steps.interrupted])
+                agent_id_to_index = self._ma_agent_id_to_index[n]
+                ma_decision_steps_len[n] = len(decision_steps)
 
-        for n in self.behavior_names:
-            decision_steps: DecisionSteps = tmp_ma_decision_steps[n]
-            terminal_steps: TerminalSteps = tmp_ma_terminal_steps[n]
+                for agent_id in decision_steps:
+                    agent_idx = agent_id_to_index[agent_id]
+                    info = decision_steps[agent_id]
+                    for obs, _obs in zip(ma_obs_list[n], info.obs):
+                        obs[agent_idx] = _obs
 
-            reward = decision_steps.reward
-            for i, agent_id in enumerate(terminal_steps.agent_id):
-                reward[decision_steps.agent_id_to_index[agent_id]] = terminal_steps.reward[i]
+                    if agent_id not in visited_ma_agent_ids[n]:
+                        ma_reward[n][agent_idx] = info.reward
 
-            done = np.full([len(decision_steps), ], False, dtype=bool)
-            for i, agent_id in enumerate(terminal_steps.agent_id):
-                done[decision_steps.agent_id_to_index[agent_id]] = True
+                    visited_ma_agent_ids[n].add(agent_id)
 
-            max_step = np.full([len(decision_steps), ], False, dtype=bool)
-            for i, agent_id in enumerate(terminal_steps.agent_id):
-                max_step[decision_steps.agent_id_to_index[agent_id]] = terminal_steps.interrupted[i]
+                for agent_id in terminal_steps:
+                    agent_idx = agent_id_to_index[agent_id]
+                    info = terminal_steps[agent_id]
+                    for obs, _obs in zip(ma_obs_list[n], info.obs):
+                        obs[agent_idx] = _obs
+                    ma_reward[n][agent_idx] = info.reward
+                    ma_done[n][agent_idx] = True
+                    ma_max_step[n][agent_idx] = info.interrupted
 
-            ma_obs_list[n] = [obs.astype(np.float32) for obs in decision_steps.obs]
-            ma_reward[n] = reward.astype(np.float32)
-            ma_done[n] = done
-            ma_max_step[n] = max_step
+                    visited_ma_agent_ids[n].add(agent_id)
 
         return ma_obs_list, ma_reward, ma_done, ma_max_step
 
