@@ -1,9 +1,11 @@
+from collections import defaultdict
 import itertools
 import logging
 import math
 import multiprocessing
 import multiprocessing.connection
 import os
+import random
 import uuid
 from typing import List
 
@@ -67,7 +69,7 @@ class UnityWrapperProcess:
         self.scene = scene
         self.n_copys = n_copys
 
-        seed = seed if seed is not None else np.random.randint(0, 65536)
+        seed = seed if seed is not None else random.randint(0, 65536)
         additional_args = [] if additional_args is None else additional_args.split(' ')
 
         self.engine_configuration_channel = EngineConfigurationChannel()
@@ -106,6 +108,14 @@ class UnityWrapperProcess:
 
         self._env.reset()
         self.behavior_names = list(self._env.behavior_specs)
+
+        self.ma_n_agents = {n: 0 for n in self.behavior_names}
+        for n in self.behavior_names:
+            decision_steps, terminal_steps = self._env.get_steps(n)
+
+            n_agents = decision_steps.obs[0].shape[0]
+            self.ma_n_agents[n] = n_agents
+            self._logger.info(f'{n} Number of Agents: {n_agents}')
 
         if conn:
             try:
@@ -170,7 +180,7 @@ class UnityWrapperProcess:
 
         self._logger.info('Initialized')
 
-        return self.ma_obs_shapes, self.ma_d_action_size, self.ma_c_action_size
+        return self.ma_obs_shapes, self.ma_d_action_size, self.ma_c_action_size, self.ma_n_agents
 
     def reset(self, reset_config=None):
         """
@@ -406,17 +416,30 @@ class UnityWrapper:
             discrete action size: dict[str, int], sum of all action branches
             continuous action size: dict[str, int]
         """
+
+        self.ma_n_agents_list = defaultdict(list)
+
         if self._seq_envs:
             for env in self._envs:
                 results = env.init()
+                ma_obs_shapes, ma_d_action_size, ma_c_action_size, ma_n_agents = results
+                for n, n_agents in ma_n_agents.items():
+                    self.ma_n_agents_list[n].append(n_agents)
         else:
             for conn in self._conns:
                 conn.send((INIT, None))
                 results = conn.recv()
+                ma_obs_shapes, ma_d_action_size, ma_c_action_size, ma_n_agents = results
+                for n, n_agents in ma_n_agents.items():
+                    self.ma_n_agents_list[n].append(n_agents)
 
-        self.behavior_names = list(results[0].keys())
+        self.behavior_names = list(ma_obs_shapes.keys())
+        for n, n_agents_list in self.ma_n_agents_list.items():
+            for i in range(1, len(n_agents_list)):
+                n_agents_list[i] += n_agents_list[i - 1]
+            n_agents_list.insert(0, 0)
 
-        return results
+        return ma_obs_shapes, ma_d_action_size, ma_c_action_size
 
     def reset(self, reset_config=None):
         """
@@ -460,12 +483,12 @@ class UnityWrapper:
             for n in self.behavior_names:
                 d_action = ma_d_action[n]
                 c_action = ma_c_action[n]
+                n_agents_list = self.ma_n_agents_list[n]
+
                 if d_action is not None:
-                    n_agents_per_copy = d_action.shape[0] // self.n_copys
-                    tmp_ma_d_actions[n] = d_action[i * MAX_N_COPYS_PER_PROCESS * n_agents_per_copy:(i + 1) * MAX_N_COPYS_PER_PROCESS * n_agents_per_copy]
+                    tmp_ma_d_actions[n] = d_action[n_agents_list[i]:n_agents_list[i + 1]]
                 if c_action is not None:
-                    n_agents_per_copy = c_action.shape[0] // self.n_copys
-                    tmp_ma_c_actions[n] = c_action[i * MAX_N_COPYS_PER_PROCESS * n_agents_per_copy:(i + 1) * MAX_N_COPYS_PER_PROCESS * n_agents_per_copy]
+                    tmp_ma_c_actions[n] = c_action[n_agents_list[i]:n_agents_list[i + 1]]
 
             if self._seq_envs:
                 (ma_obs_list,
