@@ -13,7 +13,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
         self.rnn = m.GRU(self.conv.output_size + 9 + self.c_action_size, 128, 1)
 
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         vis_obs, vec_obs = obs_list
 
         vis_obs = self.conv(vis_obs)

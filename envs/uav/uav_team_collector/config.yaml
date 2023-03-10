@@ -8,7 +8,7 @@ default:
       no_graphics: true
 
     n_agents: 50
-    max_step: 300000
+    max_step: 500000
     reset_on_iteration: false
 
   reset_config:
@@ -24,3 +24,11 @@ default:
 
     use_rnd: true
     rnd_n_sample: 50
+
+vanilla:
+  base_config:
+    name: "vanilla_{time}"
+
+  sac_config:
+    burn_in_step: 0
+    seq_encoder: null

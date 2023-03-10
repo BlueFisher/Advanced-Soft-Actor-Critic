@@ -22,7 +22,7 @@ class ModelBaseSimpleRep(nn.Module):
     def _build_model(self, **kwargs):
         pass
 
-    def forward(self, obs_list):
+    def forward(self, obs_list: List[torch.Tensor]):
         raise Exception("ModelSimpleRep not implemented")
 
     def get_augmented_encoders(self, obs_list) -> Union[torch.Tensor, Tuple[torch.Tensor]]:
@@ -54,7 +54,16 @@ class ModelBaseRNNRep(nn.Module):
     def _build_model(self, **kwargs):
         pass
 
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, obs_list: List[torch.Tensor], pre_action: torch.Tensor,
+                rnn_state: Optional[torch.Tensor] = None,
+                padding_mask: Optional[torch.Tensor] = None):
+        """
+        Args:
+            obs_list: list([Batch, l, *obs_shapes_i], ...)
+            pre_action: [Batch, l, action_size]
+            rnn_state: [Batch, l, *seq_hidden_state_shape]
+            padding_mask (torch.bool): [Batch, l]
+        """
         raise Exception("ModelRNNRep not implemented")
 
     def get_augmented_encoders(self, obs_list) -> Union[torch.Tensor, Tuple[torch.Tensor]]:

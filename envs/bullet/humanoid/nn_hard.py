@@ -16,7 +16,7 @@ class ModelRep(m.ModelBaseRNNRep):
             nn.Tanh()
         )
 
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         obs = obs_list[0]
         obs = torch.cat([obs[..., :3], obs[..., 6:]], dim=-1)
 

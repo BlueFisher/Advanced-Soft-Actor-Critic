@@ -17,10 +17,13 @@ class ModelRep(m.ModelBaseRNNRep):
             nn.Tanh()
         )
 
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         obs = obs_list[0][..., :-EXTRA_SIZE]
 
         output, hn = self.rnn(torch.cat([obs, pre_action], dim=-1), rnn_state)
+
+        if padding_mask is not None:
+            output = output * (~padding_mask).to(output.dtype).unsqueeze(-1)
 
         state = self.dense(output)
 
@@ -39,7 +42,7 @@ class ModelOptionRep(ModelRep):
             nn.Tanh()
         )
 
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         high_rep, obs = obs_list
         obs = obs[..., :-EXTRA_SIZE]
 

@@ -53,7 +53,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
         return bbox
 
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         bbox, vis_camera, vis_segmentation, vec = obs_list
 
         if self.blurrer:
