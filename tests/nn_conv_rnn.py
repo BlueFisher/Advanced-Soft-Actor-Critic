@@ -17,7 +17,7 @@ class ModelRep(m.ModelBaseRNNRep):
             nn.Tanh()
         )
 
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         obs_vec, obs_vis = obs_list
         obs_vec = obs_vec[..., EXTRA_SIZE:]
 
@@ -60,7 +60,7 @@ class ModelOptionRep(m.ModelBaseRNNRep):
             nn.Tanh()
         )
 
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         high_state, obs_vec, obs_vis = obs_list
         obs_vec = obs_vec[..., EXTRA_SIZE:]
 

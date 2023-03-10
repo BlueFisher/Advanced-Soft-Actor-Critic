@@ -902,7 +902,8 @@ class SAC_Base(object):
             if self.seq_encoder == SEQ_ENCODER.RNN:
                 l_states, next_rnn_state = model_rep(l_obses_list,
                                                      l_pre_actions,
-                                                     f_seq_hidden_states[:, 0])
+                                                     f_seq_hidden_states[:, 0],
+                                                     padding_mask=l_padding_masks)
                 next_f_rnn_states = next_rnn_state.unsqueeze(dim=1)
 
                 return l_states, next_f_rnn_states  # [Batch, l, state_size], [Batch, 1, rnn_state_size]
@@ -952,7 +953,8 @@ class SAC_Base(object):
             for t in range(l):
                 f_states, rnn_state = self.model_rep([l_obses[:, t:t + 1, ...] for l_obses in l_obses_list],
                                                      l_pre_actions[:, t:t + 1, ...],
-                                                     rnn_state)
+                                                     rnn_state,
+                                                     padding_mask=l_padding_masks[:, t:t + 1, ...])
 
                 if l_states is None:
                     l_states = torch.zeros((batch, l, *f_states.shape[2:]), device=self.device)
@@ -1493,14 +1495,17 @@ class SAC_Base(object):
                 pre_actions_at_n = bn_actions[:, self.burn_in_step - 1:self.burn_in_step, ...]
 
                 if self.seq_encoder == SEQ_ENCODER.RNN:
+                    padding_masks_at_n = bn_padding_masks[:, self.burn_in_step:self.burn_in_step + 1]
                     state = self.model_rep.get_state_from_encoders(obses_list_at_n,
                                                                    _encoder if len(_encoder) > 1 else _encoder[0],
                                                                    pre_actions_at_n,
-                                                                   self.get_initial_seq_hidden_state(batch, False))
+                                                                   self.get_initial_seq_hidden_state(batch, False),
+                                                                   padding_mask=padding_masks_at_n)
                     target_state = self.model_target_rep.get_state_from_encoders(obses_list_at_n,
                                                                                  _target_encoder if len(_target_encoder) > 1 else _target_encoder[0],
                                                                                  pre_actions_at_n,
-                                                                                 self.get_initial_seq_hidden_state(batch, False))
+                                                                                 self.get_initial_seq_hidden_state(batch, False),
+                                                                                 padding_mask=padding_masks_at_n)
                     state = state[:, 0, ...]
                     target_state = target_state[:, 0, ...]
 

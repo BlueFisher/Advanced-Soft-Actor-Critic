@@ -52,7 +52,7 @@ class ModelRep(m.ModelBaseRNNRep):
             m.Transform(cropper)
         ])
 
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         vis_cam, ray, vec = obs_list
         ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
 
@@ -140,7 +140,7 @@ class ModelOptionRep(m.ModelBaseRNNRep):
             m.Transform(cropper)
         ])
 
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         high_state, vis_cam, ray, vec = obs_list
         ray = ray[..., self.ray_index]
 

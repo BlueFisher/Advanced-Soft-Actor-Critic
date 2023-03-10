@@ -15,7 +15,7 @@ class ModelRep(m.ModelBaseRNNRep):
         self.dense = m.LinearLayers(input_size=64,
                                     dense_n=128, dense_depth=2, output_size=128)
 
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         ray_obs, vec_obs = obs_list
         vec_obs = vec_obs[..., :-EXTRA_SIZE]
 

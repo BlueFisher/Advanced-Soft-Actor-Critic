@@ -32,7 +32,7 @@ class ModelRep(m.ModelBaseRNNRep):
         bbox, _ = attn(bbox, bbox, bbox, key_padding_mask=bbox_mask)
         return bbox.mean(-2)
 
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         bbox_cam, ray, vec = obs_list
         ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
 

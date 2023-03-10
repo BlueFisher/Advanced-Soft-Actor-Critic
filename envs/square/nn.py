@@ -11,7 +11,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
         self.rnn = m.GRU(self.obs_shapes[0][0] + self.c_action_size, 8, 1)
 
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         ray_obs, vec_obs = obs_list
 
         output, hn = self.rnn(torch.cat([ray_obs, pre_action], dim=-1), rnn_state)

@@ -45,7 +45,7 @@ class ModelOptionRep(ModelRep):
 
         self.rnn = m.GRU(self.obs_shapes[1][0] - EXTRA_SIZE + self.c_action_size, 32, 1)
 
-    def forward(self, obs_list, pre_action, rnn_state=None):
+    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         high_rep, obs = obs_list
         obs = obs[..., :-EXTRA_SIZE]
 
