@@ -51,6 +51,7 @@ class SAC_Base(object):
                  update_target_per_step: int = 1,
                  init_log_alpha: float = -2.3,
                  use_auto_alpha: bool = True,
+                 target_alpha: bool=None,
                  learning_rate: float = 3e-4,
                  gamma: float = 0.99,
                  v_lambda: float = 1.,
@@ -109,6 +110,7 @@ class SAC_Base(object):
 
         init_log_alpha: -2.3 # The initial log_alpha
         use_auto_alpha: true # Whether using automating entropy adjustment
+        target_alpha: None # Target alpha, c_action_size if target_alpha is None
 
         learning_rate: 0.0003 # Learning rate of all optimizers
 
@@ -159,6 +161,7 @@ class SAC_Base(object):
         self.tau = tau
         self.update_target_per_step = update_target_per_step
         self.use_auto_alpha = use_auto_alpha
+        self.target_alpha = target_alpha
         self.gamma = gamma
         self.v_lambda = v_lambda
         self.v_rho = v_rho
@@ -392,6 +395,8 @@ class SAC_Base(object):
         """ ALPHA """
         self.log_d_alpha = torch.tensor(init_log_alpha, dtype=torch.float32, requires_grad=True, device=self.device)
         self.log_c_alpha = torch.tensor(init_log_alpha, dtype=torch.float32, requires_grad=True, device=self.device)
+        if self.target_alpha is None:
+            self.target_alpha = self.c_action_size
 
         if self.use_auto_alpha:
             self.optimizer_alpha = adam_optimizer([self.log_d_alpha, self.log_c_alpha])
@@ -1710,7 +1715,7 @@ class SAC_Base(object):
             log_prob = torch.sum(squash_correction_log_prob(c_policy, action_sampled), dim=1, keepdim=True)
             # [Batch, 1]
 
-            loss_c_alpha = -c_alpha * (log_prob - self.c_action_size)  # [Batch, 1]
+            loss_c_alpha = -c_alpha * (log_prob - self.target_alpha)  # [Batch, 1]
 
         loss_alpha = torch.mean(loss_d_alpha + loss_c_alpha)
 
