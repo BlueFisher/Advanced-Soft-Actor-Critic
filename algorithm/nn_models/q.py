@@ -35,13 +35,13 @@ class ModelQ(ModelBaseQ):
                      c_action_n=64, c_action_depth=0,
                      c_dense_n=64, c_dense_depth=3):
         """
-                         state
-                           │
-                        ┌──▼──┐
-              ┌─────────┤dense├────┐
-              │         └─────┘    │
-              │                    │
-              │             ┌──────▼──────┐ ┌──────────────┐
+                         state                  c_action
+                           │                        │
+                        ┌──▼──┐                     │
+              ┌─────────┤dense├────┐                │
+              │         └─────┘    │                │
+              │                    │                │
+              │             ┌──────▼──────┐ ┌───────▼──────┐
               │             │c_state_dense│ │c_action_dense│
               │             └──────┬──────┘ └───────┬──────┘
               │                    │                │

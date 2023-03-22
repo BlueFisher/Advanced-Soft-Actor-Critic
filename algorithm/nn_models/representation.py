@@ -34,7 +34,7 @@ class ModelBaseSimpleRep(nn.Module):
 
 class ModelSimpleRep(ModelBaseSimpleRep):
     def forward(self, obs_list):
-        return torch.cat(obs_list, dim=-1)
+        return torch.cat([o for o, os in zip(obs_list, self.obs_shapes) if len(os) == 1], dim=-1)
 
 
 class ModelBaseRNNRep(nn.Module):

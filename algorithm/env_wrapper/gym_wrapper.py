@@ -1,60 +1,8 @@
 import logging
-import multiprocessing
-import os
 import time
 
-import gym
+import gymnasium as gym
 import numpy as np
-
-try:
-    import pybullet_envs
-except:
-    pass
-
-try:
-    import gym_minigrid
-except:
-    pass
-
-VANILLA_ENVS = ['CartPole-v1', 'Pendulum-v0', 'MountainCarContinuous-v0']
-
-RESET = 0
-STEP = 1
-CLOSE = 2
-
-
-def start_gym_process(env_name, render, conn):
-    try:
-        from algorithm import config_helper
-        config_helper.set_logger()
-    except:
-        pass
-
-    logger = logging.getLogger('GymWrapper.Process')
-
-    logger.info(f'Process {os.getpid()} created')
-
-    env = gym.make(env_name)
-    if render:
-        env.render()
-
-    try:
-        while True:
-            cmd, data = conn.recv()
-            if cmd == RESET:
-                obs = env.reset()
-                conn.send(obs)
-            elif cmd == CLOSE:
-                env.close()
-                break
-            elif cmd == STEP:
-                conn.send(env.step(data))
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        logger.error(e)
-
-    logger.warning(f'Process {os.getpid()} exits')
 
 
 class GymWrapper:
@@ -62,157 +10,88 @@ class GymWrapper:
                  train_mode=True,
                  env_name=None,
                  render=False,
-                 n_agents=1,
-                 force_seq=None):
+                 n_copies=1):
         self.train_mode = train_mode
         self.env_name = env_name
         self.render = render
-        self.n_agents = n_agents
-
-        # If use multiple processes
-        if force_seq is None:
-            self._seq_envs = n_agents == 1 or env_name in VANILLA_ENVS
-        else:
-            self._seq_envs = force_seq
-
-        if self._seq_envs:
-            # All environments are executed sequentially
-            self._envs = []
-        else:
-            # All environments are executed in parallel
-            self._conns = []
+        self.n_copies = n_copies
 
         self._logger = logging.getLogger('GymWrapper')
 
-    def init(self):
-        if self._seq_envs:
-            for i in range(self.n_agents):
-                self._envs.append(gym.make(self.env_name))
-            env = self._envs[0]
+        self._logger.info(list(gym.registry.keys()))
 
-            if self.render or not self.train_mode:
-                env.render()
-        else:
-            env = gym.make(self.env_name)
+    def init(self):
+        self.env = env = gym.vector.make(self.env_name,
+                                         render_mode='human' if self.render else None,
+                                         num_envs=self.n_copies)
 
         self._logger.info(f'Observation shapes: {env.observation_space}')
         self._logger.info(f'Action size: {env.action_space}')
 
-        self._state_dim = env.observation_space.shape[0]
-        self.is_discrete = isinstance(env.action_space, gym.spaces.Discrete)
+        self._state_dim = env.single_observation_space.shape[0]
+        self.is_discrete = isinstance(env.single_action_space, gym.spaces.Discrete)
 
         d_action_size, c_action_size = 0, 0
 
         if self.is_discrete:
-            d_action_size = env.action_space.n
+            d_action_size = env.single_action_space.n
         else:
-            c_action_size = env.action_space.shape[0]
-
-        if not self._seq_envs:
-            env.close()
-
-            for i in range(self.n_agents):
-                parent_conn, child_conn = multiprocessing.Pipe()
-                self._conns.append(parent_conn)
-                p = multiprocessing.Process(target=start_gym_process,
-                                            args=(self.env_name,
-                                                  (self.render or not self.train_mode) and i == 0,
-                                                  child_conn),
-                                            daemon=True)
-                p.start()
+            c_action_size = env.single_action_space.shape[0]
 
         return ({'gym': [(self._state_dim, )]},
                 {'gym': d_action_size},
                 {'gym': c_action_size})
 
     def reset(self, reset_config=None):
-        if self._seq_envs:
-            obs = np.stack([e.reset() for e in self._envs], axis=0)
-            obs = obs.astype(np.float32)
-        else:
-            for conn in self._conns:
-                conn.send((RESET, None))
+        obs, info = self.env.reset()
 
-            obs = np.zeros([self.n_agents, self._state_dim], dtype=np.float32)
-
-            for i, conn in enumerate(self._conns):
-                t_obs = conn.recv()
-                obs[i] = t_obs
+        obs = obs.astype(np.float32)
 
         return {'gym': [obs]}
 
     def step(self, ma_d_action, ma_c_action):
-        d_action, c_action = ma_d_action['gym'], ma_c_action['gym']
-
-        obs = np.zeros([self.n_agents, self._state_dim], dtype=np.float32)
-        reward = np.zeros(self.n_agents, dtype=np.float32)
-        done = np.zeros(self.n_agents, dtype=bool)
-        max_step = np.full(self.n_agents, False)
-
         if self.is_discrete:
+            d_action = ma_d_action['gym']
             # Convert one-hot to label
             action = np.argmax(d_action, axis=1)
-            action = action.tolist()
         else:
+            c_action = ma_c_action['gym']
             action = c_action
 
-        if self._seq_envs:
-            for i, env in enumerate(self._envs):
-                tmp_obs, tmp_reward, tmp_done, info = env.step(action[i])
-                obs[i] = tmp_obs
-                reward[i] = tmp_reward
-                done[i] = tmp_done
-
-            if self.render or not self.train_mode:
-                self._envs[0].render()
-
-            for i in np.where(done)[0]:
-                obs[i] = self._envs[i].reset()
-        else:
-            for i, conn in enumerate(self._conns):
-                conn.send((STEP, action[i]))
-
-            for i, conn in enumerate(self._conns):
-                tmp_obs, tmp_reward, tmp_done, info = conn.recv()
-                obs[i] = tmp_obs
-                reward[i] = tmp_reward
-                done[i] = tmp_done
-
-            done_index = np.where(done)[0]
-            for i in done_index:
-                self._conns[i].send((RESET, None))
-
-            for i in done_index:
-                obs[i] = self._conns[i].recv()
-
-        if not self.train_mode and self.n_agents == 1 and 'Bullet' in self.env_name:
-            time.sleep(0.01)
+        obs, reward, done, max_step, info = self.env.step(action)
 
         return {'gym': [obs]}, {'gym': reward}, {'gym': done}, {'gym': max_step}
 
     def close(self):
-        if self._seq_envs:
-            for env in self._envs:
-                env.close()
-        else:
-            for conn in self._conns:
-                conn.send((CLOSE, None))
+        self.env.close()
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    gym_wrapper = GymWrapper(True, 'HalfCheetah-v2', n_agents=1, force_seq=True, render=True)
-    gym_wrapper.init()
 
-    tt = []
-    for _ in range(3):
-        t = time.time()
-        gym_wrapper.reset()
-        for i in range(1000):
-            gym_wrapper.step(None, np.random.randn(6,))
-        tt.append(time.time() - t)
+    N_COPIES = 2
 
-    print(tt)
-    print(sum(tt) / len(tt))
+    env = GymWrapper(True, 'Ant-v4', render=True, n_copies=2)
+    ma_obs_shapes, ma_d_action_size, ma_c_action_size = env.init()
+    ma_names = list(ma_obs_shapes.keys())
 
-    gym_wrapper.close()
+    for i in range(100):
+        ma_obs_list = env.reset()
+
+        for j in range(100):
+            ma_d_action = {}
+            ma_c_action = {}
+            for n in ma_names:
+                d_action, c_action = None, None
+                if ma_d_action_size[n]:
+                    d_action = np.random.randint(0, ma_d_action_size[n], size=N_COPIES)
+                    d_action = np.eye(ma_d_action_size[n], dtype=np.int32)[d_action]
+                if ma_c_action_size[n]:
+                    c_action = np.random.randn(N_COPIES, ma_c_action_size[n])
+
+            ma_d_action[n] = d_action
+            ma_c_action[n] = c_action
+
+            ma_obs_list, ma_reward, ma_done, ma_max_step = env.step(ma_d_action, ma_c_action)
+
+    env.close()

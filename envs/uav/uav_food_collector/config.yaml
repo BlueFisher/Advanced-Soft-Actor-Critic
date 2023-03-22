@@ -1,6 +1,6 @@
 default:
   base_config:
-    env_name: UAVTeamCollector
+    env_name: UAVFoodCollector
     unity_args:
       build_path:
         win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
@@ -22,13 +22,5 @@ default:
     burn_in_step: 10
     seq_encoder: RNN
 
-    use_rnd: true
-    rnd_n_sample: 50
-
-vanilla:
-  base_config:
-    name: "vanilla_{time}"
-
-  sac_config:
-    burn_in_step: 0
-    seq_encoder: null
+    # use_rnd: true
+    # rnd_n_sample: 50
