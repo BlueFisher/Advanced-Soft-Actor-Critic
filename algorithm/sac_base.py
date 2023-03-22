@@ -51,7 +51,7 @@ class SAC_Base(object):
                  update_target_per_step: int = 1,
                  init_log_alpha: float = -2.3,
                  use_auto_alpha: bool = True,
-                 target_alpha: bool=None,
+                 target_alpha: bool = None,
                  learning_rate: float = 3e-4,
                  gamma: float = 0.99,
                  v_lambda: float = 1.,
@@ -231,6 +231,9 @@ class SAC_Base(object):
 
         self._gamma_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.gamma, device=self.device)
         self._lambda_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.v_lambda, device=self.device)
+
+        self.v_rho = torch.tensor(self.v_rho, device=self.device)
+        self.v_c = torch.tensor(self.v_c, device=self.device)
 
         def adam_optimizer(params):
             return optim.Adam(params, lr=learning_rate)
@@ -1110,10 +1113,10 @@ class SAC_Base(object):
             n_step_is = n_pi_probs / n_mu_probs.clamp(min=1e-8)
 
             # \rho_t, t \in [s, s+n-1]
-            rho = torch.minimum(n_step_is, torch.tensor(self.v_rho, device=self.device))  # [Batch, n]
+            rho = torch.minimum(n_step_is, self.v_rho)  # [Batch, n]
 
             # \prod{c_i}, i \in [s, t-1]
-            c = torch.minimum(n_step_is, torch.tensor(self.v_c, device=self.device))
+            c = torch.minimum(n_step_is, self.v_c)
             c = torch.cat([torch.ones((n_step_is.shape[0], 1), device=self.device), c[..., :-1]], dim=-1)
             c = torch.cumprod(c, dim=1)
 
