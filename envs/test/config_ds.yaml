@@ -5,7 +5,7 @@ default:
 
     max_iter: 5
     max_step_each_iter: 100
-    n_agents: 2
+    n_envs: 2
 
     evolver_enabled: false
 

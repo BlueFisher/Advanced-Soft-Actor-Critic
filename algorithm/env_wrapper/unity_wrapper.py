@@ -25,7 +25,7 @@ INIT = 0
 RESET = 1
 STEP = 2
 CLOSE = 3
-MAX_N_COPYS_PER_PROCESS = 10
+MAX_N_ENVS_PER_PROCESS = 10
 
 
 class OptionChannel(SideChannel):
@@ -54,7 +54,7 @@ class UnityWrapperProcess:
                  seed=None,
                  scene=None,
                  additional_args=None,
-                 n_copys=1):
+                 n_envs=1):
         """
         Args:
             train_mode: If in train mode, Unity will speed up
@@ -64,10 +64,11 @@ class UnityWrapperProcess:
             no_graphics: If Unity runs in no graphic mode. It must be set to False if Unity has camera sensor.
             seed: Random seed
             scene: The scene name
-            n_copys: The env copies count
+            n_envs: The env copies count
         """
         self.scene = scene
-        self.n_copys = n_copys
+        self.n_envs = n_envs
+        self.group_aggregation = True
 
         seed = seed if seed is not None else random.randint(0, 65536)
         additional_args = [] if additional_args is None else additional_args.split(' ')
@@ -75,7 +76,7 @@ class UnityWrapperProcess:
         self.engine_configuration_channel = EngineConfigurationChannel()
         self.environment_parameters_channel = EnvironmentParametersChannel()
 
-        self.environment_parameters_channel.set_float_parameter('env_copys', float(n_copys))
+        self.environment_parameters_channel.set_float_parameter('env_copys', float(n_envs))
 
         self.option_channel = OptionChannel()
 
@@ -109,13 +110,13 @@ class UnityWrapperProcess:
         self._env.reset()
         self.behavior_names = list(self._env.behavior_specs)
 
-        self.ma_n_agents = {n: 0 for n in self.behavior_names}
+        self.ma_n_envs = {n: 0 for n in self.behavior_names}
         for n in self.behavior_names:
             decision_steps, terminal_steps = self._env.get_steps(n)
 
-            n_agents = decision_steps.obs[0].shape[0]
-            self.ma_n_agents[n] = n_agents
-            self._logger.info(f'{n} Number of Agents: {n_agents}')
+            n_envs = decision_steps.obs[0].shape[0]
+            self.ma_n_envs[n] = n_envs
+            self._logger.info(f'{n} Number of Agents: {n_envs}')
 
         if conn:
             try:
@@ -180,7 +181,7 @@ class UnityWrapperProcess:
 
         self._logger.info('Initialized')
 
-        return self.ma_obs_shapes, self.ma_d_action_size, self.ma_c_action_size, self.ma_n_agents
+        return self.ma_obs_shapes, self.ma_d_action_size, self.ma_c_action_size, self.ma_n_envs
 
     def reset(self, reset_config=None):
         """
@@ -326,7 +327,7 @@ class UnityWrapper:
                  seed=None,
                  scene=None,
                  additional_args=None,
-                 n_agents=1,
+                 n_envs=1,
                  force_seq=None):
         """
         Args:
@@ -336,7 +337,7 @@ class UnityWrapper:
             no_graphics: If Unity runs in no graphic mode. It must be set to False if Unity has camera sensor.
             seed: Random seed
             scene: The scene name
-            n_agents: The env copies count
+            n_envs: The env copies count
         """
         self.train_mode = train_mode
         self.file_name = file_name
@@ -345,17 +346,17 @@ class UnityWrapper:
         self.seed = seed
         self.scene = scene
         self.additional_args = additional_args
-        self.n_copys = n_agents
+        self.n_envs = n_envs
 
         # If use multiple processes
         if force_seq is None:
-            self._seq_envs: bool = self.n_copys <= MAX_N_COPYS_PER_PROCESS
+            self._seq_envs: bool = self.n_envs <= MAX_N_ENVS_PER_PROCESS
         else:
             self._seq_envs: bool = force_seq
 
         self._process_id = 0
 
-        self.env_length = math.ceil(self.n_copys / MAX_N_COPYS_PER_PROCESS)
+        self.env_length = math.ceil(self.n_envs / MAX_N_ENVS_PER_PROCESS)
 
         if self._seq_envs:
             # All environments are executed sequentially
@@ -371,7 +372,7 @@ class UnityWrapper:
                                                       seed,
                                                       scene,
                                                       additional_args,
-                                                      min(MAX_N_COPYS_PER_PROCESS, self.n_copys - i * MAX_N_COPYS_PER_PROCESS)))
+                                                      min(MAX_N_ENVS_PER_PROCESS, self.n_envs - i * MAX_N_ENVS_PER_PROCESS)))
         else:
             # All environments are executed in parallel
             self._conns: List[multiprocessing.connection.Connection] = [None] * self.env_length
@@ -396,7 +397,7 @@ class UnityWrapper:
                                                   self.seed,
                                                   self.scene,
                                                   self.additional_args,
-                                                  min(MAX_N_COPYS_PER_PROCESS, self.n_copys - i * MAX_N_COPYS_PER_PROCESS)),
+                                                  min(MAX_N_ENVS_PER_PROCESS, self.n_envs - i * MAX_N_ENVS_PER_PROCESS)),
                                             daemon=True)
                 p.start()
 
@@ -417,27 +418,27 @@ class UnityWrapper:
             continuous action size: dict[str, int]
         """
 
-        self.ma_n_agents_list = defaultdict(list)
+        self.ma_n_envs_list = defaultdict(list)
 
         if self._seq_envs:
             for env in self._envs:
                 results = env.init()
-                ma_obs_shapes, ma_d_action_size, ma_c_action_size, ma_n_agents = results
-                for n, n_agents in ma_n_agents.items():
-                    self.ma_n_agents_list[n].append(n_agents)
+                ma_obs_shapes, ma_d_action_size, ma_c_action_size, ma_n_envs = results
+                for n, n_envs in ma_n_envs.items():
+                    self.ma_n_envs_list[n].append(n_envs)
         else:
             for conn in self._conns:
                 conn.send((INIT, None))
                 results = conn.recv()
-                ma_obs_shapes, ma_d_action_size, ma_c_action_size, ma_n_agents = results
-                for n, n_agents in ma_n_agents.items():
-                    self.ma_n_agents_list[n].append(n_agents)
+                ma_obs_shapes, ma_d_action_size, ma_c_action_size, ma_n_envs = results
+                for n, n_envs in ma_n_envs.items():
+                    self.ma_n_envs_list[n].append(n_envs)
 
         self.behavior_names = list(ma_obs_shapes.keys())
-        for n, n_agents_list in self.ma_n_agents_list.items():
-            for i in range(1, len(n_agents_list)):
-                n_agents_list[i] += n_agents_list[i - 1]
-            n_agents_list.insert(0, 0)
+        for n, n_envs_list in self.ma_n_envs_list.items():
+            for i in range(1, len(n_envs_list)):
+                n_envs_list[i] += n_envs_list[i - 1]
+            n_envs_list.insert(0, 0)
 
         return ma_obs_shapes, ma_d_action_size, ma_c_action_size
 
@@ -483,12 +484,12 @@ class UnityWrapper:
             for n in self.behavior_names:
                 d_action = ma_d_action[n]
                 c_action = ma_c_action[n]
-                n_agents_list = self.ma_n_agents_list[n]
+                n_envs_list = self.ma_n_envs_list[n]
 
                 if d_action is not None:
-                    tmp_ma_d_actions[n] = d_action[n_agents_list[i]:n_agents_list[i + 1]]
+                    tmp_ma_d_actions[n] = d_action[n_envs_list[i]:n_envs_list[i + 1]]
                 if c_action is not None:
-                    tmp_ma_c_actions[n] = c_action[n_agents_list[i]:n_agents_list[i + 1]]
+                    tmp_ma_c_actions[n] = c_action[n_envs_list[i]:n_envs_list[i + 1]]
 
             if self._seq_envs:
                 (ma_obs_list,
@@ -550,12 +551,12 @@ class UnityWrapper:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
-    N_COPIES = 2
+    N_ENVS = 10
 
     env = UnityWrapper(train_mode=True,
-                       file_name=r'D:\Unity\win-RL-Envs\RLEnvironments.exe',
-                       scene='Roller',
-                       n_agents=N_COPIES)
+                       #    file_name=r'D:\Unity\win-RL-Envs\RLEnvironments.exe',
+                       #    scene='Roller',
+                       n_envs=N_ENVS)
     ma_obs_shapes, ma_d_action_size, ma_c_action_size = env.init()
     ma_names = list(ma_obs_shapes.keys())
 
@@ -568,10 +569,10 @@ if __name__ == "__main__":
             for n in ma_names:
                 d_action, c_action = None, None
                 if ma_d_action_size[n]:
-                    d_action = np.random.randint(0, ma_d_action_size[n], size=N_COPIES)
+                    d_action = np.random.randint(0, ma_d_action_size[n], size=N_ENVS)
                     d_action = np.eye(ma_d_action_size[n], dtype=np.int32)[d_action]
                 if ma_c_action_size[n]:
-                    c_action = np.random.randn(N_COPIES, ma_c_action_size[n])
+                    c_action = np.random.randn(N_ENVS, ma_c_action_size[n])
 
             ma_d_action[n] = d_action
             ma_c_action[n] = c_action

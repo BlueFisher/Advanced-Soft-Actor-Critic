@@ -10,11 +10,11 @@ class GymWrapper:
                  train_mode=True,
                  env_name=None,
                  render=False,
-                 n_copies=1):
+                 n_envs=1):
         self.train_mode = train_mode
         self.env_name = env_name
         self.render = render
-        self.n_copies = n_copies
+        self.n_envs = n_envs
 
         self._logger = logging.getLogger('GymWrapper')
 
@@ -23,7 +23,7 @@ class GymWrapper:
     def init(self):
         self.env = env = gym.vector.make(self.env_name,
                                          render_mode='human' if self.render else None,
-                                         num_envs=self.n_copies)
+                                         num_envs=self.n_envs)
 
         self._logger.info(f'Observation shapes: {env.observation_space}')
         self._logger.info(f'Action size: {env.action_space}')
@@ -69,9 +69,9 @@ class GymWrapper:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
-    N_COPIES = 2
+    N_ENVS = 2
 
-    env = GymWrapper(True, 'Ant-v4', render=True, n_copies=2)
+    env = GymWrapper(True, 'Ant-v4', render=True, n_envs=2)
     ma_obs_shapes, ma_d_action_size, ma_c_action_size = env.init()
     ma_names = list(ma_obs_shapes.keys())
 
@@ -84,10 +84,10 @@ if __name__ == "__main__":
             for n in ma_names:
                 d_action, c_action = None, None
                 if ma_d_action_size[n]:
-                    d_action = np.random.randint(0, ma_d_action_size[n], size=N_COPIES)
+                    d_action = np.random.randint(0, ma_d_action_size[n], size=N_ENVS)
                     d_action = np.eye(ma_d_action_size[n], dtype=np.int32)[d_action]
                 if ma_c_action_size[n]:
-                    c_action = np.random.randn(N_COPIES, ma_c_action_size[n])
+                    c_action = np.random.randn(N_ENVS, ma_c_action_size[n])
 
             ma_d_action[n] = d_action
             ma_c_action[n] = c_action

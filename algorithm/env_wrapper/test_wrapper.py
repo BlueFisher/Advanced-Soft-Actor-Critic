@@ -1,17 +1,17 @@
 import numpy as np
 
 
-def get_ma_obs_list(n_agents, ma_obs_shapes):
+def get_ma_obs_list(n_envs, ma_obs_shapes):
     return {
-        n: [np.random.randn(n_agents, *obs_shape).astype(np.float32) for obs_shape in obs_shapes]
+        n: [np.random.randn(n_envs, *obs_shape).astype(np.float32) for obs_shape in obs_shapes]
         for n, obs_shapes in ma_obs_shapes.items()
     }
 
 
 class TestWrapper:
-    def __init__(self, env_args, n_agents=1):
+    def __init__(self, env_args, n_envs=1):
         self.env_args = [] if env_args is None else env_args
-        self.n_agents = n_agents
+        self.n_envs = n_envs
 
     def init(self):
         if 'ma_obs_shapes' in self.env_args:
@@ -41,18 +41,18 @@ class TestWrapper:
         return self._ma_obs_shapes, ma_d_action_size, ma_c_action_size
 
     def reset(self, reset_config=None):
-        return get_ma_obs_list(self.n_agents, self._ma_obs_shapes)
+        return get_ma_obs_list(self.n_envs, self._ma_obs_shapes)
 
     def step(self, ma_d_action, ma_c_action):
-        return (get_ma_obs_list(self.n_agents, self._ma_obs_shapes), {
-            'test0': np.random.randn(self.n_agents).astype(np.float32),
-            'test1': np.random.randn(self.n_agents).astype(np.float32),
+        return (get_ma_obs_list(self.n_envs, self._ma_obs_shapes), {
+            'test0': np.random.randn(self.n_envs).astype(np.float32),
+            'test1': np.random.randn(self.n_envs).astype(np.float32),
         }, {
-            'test0': [False] * self.n_agents,
-            'test1': [False] * self.n_agents
+            'test0': [False] * self.n_envs,
+            'test1': [False] * self.n_envs
         }, {
-            'test0': [False] * self.n_agents,
-            'test1': [False] * self.n_agents
+            'test0': [False] * self.n_envs,
+            'test1': [False] * self.n_envs
         })
 
     def close(self):

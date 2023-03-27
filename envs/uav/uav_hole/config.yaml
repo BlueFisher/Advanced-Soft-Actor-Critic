@@ -1,23 +1,26 @@
 default:
   base_config:
-    env_name: RayObstacleSquare
+    env_name: UAVHole
     unity_args:
       build_path:
         win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
+      no_graphics: false
 
+    n_envs: 50
+    max_step: 500000
     reset_on_iteration: false
-    n_envs: 10
 
   reset_config:
     force_reset: true
 
   sac_config:
+    write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
+    save_model_per_step: 10000 # Save model every N steps
+
     n_step: 3
-
-rnn:
-  sac_config:
-    nn: nn_rnn
-
     burn_in_step: 10
     seq_encoder: RNN
+
+    use_rnd: true
+    rnd_n_sample: 50

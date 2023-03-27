@@ -82,7 +82,7 @@ class Learner(Main):
         if args.unity_port is not None:
             config['base_config']['unity_args']['port'] = args.unity_port
         if args.agents is not None:
-            config['base_config']['n_agents'] = args.agents
+            config['base_config']['n_envs'] = args.agents
         if args.name is not None:
             config['base_config']['name'] = args.name
         if args.nn is not None:
@@ -292,7 +292,7 @@ class Learner(Main):
         self.ma_manager[ma_name]['episode_length_array'][episode_idx] = l_indexes.shape[1]
 
     def _policy_evaluation(self):
-        self.ma_manager.init(self.base_config['n_agents'])
+        self.ma_manager.init(self.base_config['n_envs'])
 
         ma_obs_list = self.env.reset(reset_config=self.reset_config)
         self.ma_manager.set_obs_list(ma_obs_list)

@@ -54,7 +54,7 @@ base_config:
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
 
-  n_agents: 1 # N agents running in parallel
+  n_envs: 1 # N environments running in parallel
 
   max_iter: -1 # Max iteration
   max_step: -1 # Max step. Training will be terminated if max_iter or max_step encounters
@@ -142,7 +142,7 @@ base_config:
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
   update_sac_bak_per_step: 200 # Every N step update sac_bak
-  n_agents: 1 # N agents running in parallel
+  n_envs: 1 # N environments running in parallel
   max_step_each_iter: -1 # Max step in each iteration
   reset_on_iteration: true # Whether forcing reset agent if an episode terminated
 

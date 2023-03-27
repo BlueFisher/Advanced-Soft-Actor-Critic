@@ -112,7 +112,7 @@ class Actor(Main):
         if args.unity_port is not None:
             config['base_config']['unity_args']['port'] = args.unity_port
         if args.agents is not None:
-            config['base_config']['n_agents'] = args.agents
+            config['base_config']['n_envs'] = args.agents
 
         self._stub = StubController(config['net_config']['learner_host'],
                                     config['net_config']['learner_port'])
@@ -270,7 +270,7 @@ class Actor(Main):
         mgr['episode_length_array'][episode_idx] = l_indexes.shape[1]
 
     def _run(self):
-        self.ma_manager.init(self.base_config['n_agents'])
+        self.ma_manager.init(self.base_config['n_envs'])
 
         ma_obs_list = self.env.reset(reset_config=self.reset_config)
         self.ma_manager.set_obs_list(ma_obs_list)

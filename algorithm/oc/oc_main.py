@@ -68,7 +68,7 @@ class OC_Main(Main):
                                           replay_config=mgr.config['replay_config']))
 
     def _run(self):
-        self.ma_manager.pre_run(self.base_config['n_agents'])
+        self.ma_manager.pre_run(self.base_config['n_envs'])
 
         ma_obs_list = self.env.reset(reset_config=self.reset_config)
         self.ma_manager.set_obs_list(ma_obs_list)

@@ -7,7 +7,7 @@ default:
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
       no_graphics: false
 
-    n_agents: 50
+    n_envs: 50
     max_step: 150000
     reset_on_iteration: false
 

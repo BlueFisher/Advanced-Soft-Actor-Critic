@@ -228,15 +228,15 @@ class OC_AgentManager(AgentManager):
         self.seq_encoder = rl.seq_encoder
 
     def pre_run(self, num_agents: int):
-        self['initial_option_index'] = self.rl.get_initial_option_index(num_agents)  # [n_agents, action_size]
+        self['initial_option_index'] = self.rl.get_initial_option_index(num_agents)  # [n_envs, action_size]
         self['pre_option_index'] = self['initial_option_index']
-        self['initial_pre_action'] = self.rl.get_initial_action(num_agents)  # [n_agents, action_size]
+        self['initial_pre_action'] = self.rl.get_initial_action(num_agents)  # [n_envs, action_size]
         self['pre_action'] = self['initial_pre_action']
         if self.seq_encoder is not None:
-            self['initial_seq_hidden_state'] = self.rl.get_initial_seq_hidden_state(num_agents)  # [n_agents, *seq_hidden_state_shape]
+            self['initial_seq_hidden_state'] = self.rl.get_initial_seq_hidden_state(num_agents)  # [n_envs, *seq_hidden_state_shape]
             self['seq_hidden_state'] = self['initial_seq_hidden_state']
 
-            self['initial_low_seq_hidden_state'] = self.rl.get_initial_low_seq_hidden_state(num_agents)  # [n_agents, *los_seq_hidden_state_shape]
+            self['initial_low_seq_hidden_state'] = self.rl.get_initial_low_seq_hidden_state(num_agents)  # [n_envs, *los_seq_hidden_state_shape]
             self['low_seq_hidden_state'] = self['initial_low_seq_hidden_state']
 
         self.agents: List[OC_Agent] = [

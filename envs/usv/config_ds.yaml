@@ -7,7 +7,7 @@ default:
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
       no_graphics: false
 
-    n_agents: 10
+    n_envs: 10
     reset_on_iteration: false
 
     evolver_enabled: false
