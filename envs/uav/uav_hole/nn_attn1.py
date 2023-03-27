@@ -6,38 +6,34 @@ import algorithm.nn_models as m
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (2, 9)  # AgentsBufferSensor
-        assert self.obs_shapes[1] == (10, 3)  # TargetsBufferSensor
+        assert self.obs_shapes[1] == (84, 84, 3)
         assert self.obs_shapes[2] == (9, )
 
         self.attn_envs = m.MultiheadAttention(9, 1)
-        self.attn_targets = m.MultiheadAttention(9, 1, kdim=3, vdim=3)
 
-        self.rnn = m.GRU(9 + 9 + 9 + self.c_action_size, 128, 1)
+        self.conv = m.ConvLayers(84, 84, 3, 'simple',
+                                 out_dense_n=64, out_dense_depth=2)
+
+        self.rnn = m.GRU(9 + self.conv.output_size + self.c_action_size, 128, 1)
 
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
-        feature_agents, feature_targets, vec_obs = obs_list
+        feature_agents, vis_obs, vec_obs = obs_list
 
         feature_agents_mask = ~feature_agents.any(dim=-1)
         feature_agents_mask[..., 0] = False
-        feature_targets_mask = ~feature_targets.any(dim=-1)
-        feature_targets_mask[..., 0] = False
+
+        vis_obs = self.conv(vis_obs)
 
         attned_agents, _ = self.attn_envs(vec_obs.unsqueeze(-2), feature_agents, feature_agents,
                                             key_padding_mask=feature_agents_mask)
 
-        attned_targets, _ = self.attn_targets(vec_obs.unsqueeze(-2), feature_targets, feature_targets,
-                                              key_padding_mask=feature_targets_mask)
-
         attned_agents = attned_agents.squeeze(-2)
-        attned_targets = attned_targets.squeeze(-2)
 
         if padding_mask is not None:
             attned_agents[padding_mask] = 0.
-            attned_targets[padding_mask] = 0.
 
         state, hn = self.rnn(torch.concat([vec_obs,
-                                           attned_agents,
-                                           attned_targets,
+                                           vis_obs,
                                            pre_action], dim=-1), rnn_state)
 
         if padding_mask is not None:

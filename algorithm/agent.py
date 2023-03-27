@@ -265,10 +265,10 @@ class AgentManager:
 
     def pre_run(self, num_agents: int):
         if self.rl is not None:
-            self['initial_pre_action'] = self.rl.get_initial_action(num_agents)  # [n_agents, action_size]
+            self['initial_pre_action'] = self.rl.get_initial_action(num_agents)  # [n_envs, action_size]
             self['pre_action'] = self['initial_pre_action']
             if self.seq_encoder is not None:
-                self['initial_seq_hidden_state'] = self.rl.get_initial_seq_hidden_state(num_agents)  # [n_agents, *seq_hidden_state_shape]
+                self['initial_seq_hidden_state'] = self.rl.get_initial_seq_hidden_state(num_agents)  # [n_envs, *seq_hidden_state_shape]
                 self['seq_hidden_state'] = self['initial_seq_hidden_state']
 
         self.agents: List[Agent] = [

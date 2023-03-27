@@ -48,7 +48,7 @@ class Main(object):
             config['base_config']['unity_args']['port'] = args.port
 
         if args.agents is not None:
-            config['base_config']['n_agents'] = args.agents
+            config['base_config']['n_envs'] = args.agents
 
         config['base_config']['name'] = config_helper.generate_base_name(config['base_config']['name'])
 
@@ -74,7 +74,7 @@ class Main(object):
 
             if self.run_in_editor:
                 self.env = UnityWrapper(train_mode=self.train_mode,
-                                        n_agents=self.base_config['n_agents'])
+                                        n_envs=self.base_config['n_envs'])
             else:
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         file_name=self.base_config['unity_args']['build_path'][sys.platform],
@@ -82,7 +82,7 @@ class Main(object):
                                         no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
                                         scene=self.base_config['env_name'],
                                         additional_args=self.base_config['env_args'],
-                                        n_agents=self.base_config['n_agents'])
+                                        n_envs=self.base_config['n_envs'])
 
         elif self.base_config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
@@ -90,7 +90,7 @@ class Main(object):
             self.env = GymWrapper(train_mode=self.train_mode,
                                   env_name=self.base_config['env_name'],
                                   render=self.render,
-                                  n_agents=self.base_config['n_agents'])
+                                  n_envs=self.base_config['n_envs'])
 
         elif self.base_config['env_type'] == 'DM_CONTROL':
             from algorithm.env_wrapper.dm_control_wrapper import \
@@ -99,7 +99,7 @@ class Main(object):
             self.env = DMControlWrapper(train_mode=self.train_mode,
                                         env_name=self.base_config['env_name'],
                                         render=self.render,
-                                        n_agents=self.base_config['n_agents'])
+                                        n_envs=self.base_config['n_envs'])
 
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
@@ -122,7 +122,7 @@ class Main(object):
         self._logger.info(f'{self.base_config["env_name"]} initialized')
 
     def _run(self):
-        self.ma_manager.pre_run(self.base_config['n_agents'])
+        self.ma_manager.pre_run(self.base_config['n_envs'])
 
         ma_obs_list = self.env.reset(reset_config=self.reset_config)
         self.ma_manager.set_obs_list(ma_obs_list)

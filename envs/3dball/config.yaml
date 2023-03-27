@@ -7,7 +7,7 @@ default:
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
     max_iter: 200
-    n_agents: 10
+    n_envs: 10
 
   replay_config:
     beta: 0.1

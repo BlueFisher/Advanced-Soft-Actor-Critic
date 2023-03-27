@@ -57,8 +57,8 @@ class Main:
             config['base_config']['env_args'] = args.env_args
         if args.port is not None:
             config['base_config']['unity_args']['port'] = args.port
-        if args.agents is not None:
-            config['base_config']['n_agents'] = args.agents
+        if args.envs is not None:
+            config['base_config']['n_envs'] = args.envs
         if args.max_iter is not None:
             config['base_config']['max_iter'] = args.max_iter
         if args.name is not None:
@@ -104,7 +104,7 @@ class Main:
 
             if self.unity_run_in_editor:
                 self.env = UnityWrapper(train_mode=self.train_mode,
-                                        n_agents=self.base_config['n_agents'])
+                                        n_envs=self.base_config['n_envs'])
             else:
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         file_name=self.base_config['unity_args']['build_path'][sys.platform],
@@ -112,7 +112,7 @@ class Main:
                                         no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
                                         scene=self.base_config['env_name'],
                                         additional_args=self.base_config['env_args'],
-                                        n_agents=self.base_config['n_agents'])
+                                        n_envs=self.base_config['n_envs'])
 
         elif self.base_config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
@@ -120,7 +120,7 @@ class Main:
             self.env = GymWrapper(train_mode=self.train_mode,
                                   env_name=self.base_config['env_name'],
                                   render=self.render,
-                                  n_agents=self.base_config['n_agents'])
+                                  n_envs=self.base_config['n_envs'])
 
         elif self.base_config['env_type'] == 'DM_CONTROL':
             from algorithm.env_wrapper.dm_control_wrapper import \
@@ -129,21 +129,13 @@ class Main:
             self.env = DMControlWrapper(train_mode=self.train_mode,
                                         env_name=self.base_config['env_name'],
                                         render=self.render,
-                                        n_agents=self.base_config['n_agents'])
-
-        elif self.base_config['env_type'] == 'MINIGRID':
-            from algorithm.env_wrapper.minigrid_wrapper import MiniGridWrapper
-
-            self.env = MiniGridWrapper(train_mode=self.train_mode,
-                                       env_name=self.base_config['env_name'],
-                                       render=self.render,
-                                       n_agents=self.base_config['n_agents'])
+                                        n_envs=self.base_config['n_envs'])
 
         elif self.base_config['env_type'] == 'TEST':
             from algorithm.env_wrapper.test_wrapper import TestWrapper
 
             self.env = TestWrapper(env_args=self.base_config['env_args'],
-                                   n_agents=self.base_config['n_agents'])
+                                   n_envs=self.base_config['n_envs'])
 
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')

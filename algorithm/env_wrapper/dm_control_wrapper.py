@@ -56,16 +56,16 @@ class DMControlWrapper:
                  train_mode=True,
                  env_name=None,
                  render=False,
-                 n_agents=1,
+                 n_envs=1,
                  force_seq=None):
         self.train_mode = train_mode
         self.env_name = env_name
         self.render = render
-        self.n_agents = n_agents
+        self.n_envs = n_envs
 
         # If use multiple processes
         if force_seq is None:
-            self._seq_envs = n_agents == 1
+            self._seq_envs = n_envs == 1
         else:
             self._seq_envs = force_seq
 
@@ -81,7 +81,7 @@ class DMControlWrapper:
     def init(self):
         domain, task = self.env_name.split('/')
         if self._seq_envs:
-            for i in range(self.n_agents):
+            for i in range(self.n_envs):
                 env = suite.load(domain_name=domain, task_name=task)
                 self._envs.append(env)
             env = self._envs[0]
@@ -108,7 +108,7 @@ class DMControlWrapper:
         if not self._seq_envs:
             env.close()
 
-            for i in range(self.n_agents):
+            for i in range(self.n_envs):
                 parent_conn, child_conn = multiprocessing.Pipe()
                 self._conns.append(parent_conn)
                 p = multiprocessing.Process(target=start_dm_control_process,
@@ -135,7 +135,7 @@ class DMControlWrapper:
             for conn in self._conns:
                 conn.send((RESET, None))
 
-            obs_list = [np.zeros([self.n_agents, *s], dtype=np.float32) for s in self.observation_shapes]
+            obs_list = [np.zeros([self.n_envs, *s], dtype=np.float32) for s in self.observation_shapes]
 
             for i, conn in enumerate(self._conns):
                 _obs_list = conn.recv()
@@ -147,10 +147,10 @@ class DMControlWrapper:
     def step(self, ma_d_action, ma_c_action):
         d_action, c_action = ma_d_action['gym'], ma_c_action['gym']
 
-        obs_list = [np.zeros([self.n_agents, *s], dtype=np.float32) for s in self.observation_shapes]
-        reward = np.zeros(self.n_agents, dtype=np.float32)
-        done = np.zeros(self.n_agents, dtype=bool)
-        max_step = np.full(self.n_agents, False)
+        obs_list = [np.zeros([self.n_envs, *s], dtype=np.float32) for s in self.observation_shapes]
+        reward = np.zeros(self.n_envs, dtype=np.float32)
+        done = np.zeros(self.n_envs, dtype=bool)
+        max_step = np.full(self.n_envs, False)
 
         action = c_action
 
@@ -207,9 +207,9 @@ class DMControlWrapper:
 
 
 if __name__ == "__main__":
-    n_agents = 1
+    n_envs = 1
     logging.basicConfig(level=logging.INFO)
-    wrapper = DMControlWrapper(True, 'cartpole/balance', n_agents=n_agents, force_seq=True, render=True)
+    wrapper = DMControlWrapper(True, 'cartpole/balance', n_envs=n_envs, force_seq=True, render=True)
     wrapper.init()
 
     tt = []
@@ -217,7 +217,7 @@ if __name__ == "__main__":
         t = time.time()
         wrapper.reset()
         for i in range(1000):
-            obs_list, reward, done, max_step = wrapper.step(None, np.random.randn(n_agents, 1))
+            obs_list, reward, done, max_step = wrapper.step(None, np.random.randn(n_envs, 1))
         tt.append(time.time() - t)
 
     print(sum(tt) / len(tt))
