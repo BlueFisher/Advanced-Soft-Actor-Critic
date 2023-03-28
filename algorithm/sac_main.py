@@ -104,7 +104,8 @@ class Main:
 
             if self.unity_run_in_editor:
                 self.env = UnityWrapper(train_mode=self.train_mode,
-                                        n_envs=self.base_config['n_envs'])
+                                        n_envs=self.base_config['n_envs'],
+                                        group_aggregation=self.base_config['unity_args']['group_aggregation'])
             else:
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         file_name=self.base_config['unity_args']['build_path'][sys.platform],
@@ -112,7 +113,8 @@ class Main:
                                         no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
                                         scene=self.base_config['env_name'],
                                         additional_args=self.base_config['env_args'],
-                                        n_envs=self.base_config['n_envs'])
+                                        n_envs=self.base_config['n_envs'],
+                                        group_aggregation=self.base_config['unity_args']['group_aggregation'])
 
         elif self.base_config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
@@ -140,8 +142,9 @@ class Main:
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
-        ma_obs_shapes, ma_d_action_size, ma_c_action_size = self.env.init()
-        self.ma_manager = MultiAgentsManager(ma_obs_shapes,
+        ma_obs_names, ma_obs_shapes, ma_d_action_size, ma_c_action_size = self.env.init()
+        self.ma_manager = MultiAgentsManager(ma_obs_names,
+                                             ma_obs_shapes,
                                              ma_d_action_size,
                                              ma_c_action_size,
                                              self.model_abs_dir)
@@ -176,7 +179,8 @@ class Main:
             spec.loader.exec_module(nn)
             mgr.config['sac_config']['nn'] = nn
 
-            mgr.set_rl(SAC_Base(obs_shapes=mgr.obs_shapes,
+            mgr.set_rl(SAC_Base(obs_names=mgr.obs_names,
+                                obs_shapes=mgr.obs_shapes,
                                 d_action_size=mgr.d_action_size,
                                 c_action_size=mgr.c_action_size,
                                 model_abs_dir=mgr.model_abs_dir,

@@ -19,7 +19,8 @@ from .utils import *
 
 class SAC_Base(object):
     def __init__(self,
-                 obs_shapes: List[Tuple],
+                 obs_names: List[str],
+                 obs_shapes: List[Tuple[int]],
                  d_action_size: int,
                  c_action_size: int,
                  model_abs_dir: Optional[Path],
@@ -77,6 +78,7 @@ class SAC_Base(object):
 
                  replay_config: Optional[dict] = None):
         """
+        obs_names: List of names of observations
         obs_shapes: List of dimensions of observations
         d_action_size: Dimension of discrete actions
         c_action_size: Dimension of continuous actions
@@ -138,6 +140,7 @@ class SAC_Base(object):
         """
         self._kwargs = locals()
 
+        self.obs_names = obs_names
         self.obs_shapes = obs_shapes
         self.d_action_size = d_action_size
         self.c_action_size = c_action_size
@@ -2160,7 +2163,7 @@ class SAC_Base(object):
         storage_data = {
             'index': index,
             'padding_mask': padding_mask,
-            **{f'obs_{i}': obs for i, obs in enumerate(obs_list)},
+            **{f'obs_{name}': obs for name, obs in zip(self.obs_names, obs_list)},
             'action': action,
             'reward': reward,
             'done': done,
@@ -2272,7 +2275,7 @@ class SAC_Base(object):
         """
         m_indexes = trans['index']
         m_padding_masks = trans['padding_mask']
-        m_obses_list = [trans[f'obs_{i}'] for i in range(len(self.obs_shapes))]
+        m_obses_list = [trans[f'obs_{name}'] for name in self.obs_names]
         m_actions = trans['action']
         m_rewards = trans['reward']
         m_dones = trans['done']
@@ -2345,15 +2348,9 @@ class SAC_Base(object):
             bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
             bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
             bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
-            for i, bn_obses in enumerate(bn_obses_list):
-                if bn_obses.dtype == torch.uint8:
-                    bn_obses_list[i] = bn_obses.type(torch.float32) / 255.
             bn_actions = torch.from_numpy(bn_actions).to(self.device)
             bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
             next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
-            for i, next_obs in enumerate(next_obs_list):
-                if next_obs.dtype == torch.uint8:
-                    next_obs_list[i] = next_obs.type(torch.float32) / 255.
             bn_dones = torch.from_numpy(bn_dones).to(self.device)
             if self.use_n_step_is:
                 bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)

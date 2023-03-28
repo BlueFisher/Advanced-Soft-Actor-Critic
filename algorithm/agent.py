@@ -232,10 +232,12 @@ class Agent:
 class AgentManager:
     def __init__(self,
                  name: str,
+                 obs_names: List[str],
                  obs_shapes: List[Tuple[int]],
                  d_action_size: int,
                  c_action_size: int):
         self.name = name
+        self.obs_names = obs_names
         self.obs_shapes = obs_shapes
         self.d_action_size = d_action_size
         self.c_action_size = c_action_size
@@ -406,6 +408,7 @@ class AgentManager:
 
 class MultiAgentsManager:
     def __init__(self,
+                 ma_obs_names: dict,
                  ma_obs_shapes: dict,
                  ma_d_action_size: dict,
                  ma_c_action_size: dict,
@@ -413,6 +416,7 @@ class MultiAgentsManager:
         self._ma_manager: Dict[str, AgentManager] = {}
         for n in ma_obs_shapes:
             self._ma_manager[n] = AgentManager(n,
+                                               ma_obs_names[n],
                                                ma_obs_shapes[n],
                                                ma_d_action_size[n],
                                                ma_c_action_size[n])
