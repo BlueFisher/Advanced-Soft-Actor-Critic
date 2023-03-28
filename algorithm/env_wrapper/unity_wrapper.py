@@ -54,7 +54,8 @@ class UnityWrapperProcess:
                  seed=None,
                  scene=None,
                  additional_args=None,
-                 n_envs=1):
+                 n_envs=1,
+                 group_aggregation=False):
         """
         Args:
             train_mode: If in train mode, Unity will speed up
@@ -65,10 +66,11 @@ class UnityWrapperProcess:
             seed: Random seed
             scene: The scene name
             n_envs: The env copies count
+            group_aggregation: If aggregate group agents
         """
         self.scene = scene
         self.n_envs = n_envs
-        self.group_aggregation = True
+        self.group_aggregation = group_aggregation
 
         seed = seed if seed is not None else random.randint(0, 65536)
         additional_args = [] if additional_args is None else additional_args.split(' ')
@@ -110,13 +112,13 @@ class UnityWrapperProcess:
         self._env.reset()
         self.behavior_names = list(self._env.behavior_specs)
 
-        self.ma_n_envs = {n: 0 for n in self.behavior_names}
+        self.ma_n_agents = {n: 0 for n in self.behavior_names}
         for n in self.behavior_names:
             decision_steps, terminal_steps = self._env.get_steps(n)
 
-            n_envs = decision_steps.obs[0].shape[0]
-            self.ma_n_envs[n] = n_envs
-            self._logger.info(f'{n} Number of Agents: {n_envs}')
+            n_agents = decision_steps.obs[0].shape[0]
+            self.ma_n_agents[n] = n_agents
+            self._logger.info(f'{n} Number of Agents: {n_agents}')
 
         if conn:
             try:
@@ -144,6 +146,9 @@ class UnityWrapperProcess:
         self.ma_obs_shapes = {}
         self.ma_d_action_size = {}
         self.ma_c_action_size = {}
+
+        self.ma_unity_obs_shapes = {}
+        self.ma_unity_c_action_size = {}
 
         for n in self.behavior_names:
             behavior_spec = self._env.behavior_specs[n]
@@ -174,14 +179,29 @@ class UnityWrapperProcess:
             self.ma_d_action_size[n] = discrete_action_size
             self.ma_c_action_size[n] = continuous_action_size
 
-            for o in behavior_spec.observation_specs:
-                if len(o.shape) >= 3:
+            self.ma_unity_obs_shapes[n] = self.ma_obs_shapes[n]
+            self.ma_unity_c_action_size[n] = self.ma_c_action_size[n]
+
+            if self.group_aggregation:
+                if self.ma_d_action_size[n] > 0:
+                    raise Exception('Discrete action size is not supported in group_aggregation now')
+
+                decision_steps, terminal_steps = self._env.get_steps(n)
+                u_group_ids, u_group_id_counts = np.unique(decision_steps.group_id, return_counts=True)
+                max_u_group_id_count = u_group_id_counts.max()
+
+                self.ma_obs_shapes[n] = [(max_u_group_id_count, *obs_shape) for obs_shape in self.ma_obs_shapes[n]]
+                self.ma_c_action_size[n] = self.ma_c_action_size[n] * max_u_group_id_count
+
+            for o_name, o_shape in zip(obs_names, obs_shapes):
+                if ('camera' in o_name.lower() or 'visual' in o_name.lower() or 'image' in o_name.lower()) \
+                        and len(o_shape) >= 3:
                     self.engine_configuration_channel.set_configuration_parameters(quality_level=5)
                     break
 
         self._logger.info('Initialized')
 
-        return self.ma_obs_shapes, self.ma_d_action_size, self.ma_c_action_size, self.ma_n_envs
+        return self.ma_obs_names, self.ma_obs_shapes, self.ma_d_action_size, self.ma_c_action_size, self.ma_n_agents
 
     def reset(self, reset_config=None):
         """
@@ -197,6 +217,10 @@ class UnityWrapperProcess:
         self._ma_agents_ids = {}
         self._ma_agent_id_to_index = {}
 
+        self._ma_group_ids = {}
+        self._ma_u_group_ids = {}
+        self._ma_u_group_id_counts = {}
+
         ma_obs_list = {}
         for n in self.behavior_names:
             decision_steps, terminal_steps = self._env.get_steps(n)
@@ -206,6 +230,19 @@ class UnityWrapperProcess:
                 for a_idx, a_id in enumerate(decision_steps.agent_id)
             }
             ma_obs_list[n] = [obs.astype(np.float32) for obs in decision_steps.obs]
+
+            if self.group_aggregation:
+                self._ma_group_ids[n] = decision_steps.group_id
+                u_group_ids, u_group_id_counts = np.unique(decision_steps.group_id, return_counts=True)
+                self._ma_u_group_ids[n] = u_group_ids
+                self._ma_u_group_id_counts[n] = u_group_id_counts
+
+                for i, obs in enumerate(ma_obs_list[n]):
+                    aggr_obs = np.zeros((len(u_group_ids), u_group_id_counts.max(), *obs.shape[1:]), dtype=obs.dtype)
+                    for j, (group_id, group_id_count) in enumerate(zip(u_group_ids, u_group_id_counts)):
+                        aggr_obs[j, :group_id_count] = obs[decision_steps.group_id == group_id]
+
+                    ma_obs_list[n][i] = aggr_obs
 
         return ma_obs_list
 
@@ -222,6 +259,17 @@ class UnityWrapperProcess:
             max_step: (NAgents, ), bool
         """
 
+        if self.group_aggregation:
+            for n in self.behavior_names:
+                unity_c_action_size = self.ma_unity_c_action_size[n]
+                unity_c_action = np.zeros((len(self._ma_agents_ids[n]), unity_c_action_size), dtype=ma_c_action[n].dtype)
+
+                c_action = ma_c_action[n]
+                for action, group_id, group_id_count in zip(c_action, self._ma_u_group_ids[n], self._ma_u_group_id_counts[n]):
+                    unity_c_action[self._ma_group_ids[n] == group_id] = action.reshape(-1, unity_c_action_size)[:group_id_count]
+
+                ma_c_action[n] = unity_c_action
+
         ma_obs_list = {}
         ma_reward = {}
         ma_done = {}
@@ -229,7 +277,7 @@ class UnityWrapperProcess:
 
         for n in self.behavior_names:
             agents_len = len(self._ma_agents_ids[n])
-            ma_obs_list[n] = [np.zeros((agents_len, *obs_shape), dtype=np.float32) for obs_shape in self.ma_obs_shapes[n]]
+            ma_obs_list[n] = [np.zeros((agents_len, *obs_shape), dtype=np.float32) for obs_shape in self.ma_unity_obs_shapes[n]]
             ma_reward[n] = np.zeros(agents_len, dtype=np.float32)
             ma_done[n] = np.zeros(len(self._ma_agents_ids[n]), dtype=bool)
             ma_max_step[n] = np.zeros(len(self._ma_agents_ids[n]), dtype=bool)
@@ -311,6 +359,36 @@ class UnityWrapperProcess:
 
                     visited_ma_agent_ids[n].add(agent_id)
 
+        if self.group_aggregation:
+            for n in self.behavior_names:
+                group_ids = self._ma_group_ids[n]
+                u_group_ids = self._ma_u_group_ids[n]
+                u_group_id_counts = self._ma_u_group_id_counts[n]
+
+                for i, obs in enumerate(ma_obs_list[n]):
+                    aggr_obs = np.zeros((len(u_group_ids), u_group_id_counts.max(), *obs.shape[1:]), dtype=obs.dtype)
+                    for j, (group_id, group_id_count) in enumerate(zip(u_group_ids, u_group_id_counts)):
+                        aggr_obs[j, :group_id_count] = obs[group_ids == group_id]
+
+                    ma_obs_list[n][i] = aggr_obs
+
+                reward = ma_reward[n]
+                done = ma_done[n]
+                max_step = ma_max_step[n]
+
+                aggr_reward = np.zeros(len(u_group_ids), dtype=reward.dtype)
+                aggr_done = np.zeros(len(u_group_ids), dtype=done.dtype)
+                aggr_max_step = np.zeros(len(u_group_ids), dtype=max_step.dtype)
+
+                for j, (group_id, group_id_count) in enumerate(zip(u_group_ids, u_group_id_counts)):
+                    aggr_reward[j] = reward[group_ids == group_id].sum()
+                    aggr_done[j] = done[group_ids == group_id].any()
+                    aggr_max_step[j] = max_step[group_ids == group_id].any()
+
+                ma_reward[n] = aggr_reward
+                ma_done[n] = aggr_done
+                ma_max_step[n] = aggr_max_step
+
         return ma_obs_list, ma_reward, ma_done, ma_max_step
 
     def close(self):
@@ -328,6 +406,7 @@ class UnityWrapper:
                  scene=None,
                  additional_args=None,
                  n_envs=1,
+                 group_aggregation=False,
                  force_seq=None):
         """
         Args:
@@ -338,6 +417,7 @@ class UnityWrapper:
             seed: Random seed
             scene: The scene name
             n_envs: The env copies count
+            group_aggregation: If aggregate group agents
         """
         self.train_mode = train_mode
         self.file_name = file_name
@@ -347,6 +427,7 @@ class UnityWrapper:
         self.scene = scene
         self.additional_args = additional_args
         self.n_envs = n_envs
+        self.group_aggregation = group_aggregation
 
         # If use multiple processes
         if force_seq is None:
@@ -363,16 +444,17 @@ class UnityWrapper:
             self._envs: List[UnityWrapperProcess] = []
 
             for i in range(self.env_length):
-                self._envs.append(UnityWrapperProcess(None,
-                                                      train_mode,
-                                                      file_name,
-                                                      i,
-                                                      base_port,
-                                                      no_graphics,
-                                                      seed,
-                                                      scene,
-                                                      additional_args,
-                                                      min(MAX_N_ENVS_PER_PROCESS, self.n_envs - i * MAX_N_ENVS_PER_PROCESS)))
+                self._envs.append(UnityWrapperProcess(conn=None,
+                                                      train_mode=train_mode,
+                                                      file_name=file_name,
+                                                      worker_id=i,
+                                                      base_port=base_port,
+                                                      no_graphics=no_graphics,
+                                                      seed=seed,
+                                                      scene=scene,
+                                                      additional_args=additional_args,
+                                                      n_envs=min(MAX_N_ENVS_PER_PROCESS, self.n_envs - i * MAX_N_ENVS_PER_PROCESS),
+                                                      group_aggregation=group_aggregation))
         else:
             # All environments are executed in parallel
             self._conns: List[multiprocessing.connection.Connection] = [None] * self.env_length
@@ -397,7 +479,8 @@ class UnityWrapper:
                                                   self.seed,
                                                   self.scene,
                                                   self.additional_args,
-                                                  min(MAX_N_ENVS_PER_PROCESS, self.n_envs - i * MAX_N_ENVS_PER_PROCESS)),
+                                                  min(MAX_N_ENVS_PER_PROCESS, self.n_envs - i * MAX_N_ENVS_PER_PROCESS),
+                                                  self.group_aggregation),
                                             daemon=True)
                 p.start()
 
@@ -418,29 +501,29 @@ class UnityWrapper:
             continuous action size: dict[str, int]
         """
 
-        self.ma_n_envs_list = defaultdict(list)
+        self.ma_n_agents_list = defaultdict(list)
 
         if self._seq_envs:
             for env in self._envs:
                 results = env.init()
-                ma_obs_shapes, ma_d_action_size, ma_c_action_size, ma_n_envs = results
-                for n, n_envs in ma_n_envs.items():
-                    self.ma_n_envs_list[n].append(n_envs)
+                ma_obs_names, ma_obs_shapes, ma_d_action_size, ma_c_action_size, ma_n_agents = results
+                for n, n_agents in ma_n_agents.items():
+                    self.ma_n_agents_list[n].append(n_agents)
         else:
             for conn in self._conns:
                 conn.send((INIT, None))
                 results = conn.recv()
-                ma_obs_shapes, ma_d_action_size, ma_c_action_size, ma_n_envs = results
-                for n, n_envs in ma_n_envs.items():
-                    self.ma_n_envs_list[n].append(n_envs)
+                ma_obs_names, ma_obs_shapes, ma_d_action_size, ma_c_action_size, ma_n_agents = results
+                for n, n_agents in ma_n_agents.items():
+                    self.ma_n_agents_list[n].append(n_agents)
 
         self.behavior_names = list(ma_obs_shapes.keys())
-        for n, n_envs_list in self.ma_n_envs_list.items():
-            for i in range(1, len(n_envs_list)):
-                n_envs_list[i] += n_envs_list[i - 1]
-            n_envs_list.insert(0, 0)
+        for n, n_agents_list in self.ma_n_agents_list.items():
+            for i in range(1, len(n_agents_list)):
+                n_agents_list[i] += n_agents_list[i - 1]
+            n_agents_list.insert(0, 0)
 
-        return ma_obs_shapes, ma_d_action_size, ma_c_action_size
+        return ma_obs_names, ma_obs_shapes, ma_d_action_size, ma_c_action_size
 
     def reset(self, reset_config=None):
         """
@@ -484,12 +567,12 @@ class UnityWrapper:
             for n in self.behavior_names:
                 d_action = ma_d_action[n]
                 c_action = ma_c_action[n]
-                n_envs_list = self.ma_n_envs_list[n]
+                n_agents_list = self.ma_n_agents_list[n]
 
                 if d_action is not None:
-                    tmp_ma_d_actions[n] = d_action[n_envs_list[i]:n_envs_list[i + 1]]
+                    tmp_ma_d_actions[n] = d_action[n_agents_list[i]:n_agents_list[i + 1]]
                 if c_action is not None:
-                    tmp_ma_c_actions[n] = c_action[n_envs_list[i]:n_envs_list[i + 1]]
+                    tmp_ma_c_actions[n] = c_action[n_agents_list[i]:n_agents_list[i + 1]]
 
             if self._seq_envs:
                 (ma_obs_list,
@@ -549,14 +632,16 @@ class UnityWrapper:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
     N_ENVS = 10
+    GROUP_AGGREGATION = True
 
     env = UnityWrapper(train_mode=True,
                        #    file_name=r'D:\Unity\win-RL-Envs\RLEnvironments.exe',
                        #    scene='Roller',
-                       n_envs=N_ENVS)
+                       n_envs=N_ENVS,
+                       group_aggregation=GROUP_AGGREGATION)
     ma_obs_shapes, ma_d_action_size, ma_c_action_size = env.init()
     ma_names = list(ma_obs_shapes.keys())
 

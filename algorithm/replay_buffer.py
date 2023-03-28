@@ -16,6 +16,8 @@ class DataStorage:
         self.capacity = capacity
         self.max_id = 10 * capacity
 
+        self._data_key_is_image = {}
+
     def add(self, data: dict):
         """
         args: list
@@ -28,7 +30,12 @@ class DataStorage:
             self._buffer['_id'] = np.zeros(self.capacity, dtype=np.uint64)
             for k, v in data.items():
                 # Store uint8 if data is image
-                dtype = np.uint8 if len(v.shape[1:]) == 3 else v.dtype
+                self._data_key_is_image[k] = ('camera' in k.lower()
+                                              or 'visual' in k.lower()
+                                              or 'image' in k.lower()) and v.shape[-1] == 3
+
+                dtype = np.uint8 if self._data_key_is_image[k] else v.dtype
+
                 self._buffer[k] = np.zeros([self.capacity] + list(v.shape[1:]), dtype=dtype)
 
         ids = (np.arange(tmp_len) + self._id) % self.max_id
@@ -37,7 +44,7 @@ class DataStorage:
         self._buffer['_id'][pointers] = ids
         for k, v in data.items():
             # Store uint8 [0, 255] if data is image
-            if len(self._buffer[k].shape[1:]) == 3:
+            if self._data_key_is_image[k]:
                 v = v * 255
             self._buffer[k][pointers] = v
 
@@ -56,7 +63,15 @@ class DataStorage:
         """
         Get data from buffer without verifying whether ids in buffer
         """
-        data = {k: v[ids % self.capacity] for k, v in self._buffer.items() if k != '_id'}
+        data = {}
+        for k, v in self._buffer.items():
+            if k == '_id':
+                continue
+
+            data[k] = v[ids % self.capacity]
+            if self._data_key_is_image[k]:
+                data[k] = data[k].astype(np.float32) / 255.
+
         return data
 
     def get_ids(self, ids):

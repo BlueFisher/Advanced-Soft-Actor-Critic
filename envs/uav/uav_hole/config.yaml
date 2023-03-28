@@ -24,3 +24,11 @@ default:
 
     use_rnd: true
     rnd_n_sample: 50
+
+aggr:
+  base_config:
+    unity_args:
+      group_aggregation: true
+    
+  sac_config:
+    nn: nn_aggr

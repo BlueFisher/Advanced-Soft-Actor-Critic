@@ -7,7 +7,7 @@ base_config:
     build_path: # Unity executable path
       win32: path_win32
       linux: path_linux
-    port: 5005
+    group_aggregation: false 
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
 
