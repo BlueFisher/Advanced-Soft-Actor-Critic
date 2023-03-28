@@ -118,7 +118,8 @@ class DMControlWrapper:
                                             daemon=True)
                 p.start()
 
-        return ({'gym': self.observation_shapes},
+        return ({'gym': ['vector']},
+                {'gym': self.observation_shapes},
                 {'gym': d_action_size},
                 {'gym': c_action_size})
 

@@ -5,6 +5,7 @@ from algorithm.oc.option_selector_base import OptionSelectorBase
 from algorithm.utils.enums import *
 from tests.get_synthesis_data import *
 
+OBS_NAMES = ['vector', 'image']
 OBS_SHAPES = [(10,), (30, 30, 3)]
 NUM_OPTIONS = 4
 
@@ -22,6 +23,7 @@ class TestOCVanillaModel(unittest.TestCase):
             option_burn_in_step=-1,
             option_nn_config=None,
 
+            obs_names=OBS_NAMES,
             obs_shapes=OBS_SHAPES,
             model_abs_dir=None,
             nn=nn_conv,
@@ -59,6 +61,7 @@ class TestOCSeqEncoderModel(unittest.TestCase):
             num_options=NUM_OPTIONS,
             option_nn_config=None,
 
+            obs_names=OBS_NAMES,
             obs_shapes=OBS_SHAPES,
             model_abs_dir=None,
             nn=nn_conv,

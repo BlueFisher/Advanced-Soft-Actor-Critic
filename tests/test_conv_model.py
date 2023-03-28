@@ -4,6 +4,7 @@ import unittest
 from algorithm.sac_base import SAC_Base
 from tests.get_synthesis_data import *
 
+OBS_NAMES = ['vector', 'image']
 OBS_SHAPES = [(10,), (84, 84, 3)]
 
 
@@ -25,6 +26,7 @@ class TestConvModel(unittest.TestCase):
         nn_conv.ModelRep = ModelRep
 
         sac = SAC_Base(
+            obs_names=OBS_NAMES,
             obs_shapes=OBS_SHAPES,
             d_action_size=4,
             c_action_size=4,

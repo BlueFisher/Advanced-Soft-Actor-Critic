@@ -53,6 +53,7 @@ class OC_Main(Main):
                                           option_burn_in_step=mgr.config['oc_config']['option_burn_in_step'],
                                           option_nn_config=mgr.config['oc_config']['nn_config'],
 
+                                          obs_names=mgr.obs_names,
                                           obs_shapes=mgr.obs_shapes,
                                           d_action_size=mgr.d_action_size,
                                           c_action_size=mgr.c_action_size,
