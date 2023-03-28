@@ -5,6 +5,7 @@ from algorithm.sac_base import SAC_Base
 from algorithm.utils.enums import *
 from tests.get_synthesis_data import *
 
+OBS_NAMES = ['vector', 'image']
 OBS_SHAPES = [(10,), (30, 30, 3)]
 
 
@@ -17,6 +18,7 @@ class TestVanillaModel(unittest.TestCase):
         importlib.reload(nn_conv)
 
         sac = SAC_Base(
+            obs_names=OBS_NAMES,
             obs_shapes=OBS_SHAPES,
             model_abs_dir=None,
             nn=nn_conv,
@@ -51,6 +53,7 @@ class TestSeqEncoderModel(unittest.TestCase):
         importlib.reload(nn_conv)
 
         sac = SAC_Base(
+            obs_names=OBS_NAMES,
             obs_shapes=OBS_SHAPES,
             model_abs_dir=None,
             nn=nn_conv,

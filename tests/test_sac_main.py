@@ -16,7 +16,7 @@ class TestSACMain(unittest.TestCase):
 
             render=False,
             env_args=env_args_dict,
-            agents=None,
+            envs=None,
             max_iter=None,
 
             port=None,

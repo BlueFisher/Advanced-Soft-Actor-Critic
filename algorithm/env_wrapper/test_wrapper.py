@@ -15,8 +15,14 @@ class TestWrapper:
 
     def init(self):
         if 'ma_obs_shapes' in self.env_args:
+            self._ma_obs_names = {n: [str(i) for i in range(len(obs_shapes))]
+                                  for n, obs_shapes in self.env_args['ma_obs_shapes'].items()}
             self._ma_obs_shapes = self.env_args['ma_obs_shapes']
         else:
+            self._ma_obs_names = {
+                'test0': ['vector'],
+                'test1': ['vector']
+            }
             self._ma_obs_shapes = {
                 'test0': [(6,)],
                 'test1': [(8,)]
@@ -38,7 +44,7 @@ class TestWrapper:
                 'test1': 5
             }
 
-        return self._ma_obs_shapes, ma_d_action_size, ma_c_action_size
+        return self._ma_obs_names, self._ma_obs_shapes, ma_d_action_size, ma_c_action_size
 
     def reset(self, reset_config=None):
         return get_ma_obs_list(self.n_envs, self._ma_obs_shapes)

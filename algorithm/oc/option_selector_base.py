@@ -23,6 +23,7 @@ class OptionSelectorBase(SAC_Base):
                  option_burn_in_step: int,
                  option_nn_config: dict,
 
+                 obs_names: List[str],
                  obs_shapes: List[Tuple],
                  d_action_size: int,
                  c_action_size: int,
@@ -55,6 +56,7 @@ class OptionSelectorBase(SAC_Base):
                  update_target_per_step: int = 1,
                  init_log_alpha: float = -2.3,
                  use_auto_alpha: bool = True,
+                 target_alpha: bool = None,
                  learning_rate: float = 3e-4,
                  gamma: float = 0.99,
                  v_lambda: float = 1.,
@@ -84,7 +86,8 @@ class OptionSelectorBase(SAC_Base):
         self.option_burn_in_step = option_burn_in_step
         self.option_nn_config = option_nn_config
 
-        super().__init__(obs_shapes,
+        super().__init__(obs_names,
+                         obs_shapes,
                          d_action_size,
                          c_action_size,
                          model_abs_dir,
@@ -109,6 +112,7 @@ class OptionSelectorBase(SAC_Base):
                          update_target_per_step,
                          init_log_alpha,
                          use_auto_alpha,
+                         target_alpha,
                          learning_rate,
                          gamma,
                          v_lambda,

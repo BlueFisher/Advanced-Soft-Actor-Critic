@@ -38,7 +38,8 @@ class GymWrapper:
         else:
             c_action_size = env.single_action_space.shape[0]
 
-        return ({'gym': [(self._state_dim, )]},
+        return ({'gym': ['vector']},
+                {'gym': [(self._state_dim, )]},
                 {'gym': d_action_size},
                 {'gym': c_action_size})
 

@@ -3,6 +3,7 @@ import unittest
 from algorithm.sac_base import SAC_Base
 from tests.get_synthesis_data import *
 
+OBS_NAMES = ['vector']
 OBS_SHAPES = [(10,)]
 
 
@@ -23,6 +24,7 @@ class TestNNModel(unittest.TestCase):
             nn_vanilla.ModelPolicy = ModelPolicy
 
         sac = SAC_Base(
+            obs_names=OBS_NAMES,
             obs_shapes=OBS_SHAPES,
             d_action_size=4,
             c_action_size=4,

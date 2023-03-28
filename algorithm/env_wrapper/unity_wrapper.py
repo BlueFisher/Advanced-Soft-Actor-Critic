@@ -58,6 +58,7 @@ class UnityWrapperProcess:
                  group_aggregation=False):
         """
         Args:
+            conn: Connection if run in multiprocessing mode
             train_mode: If in train mode, Unity will speed up
             file_name: The executable path. The UnityEnvironment will run in editor if None
             worker_id: Offset from base_port
