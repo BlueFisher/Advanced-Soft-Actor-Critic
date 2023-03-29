@@ -69,8 +69,9 @@ class DataStorage:
                 continue
 
             data[k] = v[ids % self.capacity]
-            if self._data_key_is_image[k]:
-                data[k] = data[k].astype(np.float32) / 255.
+            # It is faster to convert image uint8 to float32 in GPU
+            # if self._data_key_is_image[k]:
+            #     data[k] = data[k].astype(np.float32) / 255.
 
         return data
 
