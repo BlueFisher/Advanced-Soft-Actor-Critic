@@ -155,6 +155,9 @@ class OptionSelectorBase(SAC_Base):
         self._gamma_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.gamma, device=self.device)
         self._lambda_ratio = torch.logspace(0, self.n_step - 1, self.n_step, self.v_lambda, device=self.device)
 
+        self.v_rho = torch.tensor(self.v_rho, device=self.device)
+        self.v_c = torch.tensor(self.v_c, device=self.device)
+
         def adam_optimizer(params):
             return optim.Adam(params, lr=learning_rate)
 
@@ -1481,7 +1484,7 @@ class OptionSelectorBase(SAC_Base):
         storage_data = {
             'index': index,
             'padding_mask': padding_mask,
-            **{f'obs_{i}': obs for i, obs in enumerate(obs_list)},
+            **{f'obs_{name}': obs for name, obs in zip(self.obs_names, obs_list)},
             'option_index': option_index,
             'action': action,
             'reward': reward,
@@ -1607,7 +1610,7 @@ class OptionSelectorBase(SAC_Base):
         """
         m_indexes = trans['index']
         m_padding_masks = trans['padding_mask']
-        m_obses_list = [trans[f'obs_{i}'] for i in range(len(self.obs_shapes))]
+        m_obses_list = [trans[f'obs_{name}'] for name in self.obs_names]
         m_option_indexes = trans['option_index']
         m_actions = trans['action']
         m_rewards = trans['reward']
@@ -1691,10 +1694,18 @@ class OptionSelectorBase(SAC_Base):
             bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
             bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
             bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
+            for i, bn_obses in enumerate(bn_obses_list):
+                # obs is image
+                if bn_obses.dtype == torch.uint8:
+                    bn_obses_list[i] = bn_obses.type(torch.float32) / 255.
             bn_option_indexes = torch.from_numpy(bn_option_indexes).type(torch.int64).to(self.device)
             bn_actions = torch.from_numpy(bn_actions).to(self.device)
             bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
             next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
+            for i, next_obs in enumerate(next_obs_list):
+                # obs is image
+                if next_obs.dtype == torch.uint8:
+                    next_obs_list[i] = next_obs.type(torch.float32) / 255.
             bn_dones = torch.from_numpy(bn_dones).to(self.device)
             if self.use_n_step_is:
                 bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)

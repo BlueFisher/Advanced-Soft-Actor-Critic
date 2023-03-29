@@ -84,16 +84,16 @@ def initialize_config_from_yaml(default_config_path, config_file_path,
     return config, ma_configs
 
 
-def set_logger(logger_file=None):
+def set_logger(logger_file=None, debug=False):
     # logger config
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG if debug else logging.INFO)
     # Remove default root logger handler
     logger.handlers = []
 
     # Create stream handler
     sh = logging.StreamHandler()
-    sh.setLevel(logging.INFO)
+    sh.setLevel(logging.DEBUG if debug else logging.INFO)
 
     # Add handler and formatter to logger
     sh.setFormatter(logging.Formatter('[%(levelname)s] - [%(name)s] - %(message)s'))
@@ -102,12 +102,14 @@ def set_logger(logger_file=None):
     if logger_file is not None:
         # Create file handler
         fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=10 * 1024 * 1024, backupCount=20)
-        fh.setLevel(logging.INFO)
+        fh.setLevel(logging.DEBUG if debug else logging.INFOO)
 
         # Add handler and formatter to logger
         fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
 
         logger.addHandler(fh)
+
+    logging.getLogger('PIL').setLevel(logging.WARNING)
 
 
 def save_config(config, model_root_dir: Path, config_name):
