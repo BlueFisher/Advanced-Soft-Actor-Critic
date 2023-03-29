@@ -30,7 +30,11 @@ if __name__ == '__main__':
     parser.add_argument('--ckpt', help='ckeckpoint to restore')
     parser.add_argument('--nn', help='neural network model')
     parser.add_argument('--repeat', type=int, default=1, help='number of repeated experiments')
+
+    parser.add_argument('--debug', action='store_true')
     args = parser.parse_args()
+
+    set_logger(debug=args.debug)
 
     if args.env in HITTED_ENVS:
         from algorithm.oc.oc_main_hitted import OC_MainHitted as OC_Main

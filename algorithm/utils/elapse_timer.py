@@ -6,7 +6,7 @@ from typing import Optional
 class UnifiedElapsedTimer:
     def __init__(self,
                  logger: Optional[logging.Logger] = None):
-        self.logger = logger
+        self.logger = logging.getLogger(logger.name + '.profiler')
         self._elapsed_timer_dict = {}
 
     def __call__(self, log: str, repeat: int = 1, force_report: bool = True):
@@ -17,6 +17,17 @@ class UnifiedElapsedTimer:
                                                           force_report=force_report)
 
         return self._elapsed_timer_dict[log]
+
+
+def unified_elapsed_timer(log: str, repeat: int = 1, force_report: bool = True,
+                          profiler: str = '_profiler'):
+    def profile(func):
+        def wrapper(self, *args, **kwargs):
+            with getattr(self, profiler)(log, repeat, force_report):
+                results = func(self, *args, **kwargs)
+            return results
+        return wrapper
+    return profile
 
 
 class elapsed_timer:
@@ -34,6 +45,8 @@ class elapsed_timer:
         self._last_report_avg_time = -1
         self._last_avg_time = -1
 
+        self._logger_effective = logger.getEffectiveLevel() == logging.DEBUG
+
         self._ignore = False
 
     def __enter__(self):
@@ -42,6 +55,9 @@ class elapsed_timer:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        if not self._logger_effective:
+            return
+
         if self._ignore:
             self._ignore = False
             return
@@ -57,7 +73,7 @@ class elapsed_timer:
             if self._custom_log is not None and \
                     (self._force_report or abs(average_time - self._last_report_avg_time) > 0.01):
                 if self._logger is not None:
-                    self._logger.info(f'{self._custom_log}: {average_time:.2f}s')
+                    self._logger.debug(f'{self._custom_log}: {average_time:.2f}s')
                 else:
                     print(f'{self._custom_log}: {average_time:.2f}s')
             self._last_report_avg_time = average_time
@@ -85,7 +101,7 @@ class elapsed_counter:
         if self._step == self._repeat:
             if self._logger is not None and self._custom_log is not None \
                     and self._counter > 0:
-                self._logger.info(f'{self._custom_log}: {self._counter} in {self._repeat}')
+                self._logger.debug(f'{self._custom_log}: {self._counter} in {self._repeat}')
             self._step = 0
             self._counter = 0
 

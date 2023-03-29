@@ -215,6 +215,8 @@ class SAC_Base(object):
         else:
             self._logger = logging.getLogger(f'sac.base.{ma_name}')
 
+        self._profiler = UnifiedElapsedTimer(self._logger)
+
         self._build_model(nn, nn_config, init_log_alpha, learning_rate)
         self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
 
@@ -2115,6 +2117,7 @@ class SAC_Base(object):
         else:
             self.batch_buffer.put_episode(**episode_trans)
 
+    @unified_elapsed_timer('_fill_replay_buffer', 10)
     def _fill_replay_buffer(self,
                             l_indexes: np.ndarray,
                             l_padding_masks: np.ndarray,
@@ -2216,6 +2219,7 @@ class SAC_Base(object):
                     image = plot_attn_weight(attn_weight[0].cpu().numpy())
                     self.summary_writer.add_images(f'attn_weight/{i}', image, self.global_step)
 
+    @unified_elapsed_timer('_sample_from_replay_buffer', 10)
     def _sample_from_replay_buffer(self):
         """
         Sample from replay buffer
