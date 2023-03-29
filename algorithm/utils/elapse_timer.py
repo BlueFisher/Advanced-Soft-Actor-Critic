@@ -3,7 +3,7 @@ import time
 from typing import Optional
 
 
-class unified_elapsed_timer:
+class UnifiedElapsedTimer:
     def __init__(self,
                  logger: Optional[logging.Logger] = None):
         self.logger = logger

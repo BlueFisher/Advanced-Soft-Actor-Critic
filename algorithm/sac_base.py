@@ -2348,9 +2348,17 @@ class SAC_Base(object):
             bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
             bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
             bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
+            for i, bn_obses in enumerate(bn_obses_list):
+                # obs is image
+                if bn_obses.dtype == torch.uint8:
+                    bn_obses_list[i] = bn_obses.type(torch.float32) / 255.
             bn_actions = torch.from_numpy(bn_actions).to(self.device)
             bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
             next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
+            for i, next_obs in enumerate(next_obs_list):
+                # obs is image
+                if next_obs.dtype == torch.uint8:
+                    next_obs_list[i] = next_obs.type(torch.float32) / 255.
             bn_dones = torch.from_numpy(bn_dones).to(self.device)
             if self.use_n_step_is:
                 bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
