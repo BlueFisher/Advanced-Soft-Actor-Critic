@@ -25,7 +25,7 @@ class ModelRep(m.ModelBaseRNNRep):
         vis_obs = self.conv(vis_obs)
 
         attned_agents, _ = self.attn_envs(vec_obs.unsqueeze(-2), feature_agents, feature_agents,
-                                            key_padding_mask=feature_agents_mask)
+                                          key_padding_mask=feature_agents_mask)
 
         attned_agents = attned_agents.squeeze(-2)
 

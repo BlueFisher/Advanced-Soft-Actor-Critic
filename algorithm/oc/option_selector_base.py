@@ -274,6 +274,7 @@ class OptionSelectorBase(SAC_Base):
         """
         option_kwargs = self._kwargs
         del option_kwargs['self']
+        option_kwargs['obs_names'] = ['state', *self.obs_names]
         option_kwargs['obs_shapes'] = [(self.state_size, ), *self.obs_shapes]
         option_kwargs['seq_encoder'] = SEQ_ENCODER.RNN if self.seq_encoder == SEQ_ENCODER.ATTN else self.seq_encoder
         option_kwargs['burn_in_step'] = self.option_burn_in_step
@@ -1429,6 +1430,7 @@ class OptionSelectorBase(SAC_Base):
         else:
             self.batch_buffer.put_episode(**episode_trans)
 
+    @unified_elapsed_timer('_fill_replay_buffer', 10)
     def _fill_replay_buffer(self,
                             l_indexes: np.ndarray,
                             l_padding_masks: np.ndarray,
@@ -1545,6 +1547,7 @@ class OptionSelectorBase(SAC_Base):
                     image = plot_attn_weight(attn_weight[0].cpu().numpy())
                     self.summary_writer.add_images(f'attn_weight/{i}', image, self.global_step)
 
+    @unified_elapsed_timer('_sample_from_replay_buffer', 10)
     def _sample_from_replay_buffer(self):
         """
         Sample from replay buffer
@@ -1718,21 +1721,22 @@ class OptionSelectorBase(SAC_Base):
             if self.use_replay_buffer and self.use_priority:
                 priority_is = torch.from_numpy(priority_is).to(self.device)
 
-            (m_target_states,
-             m_low_target_obses_list,
-             m_low_target_states) = self._train(
-                bn_indexes=bn_indexes,
-                bn_padding_masks=bn_padding_masks,
-                bn_obses_list=bn_obses_list,
-                bn_option_indexes=bn_option_indexes,
-                bn_actions=bn_actions,
-                bn_rewards=bn_rewards,
-                next_obs_list=next_obs_list,
-                bn_dones=bn_dones,
-                bn_mu_probs=bn_mu_probs if self.use_n_step_is else None,
-                f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None,
-                f_low_seq_hidden_states=f_low_seq_hidden_states if self.seq_encoder is not None else None,
-                priority_is=priority_is if self.use_replay_buffer and self.use_priority else None)
+            with self._profiler('_train', repeat=10):
+                (m_target_states,
+                m_low_target_obses_list,
+                m_low_target_states) = self._train(
+                    bn_indexes=bn_indexes,
+                    bn_padding_masks=bn_padding_masks,
+                    bn_obses_list=bn_obses_list,
+                    bn_option_indexes=bn_option_indexes,
+                    bn_actions=bn_actions,
+                    bn_rewards=bn_rewards,
+                    next_obs_list=next_obs_list,
+                    bn_dones=bn_dones,
+                    bn_mu_probs=bn_mu_probs if self.use_n_step_is else None,
+                    f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None,
+                    f_low_seq_hidden_states=f_low_seq_hidden_states if self.seq_encoder is not None else None,
+                    priority_is=priority_is if self.use_replay_buffer and self.use_priority else None)
 
             if step % self.save_model_per_step == 0:
                 self.save_model()

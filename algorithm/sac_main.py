@@ -11,7 +11,7 @@ import algorithm.config_helper as config_helper
 
 from .agent import MultiAgentsManager
 from .sac_base import SAC_Base
-from .utils import format_global_step, UnifiedElapsedTimer
+from .utils import UnifiedElapsedTimer, format_global_step
 from .utils.enums import *
 
 
@@ -233,11 +233,11 @@ class Main:
                     with self._profiler('get_ma_action', repeat=10):
                         ma_d_action, ma_c_action = self.ma_manager.get_ma_action(disable_sample=self.disable_sample)
 
-                    with self._profiler('env step', repeat=10):
+                    with self._profiler('env.step', repeat=10):
                         (ma_next_obs_list,
-                        ma_reward,
-                        ma_local_done,
-                        ma_max_reached) = self.env.step(ma_d_action, ma_c_action)
+                         ma_reward,
+                         ma_local_done,
+                         ma_max_reached) = self.env.step(ma_d_action, ma_c_action)
 
                     if ma_next_obs_list is None:
                         force_reset = True
