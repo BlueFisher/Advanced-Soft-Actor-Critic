@@ -1,4 +1,3 @@
-from collections import defaultdict
 import itertools
 import logging
 import math
@@ -7,6 +6,7 @@ import multiprocessing.connection
 import os
 import random
 import uuid
+from collections import defaultdict
 from typing import List
 
 import numpy as np
@@ -643,7 +643,7 @@ if __name__ == "__main__":
                        #    scene='Roller',
                        n_envs=N_ENVS,
                        group_aggregation=GROUP_AGGREGATION)
-    ma_obs_shapes, ma_d_action_size, ma_c_action_size = env.init()
+    ma_obs_names, ma_obs_shapes, ma_d_action_size, ma_c_action_size = env.init()
     ma_names = list(ma_obs_shapes.keys())
 
     for i in range(100):

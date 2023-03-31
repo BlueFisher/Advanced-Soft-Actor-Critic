@@ -10,7 +10,6 @@ RAY_SIZE = 400
 AUG_RAY_RANDOM_SIZE = 250
 
 
-
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self, blur, brightness, ray_random, need_speed):
         assert self.obs_shapes[0] == (84, 84, 3)

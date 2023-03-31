@@ -13,11 +13,24 @@ default:
     force_reset: true
 
   sac_config:
-    n_step: 3
-
-rnn:
-  sac_config:
-    nn: nn_rnn
-
     burn_in_step: 10
+    n_step: 3
     seq_encoder: RNN
+ 
+oc_2:
+  base_config:
+    name: oc2_{time}
+  oc_config:
+    num_options: 2
+
+oc_3:
+  base_config:
+    name: oc3_{time}
+  oc_config:
+    num_options: 3
+
+oc_4:
+  base_config:
+    name: oc4_{time}
+  oc_config:
+    num_options: 4

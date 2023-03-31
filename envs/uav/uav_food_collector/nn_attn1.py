@@ -23,7 +23,7 @@ class ModelRep(m.ModelBaseRNNRep):
         feature_targets_mask[..., 0] = False
 
         attned_agents, _ = self.attn_envs(vec_obs.unsqueeze(-2), feature_agents, feature_agents,
-                                            key_padding_mask=feature_agents_mask)
+                                          key_padding_mask=feature_agents_mask)
 
         attned_targets, _ = self.attn_targets(vec_obs.unsqueeze(-2), feature_targets, feature_targets,
                                               key_padding_mask=feature_targets_mask)
