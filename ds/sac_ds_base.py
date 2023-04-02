@@ -17,7 +17,7 @@ from algorithm.sac_base import SAC_Base
 class SAC_DS_Base(SAC_Base):
     def __init__(self,
                  obs_shapes: List[Tuple],
-                 d_action_size: int,
+                 d_action_sizes: List[int],
                  c_action_size: int,
                  model_abs_dir: Optional[Path],
                  device: Optional[str] = None,
@@ -67,7 +67,9 @@ class SAC_DS_Base(SAC_Base):
                  action_noise: Optional[List[float]] = None):
 
         self.obs_shapes = obs_shapes
-        self.d_action_size = d_action_size
+        self.d_action_sizes = d_action_sizes
+        self.d_action_summed_size = sum(d_action_sizes)
+        self.d_action_branch_size = len(d_action_sizes)
         self.c_action_size = c_action_size
         self.model_abs_dir = model_abs_dir
         self.train_mode = train_mode

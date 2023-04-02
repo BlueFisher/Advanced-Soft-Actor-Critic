@@ -1,3 +1,10 @@
+"""
+! The distributed training module is suspended for maintenance
+"""
+
+print('The distributed training module is suspended for maintenance')
+exit()
+
 import argparse
 import multiprocessing as mp
 import sys

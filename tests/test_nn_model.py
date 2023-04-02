@@ -26,7 +26,7 @@ class TestNNModel(unittest.TestCase):
         sac = SAC_Base(
             obs_names=OBS_NAMES,
             obs_shapes=OBS_SHAPES,
-            d_action_size=4,
+            d_action_sizes=[2, 3],
             c_action_size=4,
             model_abs_dir=None,
             nn=nn_vanilla,
@@ -36,7 +36,7 @@ class TestNNModel(unittest.TestCase):
         while step < 5:
             sac.choose_action(**gen_batch_obs(OBS_SHAPES))
             sac.put_episode(**gen_episode_trans(OBS_SHAPES,
-                                                d_action_size=4,
+                                                d_action_sizes=[2, 3],
                                                 c_action_size=4,
                                                 episode_len=10))
             step = sac.train()
@@ -57,6 +57,7 @@ def __gen():
     for i, param_dict in enumerate(possible_param_dicts):
         func_name = f'test_Q_model_{i:03d}'
         for k, v in param_dict.items():
+            v = str(v).replace('.', '_')
             func_name += f', {k}={v}'
 
         setattr(TestNNModel, func_name,
@@ -70,6 +71,7 @@ def __gen():
     for i, param_dict in enumerate(possible_param_dicts):
         func_name = f'test_policy_model_{i:03d}'
         for k, v in param_dict.items():
+            v = str(v).replace('.', '_')
             func_name += f', {k}={v}'
 
         setattr(TestNNModel, func_name,

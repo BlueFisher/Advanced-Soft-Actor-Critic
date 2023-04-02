@@ -10,7 +10,7 @@ class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):
         self.conv = m.ConvLayers(30, 30, 3, 'simple', out_dense_depth=2, output_size=8)
 
-        self.rnn = m.GRU(self.conv.output_size + self.d_action_size + self.c_action_size, 8, 2)
+        self.rnn = m.GRU(self.conv.output_size + sum(self.d_action_sizes) + self.c_action_size, 8, 2)
 
         self.dense = nn.Sequential(
             nn.Linear(self.obs_shapes[0][0] - EXTRA_SIZE + 8, 8),
@@ -36,7 +36,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
         return vis_encoder
 
-    def get_state_from_encoders(self, obs_list, encoders, pre_action, rnn_state=None):
+    def get_state_from_encoders(self, obs_list, encoders, pre_action, rnn_state=None, padding_mask=None):
         obs_vec, obs_vis = obs_list
         obs_vec = obs_vec[..., EXTRA_SIZE:]
 
@@ -53,7 +53,7 @@ class ModelOptionRep(m.ModelBaseRNNRep):
     def _build_model(self):
         self.conv = m.ConvLayers(30, 30, 3, 'simple', out_dense_depth=2, output_size=8)
 
-        self.rnn = m.GRU(self.conv.output_size + self.d_action_size + self.c_action_size, 8, 2)
+        self.rnn = m.GRU(self.conv.output_size + sum(self.d_action_sizes) + self.c_action_size, 8, 2)
 
         self.dense = nn.Sequential(
             nn.Linear(self.obs_shapes[1][0] - EXTRA_SIZE + 8 + 8, 8),
@@ -79,7 +79,7 @@ class ModelOptionRep(m.ModelBaseRNNRep):
 
         return vis_encoder
 
-    def get_state_from_encoders(self, obs_list, encoders, pre_action, rnn_state=None):
+    def get_state_from_encoders(self, obs_list, encoders, pre_action, rnn_state=None, padding_mask=None):
         high_state, obs_vec, obs_vis = obs_list
         obs_vec = obs_vec[..., EXTRA_SIZE:]
 

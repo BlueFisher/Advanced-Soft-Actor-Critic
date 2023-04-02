@@ -28,7 +28,7 @@ class TestConvModel(unittest.TestCase):
         sac = SAC_Base(
             obs_names=OBS_NAMES,
             obs_shapes=OBS_SHAPES,
-            d_action_size=4,
+            d_action_sizes=[2, 3],
             c_action_size=4,
             model_abs_dir=None,
             nn=nn_conv
@@ -38,7 +38,7 @@ class TestConvModel(unittest.TestCase):
         while step < 10:
             sac.choose_action(**gen_batch_obs(OBS_SHAPES))
             sac.put_episode(**gen_episode_trans(OBS_SHAPES,
-                                                d_action_size=4,
+                                                d_action_sizes=[2, 3],
                                                 c_action_size=4,
                                                 episode_len=10))
             step = sac.train()
@@ -60,6 +60,7 @@ def __gen():
     for param_dict in possible_param_dicts:
         func_name = f'test_{i:03d}'
         for k, v in param_dict.items():
+            v = str(v).replace('.', '_')
             if len(param_dict_candidates[k]) > 1:
                 func_name += f', {k}={v}'
 

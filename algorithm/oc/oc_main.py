@@ -57,7 +57,7 @@ class OC_Main(Main):
 
                                           obs_names=mgr.obs_names,
                                           obs_shapes=mgr.obs_shapes,
-                                          d_action_size=mgr.d_action_size,
+                                          d_action_sizes=mgr.d_action_sizes,
                                           c_action_size=mgr.c_action_size,
                                           model_abs_dir=mgr.model_abs_dir,
                                           device=self.device,

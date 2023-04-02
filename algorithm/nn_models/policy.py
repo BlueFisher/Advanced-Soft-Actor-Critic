@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 from torch import nn
@@ -7,13 +7,55 @@ from torch import nn
 from .layers import LinearLayers
 
 
+class JointOneHotCategorical(torch.distributions.Distribution):
+    def __init__(self, dists: List[torch.distributions.OneHotCategorical]):
+        self._dists = dists
+        self.logits_size_list = [dist.logits.shape[-1] for dist in dists]
+
+    @property
+    def probs(self) -> torch.Tensor:
+        return torch.concat([dist.probs for dist in self._dists], dim=-1)
+
+    @property
+    def logits(self) -> torch.Tensor:
+        return torch.concat([dist.logits for dist in self._dists], dim=-1)
+
+    @property
+    def dists(self) -> torch.distributions.OneHotCategorical:
+        return self._dists
+
+    def sample(self, sample_shape=torch.Size()) -> torch.Tensor:
+        sampled_list = [dist.sample(sample_shape) for dist in self._dists]
+
+        return torch.concat(sampled_list, dim=-1)
+
+    def sample_deter(self) -> torch.Tensor:
+        logits_list = self.logits.split(self.logits_size_list)
+        sampled_list = [torch.functional.one_hot(logits.argmax(dim=-1),
+                                                 logits_size)
+                        for logits, logits_size in zip(logits_list, self.logits_size_list)]
+
+        return torch.concat(sampled_list, dim=-1)
+
+    def log_prob(self, value) -> torch.Tensor:
+        values = value.split(self.logits_size_list, dim=-1)
+        log_prob_list = [dist.log_prob(value) for dist, value in zip(self._dists, values)]
+        return torch.stack(log_prob_list, dim=-1).sum(-1)
+
+    def entropy(self) -> torch.Tensor:
+        entropy_list = [dist.entropy() for dist in self._dists]
+        return torch.stack(entropy_list, dim=-1).sum(-1)
+
+
 class ModelBasePolicy(nn.Module):
-    def __init__(self, state_size, d_action_size, c_action_size,
+    def __init__(self,
+                 state_size: int,
+                 d_action_sizes: List[int], c_action_size: int,
                  train_mode: bool,
                  model_abs_dir: Optional[Path] = None, **kwargs):
         super().__init__()
         self.state_size = state_size
-        self.d_action_size = d_action_size
+        self.d_action_sizes = d_action_sizes
         self.c_action_size = c_action_size
         self.train_mode = train_mode
         self.model_abs_dir = model_abs_dir
@@ -52,8 +94,11 @@ class ModelPolicy(ModelBasePolicy):
         """
         self.dense = LinearLayers(self.state_size, dense_n, dense_depth)
 
-        if self.d_action_size:
-            self.d_dense = LinearLayers(self.dense.output_size, d_dense_n, d_dense_depth, self.d_action_size)
+        if self.d_action_sizes:
+            self.d_dense_list = nn.ModuleList(
+                [LinearLayers(self.dense.output_size, d_dense_n, d_dense_depth, d_action_size)
+                 for d_action_size in self.d_action_sizes]
+            )
 
         if self.c_action_size:
             self.c_dense = LinearLayers(self.dense.output_size, c_dense_n, c_dense_depth)
@@ -64,9 +109,10 @@ class ModelPolicy(ModelBasePolicy):
     def forward(self, state, obs_list):
         state = self.dense(state)
 
-        if self.d_action_size:
-            logits = self.d_dense(state)
-            d_policy = torch.distributions.OneHotCategorical(logits=logits)
+        if self.d_action_sizes:
+            logits_list = [d_dense(state) for d_dense in self.d_dense_list]
+            d_policy_list = [torch.distributions.OneHotCategorical(logits=logits) for logits in logits_list]
+            d_policy = JointOneHotCategorical(d_policy_list)
         else:
             d_policy = None
 

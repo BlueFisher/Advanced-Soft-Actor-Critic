@@ -45,7 +45,7 @@ class ModelRep(m.ModelBaseRNNRep):
         # self.vis_ray_dense = m.LinearLayers(32, dense_n=32, dense_depth=1)
         # self.vis_tp_dense = m.LinearLayers(32, dense_n=32, dense_depth=1)
 
-        self.rnn = m.GRU(64 + self.obs_shapes[3][0] + self.d_action_size, 64, 1)
+        self.rnn = m.GRU(64 + self.obs_shapes[3][0] + sum(self.d_action_sizes), 64, 1)
 
         # cropper = torch.nn.Sequential(
         #     T.RandomCrop(size=(50, 50)),

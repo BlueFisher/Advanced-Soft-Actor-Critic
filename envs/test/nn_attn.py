@@ -7,7 +7,7 @@ class ModelRep(m.ModelBaseAttentionRep):
     def _build_model(self, pe: str):
         self.pe = pe
 
-        embed_dim = self.obs_shapes[0][0] + self.c_action_size + self.d_action_size
+        embed_dim = self.obs_shapes[0][0] + self.c_action_size + sum(self.d_action_sizes)
 
         self.mlp = m.LinearLayers(embed_dim, output_size=8)
 
@@ -47,7 +47,7 @@ class ModelRep(m.ModelBaseAttentionRep):
 
 class ModelOptionRep(m.ModelBaseRNNRep):
     def _build_model(self):
-        self.rnn = m.GRU(self.obs_shapes[0][0] + self.obs_shapes[1][0] + self.d_action_size + self.c_action_size, 8, 2)
+        self.rnn = m.GRU(self.obs_shapes[0][0] + self.obs_shapes[1][0] + sum(self.d_action_sizes) + self.c_action_size, 8, 2)
 
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         high_state, obs = obs_list

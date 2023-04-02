@@ -17,7 +17,8 @@ class Agent:
     done = False  # If has one complete episode
     max_reached = False
 
-    def __init__(self, agent_id: int,
+    def __init__(self,
+                 agent_id: int,
                  obs_shapes: List[Tuple],
                  action_size: int,
                  seq_hidden_state_shape=None,
@@ -234,14 +235,15 @@ class AgentManager:
                  name: str,
                  obs_names: List[str],
                  obs_shapes: List[Tuple[int]],
-                 d_action_size: int,
+                 d_action_sizes: List[int],
                  c_action_size: int):
         self.name = name
         self.obs_names = obs_names
         self.obs_shapes = obs_shapes
-        self.d_action_size = d_action_size
+        self.d_action_sizes = d_action_sizes
+        self.d_action_summed_size = sum(d_action_sizes)
         self.c_action_size = c_action_size
-        self.action_size = d_action_size + c_action_size
+        self.action_size = self.d_action_summed_size + self.c_action_size
 
         self.rl = None
         self.seq_encoder = None
@@ -337,8 +339,8 @@ class AgentManager:
             next_seq_hidden_state = None
 
         self['action'] = action
-        self['d_action'] = action[..., :self.d_action_size]
-        self['c_action'] = action[..., self.d_action_size:]
+        self['d_action'] = action[..., :self.d_action_summed_size]
+        self['c_action'] = action[..., -self.c_action_size:]
         self['prob'] = prob
         self['next_seq_hidden_state'] = next_seq_hidden_state
 
@@ -346,16 +348,18 @@ class AgentManager:
         action = np.zeros((len(self.agents), self.action_size), dtype=np.float32)
         d_action = c_action = None
 
-        if self.d_action_size:
-            d_action = np.random.randint(0, self.d_action_size, size=len(self.agents))
-            # d_action = np.zeros((len(self.agents),), dtype=np.int64) + 5
-            d_action = np.eye(self.d_action_size, dtype=np.int32)[d_action]
-            action[:, :self.d_action_size] = d_action
+        if self.d_action_summed_size:
+            d_action_list = [np.random.randint(0, d_action_size, size=len(self.agents))
+                             for d_action_size in self.d_action_sizes]
+            d_action_list = [np.eye(d_action_size, dtype=np.int32)[d_action]
+                             for d_action, d_action_size in zip(d_action_list, self.d_action_sizes)]
+            d_action = np.concatenate(d_action_list, axis=-1)
+            action[:, :self.d_action_summed_size] = d_action
 
         if self.c_action_size:
             c_action = np.random.randn(len(self.agents), self.c_action_size)
             # c_action = np.ones((len(self.agents), self.c_action_size), dtype=np.float32)
-            action[:, self.d_action_size:] = c_action
+            action[:, -self.c_action_size:] = c_action
 
         self['action'] = action
         self['d_action'] = d_action
@@ -410,7 +414,7 @@ class MultiAgentsManager:
     def __init__(self,
                  ma_obs_names: dict,
                  ma_obs_shapes: dict,
-                 ma_d_action_size: dict,
+                 ma_d_action_sizes: dict,
                  ma_c_action_size: dict,
                  model_abs_dir: Path):
         self._ma_manager: Dict[str, AgentManager] = {}
@@ -418,7 +422,7 @@ class MultiAgentsManager:
             self._ma_manager[n] = AgentManager(n,
                                                ma_obs_names[n],
                                                ma_obs_shapes[n],
-                                               ma_d_action_size[n],
+                                               ma_d_action_sizes[n],
                                                ma_c_action_size[n])
 
             if len(ma_obs_shapes) == 1:

@@ -38,12 +38,14 @@ class ModelSimpleRep(ModelBaseSimpleRep):
 
 
 class ModelBaseRNNRep(nn.Module):
-    def __init__(self, obs_shapes: List[Tuple], d_action_size: int, c_action_size: int,
+    def __init__(self,
+                 obs_shapes: List[Tuple],
+                 d_action_sizes: List[int], c_action_size: int,
                  is_target: bool, train_mode: bool,
                  model_abs_dir: Optional[Path] = None, **kwargs):
         super().__init__()
         self.obs_shapes = obs_shapes
-        self.d_action_size = d_action_size
+        self.d_action_sizes = d_action_sizes
         self.c_action_size = c_action_size
         self.train_mode = train_mode
         self.is_target = is_target
@@ -69,7 +71,9 @@ class ModelBaseRNNRep(nn.Module):
     def get_augmented_encoders(self, obs_list) -> Union[torch.Tensor, Tuple[torch.Tensor]]:
         raise Exception("get_augmented_encoders not implemented")
 
-    def get_state_from_encoders(self, obs_list, encoders, pre_action, rnn_state=None) -> torch.Tensor:
+    def get_state_from_encoders(self, obs_list, encoders, pre_action, 
+                                rnn_state=None,
+                                padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         raise Exception("get_state_from_encoders not implemented")
 
 
