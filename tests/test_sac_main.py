@@ -66,35 +66,13 @@ class TestSACMain(unittest.TestCase):
 
 
 def __gen_vanilla():
-    env_args_dict_candidates = {
-        'ma_obs_shapes': [{
-            'test0': [(6,)]
-        }],
-        'ma_d_action_size': [
-            {
-                'test0': 0,
-            },
-            {
-                'test0': 2,
-            }
-        ],
-        'ma_c_action_size': [
-            {
-                'test0': 0,
-            },
-            {
-                'test0': 2,
-            }
-        ]
-    }
-
     env_args_dicts = [
         {
             'ma_obs_shapes': {
                 'test0': [(6,)]
             },
-            'ma_d_action_size': {
-                'test0': 0
+            'ma_d_action_sizes': {
+                'test0': []
             },
             'ma_c_action_size': {
                 'test0': 2
@@ -104,8 +82,8 @@ def __gen_vanilla():
             'ma_obs_shapes': {
                 'test0': [(6,)]
             },
-            'ma_d_action_size': {
-                'test0': 2
+            'ma_d_action_sizes': {
+                'test0': [2, 4]
             },
             'ma_c_action_size': {
                 'test0': 0
@@ -115,8 +93,8 @@ def __gen_vanilla():
             'ma_obs_shapes': {
                 'test0': [(6,)]
             },
-            'ma_d_action_size': {
-                'test0': 2
+            'ma_d_action_sizes': {
+                'test0': [2, 4]
             },
             'ma_c_action_size': {
                 'test0': 2
@@ -127,9 +105,9 @@ def __gen_vanilla():
                 'test0': [(6,)],
                 'test1': [(8,)]
             },
-            'ma_d_action_size': {
-                'test0': 0,
-                'test1': 0
+            'ma_d_action_sizes': {
+                'test0': [],
+                'test1': []
             },
             'ma_c_action_size': {
                 'test0': 2,
@@ -141,9 +119,9 @@ def __gen_vanilla():
                 'test0': [(6,)],
                 'test1': [(8,)]
             },
-            'ma_d_action_size': {
-                'test0': 0,
-                'test1': 0
+            'ma_d_action_sizes': {
+                'test0': [],
+                'test1': []
             },
             'ma_c_action_size': {
                 'test0': 2,
@@ -155,9 +133,9 @@ def __gen_vanilla():
                 'test0': [(6,)],
                 'test1': [(8,)]
             },
-            'ma_d_action_size': {
-                'test0': 2,
-                'test1': 4
+            'ma_d_action_sizes': {
+                'test0': [2, 4],
+                'test1': [4, 2]
             },
             'ma_c_action_size': {
                 'test0': 2,

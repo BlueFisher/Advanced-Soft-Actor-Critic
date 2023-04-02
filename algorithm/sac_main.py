@@ -144,10 +144,10 @@ class Main:
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
-        ma_obs_names, ma_obs_shapes, ma_d_action_size, ma_c_action_size = self.env.init()
+        ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size = self.env.init()
         self.ma_manager = MultiAgentsManager(ma_obs_names,
                                              ma_obs_shapes,
-                                             ma_d_action_size,
+                                             ma_d_action_sizes,
                                              ma_c_action_size,
                                              self.model_abs_dir)
         for n, mgr in self.ma_manager:
@@ -158,7 +158,7 @@ class Main:
                 mgr.set_config(self.ma_configs[n])
 
             self._logger.info(f'{n} observation shapes: {mgr.obs_shapes}')
-            self._logger.info(f'{n} action shapes: {mgr.d_action_size}, {mgr.c_action_size}')
+            self._logger.info(f'{n} action shapes: {mgr.d_action_sizes}, {mgr.c_action_size}')
 
         self._logger.info(f'{self.base_config["env_name"]} initialized')
 
@@ -183,7 +183,7 @@ class Main:
 
             mgr.set_rl(SAC_Base(obs_names=mgr.obs_names,
                                 obs_shapes=mgr.obs_shapes,
-                                d_action_size=mgr.d_action_size,
+                                d_action_sizes=mgr.d_action_sizes,
                                 c_action_size=mgr.c_action_size,
                                 model_abs_dir=mgr.model_abs_dir,
                                 device=self.device,
@@ -228,10 +228,12 @@ class Main:
                 iter_time = time.time()
 
                 while not self.ma_manager.is_done():
-                    self.ma_manager.burn_in_padding()
+                    with self._profiler('burn_in_padding', repeat=10):
+                        self.ma_manager.burn_in_padding()
 
                     with self._profiler('get_ma_action', repeat=10):
                         ma_d_action, ma_c_action = self.ma_manager.get_ma_action(disable_sample=self.disable_sample)
+                        # ma_d_action, ma_c_action = self.ma_manager.get_test_ma_action()
 
                     with self._profiler('env.step', repeat=10):
                         (ma_next_obs_list,
@@ -259,7 +261,8 @@ class Main:
                         with self._profiler('train', repeat=10):
                             trained_steps = self.ma_manager.train(trained_steps)
 
-                    self.ma_manager.post_step(ma_next_obs_list, ma_local_done)
+                    with self._profiler('post_step', repeat=10):
+                        self.ma_manager.post_step(ma_next_obs_list, ma_local_done)
 
                     step += 1
 

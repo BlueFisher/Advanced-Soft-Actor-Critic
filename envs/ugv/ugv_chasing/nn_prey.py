@@ -27,7 +27,7 @@ class ModelRep(m.ModelBaseRNNRep):
         self.ray_conv = m.Conv1dLayers(RAY_SIZE, 2, 'default',
                                        out_dense_n=64, out_dense_depth=2)
 
-        self.rnn = m.GRU(64 + self.obs_shapes[3][0] + self.d_action_size, 64, 1)
+        self.rnn = m.GRU(64 + self.obs_shapes[3][0] + sum(self.d_action_sizes), 64, 1)
 
     def _handle_bbox(self, bbox, attn):
         bbox_mask = ~bbox.any(dim=-1)

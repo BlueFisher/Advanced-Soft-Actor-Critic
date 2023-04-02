@@ -28,12 +28,12 @@ class TestWrapper:
                 'test1': [(8,)]
             }
 
-        if 'ma_d_action_size' in self.env_args:
-            ma_d_action_size = self.env_args['ma_d_action_size']
+        if 'ma_d_action_sizes' in self.env_args:
+            ma_d_action_sizes = self.env_args['ma_d_action_sizes']
         else:
-            ma_d_action_size = {
-                'test0': 2,
-                'test1': 4
+            ma_d_action_sizes = {
+                'test0': [2, 3, 4],
+                'test1': [4, 3, 2]
             }
 
         if 'ma_c_action_size' in self.env_args:
@@ -44,7 +44,7 @@ class TestWrapper:
                 'test1': 5
             }
 
-        return self._ma_obs_names, self._ma_obs_shapes, ma_d_action_size, ma_c_action_size
+        return self._ma_obs_names, self._ma_obs_shapes, ma_d_action_sizes, ma_c_action_size
 
     def reset(self, reset_config=None):
         return get_ma_obs_list(self.n_envs, self._ma_obs_shapes)

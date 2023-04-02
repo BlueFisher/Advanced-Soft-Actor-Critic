@@ -1,3 +1,5 @@
+from typing import List
+
 import torch
 from torch import nn
 
@@ -37,11 +39,19 @@ class ModelRND(ModelBaseRND):
                                         dense_n, dense_depth, output_size)
 
     def cal_d_rnd(self, state):
+        """
+        Returns:
+            d_rnd: [*batch, d_action_size, f]
+        """
         d_rnd_list = [d(state).unsqueeze(-2) for d in self.d_dense_list]
 
-        return torch.concat(d_rnd_list, axis=-2)
+        return torch.concat(d_rnd_list, dim=-2)
 
     def cal_c_rnd(self, state, c_action):
+        """
+        Returns:
+            c_rnd: [*batch, f]
+        """
         c_rnd = self.c_dense(torch.cat([state, c_action], dim=-1))
 
         return c_rnd
