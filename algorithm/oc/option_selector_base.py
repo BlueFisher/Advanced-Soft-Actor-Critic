@@ -1303,7 +1303,7 @@ class OptionSelectorBase(SAC_Base):
             bn_indexes (torch.int32): [batch, b + n]
             bn_padding_masks (torch.bool): [batch, b + n]
             bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
-            bn_option_indexes: [batch, b + n]
+            bn_option_indexes (torch.int64): [batch, b + n]
             bn_actions: [batch, b + n, action_size]
             bn_rewards: [batch, b + n]
             next_obs_list: list([batch, *obs_shapes_i], ...)

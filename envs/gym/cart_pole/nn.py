@@ -10,4 +10,4 @@ class ModelQ(m.ModelQ):
 
 class ModelPolicy(m.ModelPolicy):
     def _build_model(self):
-        return super()._build_model(d_dense_depth=0)
+        return super()._build_model(d_dense_n=20, d_dense_depth=1)

@@ -103,7 +103,7 @@ class DMControlWrapper:
 
         self.observation_shapes = [v.shape for v in env.observation_spec().values()]
 
-        d_action_size, c_action_size = 0, env.action_spec().shape[0]
+        d_action_sizes, c_action_size = [], env.action_spec().shape[0]
 
         if not self._seq_envs:
             env.close()
@@ -120,7 +120,7 @@ class DMControlWrapper:
 
         return ({'gym': ['vector']},
                 {'gym': self.observation_shapes},
-                {'gym': d_action_size},
+                {'gym': d_action_sizes},
                 {'gym': c_action_size})
 
     def reset(self, reset_config=None):
