@@ -158,7 +158,8 @@ class Main:
                 mgr.set_config(self.ma_configs[n])
 
             self._logger.info(f'{n} observation shapes: {mgr.obs_shapes}')
-            self._logger.info(f'{n} action shapes: {mgr.d_action_sizes}, {mgr.c_action_size}')
+            self._logger.info(f'{n} discrete action sizes: {mgr.d_action_sizes}')
+            self._logger.info(f'{n} continuous action size: {mgr.c_action_size}')
 
         self._logger.info(f'{self.base_config["env_name"]} initialized')
 

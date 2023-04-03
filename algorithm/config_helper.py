@@ -3,7 +3,7 @@ import logging.handlers
 import random
 import string
 import time
-from copy import deepcopy
+from copy import copy, deepcopy
 from pathlib import Path
 
 import numpy as np
@@ -84,34 +84,6 @@ def initialize_config_from_yaml(default_config_path, config_file_path,
     return config, ma_configs
 
 
-def set_logger(logger_file=None, debug=False):
-    # logger config
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG if debug else logging.INFO)
-    # Remove default root logger handler
-    logger.handlers = []
-
-    # Create stream handler
-    sh = logging.StreamHandler()
-    sh.setLevel(logging.DEBUG if debug else logging.INFO)
-
-    # Add handler and formatter to logger
-    sh.setFormatter(logging.Formatter('[%(levelname)s] - [%(name)s] - %(message)s'))
-    logger.addHandler(sh)
-
-    if logger_file is not None:
-        # Create file handler
-        fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=10 * 1024 * 1024, backupCount=20)
-        fh.setLevel(logging.DEBUG if debug else logging.INFOO)
-
-        # Add handler and formatter to logger
-        fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
-
-        logger.addHandler(fh)
-
-    logging.getLogger('PIL').setLevel(logging.WARNING)
-
-
 def save_config(config, model_root_dir: Path, config_name):
     model_root_dir.mkdir(parents=True, exist_ok=True)
 
@@ -135,3 +107,57 @@ def generate_base_name(name, prefix=None):
         replaced = prefix + '_' + replaced
 
     return name.replace('{time}', replaced)
+
+
+############# CONFIG LOGGING #############
+
+
+MAPPING = {
+    'DEBUG': 37,  # white
+    'INFO': 36,  # cyan
+    'WARNING': 33,  # yellow
+    'ERROR': 31,  # red
+    'CRITICAL': 41,  # white on red bg
+}
+
+PREFIX = '\033['
+SUFFIX = '\033[0m'
+
+
+class ColoredFormatter(logging.Formatter):
+    def format(self, record):
+        colored_record = copy(record)
+        levelname = colored_record.levelname
+        seq = MAPPING.get(levelname, 37)  # default white
+        colored_levelname = ('{0}{1}m{2}{3}') \
+            .format(PREFIX, seq, levelname, SUFFIX)
+        colored_record.levelname = colored_levelname
+        return logging.Formatter.format(self, colored_record)
+
+
+def set_logger(logger_file=None, debug=False):
+    # logger config
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG if debug else logging.INFO)
+    # Remove default root logger handler
+    logger.handlers = []
+
+    # Create stream handler
+    sh = logging.StreamHandler()
+    sh.setLevel(logging.DEBUG if debug else logging.INFO)
+
+    # Add handler and formatter to logger
+    sh.setFormatter(ColoredFormatter('[%(levelname)s] - [%(name)s] - %(message)s'))
+    logger.addHandler(sh)
+
+    if logger_file is not None:
+        # Create file handler
+        fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=10 * 1024 * 1024, backupCount=20)
+        fh.setLevel(logging.DEBUG if debug else logging.INFOO)
+
+        # Add handler and formatter to logger
+        fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
+
+        logger.addHandler(fh)
+
+    logging.getLogger('PIL').setLevel(logging.WARNING)

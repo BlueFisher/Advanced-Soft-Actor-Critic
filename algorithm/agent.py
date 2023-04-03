@@ -348,7 +348,7 @@ class AgentManager:
         action = np.zeros((len(self.agents), self.action_size), dtype=np.float32)
         d_action = c_action = None
 
-        if self.d_action_summed_size:
+        if self.d_action_sizes:
             d_action_list = [np.random.randint(0, d_action_size, size=len(self.agents))
                              for d_action_size in self.d_action_sizes]
             d_action_list = [np.eye(d_action_size, dtype=np.int32)[d_action]

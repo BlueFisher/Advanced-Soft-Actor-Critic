@@ -140,12 +140,12 @@ class UnityWrapperProcess:
         """
         Returns:
             observation shapes: tuple[(o1, ), (o2, ), (o3_1, o3_2, o3_3), ...]
-            discrete action size: int, sum of all action branches
+            discrete action sizes: list[int], list of all action branches
             continuous action size: int
         """
         self.ma_obs_names = {}
         self.ma_obs_shapes = {}
-        self.ma_d_action_size = {}
+        self.ma_d_action_sizes = {}
         self.ma_c_action_size = {}
 
         self.ma_unity_obs_shapes = {}
@@ -162,29 +162,25 @@ class UnityWrapperProcess:
 
             self._empty_action = behavior_spec.action_spec.empty_action
 
-            discrete_action_size = 0
+            discrete_action_sizes = []
             if behavior_spec.action_spec.discrete_size > 0:
-                discrete_action_size = 1
-                action_product_list = []
-                for action, branch_size in enumerate(behavior_spec.action_spec.discrete_branches):
-                    discrete_action_size *= branch_size
-                    action_product_list.append(range(branch_size))
-                    self._logger.info(f"{n} Discrete action branch {action} has {branch_size} different actions")
-
-                self.action_product = np.array(list(itertools.product(*action_product_list)))
+                for branch, branch_size in enumerate(behavior_spec.action_spec.discrete_branches):
+                    discrete_action_sizes.append(branch_size)
+                    self._logger.info(f"{n} Discrete action branch {branch} has {branch_size} different actions")
 
             continuous_action_size = behavior_spec.action_spec.continuous_size
 
             self._logger.info(f'{n} Continuous action size: {continuous_action_size}')
 
-            self.ma_d_action_size[n] = discrete_action_size
+            self.ma_d_action_sizes[n] = discrete_action_sizes
             self.ma_c_action_size[n] = continuous_action_size
 
             self.ma_unity_obs_shapes[n] = self.ma_obs_shapes[n]
             self.ma_unity_c_action_size[n] = self.ma_c_action_size[n]
 
             if self.group_aggregation:
-                if self.ma_d_action_size[n] > 0:
+                if self.ma_d_action_sizes[n]:
+                    # TODO
                     raise Exception('Discrete action size is not supported in group_aggregation now')
 
                 decision_steps, terminal_steps = self._env.get_steps(n)
@@ -202,7 +198,7 @@ class UnityWrapperProcess:
 
         self._logger.info('Initialized')
 
-        return self.ma_obs_names, self.ma_obs_shapes, self.ma_d_action_size, self.ma_c_action_size, self.ma_n_agents
+        return self.ma_obs_names, self.ma_obs_shapes, self.ma_d_action_sizes, self.ma_c_action_size, self.ma_n_agents
 
     def reset(self, reset_config=None):
         """
@@ -250,7 +246,7 @@ class UnityWrapperProcess:
     def step(self, ma_d_action, ma_c_action):
         """
         Args:
-            d_action: (NAgents, discrete_action_size), one hot like action
+            d_action: (NAgents, discrete_action_summed_size), one hot like action
             c_action: (NAgents, continuous_action_size)
 
         Returns:
@@ -289,11 +285,13 @@ class UnityWrapperProcess:
         for n in self.behavior_names:
             d_action = c_action = None
 
-            if self.ma_d_action_size[n]:
-                d_action = ma_d_action[n]
-                d_action = np.argmax(d_action, axis=1)
-                d_action = self.action_product[d_action]
-            c_action = ma_c_action[n]
+            if self.ma_d_action_sizes[n]:
+                d_action_list = np.split(ma_d_action[n], np.cumsum(self.ma_d_action_sizes[n]), axis=-1)[:-1]
+                d_action_list = [np.argmax(d_action, axis=-1) for d_action in d_action_list]
+                d_action = np.stack(d_action_list, axis=-1)
+
+            if self.ma_c_action_size[n]:
+                c_action = ma_c_action[n]
 
             self._env.set_actions(n,
                                   ActionTuple(continuous=c_action, discrete=d_action))
@@ -498,7 +496,7 @@ class UnityWrapper:
         """
         Returns:
             observation shapes: dict[str, tuple[(o1, ), (o2, ), (o3_1, o3_2, o3_3), ...]]
-            discrete action size: dict[str, int], sum of all action branches
+            discrete action sizes: dict[str, list[int]], list of all action branches
             continuous action size: dict[str, int]
         """
 
@@ -507,14 +505,14 @@ class UnityWrapper:
         if self._seq_envs:
             for env in self._envs:
                 results = env.init()
-                ma_obs_names, ma_obs_shapes, ma_d_action_size, ma_c_action_size, ma_n_agents = results
+                ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size, ma_n_agents = results
                 for n, n_agents in ma_n_agents.items():
                     self.ma_n_agents_list[n].append(n_agents)
         else:
             for conn in self._conns:
                 conn.send((INIT, None))
                 results = conn.recv()
-                ma_obs_names, ma_obs_shapes, ma_d_action_size, ma_c_action_size, ma_n_agents = results
+                ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size, ma_n_agents = results
                 for n, n_agents in ma_n_agents.items():
                     self.ma_n_agents_list[n].append(n_agents)
 
@@ -524,7 +522,7 @@ class UnityWrapper:
                 n_agents_list[i] += n_agents_list[i - 1]
             n_agents_list.insert(0, 0)
 
-        return ma_obs_names, ma_obs_shapes, ma_d_action_size, ma_c_action_size
+        return ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size
 
     def reset(self, reset_config=None):
         """
@@ -636,14 +634,14 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     N_ENVS = 10
-    GROUP_AGGREGATION = True
+    GROUP_AGGREGATION = False
 
     env = UnityWrapper(train_mode=True,
                        #    file_name=r'D:\Unity\win-RL-Envs\RLEnvironments.exe',
                        #    scene='Roller',
                        n_envs=N_ENVS,
                        group_aggregation=GROUP_AGGREGATION)
-    ma_obs_names, ma_obs_shapes, ma_d_action_size, ma_c_action_size = env.init()
+    ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size = env.init()
     ma_names = list(ma_obs_shapes.keys())
 
     for i in range(100):
@@ -654,9 +652,13 @@ if __name__ == "__main__":
             ma_c_action = {}
             for n in ma_names:
                 d_action, c_action = None, None
-                if ma_d_action_size[n]:
-                    d_action = np.random.randint(0, ma_d_action_size[n], size=N_ENVS)
-                    d_action = np.eye(ma_d_action_size[n], dtype=np.int32)[d_action]
+                if ma_d_action_sizes[n]:
+                    d_action_sizes = ma_d_action_sizes[n]
+                    d_action_list = [np.random.randint(0, d_action_size, size=N_ENVS)
+                                     for d_action_size in d_action_sizes]
+                    d_action_list = [np.eye(d_action_size, dtype=np.int32)[d_action]
+                                     for d_action, d_action_size in zip(d_action_list, d_action_sizes)]
+                    d_action = np.concatenate(d_action_list, axis=-1)
                 if ma_c_action_size[n]:
                     c_action = np.random.randn(N_ENVS, ma_c_action_size[n])
 

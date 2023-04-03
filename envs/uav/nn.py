@@ -11,7 +11,10 @@ class ModelRep(m.ModelBaseRNNRep):
         self.conv = m.ConvLayers(84, 84, 3, 'simple',
                                  out_dense_n=64, out_dense_depth=2)
 
-        self.rnn = m.GRU(self.conv.output_size + 9 + self.c_action_size, 128, 1)
+        if self.d_action_sizes:
+            self.rnn = m.GRU(self.conv.output_size + 9 + sum(self.d_action_sizes), 128, 1)
+        if self.c_action_size:
+            self.rnn = m.GRU(self.conv.output_size + 9 + self.c_action_size, 128, 1)
 
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         vis_obs, vec_obs = obs_list

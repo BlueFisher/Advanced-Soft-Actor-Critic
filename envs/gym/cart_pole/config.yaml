@@ -23,9 +23,12 @@ default:
 
     discrete_dqn_like: true
 
-    use_n_step_is: true
-
 no_dqn:
   sac_config:
+    batch_size: 256
+    use_n_step_is: false # Whether using importance sampling
+
+    init_log_alpha: -4.8
+    use_auto_alpha: false # Whether using automating entropy adjustment
+    learning_rate: 0.0003
     discrete_dqn_like: false
-    learning_rate: 0.0001
