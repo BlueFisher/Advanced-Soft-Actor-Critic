@@ -18,7 +18,7 @@ class ImageVisual:
         Supporting RGB and gray images
         Only supporting images with batch size less than 5
         Args:
-            *images: [Batch, H, W, C]
+            *images: [batch, H, W, C]
         """
         if len(images[0].shape) > 4:
             images = [image[:, -1, ...] for image in images]

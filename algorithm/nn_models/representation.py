@@ -61,10 +61,10 @@ class ModelBaseRNNRep(nn.Module):
                 padding_mask: Optional[torch.Tensor] = None):
         """
         Args:
-            obs_list: list([Batch, l, *obs_shapes_i], ...)
-            pre_action: [Batch, l, action_size]
-            rnn_state: [Batch, l, *seq_hidden_state_shape]
-            padding_mask (torch.bool): [Batch, l]
+            obs_list: list([batch, l, *obs_shapes_i], ...)
+            pre_action: [batch, l, action_size]
+            rnn_state: [batch, l, *seq_hidden_state_shape]
+            padding_mask (torch.bool): [batch, l]
         """
         raise Exception("ModelRNNRep not implemented")
 

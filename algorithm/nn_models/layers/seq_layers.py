@@ -105,7 +105,7 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
         Args:
             key_length: int
             query_length: int
-            key_padding_mask: [Batch, key_length]
+            key_padding_mask: [batch, key_length]
                 A `True` value indicates that the corresponding key value will be ignored 
                 for the purpose of attention.
         """
@@ -132,9 +132,9 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
                 key_padding_mask: Optional[torch.Tensor] = None):
         """
         Args:
-            key: [Batch, key_length, embed_dim]
+            key: [batch, key_length, embed_dim]
             query_length: int
-            key_padding_mask: [Batch, key_padding_mask_length]
+            key_padding_mask: [batch, key_padding_mask_length]
                 A `True` value indicates that the corresponding key value will be ignored 
                 for the purpose of attention.
                 `key_padding_mask_length` could be shorter than key_length.
@@ -188,15 +188,15 @@ class EpisodeMultiheadAttention(nn.Module):
                 key_padding_mask: Optional[torch.Tensor] = None):
         """
         Args:
-            [Batch, key_length, embed_dim],
+            [batch, key_length, embed_dim],
             query_length: int
-            hidden_state: [Batch, hidden_state_length, embed_dim]
+            hidden_state: [batch, hidden_state_length, embed_dim]
             is_prev_hidden_state: bool
-            key_padding_mask: [Batch, key_length]
+            key_padding_mask: [batch, key_length]
         Returns:
-            encoded_query: [Batch, query_length, embed_dim]
-            next_hidden_state: [Batch, query_length, embed_dim * num_layers]
-            attn_weights_list: List[[Batch, query_length, key_length_i], ...]
+            encoded_query: [batch, query_length, embed_dim]
+            next_hidden_state: [batch, query_length, embed_dim * num_layers]
+            attn_weights_list: List[[batch, query_length, key_length_i], ...]
         """
         key_length = key.shape[1]
         assert query_length <= key_length

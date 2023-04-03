@@ -16,7 +16,7 @@ class RayVisual:
     def __call__(self, *rays: Union[np.ndarray, torch.Tensor], save_name=None):
         """
         Args:
-            *rays: [Batch, ray_size, C]
+            *rays: [batch, ray_size, C]
                 ray[..., -2] = 0 if has_hit else 1
                 ray[..., -1] = hit_fraction if has_hit else 1
         """
@@ -37,7 +37,7 @@ class RayVisual:
             self.scs = [[] for _ in range(batch_size)]
             for i in range(batch_size):
                 for j, ray in enumerate(rays):
-                    # ray: [Batch, ray_size, C]
+                    # ray: [batch, ray_size, C]
                     self.axes[i][j].spines['right'].set_visible(False)
                     self.axes[i][j].spines['top'].set_visible(False)
                     self.axes[i][j].spines['left'].set_position('center')
