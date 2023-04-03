@@ -17,10 +17,10 @@ class OptionBase(SAC_Base):
                       force_rnd_if_available: bool = False):
         """
         Args:
-            obs_list: list([Batch, *obs_shapes_i], ...)
+            obs_list: list([batch, *obs_shapes_i], ...)
 
         Returns:
-            action: [Batch, d_action_summed_size + c_action_size]
+            action: [batch, d_action_summed_size + c_action_size]
         """
         state = self.model_rep(obs_list)
 
@@ -36,13 +36,13 @@ class OptionBase(SAC_Base):
                           force_rnd_if_available: bool = False):
         """
         Args:
-            obs_list: list([Batch, *obs_shapes_i], ...)
-            pre_action: [Batch, d_action_summed_size + c_action_size]
-            rnn_state: [Batch, *seq_hidden_state_shape]
+            obs_list: list([batch, *obs_shapes_i], ...)
+            pre_action: [batch, d_action_summed_size + c_action_size]
+            rnn_state: [batch, *seq_hidden_state_shape]
 
         Returns:
-            action: [Batch, d_action_summed_size + c_action_size]
-            rnn_state: [Batch, *seq_hidden_state_shape]
+            action: [batch, d_action_summed_size + c_action_size]
+            rnn_state: [batch, *seq_hidden_state_shape]
         """
         obs_list = [obs.unsqueeze(1) for obs in obs_list]
         pre_action = pre_action.unsqueeze(1)
@@ -66,16 +66,16 @@ class OptionBase(SAC_Base):
                            force_rnd_if_available: bool = False):
         """
         Args:
-            ep_indexes: [Batch, episode_len]
-            ep_padding_masks: [Batch, episode_len]
-            ep_obses_list: list([Batch, episode_len, *obs_shapes_i], ...)
-            ep_pre_actions: [Batch, episode_len, d_action_summed_size + c_action_size]
-            ep_attn_hidden_states: [Batch, episode_len, *seq_hidden_state_shape]
+            ep_indexes: [batch, episode_len]
+            ep_padding_masks: [batch, episode_len]
+            ep_obses_list: list([batch, episode_len, *obs_shapes_i], ...)
+            ep_pre_actions: [batch, episode_len, d_action_summed_size + c_action_size]
+            ep_attn_hidden_states: [batch, episode_len, *seq_hidden_state_shape]
 
         Returns:
-            action: [Batch, d_action_summed_size + c_action_size]
-            prob: [Batch, ]
-            attn_hidden_state: [Batch, *rnn_state_shape]
+            action: [batch, d_action_summed_size + c_action_size]
+            prob: [batch, ]
+            attn_hidden_state: [batch, *rnn_state_shape]
         """
         state, next_attn_hidden_state, _ = self.model_rep(ep_indexes,
                                                           ep_obses_list, ep_pre_actions,
@@ -107,21 +107,21 @@ class OptionBase(SAC_Base):
                          stacked_next_target_n_d_qs: torch.Tensor):
         """
         Args:
-            next_n_terminations: [Batch, n]
-            min_next_n_max_vs: [Batch, n]
-            n_rewards: [Batch, n]
-            n_dones (torch.bool): [Batch, n]
+            next_n_terminations: [batch, n]
+            min_next_n_max_vs: [batch, n]
+            n_rewards: [batch, n]
+            n_dones (torch.bool): [batch, n]
             stacked_next_n_d_qs: [ensemble_q_sample, Batch, n, d_action_summed_size]
             stacked_next_target_n_d_qs: [ensemble_q_sample, Batch, n, d_action_summed_size]
 
         Returns:
-            y: [Batch, 1]
+            y: [batch, 1]
         """
 
         stacked_next_q = stacked_next_n_d_qs[..., -1, :]  # [ensemble_q_sample, Batch, d_action_summed_size]
         stacked_next_target_q = stacked_next_target_n_d_qs[..., -1, :]  # [ensemble_q_sample, Batch, d_action_summed_size]
 
-        done = n_dones[:, -1:]  # [Batch, 1]
+        done = n_dones[:, -1:]  # [batch, 1]
 
         stacked_next_q_list = stacked_next_q.split(self.d_action_sizes, dim=-1)
 
@@ -138,16 +138,16 @@ class OptionBase(SAC_Base):
         stacked_max_next_target_q = stacked_max_next_target_q / self.d_action_branch_size
 
         next_q, _ = torch.min(stacked_max_next_target_q, dim=0)
-        # [Batch, 1]
+        # [batch, 1]
 
         next_termination = next_n_terminations[:, -1:]
         min_next_max_v = min_next_n_max_vs[:, -1:]
 
         next_q = (1 - next_termination) * next_q + \
-            next_termination * min_next_max_v  # [Batch, 1]
+            next_termination * min_next_max_v  # [batch, 1]
 
-        g = torch.sum(self._gamma_ratio * n_rewards, dim=-1, keepdim=True)  # [Batch, 1]
-        y = g + self.gamma**self.n_step * next_q * ~done  # [Batch, 1]
+        g = torch.sum(self._gamma_ratio * n_rewards, dim=-1, keepdim=True)  # [batch, 1]
+        y = g + self.gamma**self.n_step * next_q * ~done  # [batch, 1]
 
         return y
 
@@ -167,18 +167,18 @@ class OptionBase(SAC_Base):
                n_mu_probs):
         """
         Args:
-            next_n_terminations: [Batch, n]
+            next_n_terminations: [batch, n]
 
-            next_n_v_over_options_list: [Batch, n, num_options], ...
+            next_n_v_over_options_list: [batch, n, num_options], ...
 
-            n_obses_list: list([Batch, n, *obs_shapes_i], ...)
-            n_states: [Batch, n, state_size]
-            n_option_indexes (torch.int64): [Batch, n]
-            n_actions: [Batch, n, action_size]
-            n_rewards: [Batch, n]
-            next_state: [Batch, state_size]
-            n_dones (torch.bool): [Batch, n]
-            n_mu_probs: [Batch, n]
+            n_obses_list: list([batch, n, *obs_shapes_i], ...)
+            n_states: [batch, n, state_size]
+            n_option_indexes (torch.int64): [batch, n]
+            n_actions: [batch, n, action_size]
+            n_rewards: [batch, n]
+            next_state: [batch, state_size]
+            n_dones (torch.bool): [batch, n]
+            n_mu_probs: [batch, n]
 
         """
 
@@ -186,35 +186,35 @@ class OptionBase(SAC_Base):
         c_alpha = torch.exp(self.log_c_alpha)
 
         next_n_obses_list = [torch.cat([n_obses[:, 1:, ...], next_obs.unsqueeze(1)], dim=1)
-                             for n_obses, next_obs in zip(n_obses_list, next_obs_list)]  # list([Batch, n, *obs_shapes_i], ...)
-        next_n_states = torch.cat([n_states[:, 1:, ...], next_state.unsqueeze(1)], dim=1)  # [Batch, n, state_size]
+                             for n_obses, next_obs in zip(n_obses_list, next_obs_list)]  # list([batch, n, *obs_shapes_i], ...)
+        next_n_states = torch.cat([n_states[:, 1:, ...], next_state.unsqueeze(1)], dim=1)  # [batch, n, state_size]
 
-        next_n_max_vs_list = [next_n_v_over_options.max(-1)[0] for next_n_v_over_options in next_n_v_over_options_list]  # [Batch, n]
+        next_n_max_vs_list = [next_n_v_over_options.max(-1)[0] for next_n_v_over_options in next_n_v_over_options_list]  # [batch, n]
 
         stacked_next_n_max_vs = torch.stack(next_n_max_vs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
         # [ensemble_q_num, Batch, n] -> [ensemble_q_sample, Batch, n]
 
-        min_next_n_max_vs, _ = stacked_next_n_max_vs.min(dim=0)  # [Batch, n]
+        min_next_n_max_vs, _ = stacked_next_n_max_vs.min(dim=0)  # [batch, n]
 
         d_policy, c_policy = self.model_policy(n_states, n_obses_list)
         next_d_policy, next_c_policy = self.model_policy(next_n_states, next_n_obses_list)
 
         if self.c_action_size:
-            n_c_actions_sampled = c_policy.rsample()  # [Batch, n, action_size]
-            next_n_c_actions_sampled = next_c_policy.rsample()  # [Batch, n, action_size]
+            n_c_actions_sampled = c_policy.rsample()  # [batch, n, action_size]
+            next_n_c_actions_sampled = next_c_policy.rsample()  # [batch, n, action_size]
         else:
             n_c_actions_sampled = torch.zeros(0, device=self.device)
             next_n_c_actions_sampled = torch.zeros(0, device=self.device)
 
-        # ([Batch, n, action_size], [Batch, n, 1])
+        # ([batch, n, action_size], [batch, n, 1])
         n_qs_list = [q(n_states, torch.tanh(n_c_actions_sampled)) for q in self.model_target_q_list]
         next_n_qs_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled)) for q in self.model_target_q_list]
 
-        n_d_qs_list = [q[0] for q in n_qs_list]  # [Batch, n, action_size]
-        n_c_qs_list = [q[1] for q in n_qs_list]  # [Batch, n, 1]
+        n_d_qs_list = [q[0] for q in n_qs_list]  # [batch, n, action_size]
+        n_c_qs_list = [q[1] for q in n_qs_list]  # [batch, n, 1]
 
-        next_n_d_qs_list = [q[0] for q in next_n_qs_list]  # [Batch, n, action_size]
-        next_n_c_qs_list = [q[1] for q in next_n_qs_list]  # [Batch, n, 1]
+        next_n_d_qs_list = [q[0] for q in next_n_qs_list]  # [batch, n, action_size]
+        next_n_c_qs_list = [q[1] for q in next_n_qs_list]  # [batch, n, 1]
 
         d_y, c_y = None, None
 
@@ -237,26 +237,26 @@ class OptionBase(SAC_Base):
                 stacked_n_d_qs = torch.stack(n_d_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
                 # [ensemble_q_num, Batch, n, d_action_summed_size] -> [ensemble_q_sample, Batch, n, d_action_summed_size]
 
-                min_n_d_qs, _ = torch.min(stacked_n_d_qs, dim=0)  # [Batch, n, d_action_summed_size]
-                min_next_n_d_qs, _ = torch.min(stacked_next_n_d_qs, dim=0)  # [Batch, n, d_action_summed_size]
+                min_n_d_qs, _ = torch.min(stacked_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
+                min_next_n_d_qs, _ = torch.min(stacked_next_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
 
-                n_probs = d_policy.probs  # [Batch, n, d_action_summed_size]
-                next_n_probs = next_d_policy.probs  # [Batch, n, d_action_summed_size]
+                n_probs = d_policy.probs  # [batch, n, d_action_summed_size]
+                next_n_probs = next_d_policy.probs  # [batch, n, d_action_summed_size]
                 # ! Note that the probs here is not strict probabilities
                 # ! sum(probs) == self.d_action_branch_size
-                clipped_n_probs = n_probs.clamp(min=1e-8)  # [Batch, n, d_action_summed_size]
-                clipped_next_n_probs = next_n_probs.clamp(min=1e-8)  # [Batch, n, d_action_summed_size]
-                tmp_n_vs = min_n_d_qs - d_alpha * torch.log(clipped_n_probs)  # [Batch, n, d_action_summed_size]
+                clipped_n_probs = n_probs.clamp(min=1e-8)  # [batch, n, d_action_summed_size]
+                clipped_next_n_probs = next_n_probs.clamp(min=1e-8)  # [batch, n, d_action_summed_size]
+                tmp_n_vs = min_n_d_qs - d_alpha * torch.log(clipped_n_probs)  # [batch, n, d_action_summed_size]
 
                 tmp_next_n_vs = (1 - next_n_terminations.unsqueeze(-1)) * (min_next_n_d_qs - d_alpha * torch.log(clipped_next_n_probs)) + \
-                    next_n_terminations.unsqueeze(-1) * min_next_n_max_vs.unsqueeze(-1)  # [Batch, n, d_action_summed_size]
+                    next_n_terminations.unsqueeze(-1) * min_next_n_max_vs.unsqueeze(-1)  # [batch, n, d_action_summed_size]
 
-                n_vs = torch.sum(n_probs * tmp_n_vs, dim=-1) / self.d_action_branch_size  # [Batch, n]
-                next_n_vs = torch.sum(next_n_probs * tmp_next_n_vs, dim=-1) / self.d_action_branch_size  # [Batch, n]
+                n_vs = torch.sum(n_probs * tmp_n_vs, dim=-1) / self.d_action_branch_size  # [batch, n]
+                next_n_vs = torch.sum(next_n_probs * tmp_next_n_vs, dim=-1) / self.d_action_branch_size  # [batch, n]
 
                 if self.use_n_step_is:
                     n_d_actions = n_actions[..., :self.d_action_summed_size]
-                    n_pi_probs = torch.exp(d_policy.log_prob(n_d_actions))  # [Batch, n]
+                    n_pi_probs = torch.exp(d_policy.log_prob(n_d_actions))  # [batch, n]
 
                 d_y = self._v_trace(n_rewards=n_rewards,
                                     n_dones=n_dones,
@@ -266,8 +266,8 @@ class OptionBase(SAC_Base):
                                     next_n_vs=next_n_vs)
 
         if self.c_action_size:
-            n_actions_log_prob = torch.sum(squash_correction_log_prob(c_policy, n_c_actions_sampled), dim=-1)  # [Batch, n]
-            next_n_actions_log_prob = torch.sum(squash_correction_log_prob(next_c_policy, next_n_c_actions_sampled), dim=-1)  # [Batch, n]
+            n_actions_log_prob = torch.sum(squash_correction_log_prob(c_policy, n_c_actions_sampled), dim=-1)  # [batch, n]
+            next_n_actions_log_prob = torch.sum(squash_correction_log_prob(next_c_policy, next_n_c_actions_sampled), dim=-1)  # [batch, n]
 
             stacked_n_c_qs = torch.stack(n_c_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
             # [ensemble_q_num, Batch, n, 1] -> [ensemble_q_sample, Batch, n, 1]
@@ -275,32 +275,32 @@ class OptionBase(SAC_Base):
             # [ensemble_q_num, Batch, n, 1] -> [ensemble_q_sample, Batch, n, 1]
 
             min_n_c_qs, _ = stacked_n_c_qs.min(dim=0)
-            min_n_c_qs = min_n_c_qs.squeeze(dim=-1)  # [Batch, n]
+            min_n_c_qs = min_n_c_qs.squeeze(dim=-1)  # [batch, n]
             min_next_n_c_qs, _ = stacked_next_n_c_qs.min(dim=0)
-            min_next_n_c_qs = min_next_n_c_qs.squeeze(dim=-1)  # [Batch, n]
+            min_next_n_c_qs = min_next_n_c_qs.squeeze(dim=-1)  # [batch, n]
 
             """NORMAL"""
-            # next_termination = next_n_terminations[:, -1:]  # [Batch, 1]
-            # min_next_max_v = min_next_n_max_vs[:, -1:]  # [Batch, 1]
-            # next_action_log_prob = next_n_actions_log_prob[:, -1:]  # [Batch, 1]
+            # next_termination = next_n_terminations[:, -1:]  # [batch, 1]
+            # min_next_max_v = min_next_n_max_vs[:, -1:]  # [batch, 1]
+            # next_action_log_prob = next_n_actions_log_prob[:, -1:]  # [batch, 1]
 
-            # min_next_c_q = min_next_n_c_qs[:, -1:]  # [Batch, 1]
-            # done = n_dones[:, -1:]  # [Batch, 1]
-            # c_y = torch.sum(self._gamma_ratio * n_rewards, dim=-1, keepdim=True)  # [Batch, 1]
+            # min_next_c_q = min_next_n_c_qs[:, -1:]  # [batch, 1]
+            # done = n_dones[:, -1:]  # [batch, 1]
+            # c_y = torch.sum(self._gamma_ratio * n_rewards, dim=-1, keepdim=True)  # [batch, 1]
             # c_y = c_y + self.gamma ** self.n_step * ~done * \
             #     ((1 - next_termination) * (min_next_c_q - c_alpha * next_action_log_prob) +
             #      next_termination * min_next_max_v)
 
             """V-TRACE"""
-            n_vs = min_n_c_qs - c_alpha * n_actions_log_prob  # [Batch, n]
+            n_vs = min_n_c_qs - c_alpha * n_actions_log_prob  # [batch, n]
             next_n_vs = (1 - next_n_terminations) * (min_next_n_c_qs - c_alpha * next_n_actions_log_prob) + \
-                next_n_terminations * min_next_n_max_vs  # [Batch, n]
+                next_n_terminations * min_next_n_max_vs  # [batch, n]
 
             if self.use_n_step_is:
                 n_c_actions = n_actions[..., -self.c_action_size:]
                 n_pi_probs = squash_correction_prob(c_policy, torch.atanh(n_c_actions))
-                # [Batch, n, action_size]
-                n_pi_probs = n_pi_probs.prod(axis=-1)  # [Batch, n]
+                # [batch, n, action_size]
+                n_pi_probs = n_pi_probs.prod(axis=-1)  # [batch, n]
 
             c_y = self._v_trace(n_rewards=n_rewards,
                                 n_dones=n_dones,
@@ -316,14 +316,14 @@ class OptionBase(SAC_Base):
               obs_list: List[torch.Tensor],
               state: torch.Tensor):
         o_d_policy, o_c_policy = self.model_policy(state, obs_list)
-        o_c_action_sampled = o_c_policy.rsample()  # [Batch, c_action_size]
-        o_c_action_log_prob = squash_correction_log_prob(o_c_policy, o_c_action_sampled)  # [Batch, c_action_size]
-        o_c_action_log_prob = torch.sum(o_c_action_log_prob, dim=-1, keepdim=True)  # [Batch, 1]
-        o_c_q_list = [q(state, torch.tanh(o_c_action_sampled))[1] for q in self.model_q_list]  # [[Batch, 1], ...]
+        o_c_action_sampled = o_c_policy.rsample()  # [batch, c_action_size]
+        o_c_action_log_prob = squash_correction_log_prob(o_c_policy, o_c_action_sampled)  # [batch, c_action_size]
+        o_c_action_log_prob = torch.sum(o_c_action_log_prob, dim=-1, keepdim=True)  # [batch, 1]
+        o_c_q_list = [q(state, torch.tanh(o_c_action_sampled))[1] for q in self.model_q_list]  # [[batch, 1], ...]
         stacked_o_c_q = torch.stack(o_c_q_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
         # [ensemble_q_num, Batch, 1] -> [ensemble_q_sample, Batch, 1]
 
-        min_o_c_q, _ = torch.min(stacked_o_c_q, dim=0)  # [ensemble_q_sample, Batch, 1] -> [Batch, 1]
+        min_o_c_q, _ = torch.min(stacked_o_c_q, dim=0)  # [ensemble_q_sample, Batch, 1] -> [batch, 1]
 
         v = min_o_c_q - torch.exp(self.log_c_alpha) * o_c_action_log_prob
 
@@ -359,9 +359,9 @@ class OptionBase(SAC_Base):
         c_action = action[..., -self.c_action_size:]
 
         q_list = [q(state, c_action) for q in self.model_q_list]
-        # ([Batch, d_action_summed_size], [Batch, 1])
-        d_q_list = [q[0] for q in q_list]  # [Batch, action_size]
-        c_q_list = [q[1] for q in q_list]  # [Batch, 1]
+        # ([batch, d_action_summed_size], [batch, 1])
+        d_q_list = [q[0] for q in q_list]  # [batch, action_size]
+        c_q_list = [q[1] for q in q_list]  # [batch, 1]
 
         d_y, c_y = self._get_y(next_n_terminations=next_n_terminations,
 
@@ -375,14 +375,14 @@ class OptionBase(SAC_Base):
                                next_state=next_target_state,
                                n_dones=bn_dones[:, self.burn_in_step:],
                                n_mu_probs=bn_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
-        #  [Batch, 1], [Batch, 1]
+        #  [batch, 1], [batch, 1]
 
         loss_q_list = [torch.zeros((batch, 1), device=self.device) for _ in range(self.ensemble_q_num)]
         loss_none_mse = nn.MSELoss(reduction='none')
 
         if self.d_action_sizes:
             for i in range(self.ensemble_q_num):
-                q_single = torch.sum(d_action * d_q_list[i], dim=-1, keepdim=True) / self.d_action_branch_size  # [Batch, 1]
+                q_single = torch.sum(d_action * d_q_list[i], dim=-1, keepdim=True) / self.d_action_branch_size  # [batch, 1]
                 loss_q_list[i] += loss_none_mse(q_single, d_y)
 
         if self.c_action_size:
@@ -395,14 +395,14 @@ class OptionBase(SAC_Base):
                     self.clip_epsilon,
                 ) for i in range(self.ensemble_q_num)]
 
-                loss_q_a_list = [loss_none_mse(clipped_q, c_y) for clipped_q in clipped_q_list]  # [Batch, 1]
-                loss_q_b_list = [loss_none_mse(q, c_y) for q in c_q_list]  # [Batch, 1]
+                loss_q_a_list = [loss_none_mse(clipped_q, c_y) for clipped_q in clipped_q_list]  # [batch, 1]
+                loss_q_b_list = [loss_none_mse(q, c_y) for q in c_q_list]  # [batch, 1]
 
                 for i in range(self.ensemble_q_num):
-                    loss_q_list[i] += torch.maximum(loss_q_a_list[i], loss_q_b_list[i])  # [Batch, 1]
+                    loss_q_list[i] += torch.maximum(loss_q_a_list[i], loss_q_b_list[i])  # [batch, 1]
             else:
                 for i in range(self.ensemble_q_num):
-                    loss_q_list[i] += loss_none_mse(c_q_list[i], c_y)  # [Batch, 1]
+                    loss_q_list[i] += loss_none_mse(c_q_list[i], c_y)  # [batch, 1]
 
         if self.use_replay_buffer and self.use_priority:
             loss_q_list = [loss_q * priority_is for loss_q in loss_q_list]
@@ -533,22 +533,22 @@ class OptionBase(SAC_Base):
                       bn_mu_probs: torch.Tensor = None):
         """
         Args:
-            next_n_terminations: [Batch, n]
+            next_n_terminations: [batch, n]
 
-            next_n_v_over_options_list: list([Batch, n, num_options], ...)
+            next_n_v_over_options_list: list([batch, n, num_options], ...)
 
-            bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
-            bn_states: [Batch, b + n, state_size]
-            bn_target_states: [Batch, b + n, state_size]
-            bn_actions: [Batch, b + n, action_size]
-            bn_rewards: [Batch, b + n]
-            next_obs_list: list([Batch, *obs_shapes_i], ...)
-            next_target_state: [Batch, state_size]
-            bn_dones: [Batch, b + n]
-            bn_mu_probs: [Batch, b + n]
+            bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
+            bn_states: [batch, b + n, state_size]
+            bn_target_states: [batch, b + n, state_size]
+            bn_actions: [batch, b + n, action_size]
+            bn_rewards: [batch, b + n]
+            next_obs_list: list([batch, *obs_shapes_i], ...)
+            next_target_state: [batch, state_size]
+            bn_dones: [batch, b + n]
+            bn_mu_probs: [batch, b + n]
 
         Returns:
-            The td-error of observations, [Batch, 1]
+            The td-error of observations, [batch, 1]
         """
 
         state = bn_states[:, self.burn_in_step, ...]
@@ -559,14 +559,14 @@ class OptionBase(SAC_Base):
         batch = state.shape[0]
 
         q_list = [q(state, c_action) for q in self.model_q_list]
-        # ([Batch, action_size], [Batch, 1])
-        d_q_list = [q[0] for q in q_list]  # [Batch, action_size]
-        c_q_list = [q[1] for q in q_list]  # [Batch, 1]
+        # ([batch, action_size], [batch, 1])
+        d_q_list = [q[0] for q in q_list]  # [batch, action_size]
+        c_q_list = [q[1] for q in q_list]  # [batch, 1]
 
         if self.d_action_sizes:
             d_q_list = [torch.sum(d_action * q, dim=-1, keepdim=True) / self.d_action_branch_size
                         for q in d_q_list]
-            # [Batch, 1]
+            # [batch, 1]
 
         d_y, c_y = self._get_y(next_n_terminations=next_n_terminations,
 
@@ -580,10 +580,10 @@ class OptionBase(SAC_Base):
                                next_state=next_target_state,
                                n_dones=bn_dones[:, self.burn_in_step:],
                                n_mu_probs=bn_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
-        # [Batch, 1], [Batch, 1]
+        # [batch, 1], [batch, 1]
 
         q_td_error_list = [torch.zeros((batch, 1), device=self.device) for _ in range(self.ensemble_q_num)]
-        # [Batch, 1]
+        # [batch, 1]
 
         if self.d_action_sizes:
             for i in range(self.ensemble_q_num):

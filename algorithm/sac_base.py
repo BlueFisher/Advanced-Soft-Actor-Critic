@@ -651,11 +651,11 @@ class SAC_Base(object):
         choose the action that has the max (model_rnd(s, a) - model_target_rnd(s, a))**2
 
         Args:
-            state: [Batch, state_size]
-            d_policy: [Batch, d_action_summed_size]
+            state: [batch, state_size]
+            d_policy: [batch, d_action_summed_size]
 
         Returns:
-            d_action: [Batch, d_action_summed_size]
+            d_action: [batch, d_action_summed_size]
         """
         batch = state.shape[0]
         n_sample = self.rnd_n_sample
@@ -687,11 +687,11 @@ class SAC_Base(object):
         choose the action that has the max (model_rnd(s, a) - model_target_rnd(s, a))**2
 
         Args:
-            state: [Batch, state_size]
-            c_policy: [Batch, c_action_size]
+            state: [batch, state_size]
+            c_policy: [batch, c_action_size]
 
         Returns:
-            c_action: [Batch, c_action_size]
+            c_action: [batch, c_action_size]
         """
         batch = state.shape[0]
         n_sample = self.rnd_n_sample
@@ -716,7 +716,7 @@ class SAC_Base(object):
 
         batch = max(d_action.shape[0], c_action.shape[0])
 
-        action_noise = torch.linspace(*self.action_noise, steps=batch, device=self.device)  # [Batch, ]
+        action_noise = torch.linspace(*self.action_noise, steps=batch, device=self.device)  # [batch, ]
 
         if self.d_action_sizes:
             random_d_actions = [torch.argmax(torch.rand(batch, d_action_size, device=self.device), dim=-1)
@@ -741,11 +741,11 @@ class SAC_Base(object):
                        force_rnd_if_available: bool = False):
         """
         Args:
-            state: [Batch, state_size]
+            state: [batch, state_size]
 
         Returns:
-            action: [Batch, d_action_summed_size + c_action_size]
-            prob: [Batch, ]
+            action: [batch, d_action_summed_size + c_action_size]
+            prob: [batch, ]
         """
         batch = state.shape[0]
         d_policy, c_policy = self.model_policy(state, obs_list)
@@ -785,13 +785,13 @@ class SAC_Base(object):
 
         d_action, c_action = self._random_action(d_action, c_action)
 
-        policy_prob = torch.ones(state.shape[:1], device=self.device)  # [Batch, ]
+        policy_prob = torch.ones(state.shape[:1], device=self.device)  # [batch, ]
         if self.d_action_sizes:
-            policy_prob *= torch.exp(d_policy.log_prob(d_action))  # [Batch, ]
+            policy_prob *= torch.exp(d_policy.log_prob(d_action))  # [batch, ]
         if self.c_action_size:
             c_policy_prob = squash_correction_prob(c_policy, torch.atanh(c_action))
-            # [Batch, action_size]
-            policy_prob *= torch.prod(c_policy_prob, dim=-1)  # [Batch, ]
+            # [batch, action_size]
+            policy_prob *= torch.prod(c_policy_prob, dim=-1)  # [batch, ]
 
         return torch.cat([d_action, c_action], dim=-1), policy_prob
 
@@ -802,11 +802,11 @@ class SAC_Base(object):
                       force_rnd_if_available: bool = False):
         """
         Args:
-            obs_list (np): list([Batch, *obs_shapes_i], ...)
+            obs_list (np): list([batch, *obs_shapes_i], ...)
 
         Returns:
-            action (np): [Batch, d_action_summed_size + c_action_size]
-            prob (np): [Batch, ]
+            action (np): [batch, d_action_summed_size + c_action_size]
+            prob (np): [batch, ]
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         state = self.model_rep(obs_list)
@@ -823,13 +823,13 @@ class SAC_Base(object):
                           force_rnd_if_available: bool = False):
         """
         Args:
-            obs_list (np): list([Batch, *obs_shapes_i], ...)
-            pre_action (np): [Batch, d_action_summed_size + c_action_size]
-            rnn_state (np): [Batch, *seq_hidden_state_shape]
+            obs_list (np): list([batch, *obs_shapes_i], ...)
+            pre_action (np): [batch, d_action_summed_size + c_action_size]
+            rnn_state (np): [batch, *seq_hidden_state_shape]
         Returns:
-            action (np): [Batch, d_action_summed_size + c_action_size]
-            prob (np): [Batch, ]
-            rnn_state (np): [Batch, *seq_hidden_state_shape]
+            action (np): [batch, d_action_summed_size + c_action_size]
+            prob (np): [batch, ]
+            rnn_state (np): [batch, *seq_hidden_state_shape]
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         pre_action = torch.from_numpy(pre_action).to(self.device)
@@ -838,7 +838,7 @@ class SAC_Base(object):
         obs_list = [obs.unsqueeze(1) for obs in obs_list]
         pre_action = pre_action.unsqueeze(1)
         state, next_rnn_state = self.model_rep(obs_list, pre_action, rnn_state)
-        # state: [Batch, 1, state_size]
+        # state: [batch, 1, state_size]
         state = state.squeeze(1)
         obs_list = [obs.squeeze(1) for obs in obs_list]
 
@@ -860,16 +860,16 @@ class SAC_Base(object):
                            force_rnd_if_available: bool = False):
         """
         Args:
-            ep_indexes (np.int32): [Batch, episode_len]
-            ep_padding_masks (np.bool): [Batch, episode_len]
-            ep_obses_list (np): list([Batch, episode_len, *obs_shapes_i], ...)
-            ep_pre_actions (np): [Batch, episode_len, d_action_summed_size + c_action_size]
-            ep_attn_states (np): [Batch, episode_len, *seq_hidden_state_shape]
+            ep_indexes (np.int32): [batch, episode_len]
+            ep_padding_masks (np.bool): [batch, episode_len]
+            ep_obses_list (np): list([batch, episode_len, *obs_shapes_i], ...)
+            ep_pre_actions (np): [batch, episode_len, d_action_summed_size + c_action_size]
+            ep_attn_states (np): [batch, episode_len, *seq_hidden_state_shape]
 
         Returns:
-            action (np): [Batch, d_action_summed_size + c_action_size]
-            prob (np): [Batch, ]
-            attn_state (np): [Batch, *attn_state_shape]
+            action (np): [batch, d_action_summed_size + c_action_size]
+            prob (np): [batch, ]
+            attn_state (np): [batch, *attn_state_shape]
         """
         ep_indexes = torch.from_numpy(ep_indexes).to(self.device)
         ep_padding_masks = torch.from_numpy(ep_padding_masks).to(self.device)
@@ -883,8 +883,8 @@ class SAC_Base(object):
                                                    hidden_state=ep_attn_states,
                                                    is_prev_hidden_state=False,
                                                    padding_mask=ep_padding_masks)
-        # state: [Batch, 1, state_size]
-        # next_attn_state: [Batch, 1, *attn_state_shape]
+        # state: [batch, 1, state_size]
+        # next_attn_state: [batch, 1, *attn_state_shape]
 
         state = state.squeeze(1)
         next_attn_state = next_attn_state.squeeze(1)
@@ -907,16 +907,16 @@ class SAC_Base(object):
                      is_target=False):
         """
         Args:
-            l_indexes: [Batch, l]
-            l_padding_masks: [Batch, l]
-            l_obses_list: list([Batch, l, *obs_shapes_i], ...)
-            l_pre_actions: [Batch, l, action_size]
-            f_seq_hidden_states: [Batch, 1, *seq_hidden_state_shape]
+            l_indexes: [batch, l]
+            l_padding_masks: [batch, l]
+            l_obses_list: list([batch, l, *obs_shapes_i], ...)
+            l_pre_actions: [batch, l, action_size]
+            f_seq_hidden_states: [batch, 1, *seq_hidden_state_shape]
 
         Returns:
-            l_states: [Batch, l, state_size]
-            next_f_rnn_states (optional): [Batch, 1, rnn_state_size]
-            l_attn_states (optional): [Batch, l, attn_state_size]
+            l_states: [batch, l, state_size]
+            next_f_rnn_states (optional): [batch, 1, rnn_state_size]
+            l_attn_states (optional): [batch, l, attn_state_size]
         """
 
         model_rep = self.model_target_rep if is_target else self.model_rep
@@ -924,7 +924,7 @@ class SAC_Base(object):
         if self.seq_encoder is None:
             l_states = model_rep(l_obses_list)
 
-            return l_states, None  # [Batch, l, state_size]
+            return l_states, None  # [batch, l, state_size]
         else:
             if self.seq_encoder == SEQ_ENCODER.RNN:
                 l_states, next_rnn_state = model_rep(l_obses_list,
@@ -933,7 +933,7 @@ class SAC_Base(object):
                                                      padding_mask=l_padding_masks)
                 next_f_rnn_states = next_rnn_state.unsqueeze(dim=1)
 
-                return l_states, next_f_rnn_states  # [Batch, l, state_size], [Batch, 1, rnn_state_size]
+                return l_states, next_f_rnn_states  # [batch, l, state_size], [batch, 1, rnn_state_size]
 
             elif self.seq_encoder == SEQ_ENCODER.ATTN:
                 l_states, l_attn_states, _ = model_rep(l_indexes,
@@ -944,7 +944,7 @@ class SAC_Base(object):
                                                        is_prev_hidden_state=True,
                                                        padding_mask=l_padding_masks)
 
-                return l_states, l_attn_states  # [Batch, l, state_size], [Batch, l, attn_state_size]
+                return l_states, l_attn_states  # [batch, l, state_size], [batch, l, attn_state_size]
 
     def get_l_states_with_seq_hidden_states(self,
                                             l_indexes: torch.Tensor,
@@ -954,15 +954,15 @@ class SAC_Base(object):
                                             f_seq_hidden_states: Optional[torch.Tensor] = None):
         """
         Args:
-            l_indexes (torch.int32): [Batch, l]
-            l_padding_masks (torch.bool): [Batch, l]
-            l_obses_list: list([Batch, l, *obs_shapes_i], ...)
-            l_pre_actions: [Batch, l, action_size]
-            f_seq_hidden_states: [Batch, 1, *seq_hidden_state_shape]
+            l_indexes (torch.int32): [batch, l]
+            l_padding_masks (torch.bool): [batch, l]
+            l_obses_list: list([batch, l, *obs_shapes_i], ...)
+            l_pre_actions: [batch, l, action_size]
+            f_seq_hidden_states: [batch, 1, *seq_hidden_state_shape]
 
         Returns:
-            l_states: [Batch, l, state_size]
-            l_seq_hidden_state: [Batch, l, *seq_hidden_state_shape]
+            l_states: [batch, l, state_size]
+            l_seq_hidden_state: [batch, l, *seq_hidden_state_shape]
         """
 
         batch, l, *_ = l_indexes.shape
@@ -970,7 +970,7 @@ class SAC_Base(object):
         if self.seq_encoder is None:
             l_states = self.model_rep(l_obses_list)
 
-            return l_states, None  # [Batch, l, state_size]
+            return l_states, None  # [batch, l, state_size]
 
         elif self.seq_encoder == SEQ_ENCODER.RNN:
             l_states = None
@@ -1009,27 +1009,27 @@ class SAC_Base(object):
                     l_actions: torch.Tensor):
         """
         Args:
-            l_obses_list: list([Batch, l, *obs_shapes_i], ...)
-            l_states: [Batch, l, state_size]
-            l_actions: [Batch, l, action_size]
+            l_obses_list: list([batch, l, *obs_shapes_i], ...)
+            l_states: [batch, l, state_size]
+            l_actions: [batch, l, action_size]
 
         Returns:
-            l_probs: [Batch, l]
+            l_probs: [batch, l]
         """
 
         d_policy, c_policy = self.model_policy(l_states, l_obses_list)
 
-        policy_prob = torch.ones((l_states.shape[:2]), device=self.device)  # [Batch, l]
+        policy_prob = torch.ones((l_states.shape[:2]), device=self.device)  # [batch, l]
 
         if self.d_action_sizes:
             n_selected_d_actions = l_actions[..., :self.d_action_summed_size]
-            policy_prob *= torch.exp(d_policy.log_prob(n_selected_d_actions))   # [Batch, l]
+            policy_prob *= torch.exp(d_policy.log_prob(n_selected_d_actions))   # [batch, l]
 
         if self.c_action_size:
             l_selected_c_actions = l_actions[..., -self.c_action_size:]
             c_policy_prob = squash_correction_prob(c_policy, torch.atanh(l_selected_c_actions))
-            # [Batch, l, c_action_size]
-            policy_prob *= torch.prod(c_policy_prob, dim=-1)  # [Batch, l]
+            # [batch, l, c_action_size]
+            policy_prob *= torch.prod(c_policy_prob, dim=-1)  # [batch, l]
 
         return policy_prob
 
@@ -1041,17 +1041,17 @@ class SAC_Base(object):
                    next_obs_list: torch.Tensor):
         """
         Args:
-            bn_indexes (torch.int32): [Batch, b + n]
-            bn_padding_masks (torch.bool): [Batch, b + n]
-            bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
-            bn_actions: [Batch, b + n, action_size]
-            next_obs_list: list([Batch, *obs_shapes_i], ...)
+            bn_indexes (torch.int32): [batch, b + n]
+            bn_padding_masks (torch.bool): [batch, b + n]
+            bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
+            bn_actions: [batch, b + n, action_size]
+            next_obs_list: list([batch, *obs_shapes_i], ...)
 
         Returns:
-            m_indexes: [Batch, b + n + 1]
-            m_padding_masks: [Batch, b + n + 1]
-            m_obses_list: list([Batch, b + n + 1, *obs_shapes_i], ...)
-            m_pre_actions: [Batch, b + n + 1, action_size]
+            m_indexes: [batch, b + n + 1]
+            m_padding_masks: [batch, b + n + 1]
+            m_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
+            m_pre_actions: [batch, b + n + 1, action_size]
         """
 
         m_indexes = torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1)
@@ -1071,19 +1071,19 @@ class SAC_Base(object):
                          stacked_next_target_n_d_qs: torch.Tensor):
         """
         Args:
-            n_rewards: [Batch, n]
-            n_dones (torch.bool): [Batch, n]
+            n_rewards: [batch, n]
+            n_dones (torch.bool): [batch, n]
             stacked_next_n_d_qs: [ensemble_q_sample, Batch, n, d_action_summed_size]
             stacked_next_target_n_d_qs: [ensemble_q_sample, Batch, n, d_action_summed_size]
 
         Returns:
-            y: [Batch, 1]
+            y: [batch, 1]
         """
 
         stacked_next_q = stacked_next_n_d_qs[..., -1, :]  # [ensemble_q_sample, Batch, d_action_summed_size]
         stacked_next_target_q = stacked_next_target_n_d_qs[..., -1, :]  # [ensemble_q_sample, Batch, d_action_summed_size]
 
-        done = n_dones[:, -1:]  # [Batch, 1]
+        done = n_dones[:, -1:]  # [batch, 1]
 
         stacked_next_q_list = stacked_next_q.split(self.d_action_sizes, dim=-1)
 
@@ -1100,10 +1100,10 @@ class SAC_Base(object):
         stacked_max_next_target_q = stacked_max_next_target_q / self.d_action_branch_size
 
         next_q, _ = torch.min(stacked_max_next_target_q, dim=0)
-        # [Batch, 1]
+        # [batch, 1]
 
-        g = torch.sum(self._gamma_ratio * n_rewards, dim=-1, keepdim=True)  # [Batch, 1]
-        y = g + self.gamma**self.n_step * next_q * ~done  # [Batch, 1]
+        g = torch.sum(self._gamma_ratio * n_rewards, dim=-1, keepdim=True)  # [batch, 1]
+        y = g + self.gamma**self.n_step * next_q * ~done  # [batch, 1]
 
         return y
 
@@ -1117,18 +1117,18 @@ class SAC_Base(object):
                  next_n_vs: torch.Tensor):
         """
         Args:
-            n_rewards: [Batch, n]
-            n_dones (torch.bool): [Batch, n]
-            n_mu_probs: [Batch, n]
-            n_pi_probs: [Batch, n]
-            n_vs: [Batch, n]
-            next_n_vs: [Batch, n]
+            n_rewards: [batch, n]
+            n_dones (torch.bool): [batch, n]
+            n_mu_probs: [batch, n]
+            n_pi_probs: [batch, n]
+            n_vs: [batch, n]
+            next_n_vs: [batch, n]
 
         Returns:
-            y: [Batch, 1]
+            y: [batch, 1]
         """
 
-        td_error = n_rewards + self.gamma * ~n_dones * next_n_vs - n_vs  # [Batch, n]
+        td_error = n_rewards + self.gamma * ~n_dones * next_n_vs - n_vs  # [batch, n]
         td_error = self._gamma_ratio * td_error
 
         if self.use_n_step_is:
@@ -1137,7 +1137,7 @@ class SAC_Base(object):
             n_step_is = n_pi_probs / n_mu_probs.clamp(min=1e-8)
 
             # \rho_t, t \in [s, s+n-1]
-            rho = torch.minimum(n_step_is, self.v_rho)  # [Batch, n]
+            rho = torch.minimum(n_step_is, self.v_rho)  # [batch, n]
 
             # \prod{c_i}, i \in [s, t-1]
             c = torch.minimum(n_step_is, self.v_c)
@@ -1148,10 +1148,10 @@ class SAC_Base(object):
             td_error = c * rho * td_error
 
         # \sum{td_error}
-        r = torch.sum(td_error, dim=1, keepdim=True)  # [Batch, 1]
+        r = torch.sum(td_error, dim=1, keepdim=True)  # [batch, 1]
 
         # V_s + \sum{td_error}
-        y = n_vs[:, 0:1] + r  # [Batch, 1]
+        y = n_vs[:, 0:1] + r  # [batch, 1]
 
         return y
 
@@ -1167,16 +1167,16 @@ class SAC_Base(object):
                n_mu_probs: torch.Tensor = None):
         """
         Args:
-            n_obses_list: list([Batch, n, *obs_shapes_i], ...)
-            n_states: [Batch, n, state_size]
-            n_actions: [Batch, n, action_size]
-            n_rewards: [Batch, n]
-            state_: [Batch, state_size]
-            n_dones (torch.bool): [Batch, n]
-            n_mu_probs: [Batch, n]
+            n_obses_list: list([batch, n, *obs_shapes_i], ...)
+            n_states: [batch, n, state_size]
+            n_actions: [batch, n, action_size]
+            n_rewards: [batch, n]
+            state_: [batch, state_size]
+            n_dones (torch.bool): [batch, n]
+            n_mu_probs: [batch, n]
 
         Returns:
-            y: [Batch, 1]
+            y: [batch, 1]
         """
 
         d_alpha = torch.exp(self.log_d_alpha)
@@ -1184,39 +1184,39 @@ class SAC_Base(object):
 
         next_n_obses_list = [torch.cat([n_obses[:, 1:, ...], next_obs.unsqueeze(1)], dim=1)
                              for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
-        next_n_states = torch.cat([n_states[:, 1:, ...], next_state.unsqueeze(1)], dim=1)  # [Batch, n, state_size]
+        next_n_states = torch.cat([n_states[:, 1:, ...], next_state.unsqueeze(1)], dim=1)  # [batch, n, state_size]
 
         d_policy, c_policy = self.model_policy(n_states, n_obses_list)
         next_d_policy, next_c_policy = self.model_policy(next_n_states, next_n_obses_list)
 
         if self.curiosity is not None:
             if self.curiosity == CURIOSITY.FORWARD:
-                approx_next_n_states = self.model_forward_dynamic(n_states, n_actions)  # [Batch, n, state_size]
-                in_n_rewards = torch.sum(torch.pow(approx_next_n_states - next_n_states, 2), dim=-1) * 0.5  # [Batch, n]
+                approx_next_n_states = self.model_forward_dynamic(n_states, n_actions)  # [batch, n, state_size]
+                in_n_rewards = torch.sum(torch.pow(approx_next_n_states - next_n_states, 2), dim=-1) * 0.5  # [batch, n]
 
             elif self.curiosity == CURIOSITY.INVERSE:
-                approx_n_actions = self.model_inverse_dynamic(n_states, next_n_states)  # [Batch, n, action_size]
-                in_n_rewards = torch.sum(torch.pow(approx_n_actions - n_actions, 2), dim=-1) * 0.5  # [Batch, n]
+                approx_n_actions = self.model_inverse_dynamic(n_states, next_n_states)  # [batch, n, action_size]
+                in_n_rewards = torch.sum(torch.pow(approx_n_actions - n_actions, 2), dim=-1) * 0.5  # [batch, n]
 
-            in_n_rewards = in_n_rewards * self.curiosity_strength  # [Batch, n]
-            n_rewards += in_n_rewards  # [Batch, n]
+            in_n_rewards = in_n_rewards * self.curiosity_strength  # [batch, n]
+            n_rewards += in_n_rewards  # [batch, n]
 
         if self.c_action_size:
-            n_c_actions_sampled = c_policy.rsample()  # [Batch, n, c_action_size]
-            next_n_c_actions_sampled = next_c_policy.rsample()  # [Batch, n, c_action_size]
+            n_c_actions_sampled = c_policy.rsample()  # [batch, n, c_action_size]
+            next_n_c_actions_sampled = next_c_policy.rsample()  # [batch, n, c_action_size]
         else:
             n_c_actions_sampled = torch.zeros(0, device=self.device)
             next_n_c_actions_sampled = torch.zeros(0, device=self.device)
 
-        # ([Batch, n, d_action_summed_size], [Batch, n, 1])
+        # ([batch, n, d_action_summed_size], [batch, n, 1])
         n_qs_list = [q(n_states, torch.tanh(n_c_actions_sampled)) for q in self.model_target_q_list]
         next_n_qs_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled)) for q in self.model_target_q_list]
 
-        n_d_qs_list = [q[0] for q in n_qs_list]  # [Batch, n, d_action_summed_size]
-        n_c_qs_list = [q[1] for q in n_qs_list]  # [Batch, n, 1]
+        n_d_qs_list = [q[0] for q in n_qs_list]  # [batch, n, d_action_summed_size]
+        n_c_qs_list = [q[1] for q in n_qs_list]  # [batch, n, 1]
 
-        next_n_d_qs_list = [q[0] for q in next_n_qs_list]  # [Batch, n, d_action_summed_size]
-        next_n_c_qs_list = [q[1] for q in next_n_qs_list]  # [Batch, n, 1]
+        next_n_d_qs_list = [q[0] for q in next_n_qs_list]  # [batch, n, d_action_summed_size]
+        next_n_c_qs_list = [q[1] for q in next_n_qs_list]  # [batch, n, 1]
 
         d_y, c_y = None, None
 
@@ -1237,24 +1237,24 @@ class SAC_Base(object):
                 stacked_n_d_qs = torch.stack(n_d_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
                 # [ensemble_q_num, Batch, n, d_action_summed_size] -> [ensemble_q_sample, Batch, n, d_action_summed_size]
 
-                min_n_qs, _ = torch.min(stacked_n_d_qs, dim=0)  # [Batch, n, d_action_summed_size]
-                min_next_n_qs, _ = torch.min(stacked_next_n_d_qs, dim=0)  # [Batch, n, d_action_summed_size]
+                min_n_qs, _ = torch.min(stacked_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
+                min_next_n_qs, _ = torch.min(stacked_next_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
 
-                probs = d_policy.probs  # [Batch, n, d_action_summed_size]
-                next_probs = next_d_policy.probs  # [Batch, n, d_action_summed_size]
+                probs = d_policy.probs  # [batch, n, d_action_summed_size]
+                next_probs = next_d_policy.probs  # [batch, n, d_action_summed_size]
                 # ! Note that the probs here is not strict probabilities
                 # ! sum(probs) == self.d_action_branch_size
-                clipped_probs = probs.clamp(min=1e-8)  # [Batch, n, d_action_summed_size]
-                clipped_next_probs = next_probs.clamp(min=1e-8)  # [Batch, n, d_action_summed_size]
-                tmp_n_vs = min_n_qs - d_alpha * torch.log(clipped_probs)  # [Batch, n, d_action_summed_size]
-                tmp_next_n_vs = min_next_n_qs - d_alpha * torch.log(clipped_next_probs)  # [Batch, n, d_action_summed_size]
+                clipped_probs = probs.clamp(min=1e-8)  # [batch, n, d_action_summed_size]
+                clipped_next_probs = next_probs.clamp(min=1e-8)  # [batch, n, d_action_summed_size]
+                tmp_n_vs = min_n_qs - d_alpha * torch.log(clipped_probs)  # [batch, n, d_action_summed_size]
+                tmp_next_n_vs = min_next_n_qs - d_alpha * torch.log(clipped_next_probs)  # [batch, n, d_action_summed_size]
 
-                n_vs = torch.sum(probs * tmp_n_vs, dim=-1) / self.d_action_branch_size  # [Batch, n]
-                next_n_vs = torch.sum(next_probs * tmp_next_n_vs, dim=-1) / self.d_action_branch_size  # [Batch, n]
+                n_vs = torch.sum(probs * tmp_n_vs, dim=-1) / self.d_action_branch_size  # [batch, n]
+                next_n_vs = torch.sum(next_probs * tmp_next_n_vs, dim=-1) / self.d_action_branch_size  # [batch, n]
 
                 if self.use_n_step_is:
                     n_d_actions = n_actions[..., :self.d_action_summed_size]
-                    n_pi_probs = torch.exp(d_policy.log_prob(n_d_actions))  # [Batch, n]
+                    n_pi_probs = torch.exp(d_policy.log_prob(n_d_actions))  # [batch, n]
 
                 d_y = self._v_trace(n_rewards=n_rewards,
                                     n_dones=n_dones,
@@ -1264,7 +1264,7 @@ class SAC_Base(object):
                                     next_n_vs=next_n_vs)
 
         if self.c_action_size:
-            n_actions_log_prob = torch.sum(squash_correction_log_prob(c_policy, n_c_actions_sampled), dim=-1)  # [Batch, n]
+            n_actions_log_prob = torch.sum(squash_correction_log_prob(c_policy, n_c_actions_sampled), dim=-1)  # [batch, n]
             next_n_actions_log_prob = torch.sum(squash_correction_log_prob(next_c_policy, next_n_c_actions_sampled), dim=-1)
 
             stacked_n_c_qs = torch.stack(n_c_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
@@ -1273,12 +1273,12 @@ class SAC_Base(object):
             # [ensemble_q_num, Batch, n, 1] -> [ensemble_q_sample, Batch, n, 1]
 
             min_n_c_qs, _ = stacked_n_c_qs.min(dim=0)
-            min_n_c_qs = min_n_c_qs.squeeze(dim=-1)  # [Batch, n]
+            min_n_c_qs = min_n_c_qs.squeeze(dim=-1)  # [batch, n]
             min_next_n_c_qs, _ = stacked_next_n_c_qs.min(dim=0)
-            min_next_n_c_qs = min_next_n_c_qs.squeeze(dim=-1)  # [Batch, n]
+            min_next_n_c_qs = min_next_n_c_qs.squeeze(dim=-1)  # [batch, n]
 
-            n_vs = min_n_c_qs - c_alpha * n_actions_log_prob  # [Batch, n]
-            next_n_vs = min_next_n_c_qs - c_alpha * next_n_actions_log_prob  # [Batch, n]
+            n_vs = min_n_c_qs - c_alpha * n_actions_log_prob  # [batch, n]
+            next_n_vs = min_next_n_c_qs - c_alpha * next_n_actions_log_prob  # [batch, n]
 
             # v = scale_inverse_h(v)
             # next_v = scale_inverse_h(next_v)
@@ -1286,15 +1286,15 @@ class SAC_Base(object):
             if self.use_n_step_is:
                 n_c_actions = n_actions[..., -self.c_action_size:]
                 n_pi_probs = squash_correction_prob(c_policy, torch.atanh(n_c_actions))
-                # [Batch, n, action_size]
-                n_pi_probs = n_pi_probs.prod(axis=-1)  # [Batch, n]
+                # [batch, n, action_size]
+                n_pi_probs = n_pi_probs.prod(axis=-1)  # [batch, n]
 
             c_y = self._v_trace(n_rewards, n_dones,
                                 n_mu_probs if self.use_n_step_is else None,
                                 n_pi_probs if self.use_n_step_is else None,
                                 n_vs, next_n_vs)
 
-        return d_y, c_y  # [Batch, 1]
+        return d_y, c_y  # [batch, 1]
 
     def _train_rep_q(self,
                      bn_indexes: List[torch.Tensor],
@@ -1312,19 +1312,19 @@ class SAC_Base(object):
                      priority_is: Optional[torch.Tensor] = None,):
         """
         Args:
-            bn_indexes (torch.int32): [Batch, b + n],
-            bn_padding_masks (torch.bool): [Batch, b + n],
-            bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
-            bn_states: [Batch, b + n, state_size]
-            bn_target_states: [Batch, b + n, state_size]
-            bn_actions: [Batch, b + n, action_size]
-            bn_rewards: [Batch, b + n]
-            next_obs_list: list([Batch, *obs_shapes_i], ...)
-            next_state: [Batch, state_size]
-            next_target_state: [Batch, state_size]
-            bn_dones (torch.bool): [Batch, b + n]
-            bn_mu_probs: [Batch, b + n]
-            priority_is: [Batch, 1]
+            bn_indexes (torch.int32): [batch, b + n],
+            bn_padding_masks (torch.bool): [batch, b + n],
+            bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
+            bn_states: [batch, b + n, state_size]
+            bn_target_states: [batch, b + n, state_size]
+            bn_actions: [batch, b + n, action_size]
+            bn_rewards: [batch, b + n]
+            next_obs_list: list([batch, *obs_shapes_i], ...)
+            next_state: [batch, state_size]
+            next_target_state: [batch, state_size]
+            bn_dones (torch.bool): [batch, b + n]
+            bn_mu_probs: [batch, b + n]
+            priority_is: [batch, 1]
 
         Returns:
             loss_q: torch.float32
@@ -1341,9 +1341,9 @@ class SAC_Base(object):
         batch = state.shape[0]
 
         q_list = [q(state, c_action) for q in self.model_q_list]
-        # ([Batch, d_action_summed_size], [Batch, 1])
-        d_q_list = [q[0] for q in q_list]  # [Batch, action_size]
-        c_q_list = [q[1] for q in q_list]  # [Batch, 1]
+        # ([batch, d_action_summed_size], [batch, 1])
+        d_q_list = [q[0] for q in q_list]  # [batch, action_size]
+        c_q_list = [q[1] for q in q_list]  # [batch, 1]
 
         d_y, c_y = self._get_y(n_obses_list=[bn_obses[:, self.burn_in_step:, ...] for bn_obses in bn_obses_list],
                                n_states=bn_target_states[:, self.burn_in_step:, ...],
@@ -1353,14 +1353,14 @@ class SAC_Base(object):
                                next_state=next_target_state,
                                n_dones=bn_dones[:, self.burn_in_step:],
                                n_mu_probs=bn_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
-        #  [Batch, 1], [Batch, 1]
+        #  [batch, 1], [batch, 1]
 
         loss_q_list = [torch.zeros((batch, 1), device=self.device) for _ in range(self.ensemble_q_num)]
         loss_none_mse = nn.MSELoss(reduction='none')
 
         if self.d_action_sizes:
             for i in range(self.ensemble_q_num):
-                q_single = torch.sum(d_action * d_q_list[i], dim=-1, keepdim=True) / self.d_action_branch_size  # [Batch, 1]
+                q_single = torch.sum(d_action * d_q_list[i], dim=-1, keepdim=True) / self.d_action_branch_size  # [batch, 1]
                 loss_q_list[i] += loss_none_mse(q_single, d_y)
 
         if self.c_action_size:
@@ -1373,14 +1373,14 @@ class SAC_Base(object):
                     self.clip_epsilon,
                 ) for i in range(self.ensemble_q_num)]
 
-                loss_q_a_list = [loss_none_mse(clipped_q, c_y) for clipped_q in clipped_q_list]  # [Batch, 1]
-                loss_q_b_list = [loss_none_mse(q, c_y) for q in c_q_list]  # [Batch, 1]
+                loss_q_a_list = [loss_none_mse(clipped_q, c_y) for clipped_q in clipped_q_list]  # [batch, 1]
+                loss_q_b_list = [loss_none_mse(q, c_y) for q in c_q_list]  # [batch, 1]
 
                 for i in range(self.ensemble_q_num):
-                    loss_q_list[i] += torch.maximum(loss_q_a_list[i], loss_q_b_list[i])  # [Batch, 1]
+                    loss_q_list[i] += torch.maximum(loss_q_a_list[i], loss_q_b_list[i])  # [batch, 1]
             else:
                 for i in range(self.ensemble_q_num):
-                    loss_q_list[i] += loss_none_mse(c_q_list[i], c_y)  # [Batch, 1]
+                    loss_q_list[i] += loss_none_mse(c_q_list[i], c_y)  # [batch, 1]
 
         if self.use_replay_buffer and self.use_priority:
             loss_q_list = [loss_q * priority_is for loss_q in loss_q_list]
@@ -1470,10 +1470,10 @@ class SAC_Base(object):
         Args:
             grads_rep_main list(torch.Tensor)
             grads_q_main_list list(list(torch.Tensor))
-            bn_indexes (torch.int32): [Batch, b + n]
-            bn_padding_masks (torch.bool): [Batch, b + n]
-            bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
-            bn_actions: [Batch, b + n, action_size]
+            bn_indexes (torch.int32): [batch, b + n]
+            bn_padding_masks (torch.bool): [batch, b + n]
+            bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
+            bn_actions: [batch, b + n, action_size]
 
         Returns:
             loss_siamese
@@ -1481,8 +1481,8 @@ class SAC_Base(object):
         """
 
         n_obses_list = [bn_obses[:, self.burn_in_step:, ...] for bn_obses in bn_obses_list]
-        encoder_list = self.model_rep.get_augmented_encoders(n_obses_list)  # [Batch, n, f], ...
-        target_encoder_list = self.model_target_rep.get_augmented_encoders(n_obses_list)  # [Batch, n, f], ...
+        encoder_list = self.model_rep.get_augmented_encoders(n_obses_list)  # [batch, n, f], ...
+        target_encoder_list = self.model_target_rep.get_augmented_encoders(n_obses_list)  # [batch, n, f], ...
 
         if not isinstance(encoder_list, tuple):
             encoder_list = (encoder_list, )
@@ -1569,24 +1569,24 @@ class SAC_Base(object):
             c_action = bn_actions[:, self.burn_in_step, -self.c_action_size:]
 
             q_list = [q(state, c_action)
-                      for q in self.model_q_list]  # ([Batch, d_action_summed_size], [Batch, 1]), ...
+                      for q in self.model_q_list]  # ([batch, d_action_summed_size], [batch, 1]), ...
             target_q_list = [q(target_state, c_action)
-                             for q in self.model_target_q_list]  # ([Batch, d_action_summed_size], [Batch, 1]), ...
+                             for q in self.model_target_q_list]  # ([batch, d_action_summed_size], [batch, 1]), ...
 
             if self.d_action_sizes:
                 q_single_list = [torch.sum(d_action * q[0], dim=-1) / self.d_action_branch_size
                                  for q in q_list]
-                # [Batch, d_action_summed_size], ... -> [Batch, ], ...
+                # [batch, d_action_summed_size], ... -> [batch, ], ...
                 target_q_single_list = [torch.sum(d_action * t_q[0], dim=-1) / self.d_action_branch_size
                                         for t_q in target_q_list]
-                # [Batch, d_action_summed_size], ... -> [Batch, ], ...
+                # [batch, d_action_summed_size], ... -> [batch, ], ...
 
                 q_loss_list += [functional.mse_loss(q, t_q)
                                 for q, t_q in zip(q_single_list, target_q_single_list)]
 
             if self.c_action_size:
-                c_q_list = [q[1] for q in q_list]  # [Batch, 1], ...
-                target_c_q_list = [t_q[1] for t_q in target_q_list]  # [Batch, 1], ...
+                c_q_list = [q[1] for q in q_list]  # [batch, 1], ...
+                target_c_q_list = [t_q[1] for t_q in target_q_list]  # [batch, 1], ...
 
                 q_loss_list += [functional.mse_loss(q, t_q)
                                 for q, t_q in zip(c_q_list, target_c_q_list)]
@@ -1634,7 +1634,7 @@ class SAC_Base(object):
             [bn_obses[:, self.burn_in_step:, ...] for bn_obses in bn_obses_list],  # May for extra observations
             bn_states[:, self.burn_in_step:, ...],
             bn_actions[:, self.burn_in_step:, ...]
-        )  # [Batch, n, action_size]
+        )  # [batch, n, action_size]
 
         loss_transition = -torch.mean(approx_next_state_dist.log_prob(m_target_states[:, self.burn_in_step + 1:, ...]))
 
@@ -1643,7 +1643,7 @@ class SAC_Base(object):
         kl = distributions.kl.kl_divergence(approx_next_state_dist, std_normal)
         loss_transition += self.transition_kl * torch.mean(kl)
 
-        approx_n_rewards = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])  # [Batch, n, 1]
+        approx_n_rewards = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])  # [batch, n, 1]
         loss_reward = functional.mse_loss(approx_n_rewards, torch.unsqueeze(bn_rewards[:, self.burn_in_step:], 2))
         loss_reward /= self.n_step
 
@@ -1677,39 +1677,39 @@ class SAC_Base(object):
         c_alpha = torch.exp(self.log_c_alpha)
 
         if self.d_action_sizes and not self.discrete_dqn_like:
-            probs = d_policy.probs   # [Batch, action_size]
+            probs = d_policy.probs   # [batch, action_size]
             clipped_probs = torch.maximum(probs, torch.tensor(1e-8, device=self.device))
 
             c_action = action[..., -self.c_action_size:]
 
             q_list = [q(state, c_action) for q in self.model_q_list]
-            # ([Batch, action_size], [Batch, 1])
-            d_q_list = [q[0] for q in q_list]  # [Batch, action_size]
+            # ([batch, action_size], [batch, 1])
+            d_q_list = [q[0] for q in q_list]  # [batch, action_size]
 
             stacked_d_q = torch.stack(d_q_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
             # [ensemble_q_num, Batch, d_action_summed_size] -> [ensemble_q_sample, Batch, d_action_summed_size]
             min_d_q, _ = torch.min(stacked_d_q, dim=0)
-            # [ensemble_q_sample, Batch, d_action_summed_size] -> [Batch, d_action_summed_size]
+            # [ensemble_q_sample, Batch, d_action_summed_size] -> [batch, d_action_summed_size]
 
-            _loss_policy = d_alpha.detach() * torch.log(clipped_probs) - min_d_q.detach()  # [Batch, d_action_summed_size]
-            loss_d_policy = torch.sum(probs * _loss_policy, dim=1, keepdim=True)  # [Batch, 1]
+            _loss_policy = d_alpha.detach() * torch.log(clipped_probs) - min_d_q.detach()  # [batch, d_action_summed_size]
+            loss_d_policy = torch.sum(probs * _loss_policy, dim=1, keepdim=True)  # [batch, 1]
 
         if self.c_action_size:
             action_sampled = c_policy.rsample()
             c_q_for_gradient_list = [q(state, torch.tanh(action_sampled))[1] for q in self.model_q_list]
-            # [[Batch, 1], ...]
+            # [[batch, 1], ...]
 
             stacked_c_q_for_gradient = torch.stack(c_q_for_gradient_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
             # [ensemble_q_num, Batch, 1] -> [ensemble_q_sample, Batch, 1]
 
             log_prob = torch.sum(squash_correction_log_prob(c_policy, action_sampled), dim=1, keepdim=True)
-            # [Batch, 1]
+            # [batch, 1]
 
             min_c_q_for_gradient, _ = torch.min(stacked_c_q_for_gradient, dim=0)
-            # [ensemble_q_sample, Batch, 1] -> [Batch, 1]
+            # [ensemble_q_sample, Batch, 1] -> [batch, 1]
 
             loss_c_policy = c_alpha.detach() * log_prob - min_c_q_for_gradient
-            # [Batch, 1]
+            # [batch, 1]
 
         loss_policy = torch.mean(loss_d_policy + loss_c_policy)
 
@@ -1735,21 +1735,21 @@ class SAC_Base(object):
         loss_c_alpha = torch.zeros((batch, 1), device=self.device)
 
         if self.d_action_sizes and not self.discrete_dqn_like:
-            probs = d_policy.probs   # [Batch, d_action_summed_size]
+            probs = d_policy.probs   # [batch, d_action_summed_size]
             clipped_probs = probs.clamp(min=1e-8)
 
             d_action_sizes = torch.tensor(self.d_action_sizes, device=self.device)
             d_action_sizes = torch.repeat_interleave(d_action_sizes, d_action_sizes)
             _loss_alpha = -d_alpha * (torch.log(clipped_probs) - d_action_sizes)
 
-            loss_d_alpha = torch.sum(probs * _loss_alpha, dim=1, keepdim=True)  # [Batch, 1]
+            loss_d_alpha = torch.sum(probs * _loss_alpha, dim=1, keepdim=True)  # [batch, 1]
 
         if self.c_action_size:
             action_sampled = c_policy.sample()
             log_prob = torch.sum(squash_correction_log_prob(c_policy, action_sampled), dim=1, keepdim=True)
-            # [Batch, 1]
+            # [batch, 1]
 
-            loss_c_alpha = -c_alpha * (log_prob - self.target_alpha)  # [Batch, 1]
+            loss_c_alpha = -c_alpha * (log_prob - self.target_alpha)  # [batch, 1]
 
         loss_alpha = torch.mean(loss_d_alpha + loss_c_alpha)
 
@@ -1827,16 +1827,16 @@ class SAC_Base(object):
                priority_is: torch.Tensor = None):
         """
         Args:
-            bn_indexes (torch.int32): [Batch, b + n]
-            bn_padding_masks (torch.bool): [Batch, b + n]
-            bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
-            bn_actions: [Batch, b + n, action_size]
-            bn_rewards: [Batch, b + n]
-            next_obs_list: list([Batch, *obs_shapes_i], ...)
-            bn_dones (torch.bool): [Batch, b + n]
-            bn_mu_probs: [Batch, b + n]
-            f_seq_hidden_states: [Batch, 1, *seq_hidden_state_shape]
-            priority_is: [Batch, 1]
+            bn_indexes (torch.int32): [batch, b + n]
+            bn_padding_masks (torch.bool): [batch, b + n]
+            bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
+            bn_actions: [batch, b + n, action_size]
+            bn_rewards: [batch, b + n]
+            next_obs_list: list([batch, *obs_shapes_i], ...)
+            bn_dones (torch.bool): [batch, b + n]
+            bn_mu_probs: [batch, b + n]
+            f_seq_hidden_states: [batch, 1, *seq_hidden_state_shape]
+            priority_is: [batch, 1]
         """
 
         if self.global_step % self.update_target_per_step == 0:
@@ -1969,18 +1969,18 @@ class SAC_Base(object):
                       bn_mu_probs: torch.Tensor = None):
         """
         Args:
-            bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
-            bn_states: [Batch, b + n, state_size]
-            bn_target_states: [Batch, b + n, state_size]
-            bn_actions: [Batch, b + n, action_size]
-            bn_rewards: [Batch, b + n]
-            next_obs_list: list([Batch, *obs_shapes_i], ...)
-            next_target_state: [Batch, state_size]
-            bn_dones (torch.bool): [Batch, b + n]
-            bn_mu_probs: [Batch, b + n]
+            bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
+            bn_states: [batch, b + n, state_size]
+            bn_target_states: [batch, b + n, state_size]
+            bn_actions: [batch, b + n, action_size]
+            bn_rewards: [batch, b + n]
+            next_obs_list: list([batch, *obs_shapes_i], ...)
+            next_target_state: [batch, state_size]
+            bn_dones (torch.bool): [batch, b + n]
+            bn_mu_probs: [batch, b + n]
 
         Returns:
-            The td-error of observations, [Batch, 1]
+            The td-error of observations, [batch, 1]
         """
         state = bn_states[:, self.burn_in_step, ...]
         action = bn_actions[:, self.burn_in_step, ...]
@@ -1988,14 +1988,14 @@ class SAC_Base(object):
         c_action = action[..., -self.c_action_size:]
 
         q_list = [q(state, c_action) for q in self.model_q_list]
-        # ([Batch, d_action_summed_size], [Batch, 1])
-        d_q_list = [q[0] for q in q_list]  # [Batch, d_action_summed_size]
-        c_q_list = [q[1] for q in q_list]  # [Batch, 1]
+        # ([batch, d_action_summed_size], [batch, 1])
+        d_q_list = [q[0] for q in q_list]  # [batch, d_action_summed_size]
+        c_q_list = [q[1] for q in q_list]  # [batch, 1]
 
         if self.d_action_sizes:
             d_q_list = [torch.sum(d_action * q, dim=-1, keepdim=True) / self.d_action_branch_size
                         for q in d_q_list]
-            # [Batch, 1]
+            # [batch, 1]
 
         d_y, c_y = self._get_y(n_obses_list=[bn_obses[:, self.burn_in_step:, ...] for bn_obses in bn_obses_list],
                                n_states=bn_target_states[:, self.burn_in_step:, ...],
@@ -2005,10 +2005,10 @@ class SAC_Base(object):
                                next_state=next_target_state,
                                n_dones=bn_dones[:, self.burn_in_step:],
                                n_mu_probs=bn_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
-        # [Batch, 1], [Batch, 1]
+        # [batch, 1], [batch, 1]
 
         q_td_error_list = [torch.zeros((state.shape[0], 1), device=self.device) for _ in range(self.ensemble_q_num)]
-        # [Batch, 1]
+        # [batch, 1]
         if self.d_action_sizes:
             for i in range(self.ensemble_q_num):
                 q_td_error_list[i] += torch.abs(d_q_list[i] - d_y)
@@ -2252,18 +2252,18 @@ class SAC_Base(object):
         Sample from replay buffer
 
         Returns:
-            pointers: [Batch, ]
+            pointers: [batch, ]
             (
-                bn_indexes (np.int32): [Batch, b + n]
-                bn_padding_masks (bool): [Batch, b + n]
-                bn_obses_list (np): list([Batch, b + n, *obs_shapes_i], ...)
-                bn_actions (np): [Batch, b + n, action_size]
-                bn_rewards (np): [Batch, b + n]
-                next_obs_list (np): list([Batch, *obs_shapes_i], ...)
-                bn_dones (np): [Batch, b + n]
-                bn_mu_probs (np): [Batch, b + n]
-                bn_seq_hidden_states (np): [Batch, b + n, *seq_hidden_state_shape],
-                priority_is (np): [Batch, 1]
+                bn_indexes (np.int32): [batch, b + n]
+                bn_padding_masks (bool): [batch, b + n]
+                bn_obses_list (np): list([batch, b + n, *obs_shapes_i], ...)
+                bn_actions (np): [batch, b + n, action_size]
+                bn_rewards (np): [batch, b + n]
+                next_obs_list (np): list([batch, *obs_shapes_i], ...)
+                bn_dones (np): [batch, b + n]
+                bn_mu_probs (np): [batch, b + n]
+                bn_seq_hidden_states (np): [batch, b + n, *seq_hidden_state_shape],
+                priority_is (np): [batch, 1]
             )
         """
         sampled = self.replay_buffer.sample()
@@ -2272,14 +2272,14 @@ class SAC_Base(object):
 
         """
         trans:
-            index (np.int32): [Batch, ]
-            padding_mask (bool): [Batch, ]
-            obs_i: [Batch, *obs_shapes_i]
-            action: [Batch, action_size]
-            reward: [Batch, ]
-            done (bool): [Batch, ]
-            mu_prob: [Batch, ]
-            seq_hidden_state: [Batch, *seq_hidden_state_shape]
+            index (np.int32): [batch, ]
+            padding_mask (bool): [batch, ]
+            obs_i: [batch, *obs_shapes_i]
+            action: [batch, action_size]
+            reward: [batch, ]
+            done (bool): [batch, ]
+            mu_prob: [batch, ]
+            seq_hidden_state: [batch, *seq_hidden_state_shape]
         """
         pointers, trans, priority_is = sampled
 
@@ -2295,14 +2295,14 @@ class SAC_Base(object):
             trans[k] = np.concatenate([np.expand_dims(t, 1) for t in v], axis=1)
 
         """
-        m_indexes (np.int32): [Batch, N + 1]
-        m_padding_masks (bool): [Batch, N + 1]
-        m_obses_list: list([Batch, N + 1, *obs_shapes_i], ...)
-        m_actions: [Batch, N + 1, action_size]
-        m_rewards: [Batch, N + 1]
-        m_dones (bool): [Batch, N + 1]
-        m_mu_probs: [Batch, N + 1]
-        m_seq_hidden_state: [Batch, N + 1, *seq_hidden_state_shape]
+        m_indexes (np.int32): [batch, N + 1]
+        m_padding_masks (bool): [batch, N + 1]
+        m_obses_list: list([batch, N + 1, *obs_shapes_i], ...)
+        m_actions: [batch, N + 1, action_size]
+        m_rewards: [batch, N + 1]
+        m_dones (bool): [batch, N + 1]
+        m_mu_probs: [batch, N + 1]
+        m_seq_hidden_state: [batch, N + 1, *seq_hidden_state_shape]
         """
         m_indexes = trans['index']
         m_padding_masks = trans['padding_mask']
@@ -2365,16 +2365,16 @@ class SAC_Base(object):
              priority_is) = batch
 
             """
-            bn_indexes (np.int32): [Batch, b + n]
-            bn_padding_masks (bool): [Batch, b + n]
-            bn_obses_list: list([Batch, b + n, *obs_shapes_i], ...)
-            bn_actions: [Batch, b + n, action_size]
-            bn_rewards: [Batch, b + n]
-            next_obs_list: list([Batch, *obs_shapes_i], ...)
-            bn_dones (bool): [Batch, b + n]
-            bn_mu_probs: [Batch, b + n]
-            bn_seq_hidden_states: [Batch, b + n, *seq_hidden_state_shape]
-            priority_is: [Batch, 1]
+            bn_indexes (np.int32): [batch, b + n]
+            bn_padding_masks (bool): [batch, b + n]
+            bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
+            bn_actions: [batch, b + n, action_size]
+            bn_rewards: [batch, b + n]
+            next_obs_list: list([batch, *obs_shapes_i], ...)
+            bn_dones (bool): [batch, b + n]
+            bn_mu_probs: [batch, b + n]
+            bn_seq_hidden_states: [batch, b + n, *seq_hidden_state_shape]
+            priority_is: [batch, 1]
             """
             bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
             bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
@@ -2415,7 +2415,7 @@ class SAC_Base(object):
                 self.save_model()
 
             if self.use_replay_buffer:
-                bn_pre_actions = gen_pre_n_actions(bn_actions)  # [Batch, b + n, action_size]
+                bn_pre_actions = gen_pre_n_actions(bn_actions)  # [batch, b + n, action_size]
 
                 bn_states, next_bn_seq_hidden_states = self.get_l_states_with_seq_hidden_states(
                     l_indexes=bn_indexes,
