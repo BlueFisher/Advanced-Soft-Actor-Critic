@@ -188,6 +188,7 @@ class UnityWrapperProcess:
                 max_u_group_id_count = u_group_id_counts.max()
 
                 self.ma_obs_shapes[n] = [(max_u_group_id_count, *obs_shape) for obs_shape in self.ma_obs_shapes[n]]
+                self.ma_d_action_size[n] = self.ma_d_action_size[n] * max_u_group_id_count
                 self.ma_c_action_size[n] = self.ma_c_action_size[n] * max_u_group_id_count
 
             for o_name, o_shape in zip(obs_names, obs_shapes):
@@ -258,6 +259,8 @@ class UnityWrapperProcess:
 
         if self.group_aggregation:
             for n in self.behavior_names:
+                unity_d_action_summed_size = self.ma_u
+
                 unity_c_action_size = self.ma_unity_c_action_size[n]
                 unity_c_action = np.zeros((len(self._ma_agents_ids[n]), unity_c_action_size), dtype=ma_c_action[n].dtype)
 

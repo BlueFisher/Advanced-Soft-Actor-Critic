@@ -52,7 +52,8 @@ class SAC_Base(object):
                  update_target_per_step: int = 1,
                  init_log_alpha: float = -2.3,
                  use_auto_alpha: bool = True,
-                 target_alpha: bool = None,
+                 target_d_alpha: float = 0.98,
+                 target_c_alpha: float = 1.,
                  learning_rate: float = 3e-4,
                  gamma: float = 0.99,
                  v_lambda: float = 1.,
@@ -112,7 +113,8 @@ class SAC_Base(object):
 
         init_log_alpha: -2.3 # The initial log_alpha
         use_auto_alpha: true # Whether using automating entropy adjustment
-        target_alpha: None # Target alpha, c_action_size if target_alpha is None
+        target_d_alpha: 0.98 # Target discrete alpha ratio
+        target_c_alpha: 1.0 # Target continuous alpha ratio
 
         learning_rate: 0.0003 # Learning rate of all optimizers
 
@@ -166,7 +168,8 @@ class SAC_Base(object):
         self.tau = tau
         self.update_target_per_step = update_target_per_step
         self.use_auto_alpha = use_auto_alpha
-        self.target_alpha = target_alpha
+        self.target_d_alpha = target_d_alpha
+        self.target_c_alpha = target_c_alpha
         self.gamma = gamma
         self.v_lambda = v_lambda
         self.v_rho = v_rho
@@ -405,8 +408,16 @@ class SAC_Base(object):
         """ ALPHA """
         self.log_d_alpha = torch.tensor(init_log_alpha, dtype=torch.float32, requires_grad=True, device=self.device)
         self.log_c_alpha = torch.tensor(init_log_alpha, dtype=torch.float32, requires_grad=True, device=self.device)
-        if self.target_alpha is None:
-            self.target_alpha = self.c_action_size
+
+        if self.d_action_sizes:
+            d_action_sizes = torch.tensor(self.d_action_sizes, device=self.device)
+            d_action_sizes = torch.repeat_interleave(d_action_sizes.type(torch.float32), d_action_sizes)
+            self.target_d_alpha = self.target_d_alpha * (-torch.log(1 / d_action_sizes))
+
+        if self.c_action_size:
+            self.target_c_alpha = self.target_c_alpha * torch.tensor(-self.c_action_size,
+                                                                     dtype=torch.float32,
+                                                                     device=self.device)
 
         if self.use_auto_alpha:
             self.optimizer_alpha = adam_optimizer([self.log_d_alpha, self.log_c_alpha])
@@ -1289,10 +1300,12 @@ class SAC_Base(object):
                 # [batch, n, action_size]
                 n_pi_probs = n_pi_probs.prod(axis=-1)  # [batch, n]
 
-            c_y = self._v_trace(n_rewards, n_dones,
-                                n_mu_probs if self.use_n_step_is else None,
-                                n_pi_probs if self.use_n_step_is else None,
-                                n_vs, next_n_vs)
+            c_y = self._v_trace(n_rewards=n_rewards,
+                                n_dones=n_dones,
+                                n_mu_probs=n_mu_probs if self.use_n_step_is else None,
+                                n_pi_probs=n_pi_probs if self.use_n_step_is else None,
+                                n_vs=n_vs,
+                                next_n_vs=next_n_vs)
 
         return d_y, c_y  # [batch, 1]
 
@@ -1673,8 +1686,9 @@ class SAC_Base(object):
         loss_d_policy = torch.zeros((batch, 1), device=self.device)
         loss_c_policy = torch.zeros((batch, 1), device=self.device)
 
-        d_alpha = torch.exp(self.log_d_alpha)
-        c_alpha = torch.exp(self.log_c_alpha)
+        with torch.no_grad():
+            d_alpha = torch.exp(self.log_d_alpha)
+            c_alpha = torch.exp(self.log_c_alpha)
 
         if self.d_action_sizes and not self.discrete_dqn_like:
             probs = d_policy.probs   # [batch, action_size]
@@ -1691,8 +1705,8 @@ class SAC_Base(object):
             min_d_q, _ = torch.min(stacked_d_q, dim=0)
             # [ensemble_q_sample, Batch, d_action_summed_size] -> [batch, d_action_summed_size]
 
-            _loss_policy = d_alpha.detach() * torch.log(clipped_probs) - min_d_q.detach()  # [batch, d_action_summed_size]
-            loss_d_policy = torch.sum(probs * _loss_policy, dim=1, keepdim=True)  # [batch, 1]
+            _loss_policy = d_alpha * torch.log(clipped_probs) - min_d_q.detach()  # [batch, d_action_summed_size]
+            loss_d_policy = torch.sum(probs * _loss_policy, dim=1, keepdim=True) / self.d_action_branch_size  # [batch, 1]
 
         if self.c_action_size:
             action_sampled = c_policy.rsample()
@@ -1726,10 +1740,8 @@ class SAC_Base(object):
                      state: torch.Tensor):
         batch = state.shape[0]
 
-        d_policy, c_policy = self.model_policy(state, obs_list)
-
-        d_alpha = torch.exp(self.log_d_alpha)
-        c_alpha = torch.exp(self.log_c_alpha)
+        with torch.no_grad():
+            d_policy, c_policy = self.model_policy(state, obs_list)
 
         loss_d_alpha = torch.zeros((batch, 1), device=self.device)
         loss_c_alpha = torch.zeros((batch, 1), device=self.device)
@@ -1738,24 +1750,24 @@ class SAC_Base(object):
             probs = d_policy.probs   # [batch, d_action_summed_size]
             clipped_probs = probs.clamp(min=1e-8)
 
-            d_action_sizes = torch.tensor(self.d_action_sizes, device=self.device)
-            d_action_sizes = torch.repeat_interleave(d_action_sizes, d_action_sizes)
-            _loss_alpha = -d_alpha * (torch.log(clipped_probs) - d_action_sizes)
-
-            loss_d_alpha = torch.sum(probs * _loss_alpha, dim=1, keepdim=True)  # [batch, 1]
+            _loss_alpha = -self.log_d_alpha * (torch.log(clipped_probs) + self.target_d_alpha)  # [batch, d_action_summed_size]
+            loss_d_alpha = torch.sum(probs * _loss_alpha, dim=1, keepdim=True) / self.d_action_branch_size # [batch, 1]
 
         if self.c_action_size:
             action_sampled = c_policy.sample()
             log_prob = torch.sum(squash_correction_log_prob(c_policy, action_sampled), dim=1, keepdim=True)
             # [batch, 1]
 
-            loss_c_alpha = -c_alpha * (log_prob - self.target_alpha)  # [batch, 1]
+            loss_c_alpha = -self.log_c_alpha * (log_prob + self.target_c_alpha)  # [batch, 1]
 
         loss_alpha = torch.mean(loss_d_alpha + loss_c_alpha)
 
         self.optimizer_alpha.zero_grad()
         loss_alpha.backward(inputs=[self.log_d_alpha, self.log_c_alpha])
         self.optimizer_alpha.step()
+
+        d_alpha = torch.exp(self.log_d_alpha)
+        c_alpha = torch.exp(self.log_c_alpha)
 
         return d_alpha, c_alpha
 
@@ -1911,7 +1923,7 @@ class SAC_Base(object):
 
             with torch.no_grad():
                 self.summary_writer.add_scalar('loss/q', loss_q, self.global_step)
-                if self.d_action_sizes:
+                if self.d_action_sizes and not self.discrete_dqn_like:
                     self.summary_writer.add_scalar('loss/d_entropy', d_policy_entropy, self.global_step)
                     if self.use_auto_alpha and not self.discrete_dqn_like:
                         self.summary_writer.add_scalar('loss/d_alpha', d_alpha, self.global_step)

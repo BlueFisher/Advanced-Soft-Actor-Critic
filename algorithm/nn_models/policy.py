@@ -45,7 +45,7 @@ class JointOneHotCategorical(torch.distributions.Distribution):
     def entropy(self) -> torch.Tensor:
         entropy_list = [dist.entropy() for dist in self._dists]
         return torch.stack(entropy_list, dim=-1).sum(-1)
-
+    
 
 class ModelBasePolicy(nn.Module):
     def __init__(self,
