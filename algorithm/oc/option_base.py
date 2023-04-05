@@ -315,6 +315,7 @@ class OptionBase(SAC_Base):
     def get_v(self,
               obs_list: List[torch.Tensor],
               state: torch.Tensor):
+        # TODO D_POLICY
         o_d_policy, o_c_policy = self.model_policy(state, obs_list)
         o_c_action_sampled = o_c_policy.rsample()  # [batch, c_action_size]
         o_c_action_log_prob = squash_correction_log_prob(o_c_policy, o_c_action_sampled)  # [batch, c_action_size]

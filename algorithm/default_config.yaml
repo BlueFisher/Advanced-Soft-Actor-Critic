@@ -55,7 +55,8 @@ sac_config:
 
   init_log_alpha: -2.3 # The initial log_alpha
   use_auto_alpha: true # Whether using automating entropy adjustment
-  target_alpha: null # Target alpha, c_action_size if target_alpha is None
+  target_d_alpha: 0.98 # Target discrete alpha ratio
+  target_c_alpha: 1.0 # Target continuous alpha ratio
 
   learning_rate: 0.0003 # Learning rate of all optimizers
 
