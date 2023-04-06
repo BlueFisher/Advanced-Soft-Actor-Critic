@@ -20,12 +20,15 @@ class Agent:
     def __init__(self,
                  agent_id: int,
                  obs_shapes: List[Tuple],
-                 action_size: int,
+                 d_action_sizes: List[int],
+                 c_action_size: int,
                  seq_hidden_state_shape=None,
                  max_return_episode_trans=-1):
         self.agent_id = agent_id
         self.obs_shapes = obs_shapes
-        self.action_size = action_size
+        self.d_action_sizes = d_action_sizes
+        self.d_action_summed_size = sum(d_action_sizes)
+        self.c_action_size = c_action_size
         self.seq_hidden_state_shape = seq_hidden_state_shape
         self.max_return_episode_trans = max_return_episode_trans
 
@@ -36,12 +39,12 @@ class Agent:
             'index': -np.ones((episode_length, ), dtype=int),
             'padding_mask': np.ones((episode_length, ), dtype=bool),  # `True` indicates ignored
             'obs_list': [np.zeros((episode_length, *s), dtype=np.float32) for s in self.obs_shapes],
-            'action': np.zeros((episode_length, self.action_size), dtype=np.float32),
+            'action': np.zeros((episode_length, self.d_action_summed_size + self.c_action_size), dtype=np.float32),
             'reward': np.zeros((episode_length, ), dtype=np.float32),
             'local_done': np.zeros((episode_length, ), dtype=bool),
             'max_reached': np.zeros((episode_length, ), dtype=bool),
             'next_obs_list': [np.zeros(s, dtype=np.float32) for s in self.obs_shapes],
-            'prob': np.zeros((episode_length, ), dtype=np.float32),
+            'prob': np.zeros((episode_length, self.d_action_summed_size + self.c_action_size), dtype=np.float32),
             'seq_hidden_state': np.zeros((episode_length, *self.seq_hidden_state_shape), dtype=np.float32) if self.seq_hidden_state_shape is not None else None,
         }
 
@@ -52,7 +55,7 @@ class Agent:
                        local_done: bool,
                        max_reached: bool,
                        next_obs_list: List[np.ndarray],
-                       prob: float,
+                       prob: np.ndarray,
                        is_padding: bool = False,
                        seq_hidden_state: Optional[np.ndarray] = None):
         """
@@ -63,7 +66,7 @@ class Agent:
             local_done: bool
             max_reached: bool
             next_obs_list: List([*obs_shapes_i], ...)
-            prob: float
+            prob: [action_size, ]
             is_padding: bool
             seq_hidden_state: [*seq_hidden_state_shape]
 
@@ -75,7 +78,7 @@ class Agent:
             ep_rewards: [1, episode_len]
             next_obs_list: List([1, *obs_shapes_i], ...)
             ep_dones (np.bool): [1, episode_len], bool
-            ep_probs: [1, episode_len]
+            ep_probs: [1, episode_len, action_size]
             ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
         expaned_transition = {
@@ -156,7 +159,7 @@ class Agent:
             ep_rewards: [1, episode_len]
             next_obs_list: List([1, *obs_shapes_i], ...)
             ep_dones (np.bool): [1, episode_len]
-            ep_probs: [1, episode_len]
+            ep_probs: [1, episode_len, action_size]
             ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
         tmp = self._tmp_episode_trans.copy()
@@ -194,7 +197,7 @@ class Agent:
         ep_dones = np.expand_dims(np.logical_and(tmp['local_done'],
                                                  ~tmp['max_reached']),
                                   0)  # [1, episode_len]
-        ep_probs = np.expand_dims(tmp['prob'], 0)  # [1, episode_len]
+        ep_probs = np.expand_dims(tmp['prob'], 0)  # [1, episode_len, action_size]
         ep_seq_hidden_states = np.expand_dims(tmp['seq_hidden_state'], 0) if tmp['seq_hidden_state'] is not None else None
         # [1, episode_len, *seq_hidden_state_shape]
 
@@ -276,7 +279,10 @@ class AgentManager:
                 self['seq_hidden_state'] = self['initial_seq_hidden_state']
 
         self.agents: List[Agent] = [
-            Agent(i, self.obs_shapes, self.action_size,
+            Agent(i,
+                  self.obs_shapes,
+                  self.d_action_sizes,
+                  self.c_action_size,
                   seq_hidden_state_shape=self.rl.seq_hidden_state_shape
                   if self.seq_encoder is not None else None)
             for i in range(num_agents)
@@ -474,7 +480,7 @@ class MultiAgentsManager:
                         local_done=False,
                         max_reached=False,
                         next_obs_list=[np.zeros(t, dtype=np.float32) for t in mgr.obs_shapes],
-                        prob=0.,
+                        prob=np.zeros((a.d_action_summed_size + a.c_action_size, )),
                         is_padding=True,
                         seq_hidden_state=mgr['initial_seq_hidden_state'][0]
                     )

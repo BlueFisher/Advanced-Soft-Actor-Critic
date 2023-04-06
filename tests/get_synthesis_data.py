@@ -112,7 +112,7 @@ def gen_episode_trans(obs_shapes, d_action_sizes, c_action_size, seq_hidden_stat
         'l_rewards': np.random.randn(1, episode_len).astype(np.float32),
         'next_obs_list': [np.random.randn(1, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
         'l_dones': np.random.randint(0, 2, size=(1, episode_len), dtype=bool),
-        'l_probs': np.random.randn(1, episode_len).astype(np.float32),
+        'l_probs': np.random.rand(1, episode_len, sum(d_action_sizes) + c_action_size).astype(np.float32),
     }
     if seq_hidden_state_shape:
         return {

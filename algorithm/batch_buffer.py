@@ -36,7 +36,7 @@ class BatchBuffer:
         bn_rewards: [episode_len - bn + 1, bn]
         next_obs_list: list([episode_len - bn + 1, *obs_shapes_i], ...)
         bn_dones: [episode_len - bn + 1, bn]
-        bn_probs: [episode_len - bn + 1, bn]
+        bn_probs: [episode_len - bn + 1, bn, action_size]
         f_seq_hidden_states: [episode_len - bn + 1, 1, *seq_hidden_state_shape]
         """
         self._batch_list.clear()
