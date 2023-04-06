@@ -755,8 +755,8 @@ class SAC_Base(object):
             state: [batch, state_size]
 
         Returns:
-            action: [batch, d_action_summed_size + c_action_size]
-            prob: [batch, ]
+            action: [batch, action_size]
+            prob: [batch, action_size]
         """
         batch = state.shape[0]
         d_policy, c_policy = self.model_policy(state, obs_list)
@@ -796,15 +796,16 @@ class SAC_Base(object):
 
         d_action, c_action = self._random_action(d_action, c_action)
 
-        policy_prob = torch.ones(state.shape[:1], device=self.device)  # [batch, ]
-        if self.d_action_sizes:
-            policy_prob *= torch.exp(d_policy.log_prob(d_action))  # [batch, ]
+        prob = torch.ones((batch,
+                           self.d_action_summed_size + self.c_action_size),
+                          device=self.device)  # [batch, action_size]
+        if self.d_action_sizes and not self.discrete_dqn_like:
+            prob[:, :self.d_action_summed_size] = d_policy.probs  # [batch, d_action_summed_size]
         if self.c_action_size:
-            c_policy_prob = squash_correction_prob(c_policy, torch.atanh(c_action))
-            # [batch, action_size]
-            policy_prob *= torch.prod(c_policy_prob, dim=-1)  # [batch, ]
+            c_prob = squash_correction_prob(c_policy, torch.atanh(c_action))  # [batch, c_action_size]
+            prob[:, -self.c_action_size:] = c_prob  # [batch, c_action_size]
 
-        return torch.cat([d_action, c_action], dim=-1), policy_prob
+        return torch.cat([d_action, c_action], dim=-1), prob
 
     @torch.no_grad()
     def choose_action(self,
@@ -816,8 +817,8 @@ class SAC_Base(object):
             obs_list (np): list([batch, *obs_shapes_i], ...)
 
         Returns:
-            action (np): [batch, d_action_summed_size + c_action_size]
-            prob (np): [batch, ]
+            action (np): [batch, action_size]
+            prob (np): [batch, action_size]
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         state = self.model_rep(obs_list)
@@ -835,11 +836,11 @@ class SAC_Base(object):
         """
         Args:
             obs_list (np): list([batch, *obs_shapes_i], ...)
-            pre_action (np): [batch, d_action_summed_size + c_action_size]
+            pre_action (np): [batch, action_size]
             rnn_state (np): [batch, *seq_hidden_state_shape]
         Returns:
-            action (np): [batch, d_action_summed_size + c_action_size]
-            prob (np): [batch, ]
+            action (np): [batch, action_size]
+            prob (np): [batch, action_size]
             rnn_state (np): [batch, *seq_hidden_state_shape]
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
@@ -874,12 +875,12 @@ class SAC_Base(object):
             ep_indexes (np.int32): [batch, episode_len]
             ep_padding_masks (np.bool): [batch, episode_len]
             ep_obses_list (np): list([batch, episode_len, *obs_shapes_i], ...)
-            ep_pre_actions (np): [batch, episode_len, d_action_summed_size + c_action_size]
+            ep_pre_actions (np): [batch, episode_len, action_size]
             ep_attn_states (np): [batch, episode_len, *seq_hidden_state_shape]
 
         Returns:
-            action (np): [batch, d_action_summed_size + c_action_size]
-            prob (np): [batch, ]
+            action (np): [batch, action_size]
+            prob (np): [batch, action_size]
             attn_state (np): [batch, *attn_state_shape]
         """
         ep_indexes = torch.from_numpy(ep_indexes).to(self.device)
@@ -1025,24 +1026,25 @@ class SAC_Base(object):
             l_actions: [batch, l, action_size]
 
         Returns:
-            l_probs: [batch, l]
+            l_probs: [batch, l, action_size]
         """
 
         d_policy, c_policy = self.model_policy(l_states, l_obses_list)
 
-        policy_prob = torch.ones((l_states.shape[:2]), device=self.device)  # [batch, l]
+        probs = torch.ones((*l_states.shape[:2], self.d_action_summed_size + self.c_action_size),
+                           dtype=torch.float32,
+                           device=self.device)  # [batch, l, action_size]
 
         if self.d_action_sizes:
-            n_selected_d_actions = l_actions[..., :self.d_action_summed_size]
-            policy_prob *= torch.exp(d_policy.log_prob(n_selected_d_actions))   # [batch, l]
+            probs[..., :self.d_action_summed_size] = d_policy.probs  # [batch, l, d_action_summed_size]
 
         if self.c_action_size:
             l_selected_c_actions = l_actions[..., -self.c_action_size:]
             c_policy_prob = squash_correction_prob(c_policy, torch.atanh(l_selected_c_actions))
             # [batch, l, c_action_size]
-            policy_prob *= torch.prod(c_policy_prob, dim=-1)  # [batch, l]
+            probs[..., -self.c_action_size:] = c_policy_prob  # [batch, l, c_action_size]
 
-        return policy_prob
+        return probs  # [batch, l, action_size]
 
     def get_m_data(self,
                    bn_indexes: torch.Tensor,
@@ -1184,7 +1186,7 @@ class SAC_Base(object):
             n_rewards: [batch, n]
             state_: [batch, state_size]
             n_dones (torch.bool): [batch, n]
-            n_mu_probs: [batch, n]
+            n_mu_probs: [batch, n, action_size]
 
         Returns:
             y: [batch, 1]
@@ -1248,8 +1250,8 @@ class SAC_Base(object):
                 stacked_n_d_qs = torch.stack(n_d_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
                 # [ensemble_q_num, Batch, n, d_action_summed_size] -> [ensemble_q_sample, Batch, n, d_action_summed_size]
 
-                min_n_qs, _ = torch.min(stacked_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
-                min_next_n_qs, _ = torch.min(stacked_next_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
+                min_n_qs = torch.mean(stacked_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
+                min_next_n_qs = torch.mean(stacked_next_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
 
                 probs = d_policy.probs  # [batch, n, d_action_summed_size]
                 next_probs = next_d_policy.probs  # [batch, n, d_action_summed_size]
@@ -1264,19 +1266,23 @@ class SAC_Base(object):
                 next_n_vs = torch.sum(next_probs * tmp_next_n_vs, dim=-1) / self.d_action_branch_size  # [batch, n]
 
                 if self.use_n_step_is:
-                    n_d_actions = n_actions[..., :self.d_action_summed_size]
-                    n_pi_probs = torch.exp(d_policy.log_prob(n_d_actions))  # [batch, n]
+                    n_d_actions = n_actions[..., :self.d_action_summed_size]  # [batch, n, d_action_summed_size]
+                    n_d_mu_probs = n_mu_probs[..., :self.d_action_summed_size]  # [batch, n, d_action_summed_size]
+                    n_d_mu_probs = n_d_mu_probs * n_d_actions  # [batch, n]
+                    n_d_mu_probs[n_d_mu_probs == 0.] = 1.
+                    n_d_mu_probs = n_d_mu_probs.prod(-1)  # [batch, n]
+                    n_d_pi_probs = torch.exp(d_policy.log_prob(n_d_actions).sum(-1))  # [batch, n]
 
                 d_y = self._v_trace(n_rewards=n_rewards,
                                     n_dones=n_dones,
-                                    n_mu_probs=n_mu_probs if self.use_n_step_is else None,
-                                    n_pi_probs=n_pi_probs if self.use_n_step_is else None,
+                                    n_mu_probs=n_d_mu_probs if self.use_n_step_is else None,
+                                    n_pi_probs=n_d_pi_probs if self.use_n_step_is else None,
                                     n_vs=n_vs,
                                     next_n_vs=next_n_vs)
 
         if self.c_action_size:
             n_actions_log_prob = torch.sum(squash_correction_log_prob(c_policy, n_c_actions_sampled), dim=-1)  # [batch, n]
-            next_n_actions_log_prob = torch.sum(squash_correction_log_prob(next_c_policy, next_n_c_actions_sampled), dim=-1)
+            next_n_actions_log_prob = torch.sum(squash_correction_log_prob(next_c_policy, next_n_c_actions_sampled), dim=-1)  # [batch, n]
 
             stacked_n_c_qs = torch.stack(n_c_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
             # [ensemble_q_num, Batch, n, 1] -> [ensemble_q_sample, Batch, n, 1]
@@ -1296,14 +1302,14 @@ class SAC_Base(object):
 
             if self.use_n_step_is:
                 n_c_actions = n_actions[..., -self.c_action_size:]
-                n_pi_probs = squash_correction_prob(c_policy, torch.atanh(n_c_actions))
-                # [batch, n, action_size]
-                n_pi_probs = n_pi_probs.prod(axis=-1)  # [batch, n]
+                n_c_mu_probs = n_mu_probs[..., -self.c_action_size:]  # [batch, n, c_action_size]
+                n_c_pi_probs = squash_correction_prob(c_policy, torch.atanh(n_c_actions))
+                # [batch, n, c_action_size]
 
             c_y = self._v_trace(n_rewards=n_rewards,
                                 n_dones=n_dones,
-                                n_mu_probs=n_mu_probs if self.use_n_step_is else None,
-                                n_pi_probs=n_pi_probs if self.use_n_step_is else None,
+                                n_mu_probs=n_c_mu_probs.prod(-1) if self.use_n_step_is else None,
+                                n_pi_probs=n_c_pi_probs.prod(-1) if self.use_n_step_is else None,
                                 n_vs=n_vs,
                                 next_n_vs=next_n_vs)
 
@@ -1321,7 +1327,7 @@ class SAC_Base(object):
                      next_state: torch.Tensor,
                      next_target_state: torch.Tensor,
                      bn_dones: torch.Tensor,
-                     bn_mu_probs: Optional[torch.Tensor] = None,
+                     bn_mu_probs: torch.Tensor,
                      priority_is: Optional[torch.Tensor] = None,):
         """
         Args:
@@ -1336,7 +1342,7 @@ class SAC_Base(object):
             next_state: [batch, state_size]
             next_target_state: [batch, state_size]
             bn_dones (torch.bool): [batch, b + n]
-            bn_mu_probs: [batch, b + n]
+            bn_mu_probs: [batch, b + n, action_size]
             priority_is: [batch, 1]
 
         Returns:
@@ -1678,7 +1684,8 @@ class SAC_Base(object):
     def _train_policy(self,
                       obs_list: List[torch.Tensor],
                       state: torch.Tensor,
-                      action: torch.Tensor):
+                      action: torch.Tensor,
+                      mu_d_policy_probs: torch.Tensor = None):
         batch = state.shape[0]
 
         d_policy, c_policy = self.model_policy(state, obs_list)
@@ -1702,11 +1709,16 @@ class SAC_Base(object):
 
             stacked_d_q = torch.stack(d_q_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
             # [ensemble_q_num, Batch, d_action_summed_size] -> [ensemble_q_sample, Batch, d_action_summed_size]
-            min_d_q, _ = torch.min(stacked_d_q, dim=0)
+            mean_d_q = torch.mean(stacked_d_q, dim=0).detach()
             # [ensemble_q_sample, Batch, d_action_summed_size] -> [batch, d_action_summed_size]
 
-            _loss_policy = d_alpha * torch.log(clipped_probs) - min_d_q.detach()  # [batch, d_action_summed_size]
+            _loss_policy = d_alpha * torch.log(clipped_probs) - mean_d_q  # [batch, d_action_summed_size]
             loss_d_policy = torch.sum(probs * _loss_policy, dim=1, keepdim=True) / self.d_action_branch_size  # [batch, 1]
+
+            mu_d_policy_entropy = torch.sum(mu_d_policy_probs * torch.log(mu_d_policy_probs), dim=-1)  # [batch, ]
+            pi_d_policy_entropy = d_policy.entropy().sum(-1)  # [batch, ]
+            entropy_penalty = torch.pow(mu_d_policy_entropy - pi_d_policy_entropy, 2.) / 4.  # [batch, ]
+            loss_d_policy += entropy_penalty.unsqueeze(-1)  # [batch, 1]
 
         if self.c_action_size:
             action_sampled = c_policy.rsample()
@@ -1722,7 +1734,7 @@ class SAC_Base(object):
             min_c_q_for_gradient, _ = torch.min(stacked_c_q_for_gradient, dim=0)
             # [ensemble_q_sample, Batch, 1] -> [batch, 1]
 
-            loss_c_policy = c_alpha.detach() * log_prob - min_c_q_for_gradient
+            loss_c_policy = c_alpha * log_prob - min_c_q_for_gradient
             # [batch, 1]
 
         loss_policy = torch.mean(loss_d_policy + loss_c_policy)
@@ -1732,7 +1744,7 @@ class SAC_Base(object):
             loss_policy.backward(inputs=list(self.model_policy.parameters()))
             self.optimizer_policy.step()
 
-        return (torch.mean(d_policy.entropy()) if self.d_action_sizes else None,
+        return (torch.mean(d_policy.entropy().sum(-1)) if self.d_action_sizes else None,
                 torch.mean(c_policy.entropy()) if self.c_action_size else None)
 
     def _train_alpha(self,
@@ -1751,7 +1763,7 @@ class SAC_Base(object):
             clipped_probs = probs.clamp(min=1e-8)
 
             _loss_alpha = -self.log_d_alpha * (torch.log(clipped_probs) + self.target_d_alpha)  # [batch, d_action_summed_size]
-            loss_d_alpha = torch.sum(probs * _loss_alpha, dim=1, keepdim=True) / self.d_action_branch_size # [batch, 1]
+            loss_d_alpha = torch.sum(probs * _loss_alpha, dim=1, keepdim=True) / self.d_action_branch_size  # [batch, 1]
 
         if self.c_action_size:
             action_sampled = c_policy.sample()
@@ -1834,7 +1846,7 @@ class SAC_Base(object):
                bn_rewards: torch.Tensor,
                next_obs_list: List[torch.Tensor],
                bn_dones: torch.Tensor,
-               bn_mu_probs: torch.Tensor = None,
+               bn_mu_probs: torch.Tensor,
                f_seq_hidden_states: torch.Tensor = None,
                priority_is: torch.Tensor = None):
         """
@@ -1846,7 +1858,7 @@ class SAC_Base(object):
             bn_rewards: [batch, b + n]
             next_obs_list: list([batch, *obs_shapes_i], ...)
             bn_dones (torch.bool): [batch, b + n]
-            bn_mu_probs: [batch, b + n]
+            bn_mu_probs: [batch, b + n, action_size]
             f_seq_hidden_states: [batch, 1, *seq_hidden_state_shape]
             priority_is: [batch, 1]
         """
@@ -1905,8 +1917,10 @@ class SAC_Base(object):
         obs_list = [m_obses[:, self.burn_in_step, ...] for m_obses in m_obses_list]
         state = m_states[:, self.burn_in_step, ...]
         action = bn_actions[:, self.burn_in_step, ...]
+        mu_d_policy_probs = bn_mu_probs[:, self.burn_in_step, :self.d_action_summed_size]
 
-        d_policy_entropy, c_policy_entropy = self._train_policy(obs_list, state, action)
+        d_policy_entropy, c_policy_entropy = self._train_policy(obs_list, state, action,
+                                                                mu_d_policy_probs)
 
         if self.use_auto_alpha and ((self.d_action_sizes and not self.discrete_dqn_like) or self.c_action_size):
             d_alpha, c_alpha = self._train_alpha(obs_list, state)
@@ -1978,7 +1992,7 @@ class SAC_Base(object):
                       next_obs_list: List[torch.Tensor],
                       next_target_state: torch.Tensor,
                       bn_dones: torch.Tensor,
-                      bn_mu_probs: torch.Tensor = None):
+                      bn_mu_probs: torch.Tensor):
         """
         Args:
             bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
@@ -1989,7 +2003,7 @@ class SAC_Base(object):
             next_obs_list: list([batch, *obs_shapes_i], ...)
             next_target_state: [batch, state_size]
             bn_dones (torch.bool): [batch, b + n]
-            bn_mu_probs: [batch, b + n]
+            bn_mu_probs: [batch, b + n, action_size]
 
         Returns:
             The td-error of observations, [batch, 1]
@@ -2052,7 +2066,7 @@ class SAC_Base(object):
             l_rewards: [1, episode_len]
             next_obs_list: list([1, *obs_shapes_i], ...)
             l_dones: [1, episode_len]
-            l_mu_probs: [1, episode_len]
+            l_mu_probs: [1, episode_len, action_size]
             l_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
 
         Returns:
@@ -2089,7 +2103,7 @@ class SAC_Base(object):
         bn_rewards: [episode_len - bn + 1, bn]
         next_obs_list: list([episode_len - bn + 1, *obs_shapes_i], ...)
         bn_dones: [episode_len - bn + 1, bn]
-        bn_mu_probs: [episode_len - bn + 1, bn]
+        bn_mu_probs: [episode_len - bn + 1, bn, action_size]
         f_seq_hidden_states: [episode_len - bn + 1, 1, *seq_hidden_state_shape]
         """
 
@@ -2106,7 +2120,7 @@ class SAC_Base(object):
             _bn_rewards = torch.from_numpy(bn_rewards[b_i:b_j]).to(self.device)
             _next_obs_list = [torch.from_numpy(o[b_i:b_j]).to(self.device) for o in next_obs_list]
             _bn_dones = torch.from_numpy(bn_dones[b_i:b_j]).to(self.device)
-            _bn_mu_probs = torch.from_numpy(bn_mu_probs[b_i:b_j]).to(self.device) if self.use_n_step_is else None
+            _bn_mu_probs = torch.from_numpy(bn_mu_probs[b_i:b_j]).to(self.device)
             _f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states[b_i:b_j]).to(self.device) if self.seq_encoder is not None else None
 
             (_m_indexes,
@@ -2139,7 +2153,7 @@ class SAC_Base(object):
                                           next_obs_list=_next_obs_list,
                                           next_target_state=_m_target_states[:, -1, ...],
                                           bn_dones=_bn_dones,
-                                          bn_mu_probs=_bn_mu_probs if self.use_n_step_is else None).detach().cpu().numpy()
+                                          bn_mu_probs=_bn_mu_probs).detach().cpu().numpy()
             td_error_list.append(td_error.flatten())
 
         td_error = np.concatenate([*td_error_list,
@@ -2176,7 +2190,7 @@ class SAC_Base(object):
             l_rewards (np): [1, episode_len]
             next_obs_list (np): list([1, *obs_shapes_i], ...)
             l_dones (bool): [1, episode_len]
-            l_probs (np): [1, episode_len]
+            l_probs (np): [1, episode_len, action_size]
             l_seq_hidden_states (np): [1, episode_len, *seq_hidden_state_shape]
         """
         # Reshape [1, episode_len, ...] to [episode_len, ...]
@@ -2188,6 +2202,7 @@ class SAC_Base(object):
         action = l_actions.squeeze(0)
         reward = l_rewards.squeeze(0)
         done = l_dones.squeeze(0)
+        mu_prob = l_probs.squeeze(0)
 
         # Padding next_obs for episode experience replay
         index = np.concatenate([index,
@@ -2201,6 +2216,8 @@ class SAC_Base(object):
                                  np.zeros([1], dtype=np.float32)])
         done = np.concatenate([done,
                                np.zeros([1], dtype=bool)])
+        mu_prob = np.concatenate([mu_prob,
+                                  np.zeros([1, mu_prob.shape[-1]], dtype=np.float32)])
 
         storage_data = {
             'index': index,
@@ -2209,14 +2226,8 @@ class SAC_Base(object):
             'action': action,
             'reward': reward,
             'done': done,
+            'mu_prob': mu_prob
         }
-
-        if self.use_n_step_is:
-            l_mu_probs = l_probs
-            mu_prob = l_mu_probs.squeeze(0)
-            mu_prob = np.concatenate([mu_prob,
-                                      np.zeros([1], dtype=np.float32)])
-            storage_data['mu_prob'] = mu_prob
 
         if self.seq_encoder is not None:
             seq_hidden_state = l_seq_hidden_states.squeeze(0)
@@ -2233,7 +2244,7 @@ class SAC_Base(object):
                                                  l_rewards=l_rewards,
                                                  next_obs_list=next_obs_list,
                                                  l_dones=l_dones,
-                                                 l_mu_probs=l_mu_probs if self.use_n_step_is else None,
+                                                 l_mu_probs=l_probs,
                                                  l_seq_hidden_states=l_seq_hidden_states if self.seq_encoder is not None else None)
             self.replay_buffer.add_with_td_error(td_error, storage_data,
                                                  ignore_size=self.burn_in_step + self.n_step)
@@ -2273,7 +2284,7 @@ class SAC_Base(object):
                 bn_rewards (np): [batch, b + n]
                 next_obs_list (np): list([batch, *obs_shapes_i], ...)
                 bn_dones (np): [batch, b + n]
-                bn_mu_probs (np): [batch, b + n]
+                bn_mu_probs (np): [batch, b + n, action_size]
                 bn_seq_hidden_states (np): [batch, b + n, *seq_hidden_state_shape],
                 priority_is (np): [batch, 1]
             )
@@ -2290,7 +2301,7 @@ class SAC_Base(object):
             action: [batch, action_size]
             reward: [batch, ]
             done (bool): [batch, ]
-            mu_prob: [batch, ]
+            mu_prob: [batch, action_size]
             seq_hidden_state: [batch, *seq_hidden_state_shape]
         """
         pointers, trans, priority_is = sampled
@@ -2313,7 +2324,7 @@ class SAC_Base(object):
         m_actions: [batch, N + 1, action_size]
         m_rewards: [batch, N + 1]
         m_dones (bool): [batch, N + 1]
-        m_mu_probs: [batch, N + 1]
+        m_mu_probs: [batch, N + 1, action_size]
         m_seq_hidden_state: [batch, N + 1, *seq_hidden_state_shape]
         """
         m_indexes = trans['index']
@@ -2322,6 +2333,7 @@ class SAC_Base(object):
         m_actions = trans['action']
         m_rewards = trans['reward']
         m_dones = trans['done']
+        m_mu_probs = trans['mu_prob']
 
         bn_indexes = m_indexes[:, :-1]
         bn_padding_masks = m_padding_masks[:, :-1]
@@ -2330,10 +2342,7 @@ class SAC_Base(object):
         bn_rewards = m_rewards[:, :-1]
         next_obs_list = [m_obses[:, -1, ...] for m_obses in m_obses_list]
         bn_dones = m_dones[:, :-1]
-
-        if self.use_n_step_is:
-            m_mu_probs = trans['mu_prob']
-            bn_mu_probs = m_mu_probs[:, :-1]
+        bn_mu_probs = m_mu_probs[:, :-1]
 
         if self.seq_encoder is not None:
             m_seq_hidden_states = trans['seq_hidden_state']
@@ -2346,7 +2355,7 @@ class SAC_Base(object):
                           bn_rewards,
                           next_obs_list,
                           bn_dones,
-                          bn_mu_probs if self.use_n_step_is else None,
+                          bn_mu_probs,
                           bn_seq_hidden_states if self.seq_encoder is not None else None,
                           priority_is if self.use_priority else None)
 
@@ -2384,7 +2393,7 @@ class SAC_Base(object):
             bn_rewards: [batch, b + n]
             next_obs_list: list([batch, *obs_shapes_i], ...)
             bn_dones (bool): [batch, b + n]
-            bn_mu_probs: [batch, b + n]
+            bn_mu_probs: [batch, b + n, action_size]
             bn_seq_hidden_states: [batch, b + n, *seq_hidden_state_shape]
             priority_is: [batch, 1]
             """
@@ -2403,8 +2412,7 @@ class SAC_Base(object):
                 if next_obs.dtype == torch.uint8:
                     next_obs_list[i] = next_obs.type(torch.float32) / 255.
             bn_dones = torch.from_numpy(bn_dones).to(self.device)
-            if self.use_n_step_is:
-                bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
+            bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
             if self.seq_encoder is not None:
                 f_seq_hidden_states = bn_seq_hidden_states[:, :1]
                 f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states).to(self.device)
@@ -2419,7 +2427,7 @@ class SAC_Base(object):
                 bn_rewards=bn_rewards,
                 next_obs_list=next_obs_list,
                 bn_dones=bn_dones,
-                bn_mu_probs=bn_mu_probs if self.use_n_step_is else None,
+                bn_mu_probs=bn_mu_probs,
                 f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None,
                 priority_is=priority_is if self.use_replay_buffer and self.use_priority else None)
 
@@ -2436,7 +2444,7 @@ class SAC_Base(object):
                     l_pre_actions=bn_pre_actions,
                     f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None)
 
-                if self.use_n_step_is:
+                if self.use_n_step_is or (self.d_action_sizes and not self.discrete_dqn_like):
                     bn_pi_probs_tensor = self.get_l_probs(l_obses_list=bn_obses_list,
                                                           l_states=bn_states,
                                                           l_actions=bn_actions)
@@ -2451,7 +2459,7 @@ class SAC_Base(object):
                                                   next_obs_list=next_obs_list,
                                                   next_target_state=m_target_states[:, -1, ...],
                                                   bn_dones=bn_dones,
-                                                  bn_mu_probs=bn_pi_probs_tensor if self.use_n_step_is else None).detach().cpu().numpy()
+                                                  bn_mu_probs=bn_pi_probs_tensor).detach().cpu().numpy()
                     self.replay_buffer.update(pointers, td_error)
 
                 # Update seq_hidden_states
@@ -2464,11 +2472,13 @@ class SAC_Base(object):
                     self.replay_buffer.update_transitions(tmp_pointers, 'seq_hidden_state', seq_hidden_state)
 
                 # Update n_mu_probs
-                if self.use_n_step_is:
+                if self.use_n_step_is or (self.d_action_sizes and not self.discrete_dqn_like):
                     pointers_list = [pointers + i for i in range(self.burn_in_step + self.n_step)]
                     tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
-                    pi_probs = bn_pi_probs_tensor.detach().cpu().numpy().reshape(-1)
-                    self.replay_buffer.update_transitions(tmp_pointers, 'mu_prob', pi_probs)
+
+                    pi_probs = bn_pi_probs_tensor.detach().cpu().numpy()
+                    pi_prob = pi_probs.reshape(-1, *pi_probs.shape[2:])
+                    self.replay_buffer.update_transitions(tmp_pointers, 'mu_prob', pi_prob)
 
             step = self._increase_global_step()
 

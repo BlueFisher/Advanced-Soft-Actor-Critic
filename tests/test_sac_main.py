@@ -41,7 +41,7 @@ class TestSACMain(unittest.TestCase):
 
             render=False,
             env_args=env_args_dict,
-            agents=None,
+            envs=None,
             max_iter=None,
 
             port=None,
@@ -62,6 +62,12 @@ class TestSACMain(unittest.TestCase):
     def gen_vanilla(param_dict):
         def func(self):
             self._test_vanilla(param_dict)
+        return func
+
+    @staticmethod
+    def gen_rnn(param_dict):
+        def func(self):
+            self._test_rnn(param_dict)
         return func
 
 
@@ -146,7 +152,16 @@ def __gen_vanilla():
 
     i = 0
     for env_args_dict in env_args_dicts:
-        func_name = f'test_{i:03d}'
+        func_name = f'test_vanilla_{i:03d}'
+
+        setattr(TestSACMain, func_name,
+                TestSACMain.gen_vanilla(env_args_dict))
+
+        i += 1
+
+    i = 0
+    for env_args_dict in env_args_dicts:
+        func_name = f'test_rnn_{i:03d}'
 
         setattr(TestSACMain, func_name,
                 TestSACMain.gen_vanilla(env_args_dict))

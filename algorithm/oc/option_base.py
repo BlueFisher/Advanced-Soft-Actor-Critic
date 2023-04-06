@@ -153,18 +153,18 @@ class OptionBase(SAC_Base):
 
     @torch.no_grad()
     def _get_y(self,
-               next_n_terminations,
+               next_n_terminations: torch.Tensor,
 
                next_n_v_over_options_list,
 
-               n_obses_list,
-               n_states,
-               n_actions,
-               n_rewards,
-               next_obs_list,
-               next_state,
-               n_dones,
-               n_mu_probs):
+               n_obses_list: List[torch.Tensor],
+               n_states: torch.Tensor,
+               n_actions: torch.Tensor,
+               n_rewards: torch.Tensor,
+               next_obs_list: List[torch.Tensor],
+               next_state: torch.Tensor,
+               n_dones: torch.Tensor,
+               n_mu_probs: Optional[torch.Tensor] = None):
         """
         Args:
             next_n_terminations: [batch, n]
@@ -178,8 +178,10 @@ class OptionBase(SAC_Base):
             n_rewards: [batch, n]
             next_state: [batch, state_size]
             n_dones (torch.bool): [batch, n]
-            n_mu_probs: [batch, n]
+            n_mu_probs: [batch, n, action_size]
 
+        Returns:
+            y: [batch, 1]
         """
 
         d_alpha = torch.exp(self.log_d_alpha)
@@ -206,14 +208,14 @@ class OptionBase(SAC_Base):
             n_c_actions_sampled = torch.zeros(0, device=self.device)
             next_n_c_actions_sampled = torch.zeros(0, device=self.device)
 
-        # ([batch, n, action_size], [batch, n, 1])
+        # ([batch, n, d_action_summed_size], [batch, n, 1])
         n_qs_list = [q(n_states, torch.tanh(n_c_actions_sampled)) for q in self.model_target_q_list]
         next_n_qs_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled)) for q in self.model_target_q_list]
 
-        n_d_qs_list = [q[0] for q in n_qs_list]  # [batch, n, action_size]
+        n_d_qs_list = [q[0] for q in n_qs_list]  # [batch, n, d_action_summed_size]
         n_c_qs_list = [q[1] for q in n_qs_list]  # [batch, n, 1]
 
-        next_n_d_qs_list = [q[0] for q in next_n_qs_list]  # [batch, n, action_size]
+        next_n_d_qs_list = [q[0] for q in next_n_qs_list]  # [batch, n, d_action_summed_size]
         next_n_c_qs_list = [q[1] for q in next_n_qs_list]  # [batch, n, 1]
 
         d_y, c_y = None, None
@@ -255,13 +257,17 @@ class OptionBase(SAC_Base):
                 next_n_vs = torch.sum(next_n_probs * tmp_next_n_vs, dim=-1) / self.d_action_branch_size  # [batch, n]
 
                 if self.use_n_step_is:
-                    n_d_actions = n_actions[..., :self.d_action_summed_size]
-                    n_pi_probs = torch.exp(d_policy.log_prob(n_d_actions))  # [batch, n]
+                    n_d_actions = n_actions[..., :self.d_action_summed_size]  # [batch, n, d_action_summed_size]
+                    n_d_mu_probs = n_mu_probs[..., :self.d_action_summed_size]  # [batch, n, d_action_summed_size]
+                    n_d_mu_probs = n_d_mu_probs * n_d_actions  # [batch, n]
+                    n_d_mu_probs[n_d_mu_probs == 0.] = 1.
+                    n_d_mu_probs = n_d_mu_probs.prod(-1)  # [batch, n]
+                    n_d_pi_probs = torch.exp(d_policy.log_prob(n_d_actions).sum(-1))  # [batch, n]
 
                 d_y = self._v_trace(n_rewards=n_rewards,
                                     n_dones=n_dones,
-                                    n_mu_probs=n_mu_probs if self.use_n_step_is else None,
-                                    n_pi_probs=n_pi_probs if self.use_n_step_is else None,
+                                    n_mu_probs=n_d_mu_probs if self.use_n_step_is else None,
+                                    n_pi_probs=n_d_pi_probs if self.use_n_step_is else None,
                                     n_vs=n_vs,
                                     next_n_vs=next_n_vs)
 
@@ -298,14 +304,14 @@ class OptionBase(SAC_Base):
 
             if self.use_n_step_is:
                 n_c_actions = n_actions[..., -self.c_action_size:]
-                n_pi_probs = squash_correction_prob(c_policy, torch.atanh(n_c_actions))
-                # [batch, n, action_size]
-                n_pi_probs = n_pi_probs.prod(axis=-1)  # [batch, n]
+                n_c_mu_probs = n_mu_probs[..., -self.c_action_size:]  # [batch, n, c_action_size]
+                n_c_pi_probs = squash_correction_prob(c_policy, torch.atanh(n_c_actions))
+                # [batch, n, c_action_size]
 
             c_y = self._v_trace(n_rewards=n_rewards,
                                 n_dones=n_dones,
-                                n_mu_probs=n_mu_probs if self.use_n_step_is else None,
-                                n_pi_probs=n_pi_probs if self.use_n_step_is else None,
+                                n_mu_probs=n_c_mu_probs.prod(-1) if self.use_n_step_is else None,
+                                n_pi_probs=n_c_pi_probs.prod(-1) if self.use_n_step_is else None,
                                 n_vs=n_vs,
                                 next_n_vs=next_n_vs)
 
@@ -348,9 +354,28 @@ class OptionBase(SAC_Base):
                     next_state: torch.Tensor,
                     next_target_state: torch.Tensor,
                     bn_dones: torch.Tensor,
-                    bn_mu_probs: torch.Tensor = None,
+                    bn_mu_probs: torch.Tensor,
                     priority_is: torch.Tensor = None):
+        """
+        Args:
+            next_n_terminations: [batch, n],
 
+            next_n_v_over_options_list: list([batch, n, num_options], ...),
+
+            bn_indexes (torch.int32): [batch, b + n],
+            bn_padding_masks (torch.bool): [batch, b + n],
+            bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
+            bn_states: [batch, b + n, state_size]
+            bn_target_states: [batch, b + n, state_size]
+            bn_actions: [batch, b + n, action_size]
+            bn_rewards: [batch, b + n]
+            next_obs_list: list([batch, *obs_shapes_i], ...)
+            next_state: [batch, state_size]
+            next_target_state: [batch, state_size]
+            bn_dones (torch.bool): [batch, b + n]
+            bn_mu_probs: [batch, b + n, action_size]
+            priority_is: [batch, 1]
+        """
         state = bn_states[:, self.burn_in_step, ...]
 
         batch = state.shape[0]
@@ -490,15 +515,18 @@ class OptionBase(SAC_Base):
     def train_policy_alpha(self,
                            bn_obses_list: List[torch.Tensor],
                            bn_states: torch.Tensor,
-                           bn_actions: torch.Tensor):
+                           bn_actions: torch.Tensor,
+                           bn_mu_probs: torch.Tensor):
 
         obs_list = [bn_obses[:, self.burn_in_step, ...] for bn_obses in bn_obses_list]
         state = bn_states[:, self.burn_in_step, ...]
         action = bn_actions[:, self.burn_in_step, ...]
+        mu_d_policy_probs = bn_mu_probs[:, self.burn_in_step, :self.d_action_summed_size]
 
         d_policy_entropy, c_policy_entropy = self._train_policy(obs_list=obs_list,
                                                                 state=state,
-                                                                action=action)
+                                                                action=action,
+                                                                mu_d_policy_probs=mu_d_policy_probs)
 
         if self.use_auto_alpha and ((self.d_action_sizes and not self.discrete_dqn_like) or self.c_action_size):
             d_alpha, c_alpha = self._train_alpha(obs_list, state)
@@ -531,7 +559,7 @@ class OptionBase(SAC_Base):
                       next_obs_list: List[torch.Tensor],
                       next_target_state: torch.Tensor,
                       bn_dones: torch.Tensor,
-                      bn_mu_probs: torch.Tensor = None):
+                      bn_mu_probs: torch.Tensor):
         """
         Args:
             next_n_terminations: [batch, n]
@@ -546,7 +574,7 @@ class OptionBase(SAC_Base):
             next_obs_list: list([batch, *obs_shapes_i], ...)
             next_target_state: [batch, state_size]
             bn_dones: [batch, b + n]
-            bn_mu_probs: [batch, b + n]
+            bn_mu_probs: [batch, b + n, action_size]
 
         Returns:
             The td-error of observations, [batch, 1]

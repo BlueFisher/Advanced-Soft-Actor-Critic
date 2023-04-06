@@ -14,6 +14,7 @@ default:
 
   sac_config:
     save_model_per_step: 1000 # Save model every N steps
+    write_summary_per_step: 100 # Write summaries in TensorBoard every N steps
 
     learning_rate: 0.01
     batch_size: 128
@@ -26,9 +27,40 @@ default:
 no_dqn:
   sac_config:
     batch_size: 256
-    use_n_step_is: false # Whether using importance sampling
+    target_d_alpha: 0.8
+    discrete_dqn_like: false
 
-    init_log_alpha: -4.8
-    use_auto_alpha: false # Whether using automating entropy adjustment
-    learning_rate: 0.0003
+
+no_dqn_1:
+  base_config:
+    name: 1.0_{time}
+  sac_config:
+    batch_size: 256
+    target_d_alpha: 1.0
+    use_auto_alpha: true # Whether using automating entropy adjustment
+    discrete_dqn_like: false
+
+no_dqn_0.9:
+  base_config:
+    name: 0.9_{time}
+  sac_config:
+    batch_size: 256
+    target_d_alpha: 0.9
+    use_auto_alpha: true # Whether using automating entropy adjustment
+    discrete_dqn_like: false
+
+no_dqn_0.8:
+  base_config:
+    name: 0.8_{time}
+  sac_config:
+    batch_size: 256
+    target_d_alpha: 0.8
+    discrete_dqn_like: false
+
+no_dqn_0.7:
+  base_config:
+    name: 0.7_{time}
+  sac_config:
+    batch_size: 256
+    target_d_alpha: 0.7
     discrete_dqn_like: false

@@ -40,12 +40,12 @@ class JointOneHotCategorical(torch.distributions.Distribution):
     def log_prob(self, value) -> torch.Tensor:
         values = value.split(self.logits_size_list, dim=-1)
         log_prob_list = [dist.log_prob(value) for dist, value in zip(self._dists, values)]
-        return torch.stack(log_prob_list, dim=-1).sum(-1)
+        return torch.stack(log_prob_list, dim=-1)
 
     def entropy(self) -> torch.Tensor:
         entropy_list = [dist.entropy() for dist in self._dists]
-        return torch.stack(entropy_list, dim=-1).sum(-1)
-    
+        return torch.stack(entropy_list, dim=-1)
+
 
 class ModelBasePolicy(nn.Module):
     def __init__(self,
