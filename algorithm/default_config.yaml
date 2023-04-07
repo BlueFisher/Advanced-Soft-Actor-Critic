@@ -57,6 +57,7 @@ sac_config:
   use_auto_alpha: true # Whether using automating entropy adjustment
   target_d_alpha: 0.98 # Target discrete alpha ratio
   target_c_alpha: 1.0 # Target continuous alpha ratio
+  d_policy_entropy_penalty: 0.5 # Discrete policy entropy penalty ratio
 
   learning_rate: 0.0003 # Learning rate of all optimizers
 

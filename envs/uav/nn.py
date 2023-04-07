@@ -28,9 +28,11 @@ class ModelRep(m.ModelBaseRNNRep):
 
 class ModelQ(m.ModelQ):
     def _build_model(self):
-        return super()._build_model(c_dense_n=128, c_dense_depth=2)
+        return super()._build_model(d_dense_n=128, d_dense_depth=2,
+                                    c_dense_n=128, c_dense_depth=2)
 
 
 class ModelPolicy(m.ModelPolicy):
     def _build_model(self):
-        return super()._build_model(c_dense_n=128, c_dense_depth=2)
+        return super()._build_model(d_dense_n=128, d_dense_depth=2,
+                                    c_dense_n=128, c_dense_depth=2)
