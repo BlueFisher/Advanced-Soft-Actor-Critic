@@ -54,7 +54,10 @@ class SAC_Base(object):
                  use_auto_alpha: bool = True,
                  target_d_alpha: float = 0.98,
                  target_c_alpha: float = 1.,
+                 d_policy_entropy_penalty: float = 0.5,
+
                  learning_rate: float = 3e-4,
+
                  gamma: float = 0.99,
                  v_lambda: float = 1.,
                  v_rho: float = 1.,
@@ -115,6 +118,7 @@ class SAC_Base(object):
         use_auto_alpha: true # Whether using automating entropy adjustment
         target_d_alpha: 0.98 # Target discrete alpha ratio
         target_c_alpha: 1.0 # Target continuous alpha ratio
+        d_policy_entropy_penalty: 0.5 # Discrete policy entropy penalty ratio
 
         learning_rate: 0.0003 # Learning rate of all optimizers
 
@@ -170,6 +174,7 @@ class SAC_Base(object):
         self.use_auto_alpha = use_auto_alpha
         self.target_d_alpha = target_d_alpha
         self.target_c_alpha = target_c_alpha
+        self.d_policy_entropy_penalty = d_policy_entropy_penalty
         self.gamma = gamma
         self.v_lambda = v_lambda
         self.v_rho = v_rho
@@ -1250,8 +1255,8 @@ class SAC_Base(object):
                 stacked_n_d_qs = torch.stack(n_d_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
                 # [ensemble_q_num, Batch, n, d_action_summed_size] -> [ensemble_q_sample, Batch, n, d_action_summed_size]
 
-                min_n_qs = torch.mean(stacked_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
-                min_next_n_qs = torch.mean(stacked_next_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
+                mean_n_qs = torch.mean(stacked_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
+                mean_next_n_qs = torch.mean(stacked_next_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
 
                 probs = d_policy.probs  # [batch, n, d_action_summed_size]
                 next_probs = next_d_policy.probs  # [batch, n, d_action_summed_size]
@@ -1259,8 +1264,8 @@ class SAC_Base(object):
                 # ! sum(probs) == self.d_action_branch_size
                 clipped_probs = probs.clamp(min=1e-8)  # [batch, n, d_action_summed_size]
                 clipped_next_probs = next_probs.clamp(min=1e-8)  # [batch, n, d_action_summed_size]
-                tmp_n_vs = min_n_qs - d_alpha * torch.log(clipped_probs)  # [batch, n, d_action_summed_size]
-                tmp_next_n_vs = min_next_n_qs - d_alpha * torch.log(clipped_next_probs)  # [batch, n, d_action_summed_size]
+                tmp_n_vs = mean_n_qs - d_alpha * torch.log(clipped_probs)  # [batch, n, d_action_summed_size]
+                tmp_next_n_vs = mean_next_n_qs - d_alpha * torch.log(clipped_next_probs)  # [batch, n, d_action_summed_size]
 
                 n_vs = torch.sum(probs * tmp_n_vs, dim=-1) / self.d_action_branch_size  # [batch, n]
                 next_n_vs = torch.sum(next_probs * tmp_next_n_vs, dim=-1) / self.d_action_branch_size  # [batch, n]
@@ -1698,27 +1703,28 @@ class SAC_Base(object):
             c_alpha = torch.exp(self.log_c_alpha)
 
         if self.d_action_sizes and not self.discrete_dqn_like:
-            probs = d_policy.probs   # [batch, action_size]
-            clipped_probs = torch.maximum(probs, torch.tensor(1e-8, device=self.device))
+            probs = d_policy.probs   # [batch, d_action_summed_size]
+            clipped_probs = probs.clamp(min=1e-8)
 
             c_action = action[..., -self.c_action_size:]
 
             q_list = [q(state, c_action) for q in self.model_q_list]
-            # ([batch, action_size], [batch, 1])
-            d_q_list = [q[0] for q in q_list]  # [batch, action_size]
+            # ([batch, d_action_summed_size], [batch, 1])
+            d_q_list = [q[0] for q in q_list]  # [batch, d_action_summed_size]
 
             stacked_d_q = torch.stack(d_q_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
             # [ensemble_q_num, Batch, d_action_summed_size] -> [ensemble_q_sample, Batch, d_action_summed_size]
-            mean_d_q = torch.mean(stacked_d_q, dim=0).detach()
+            mean_d_q = torch.mean(stacked_d_q, dim=0)
             # [ensemble_q_sample, Batch, d_action_summed_size] -> [batch, d_action_summed_size]
 
-            _loss_policy = d_alpha * torch.log(clipped_probs) - mean_d_q  # [batch, d_action_summed_size]
+            _loss_policy = d_alpha * torch.log(clipped_probs) - mean_d_q.detach()  # [batch, d_action_summed_size]
             loss_d_policy = torch.sum(probs * _loss_policy, dim=1, keepdim=True) / self.d_action_branch_size  # [batch, 1]
 
-            mu_d_policy_entropy = torch.sum(mu_d_policy_probs * torch.log(mu_d_policy_probs), dim=-1)  # [batch, ]
-            pi_d_policy_entropy = d_policy.entropy().sum(-1)  # [batch, ]
-            entropy_penalty = torch.pow(mu_d_policy_entropy - pi_d_policy_entropy, 2.) / 4.  # [batch, ]
-            loss_d_policy += entropy_penalty.unsqueeze(-1)  # [batch, 1]
+            clipped_mu_d_policy_probs = mu_d_policy_probs.clamp(min=1e-8)
+            mu_d_policy_entropy = -torch.sum(mu_d_policy_probs * torch.log(clipped_mu_d_policy_probs), dim=-1) / self.d_action_branch_size  # [batch, ]
+            pi_d_policy_entropy = d_policy.entropy().sum(-1) / self.d_action_branch_size  # [batch, ]
+            entropy_penalty = torch.pow(mu_d_policy_entropy - pi_d_policy_entropy, 2.) / 2.   # [batch, ]
+            loss_d_policy += self.d_policy_entropy_penalty * entropy_penalty.unsqueeze(-1)  # [batch, 1]
 
         if self.c_action_size:
             action_sampled = c_policy.rsample()
@@ -1744,7 +1750,7 @@ class SAC_Base(object):
             loss_policy.backward(inputs=list(self.model_policy.parameters()))
             self.optimizer_policy.step()
 
-        return (torch.mean(d_policy.entropy().sum(-1)) if self.d_action_sizes else None,
+        return (torch.mean(d_policy.entropy().sum(-1) / self.d_action_branch_size) if self.d_action_sizes else None,
                 torch.mean(c_policy.entropy()) if self.c_action_size else None)
 
     def _train_alpha(self,
@@ -2306,7 +2312,8 @@ class SAC_Base(object):
         """
         pointers, trans, priority_is = sampled
 
-        # Get n_step transitions TODO: could be faster, no need get all data
+        # Get n_step transitions
+        # TODO: could be faster, no need get all data
         trans = {k: [v] for k, v in trans.items()}
         # k: [v, v, ...]
         for i in range(1, self.burn_in_step + self.n_step + 1):

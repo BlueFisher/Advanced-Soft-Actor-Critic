@@ -41,3 +41,9 @@ d0.7:
     name: 0.7_{time}
   sac_config:
     target_d_alpha: 0.7
+
+d0.1:
+  base_config:
+    name: 0.1_{time}
+  sac_config:
+    target_d_alpha: 0.1
