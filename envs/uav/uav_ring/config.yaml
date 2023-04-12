@@ -1,6 +1,6 @@
 default:
   base_config:
-    env_name: UAVHole
+    env_name: UAVRing
     unity_args:
       build_path:
         win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
@@ -22,15 +22,7 @@ default:
     burn_in_step: 10
     seq_encoder: RNN
 
-    target_d_alpha: 0.5 # Target discrete alpha ratio
+    target_d_alpha: 0.6 # Target discrete alpha ratio
 
     use_rnd: true
     rnd_n_sample: 50
-
-aggr:
-  base_config:
-    unity_args:
-      group_aggregation: true
-    
-  sac_config:
-    nn: nn_aggr

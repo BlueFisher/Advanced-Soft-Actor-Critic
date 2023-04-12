@@ -768,17 +768,20 @@ class SAC_Base(object):
 
         if self.d_action_sizes:
             if self.discrete_dqn_like:
-                # TODO some actions are random, not all
-                if torch.rand(1) < 0.2 and self.train_mode:
+                d_qs, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None)
+                d_action_list = [torch.argmax(d_q, dim=-1) for d_q in d_qs.split(self.d_action_sizes, dim=-1)]
+                d_action_list = [functional.one_hot(d_action, d_action_size).type(torch.float32)
+                                 for d_action, d_action_size in zip(d_action_list, self.d_action_sizes)]
+                d_action = torch.concat(d_action_list, dim=-1)
+
+                if self.train_mode:
+                    mask = torch.rand(batch) < 0.2
+
                     d_dist_list = [distributions.OneHotCategorical(logits=torch.ones((batch, d_action_size), device=self.device))
                                    for d_action_size in self.d_action_sizes]
-                    d_action = torch.concat([dist.sample() for dist in d_dist_list], dim=-1)
-                else:
-                    d_qs, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None)
-                    d_action_list = [torch.argmax(d_q, dim=-1) for d_q in d_qs.split(self.d_action_sizes, dim=-1)]
-                    d_action_list = [functional.one_hot(d_action, d_action_size).type(torch.float32)
-                                     for d_action, d_action_size in zip(d_action_list, self.d_action_sizes)]
-                    d_action = torch.concat(d_action_list, dim=-1)
+                    random_d_action = torch.concat([dist.sample() for dist in d_dist_list], dim=-1)
+
+                    d_action[mask] = random_d_action[mask]
             else:
                 if disable_sample:
                     d_action = d_policy.sample_deter()

@@ -5,18 +5,21 @@ import algorithm.nn_models as m
 
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):
-        assert self.obs_shapes[0] == (3, 2, 9)  # AgentsBufferSensor
-        assert self.obs_shapes[1] == (3, 84, 84, 3)
-        assert self.obs_shapes[2] == (3, 9)
+        assert self.obs_shapes[0][1:] == (4, 9)  # AgentsBufferSensor
+        assert self.obs_shapes[1][1:] == (84, 84, 3)
+        assert self.obs_shapes[2][1:] == (9, )
+
+        self.group_size = self.obs_shapes[0][0]
 
         self.conv = m.ConvLayers(84, 84, 3, 'simple',
                                  out_dense_n=64, out_dense_depth=2)
         self.conv_attn = m.MultiheadAttention(self.conv.output_size, 8)
         self.vec_attn = m.MultiheadAttention(9, 1)
 
-        print(self.conv.output_size)
-
-        self.rnn = m.GRU(3 * (9 + self.conv.output_size) + self.c_action_size, 128, 1)
+        if self.d_action_sizes:
+            self.rnn = m.GRU(self.group_size * (9 + self.conv.output_size) + sum(self.d_action_sizes), 128, 1)
+        else:
+            self.rnn = m.GRU(self.group_size * (9 + self.conv.output_size) + self.c_action_size, 128, 1)
 
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         feature_agents, vis_obs, vec_obs = obs_list
@@ -42,12 +45,14 @@ class ModelRep(m.ModelBaseRNNRep):
 
 class ModelQ(m.ModelQ):
     def _build_model(self):
-        return super()._build_model(c_dense_n=128, c_dense_depth=3)
+        return super()._build_model(d_dense_n=128, d_dense_depth=2,
+                                    c_dense_n=128, c_dense_depth=2)
 
 
 class ModelPolicy(m.ModelPolicy):
     def _build_model(self):
-        return super()._build_model(c_dense_n=128, c_dense_depth=3)
+        return super()._build_model(d_dense_n=128, d_dense_depth=2,
+                                    c_dense_n=128, c_dense_depth=2)
 
 
 class ModelRND(m.ModelRND):
