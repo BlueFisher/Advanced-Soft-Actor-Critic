@@ -1,4 +1,3 @@
-import itertools
 import logging
 import math
 import multiprocessing
@@ -12,7 +11,6 @@ from typing import List
 import numpy as np
 from mlagents_envs.environment import (ActionTuple, DecisionSteps,
                                        TerminalSteps, UnityEnvironment)
-from mlagents_envs.exception import UnityTimeOutException
 from mlagents_envs.side_channel.engine_configuration_channel import (
     EngineConfig, EngineConfigurationChannel)
 from mlagents_envs.side_channel.environment_parameters_channel import \
@@ -149,6 +147,7 @@ class UnityWrapperProcess:
         self.ma_c_action_size = {}
 
         self.ma_unity_obs_shapes = {}
+        self.ma_unity_d_action_sizes = {}
         self.ma_unity_c_action_size = {}
 
         for n in self.behavior_names:
@@ -172,24 +171,26 @@ class UnityWrapperProcess:
 
             self._logger.info(f'{n} Continuous action size: {continuous_action_size}')
 
-            self.ma_d_action_sizes[n] = discrete_action_sizes
-            self.ma_c_action_size[n] = continuous_action_size
+            self.ma_d_action_sizes[n] = discrete_action_sizes  # list[int]
+            self.ma_c_action_size[n] = continuous_action_size  # int
 
             self.ma_unity_obs_shapes[n] = self.ma_obs_shapes[n]
+            self.ma_unity_d_action_sizes[n] = self.ma_d_action_sizes[n]
             self.ma_unity_c_action_size[n] = self.ma_c_action_size[n]
 
             if self.group_aggregation:
-                if self.ma_d_action_sizes[n]:
-                    # TODO
-                    raise Exception('Discrete action size is not supported in group_aggregation now')
-
                 decision_steps, terminal_steps = self._env.get_steps(n)
                 u_group_ids, u_group_id_counts = np.unique(decision_steps.group_id, return_counts=True)
-                max_u_group_id_count = u_group_id_counts.max()
+                # u_group_id_counts: agent count of each group id
+                max_u_group_id_count = u_group_id_counts.max()  # the max agent count in each group id
 
                 self.ma_obs_shapes[n] = [(max_u_group_id_count, *obs_shape) for obs_shape in self.ma_obs_shapes[n]]
-                self.ma_d_action_size[n] = self.ma_d_action_size[n] * max_u_group_id_count
-                self.ma_c_action_size[n] = self.ma_c_action_size[n] * max_u_group_id_count
+                self.ma_d_action_sizes[n] = self.ma_d_action_sizes[n] * max_u_group_id_count  # list[int]
+                self.ma_c_action_size[n] = self.ma_c_action_size[n] * max_u_group_id_count  # int
+
+                for branch, branch_size in enumerate(self.ma_d_action_sizes[n]):
+                    self._logger.info(f"{n} Aggregated discrete action branch {branch} has {branch_size} different actions")
+                self._logger.info(f'{n} Aggregated continuous action size: {self.ma_c_action_size[n]}')
 
             for o_name, o_shape in zip(obs_names, obs_shapes):
                 if ('camera' in o_name.lower() or 'visual' in o_name.lower() or 'image' in o_name.lower()) \
@@ -259,16 +260,25 @@ class UnityWrapperProcess:
 
         if self.group_aggregation:
             for n in self.behavior_names:
-                unity_d_action_summed_size = self.ma_u
+                if self.ma_d_action_sizes[n]:
+                    d_action = ma_d_action[n]
+                    unity_d_action_summed_size = sum(self.ma_unity_d_action_sizes[n])
+                    unity_d_action = np.zeros((len(self._ma_agents_ids[n]), unity_d_action_summed_size), dtype=ma_d_action[n].dtype)
 
-                unity_c_action_size = self.ma_unity_c_action_size[n]
-                unity_c_action = np.zeros((len(self._ma_agents_ids[n]), unity_c_action_size), dtype=ma_c_action[n].dtype)
+                    for action, group_id, group_id_count in zip(d_action, self._ma_u_group_ids[n], self._ma_u_group_id_counts[n]):
+                        unity_d_action[self._ma_group_ids[n] == group_id] = action.reshape(-1, unity_d_action_summed_size)[:group_id_count]
 
-                c_action = ma_c_action[n]
-                for action, group_id, group_id_count in zip(c_action, self._ma_u_group_ids[n], self._ma_u_group_id_counts[n]):
-                    unity_c_action[self._ma_group_ids[n] == group_id] = action.reshape(-1, unity_c_action_size)[:group_id_count]
+                    ma_d_action[n] = unity_d_action
 
-                ma_c_action[n] = unity_c_action
+                if self.ma_c_action_size[n]:
+                    c_action = ma_c_action[n]
+                    unity_c_action_size = self.ma_unity_c_action_size[n]
+                    unity_c_action = np.zeros((len(self._ma_agents_ids[n]), unity_c_action_size), dtype=c_action.dtype)
+
+                    for action, group_id, group_id_count in zip(c_action, self._ma_u_group_ids[n], self._ma_u_group_id_counts[n]):
+                        unity_c_action[self._ma_group_ids[n] == group_id] = action.reshape(-1, unity_c_action_size)[:group_id_count]
+
+                    ma_c_action[n] = unity_c_action
 
         ma_obs_list = {}
         ma_reward = {}
@@ -288,12 +298,12 @@ class UnityWrapperProcess:
         for n in self.behavior_names:
             d_action = c_action = None
 
-            if self.ma_d_action_sizes[n]:
-                d_action_list = np.split(ma_d_action[n], np.cumsum(self.ma_d_action_sizes[n]), axis=-1)[:-1]
+            if self.ma_unity_d_action_sizes[n]:
+                d_action_list = np.split(ma_d_action[n], np.cumsum(self.ma_unity_d_action_sizes[n]), axis=-1)[:-1]
                 d_action_list = [np.argmax(d_action, axis=-1) for d_action in d_action_list]
                 d_action = np.stack(d_action_list, axis=-1)
 
-            if self.ma_c_action_size[n]:
+            if self.ma_unity_c_action_size[n]:
                 c_action = ma_c_action[n]
 
             self._env.set_actions(n,
