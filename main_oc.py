@@ -7,8 +7,6 @@ from algorithm.config_helper import set_logger
 HITTED_ENVS = {'roller', 'square', 'pyramid', 'uav', 'ugv', 'ugv/ugv_soccer_search', 'usv'}
 
 if __name__ == '__main__':
-    set_logger()
-
     parser = argparse.ArgumentParser()
     parser.add_argument('env')
     parser.add_argument('--config', '-c', help='config file')
@@ -22,6 +20,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--port', '-p', type=int, default=5005, help='UNITY: communication port')
     parser.add_argument('--editor', action='store_true', help='UNITY: running in Unity Editor')
+    parser.add_argument('--timescale', type=float, default=None, help='UNITY: timescale')
 
     parser.add_argument('--name', '-n', help='training name')
     parser.add_argument('--disable_sample', action='store_true', help='disable sampling when choosing actions')

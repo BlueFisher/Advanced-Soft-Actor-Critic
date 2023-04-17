@@ -20,6 +20,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--port', '-p', type=int, default=5005, help='UNITY: communication port')
     parser.add_argument('--editor', action='store_true', help='UNITY: running in Unity Editor')
+    parser.add_argument('--timescale', type=float, default=None, help='UNITY: timescale')
 
     parser.add_argument('--name', '-n', help='training name')
     parser.add_argument('--disable_sample', action='store_true', help='disable sampling when choosing actions')
