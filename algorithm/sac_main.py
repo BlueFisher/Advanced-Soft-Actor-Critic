@@ -49,6 +49,7 @@ class Main:
         self.train_mode = not args.run
         self.render = args.render
         self.unity_run_in_editor = args.editor
+        self.unity_time_scale = args.timescale
 
         self.disable_sample = args.disable_sample
         self.alway_use_env_nn = args.use_env_nn
@@ -106,6 +107,7 @@ class Main:
 
             if self.unity_run_in_editor:
                 self.env = UnityWrapper(train_mode=self.train_mode,
+                                        time_scale=self.unity_time_scale,
                                         n_envs=self.base_config['n_envs'],
                                         group_aggregation=self.base_config['unity_args']['group_aggregation'])
             else:
@@ -113,6 +115,7 @@ class Main:
                                         file_name=self.base_config['unity_args']['build_path'][sys.platform],
                                         base_port=self.base_config['unity_args']['port'],
                                         no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
+                                        time_scale=self.unity_time_scale,
                                         scene=self.base_config['env_name'],
                                         additional_args=self.base_config['env_args'],
                                         n_envs=self.base_config['n_envs'],
@@ -266,6 +269,10 @@ class Main:
                         self.ma_manager.post_step(ma_next_obs_list, ma_local_done)
 
                     step += 1
+
+
+                for n, mgr in self.ma_manager:
+                    rewards = np.array([a.reward for a in mgr.agents])
 
                 if self.train_mode:
                     self._log_episode_summaries()

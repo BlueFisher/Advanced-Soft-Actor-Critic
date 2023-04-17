@@ -26,3 +26,16 @@ default:
 
     use_rnd: true
     rnd_n_sample: 50
+
+aggr:
+  base_config:
+    name: aggr_{time}
+    unity_args:
+      group_aggregation: true
+    reset_on_iteration: true
+
+  sac_config:
+    nn: nn_aggr
+
+    burn_in_step: 0
+    seq_encoder: null

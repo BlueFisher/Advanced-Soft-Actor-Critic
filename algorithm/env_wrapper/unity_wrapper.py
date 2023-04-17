@@ -49,6 +49,7 @@ class UnityWrapperProcess:
                  worker_id=0,
                  base_port=5005,
                  no_graphics=True,
+                 time_scale=None,
                  seed=None,
                  scene=None,
                  additional_args=None,
@@ -62,6 +63,7 @@ class UnityWrapperProcess:
             worker_id: Offset from base_port
             base_port: The port that communicate to Unity. It will be set to 5004 automatically if in editor.
             no_graphics: If Unity runs in no graphic mode. It must be set to False if Unity has camera sensor.
+            time_scale: Time scale of Unity. If None: time_scale = 20 if train_mode else 1
             seed: Random seed
             scene: The scene name
             n_envs: The env copies count
@@ -102,11 +104,13 @@ class UnityWrapperProcess:
                                                     self.environment_parameters_channel,
                                                     self.option_channel])
 
+        if time_scale is None:
+            time_scale = 20 if train_mode else 1
         self.engine_configuration_channel.set_configuration_parameters(
             width=200 if train_mode else 1280,
             height=200 if train_mode else 720,
             quality_level=5,
-            time_scale=20 if train_mode else 1)
+            time_scale=time_scale)
 
         self._env.reset()
         self.behavior_names = list(self._env.behavior_specs)
@@ -414,6 +418,7 @@ class UnityWrapper:
                  file_name=None,
                  base_port=5005,
                  no_graphics=True,
+                 time_scale=None,
                  seed=None,
                  scene=None,
                  additional_args=None,
@@ -426,6 +431,7 @@ class UnityWrapper:
             file_name: The executable path. The UnityEnvironment will run in editor if None
             base_port: The port that communicate to Unity. It will be set to 5004 automatically if in editor.
             no_graphics: If Unity runs in no graphic mode. It must be set to False if Unity has camera sensor.
+            time_scale: Time scale of Unity. If None: time_scale = 20 if train_mode else 1
             seed: Random seed
             scene: The scene name
             n_envs: The env copies count
@@ -435,6 +441,7 @@ class UnityWrapper:
         self.file_name = file_name
         self.base_port = base_port
         self.no_graphics = no_graphics
+        self.time_scale = time_scale
         self.seed = seed
         self.scene = scene
         self.additional_args = additional_args
@@ -462,6 +469,7 @@ class UnityWrapper:
                                                       worker_id=i,
                                                       base_port=base_port,
                                                       no_graphics=no_graphics,
+                                                      time_scale=time_scale,
                                                       seed=seed,
                                                       scene=scene,
                                                       additional_args=additional_args,
@@ -488,6 +496,7 @@ class UnityWrapper:
                                                   self._process_id,
                                                   self.base_port,
                                                   self.no_graphics,
+                                                  self.time_scale,
                                                   self.seed,
                                                   self.scene,
                                                   self.additional_args,
@@ -646,8 +655,8 @@ class UnityWrapper:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
-    N_ENVS = 10
-    GROUP_AGGREGATION = False
+    N_ENVS = 2
+    GROUP_AGGREGATION = True
 
     env = UnityWrapper(train_mode=True,
                        #    file_name=r'D:\Unity\win-RL-Envs\RLEnvironments.exe',
