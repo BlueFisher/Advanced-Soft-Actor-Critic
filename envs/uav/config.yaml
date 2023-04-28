@@ -23,27 +23,3 @@ default:
     n_step: 3
     burn_in_step: 10
     seq_encoder: RNN
-
-d0.9:
-  base_config:
-    name: 0.9_{time}
-  sac_config:
-    target_d_alpha: 0.9
-
-d0.8:
-  base_config:
-    name: 0.8_{time}
-  sac_config:
-    target_d_alpha: 0.8
-
-d0.7:
-  base_config:
-    name: 0.7_{time}
-  sac_config:
-    target_d_alpha: 0.7
-
-d0.1:
-  base_config:
-    name: 0.1_{time}
-  sac_config:
-    target_d_alpha: 0.1

@@ -232,9 +232,6 @@ class Main:
                 iter_time = time.time()
 
                 while not self.ma_manager.is_done():
-                    with self._profiler('burn_in_padding', repeat=10):
-                        self.ma_manager.burn_in_padding()
-
                     with self._profiler('get_ma_action', repeat=10):
                         ma_d_action, ma_c_action = self.ma_manager.get_ma_action(disable_sample=self.disable_sample)
                         # ma_d_action, ma_c_action = self.ma_manager.get_test_ma_action()
@@ -243,7 +240,8 @@ class Main:
                         (ma_next_obs_list,
                          ma_reward,
                          ma_local_done,
-                         ma_max_reached) = self.env.step(ma_d_action, ma_c_action)
+                         ma_max_reached,
+                         ma_next_padding_mask) = self.env.step(ma_d_action, ma_c_action)
 
                     if ma_next_obs_list is None:
                         force_reset = True
@@ -266,13 +264,11 @@ class Main:
                             trained_steps = self.ma_manager.train(trained_steps)
 
                     with self._profiler('post_step', repeat=10):
-                        self.ma_manager.post_step(ma_next_obs_list, ma_local_done)
+                        self.ma_manager.post_step(ma_next_obs_list,
+                                                  ma_local_done,
+                                                  ma_next_padding_mask)
 
                     step += 1
-
-
-                for n, mgr in self.ma_manager:
-                    rewards = np.array([a.reward for a in mgr.agents])
 
                 if self.train_mode:
                     self._log_episode_summaries()

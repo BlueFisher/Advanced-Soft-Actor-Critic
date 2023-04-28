@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import torch
 from torch import nn
@@ -10,11 +10,15 @@ from ..utils import *
 
 
 class OptionBase(SAC_Base):
+    def _init_replay_buffer(self, replay_config):
+        return
+
     @torch.no_grad()
     def choose_action(self,
                       obs_list: List[torch.Tensor],
                       disable_sample: bool = False,
-                      force_rnd_if_available: bool = False):
+                      force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
+                                                                     torch.Tensor]:
         """
         Args:
             obs_list: list([batch, *obs_shapes_i], ...)
@@ -33,7 +37,9 @@ class OptionBase(SAC_Base):
                           pre_action: torch.Tensor,
                           rnn_state: torch.Tensor,
                           disable_sample: bool = False,
-                          force_rnd_if_available: bool = False):
+                          force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
+                                                                         torch.Tensor,
+                                                                         torch.Tensor]:
         """
         Args:
             obs_list: list([batch, *obs_shapes_i], ...)
@@ -55,47 +61,6 @@ class OptionBase(SAC_Base):
         return action, prob, next_rnn_state
 
     @torch.no_grad()
-    def choose_attn_action(self,
-                           ep_indexes: torch.Tensor,
-                           ep_padding_masks: torch.Tensor,
-                           ep_obses_list: List[torch.Tensor],
-                           ep_pre_actions: torch.Tensor,
-                           ep_attn_hidden_states: torch.Tensor,
-
-                           disable_sample: bool = False,
-                           force_rnd_if_available: bool = False):
-        """
-        Args:
-            ep_indexes: [batch, episode_len]
-            ep_padding_masks: [batch, episode_len]
-            ep_obses_list: list([batch, episode_len, *obs_shapes_i], ...)
-            ep_pre_actions: [batch, episode_len, d_action_summed_size + c_action_size]
-            ep_attn_hidden_states: [batch, episode_len, *seq_hidden_state_shape]
-
-        Returns:
-            action: [batch, d_action_summed_size + c_action_size]
-            prob: [batch, ]
-            attn_hidden_state: [batch, *rnn_state_shape]
-        """
-        state, next_attn_hidden_state, _ = self.model_rep(ep_indexes,
-                                                          ep_obses_list, ep_pre_actions,
-                                                          query_length=1,
-                                                          hidden_state=ep_attn_hidden_states,
-                                                          is_prev_hidden_state=False,
-                                                          padding_mask=ep_padding_masks)
-        state = state.squeeze(1)
-        next_attn_hidden_state = next_attn_hidden_state.squeeze(1)
-
-        action, prob = self._choose_action([o[:, -1] for o in ep_obses_list],
-                                           state,
-                                           disable_sample,
-                                           force_rnd_if_available)
-
-        return (action.detach().cpu().numpy(),
-                prob.detach().cpu().numpy(),
-                next_attn_hidden_state.detach().cpu().numpy())
-
-    @torch.no_grad()
     def get_dqn_like_d_y(self,
                          next_n_terminations: torch.Tensor,
 
@@ -104,7 +69,7 @@ class OptionBase(SAC_Base):
                          n_rewards: torch.Tensor,
                          n_dones: torch.Tensor,
                          stacked_next_n_d_qs: torch.Tensor,
-                         stacked_next_target_n_d_qs: torch.Tensor):
+                         stacked_next_target_n_d_qs: torch.Tensor) -> torch.Tensor:
         """
         Args:
             next_n_terminations: [batch, n]
@@ -164,7 +129,8 @@ class OptionBase(SAC_Base):
                next_obs_list: List[torch.Tensor],
                next_state: torch.Tensor,
                n_dones: torch.Tensor,
-               n_mu_probs: Optional[torch.Tensor] = None):
+               n_mu_probs: Optional[torch.Tensor] = None) -> Tuple[Optional[torch.Tensor],
+                                                                   Optional[torch.Tensor]]:
         """
         Args:
             next_n_terminations: [batch, n]
@@ -320,7 +286,7 @@ class OptionBase(SAC_Base):
     @torch.no_grad()
     def get_v(self,
               obs_list: List[torch.Tensor],
-              state: torch.Tensor):
+              state: torch.Tensor) -> torch.Tensor:
         # TODO D_POLICY
         o_d_policy, o_c_policy = self.model_policy(state, obs_list)
         o_c_action_sampled = o_c_policy.rsample()  # [batch, c_action_size]
@@ -355,7 +321,7 @@ class OptionBase(SAC_Base):
                     next_target_state: torch.Tensor,
                     bn_dones: torch.Tensor,
                     bn_mu_probs: torch.Tensor,
-                    priority_is: torch.Tensor = None):
+                    priority_is: torch.Tensor = None) -> None:
         """
         Args:
             next_n_terminations: [batch, n],
@@ -516,7 +482,7 @@ class OptionBase(SAC_Base):
                            bn_obses_list: List[torch.Tensor],
                            bn_states: torch.Tensor,
                            bn_actions: torch.Tensor,
-                           bn_mu_probs: torch.Tensor):
+                           bn_mu_probs: torch.Tensor) -> None:
 
         obs_list = [bn_obses[:, self.burn_in_step, ...] for bn_obses in bn_obses_list]
         state = bn_states[:, self.burn_in_step, ...]
@@ -559,7 +525,7 @@ class OptionBase(SAC_Base):
                       next_obs_list: List[torch.Tensor],
                       next_target_state: torch.Tensor,
                       bn_dones: torch.Tensor,
-                      bn_mu_probs: torch.Tensor):
+                      bn_mu_probs: torch.Tensor) -> torch.Tensor:
         """
         Args:
             next_n_terminations: [batch, n]

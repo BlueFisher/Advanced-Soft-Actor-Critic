@@ -2,10 +2,11 @@ import io
 
 import matplotlib.pyplot as plt
 import PIL.Image
+import torch
 from torchvision.transforms import ToTensor
 
 
-def plot_attn_weight(attn_weight):
+def plot_attn_weight(attn_weight) -> torch.Tensor:
     """
     Args:
         attn_weight: [query_length, key_length]

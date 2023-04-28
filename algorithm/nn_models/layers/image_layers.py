@@ -11,7 +11,7 @@ def conv1d_output_size(
         kernel_size: int = 1,
         stride: int = 1,
         padding: int = 0,
-        dilation: int = 1):
+        dilation: int = 1) -> int:
 
     from math import floor
 
@@ -72,7 +72,7 @@ def convtranspose_output_shape(
     padding: int = 0,
     output_padding: int = 0,
     dilation: int = 1
-):
+) -> Tuple[int, int]:
     """
     https://pytorch.org/docs/stable/generated/torch.nn.ConvTranspose2d.html#torch.nn.ConvTranspose2d
     """
@@ -86,7 +86,7 @@ def convtranspose_output_shape(
     return h, w
 
 
-def default_conv1d(l, channels):
+def default_conv1d(l, channels) -> Tuple[nn.Module, int, int]:
     conv_1_l = conv1d_output_size(l, 8, 4)
     conv_2_l = conv1d_output_size(conv_1_l, 4, 2)
 
@@ -136,7 +136,7 @@ class Conv1dLayers(nn.Module):
             raise Exception('The dimension of input should be greater than or equal to 3')
 
 
-def small_visual(height, width, channels):
+def small_visual(height, width, channels) -> Tuple[nn.Module, int, int]:
     conv_1_hw = conv2d_output_shape((height, width), 3, 1)
     conv_2_hw = conv2d_output_shape(conv_1_hw, 3, 1)
 
@@ -148,7 +148,7 @@ def small_visual(height, width, channels):
     ), conv_2_hw, 144
 
 
-def simple_visual(height, width, channels):
+def simple_visual(height, width, channels) -> Tuple[nn.Module, int, int]:
     conv_1_hw = conv2d_output_shape((height, width), 8, 4)
     conv_2_hw = conv2d_output_shape(conv_1_hw, 4, 2)
 
@@ -160,7 +160,7 @@ def simple_visual(height, width, channels):
     ), conv_2_hw, 32
 
 
-def nature_visual(height, width, channels):
+def nature_visual(height, width, channels) -> Tuple[nn.Module, int, int]:
     conv_1_hw = conv2d_output_shape((height, width), 8, 4)
     conv_2_hw = conv2d_output_shape(conv_1_hw, 4, 2)
     conv_3_hw = conv2d_output_shape(conv_2_hw, 3, 1)

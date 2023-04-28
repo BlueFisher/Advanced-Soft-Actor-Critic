@@ -1,6 +1,7 @@
 import logging
 import math
 from pathlib import Path
+from typing import Dict, Tuple
 
 import numpy as np
 
@@ -18,7 +19,7 @@ class DataStorage:
 
         self._data_key_is_image = {}
 
-    def add(self, data: dict):
+    def add(self, data: dict) -> np.ndarray:
         """
         args: list
             The first dimension of each element is the length of an episode
@@ -59,7 +60,7 @@ class DataStorage:
     def update(self, ids, key, data):
         self._buffer[key][ids % self.capacity] = data
 
-    def get(self, ids):
+    def get(self, ids) -> Dict[str, np.ndarray]:
         """
         Get data from buffer without verifying whether ids in buffer
         """
@@ -75,16 +76,16 @@ class DataStorage:
 
         return data
 
-    def get_ids(self, ids):
+    def get_ids(self, ids) -> np.ndarray:
         """
         Get true data ids
         """
         return self._buffer['_id'][ids % self.capacity]
 
-    def save(self, path: Path):
+    def save(self, path: Path) -> None:
         np.savez(path, **self._buffer, p_size=self._size, p_id=self._id)
 
-    def load(self, path: Path):
+    def load(self, path: Path) -> None:
         if not path.exists():
             return
 
@@ -98,7 +99,7 @@ class DataStorage:
             if k not in ('p_size', 'p_id'):
                 self._buffer[k] = v
 
-    def copy(self, src):
+    def copy(self, src) -> None:
         src: DataStorage = src
 
         if self._size == 0:
@@ -112,17 +113,17 @@ class DataStorage:
         self._size = src._size
         self._id = src._id
 
-    def clear(self):
+    def clear(self) -> None:
         self._size = 0
         self._id = 0
         self._buffer = None
 
     @property
-    def size(self):
+    def size(self) -> int:
         return self._size
 
     @property
-    def is_full(self):
+    def is_full(self) -> bool:
         return self._size == self.capacity
 
 
@@ -150,10 +151,10 @@ class SumTree:
                     size: capacity - 1                       size: capacity
         """
 
-    def add(self, data_idx, p):
+    def add(self, data_idx, p) -> None:
         self.update(data_idx, p)  # update tree_frame
 
-    def update(self, data_idx, p):
+    def update(self, data_idx, p) -> None:
         tree_idx = self.data_idx_to_leaf_idx(data_idx)
         self._tree[tree_idx] = p
 
@@ -166,7 +167,12 @@ class SumTree:
 
             tree_idx = parent_idx
 
-    def sample(self, batch_size):
+    def sample(self, batch_size) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Returns:
+            leaf_idx: The index of leaves of the whole sum tree
+            p: The value of the leaf_idx
+        """
         pri_seg = self.total_p / batch_size       # priority segment
         pri_seg_low = np.arange(batch_size)
         pri_seg_high = pri_seg_low + 1
@@ -183,10 +189,10 @@ class SumTree:
 
         return leaf_idx, self._tree[leaf_idx]
 
-    def data_idx_to_leaf_idx(self, data_idx):
+    def data_idx_to_leaf_idx(self, data_idx) -> np.ndarray:
         return data_idx + self.capacity - 1
 
-    def leaf_idx_to_data_idx(self, leaf_idx):
+    def leaf_idx_to_data_idx(self, leaf_idx) -> np.ndarray:
         return leaf_idx - self.capacity + 1
 
     def clear(self):
@@ -241,7 +247,7 @@ class PrioritizedReplayBuffer:
 
         self._lock = ReadWriteLock(None, 1, 1, True, self._logger)
 
-    def add(self, transitions: dict, ignore_size=0):
+    def add(self, transitions: Dict[str, np.ndarray], ignore_size=0) -> None:
         with self._lock.write():
             if self._trans_storage.size == 0:
                 max_p = self.td_error_max
@@ -257,7 +263,9 @@ class PrioritizedReplayBuffer:
                 probs[-ignore_size:] = 0
             self._sum_tree.add(data_pointers, probs)
 
-    def add_with_td_error(self, td_error, transitions: dict, ignore_size=0):
+    def add_with_td_error(self, td_error: np.ndarray,
+                          transitions: Dict[str, np.ndarray],
+                          ignore_size=0) -> None:
         td_error = np.asarray(td_error)
         td_error = td_error.flatten()
 
@@ -276,7 +284,7 @@ class PrioritizedReplayBuffer:
                 probs[-ignore_size:] = 0
             self._sum_tree.add(data_pointers, probs)
 
-    def sample(self):
+    def sample(self) -> Tuple[np.ndarray, Dict[str, np.ndarray], np.ndarray]:
         """
         Returns:
             data index: [batch, ]
@@ -299,18 +307,18 @@ class PrioritizedReplayBuffer:
 
             return data_ids, transitions, np.expand_dims(is_weights, axis=1)
 
-    def get_storage_data(self, data_ids):
+    def get_storage_data(self, data_ids) -> Dict[str, np.ndarray]:
         """
         Get data without verifying whether data_ids exist
         """
         with self._lock.read():
             return self._trans_storage.get(data_ids)
 
-    def get_storage_data_ids(self, data_ids):
+    def get_storage_data_ids(self, data_ids) -> np.ndarray:
         with self._lock.read():
             return self._trans_storage.get_ids(data_ids)
 
-    def update(self, data_ids, td_error):
+    def update(self, data_ids, td_error) -> None:
         with self._lock.write():
             td_error = np.asarray(td_error)
             td_error = td_error.flatten()
@@ -324,11 +332,11 @@ class PrioritizedReplayBuffer:
 
             self._sum_tree.update(data_ids % self.capacity, probs)
 
-    def update_transitions(self, data_ids, key, data):
+    def update_transitions(self, data_ids, key, data) -> None:
         with self._lock.write():
             self._trans_storage.update(data_ids, key, data)
 
-    def save(self, save_dir: Path, ckpt: int):
+    def save(self, save_dir: Path, ckpt: int) -> None:
         # for p in p.glob('*-rb_tree.npy'):
         #     p.unlink()
         # for p in p.glob('*-rb_storage.npz'):
@@ -336,31 +344,31 @@ class PrioritizedReplayBuffer:
         self._sum_tree.save(save_dir.joinpath(f'{ckpt}-rb_tree.npy'))
         self._trans_storage.save(save_dir.joinpath(f'{ckpt}-rb_storage.npz'))
 
-    def load(self, save_dir: Path, ckpt: int):
+    def load(self, save_dir: Path, ckpt: int) -> None:
         self._sum_tree.load(save_dir.joinpath(f'{ckpt}-rb_tree.npy'))
         self._trans_storage.load(save_dir.joinpath(f'{ckpt}-rb_storage.npz'))
 
-    def clear(self):
+    def clear(self) -> None:
         self._trans_storage.clear()
         self._sum_tree.clear()
 
-    def copy(self, src):
+    def copy(self, src) -> None:
         with self._lock.write(), src._lock.write():
             self._trans_storage.copy(src._trans_storage)
             self._sum_tree.copy(src._sum_tree)
 
     @property
-    def is_full(self):
+    def is_full(self) -> bool:
         with self._lock.read():
             return self._trans_storage.is_full
 
     @property
-    def size(self):
+    def size(self) -> int:
         with self._lock.read():
             return self._trans_storage.size
 
     @property
-    def is_lg_batch_size(self):
+    def is_lg_batch_size(self) -> bool:
         with self._lock.read():
             return self._trans_storage.size > self.batch_size
 

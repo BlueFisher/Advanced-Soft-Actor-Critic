@@ -151,7 +151,7 @@ class DMControlWrapper:
         obs_list = [np.zeros([self.n_envs, *s], dtype=np.float32) for s in self.observation_shapes]
         reward = np.zeros(self.n_envs, dtype=np.float32)
         done = np.zeros(self.n_envs, dtype=bool)
-        max_step = np.full(self.n_envs, False)
+        max_step = np.zeros(self.n_envs, dtype=bool)
 
         action = c_action
 
@@ -196,7 +196,7 @@ class DMControlWrapper:
                 for j in range(len(obs_list)):
                     obs_list[j][i] = tmp_obs_list[j]
 
-        return {'gym': obs_list}, {'gym': reward}, {'gym': done}, {'gym': max_step}
+        return {'gym': obs_list}, {'gym': reward}, {'gym': done}, {'gym': max_step}, {'gym': np.zeros_like(max_step)}
 
     def close(self):
         if self._seq_envs:

@@ -56,3 +56,25 @@ attn:
     test1:
       sac_config:
         nn: nn_attn
+
+dilated_attn:
+  sac_config:
+    burn_in_step: 3
+    seq_encoder: DILATED_ATTN
+
+    batch_size: 10
+  
+  nn_config:
+    rep:
+      pe: nope
+
+  oc_config:
+    option_burn_in_step: 3
+
+  ma_config:
+    test0:
+      sac_config:
+        nn: nn_dilated_attn
+    test1:
+      sac_config:
+        nn: nn_dilated_attn
