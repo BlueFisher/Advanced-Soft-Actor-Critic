@@ -6,7 +6,7 @@ import os
 import random
 import uuid
 from collections import defaultdict
-from typing import List
+from typing import Dict, List, Tuple
 
 import numpy as np
 from mlagents_envs.environment import (ActionTuple, DecisionSteps,
@@ -109,11 +109,14 @@ class UnityWrapperProcess:
         self.engine_configuration_channel.set_configuration_parameters(
             width=200 if train_mode else 1280,
             height=200 if train_mode else 720,
-            quality_level=5,
+            quality_level=2,
+            # 0: URP-Performant-Renderer
+            # 1: URP-Balanced-Renderer
+            # 2: URP-HighFidelity-Renderer
             time_scale=time_scale)
 
         self._env.reset()
-        self.behavior_names = list(self._env.behavior_specs)
+        self.behavior_names: List[str] = list(self._env.behavior_specs)
 
         self.ma_n_agents = {n: 0 for n in self.behavior_names}
         for n in self.behavior_names:
@@ -145,21 +148,33 @@ class UnityWrapperProcess:
             discrete action sizes: list[int], list of all action branches
             continuous action size: int
         """
-        self.ma_obs_names = {}
-        self.ma_obs_shapes = {}
-        self.ma_d_action_sizes = {}
-        self.ma_c_action_size = {}
+        self.ma_obs_names: Dict[str, List[str]] = {}
+        self.ma_padding_index: Dict[str, int] = {}
+        self.ma_obs_shapes: Dict[str, Tuple[int, ...]] = {}
+        self.ma_d_action_sizes: Dict[str, List[int]] = {}
+        self.ma_c_action_size: Dict[str, int] = {}
 
-        self.ma_unity_obs_shapes = {}
-        self.ma_unity_d_action_sizes = {}
-        self.ma_unity_c_action_size = {}
+        self.ma_unity_obs_shapes: Dict[str, Tuple[int, ...]] = {}
+        self.ma_unity_d_action_sizes: Dict[str, List[int]] = {}
+        self.ma_unity_c_action_size: Dict[str, int] = {}
 
         for n in self.behavior_names:
             behavior_spec = self._env.behavior_specs[n]
             obs_names = [o.name for o in behavior_spec.observation_specs]
+            if '_Padding' in obs_names:
+                self.ma_padding_index[n] = obs_names.index('_Padding')
+                self._logger.info(f'{n} Padding index: {self.ma_padding_index[n]}')
+                del obs_names[self.ma_padding_index[n]]
+            else:
+                self.ma_padding_index[n] = -1
             self._logger.info(f'{n} Observation names: {obs_names}')
             self.ma_obs_names[n] = obs_names
+
             obs_shapes = [o.shape for o in behavior_spec.observation_specs]
+            self.ma_unity_obs_shapes[n] = obs_shapes.copy()
+
+            if self.ma_padding_index[n] != -1:
+                del obs_shapes[self.ma_padding_index[n]]
             self._logger.info(f'{n} Observation shapes: {obs_shapes}')
             self.ma_obs_shapes[n] = obs_shapes
 
@@ -178,9 +193,8 @@ class UnityWrapperProcess:
             self.ma_d_action_sizes[n] = discrete_action_sizes  # list[int]
             self.ma_c_action_size[n] = continuous_action_size  # int
 
-            self.ma_unity_obs_shapes[n] = self.ma_obs_shapes[n]
-            self.ma_unity_d_action_sizes[n] = self.ma_d_action_sizes[n]
-            self.ma_unity_c_action_size[n] = self.ma_c_action_size[n]
+            self.ma_unity_d_action_sizes[n] = discrete_action_sizes
+            self.ma_unity_c_action_size[n] = continuous_action_size
 
             if self.group_aggregation:
                 decision_steps, terminal_steps = self._env.get_steps(n)
@@ -204,7 +218,11 @@ class UnityWrapperProcess:
 
         self._logger.info('Initialized')
 
-        return self.ma_obs_names, self.ma_obs_shapes, self.ma_d_action_sizes, self.ma_c_action_size, self.ma_n_agents
+        return (self.ma_obs_names,
+                self.ma_obs_shapes,
+                self.ma_d_action_sizes,
+                self.ma_c_action_size,
+                self.ma_n_agents)
 
     def reset(self, reset_config=None):
         """
@@ -217,12 +235,12 @@ class UnityWrapperProcess:
 
         self._env.reset()
 
-        self._ma_agents_ids = {}
-        self._ma_agent_id_to_index = {}
+        self._ma_agents_ids: Dict[str, np.ndarray] = {}
+        self._ma_agent_id_to_index: Dict[int, int] = {}
 
-        self._ma_group_ids = {}
-        self._ma_u_group_ids = {}
-        self._ma_u_group_id_counts = {}
+        self._ma_group_ids: Dict[str, np.ndarray] = {}
+        self._ma_u_group_ids: Dict[str, np.ndarray] = {}
+        self._ma_u_group_id_counts: Dict[str, np.ndarray] = {}
 
         ma_obs_list = {}
         for n in self.behavior_names:
@@ -233,6 +251,9 @@ class UnityWrapperProcess:
                 for a_idx, a_id in enumerate(decision_steps.agent_id)
             }
             ma_obs_list[n] = [obs.astype(np.float32) for obs in decision_steps.obs]
+
+            if self.ma_padding_index[n] != -1:
+                del ma_obs_list[n][self.ma_padding_index[n]]
 
             if self.group_aggregation:
                 self._ma_group_ids[n] = decision_steps.group_id
@@ -260,6 +281,7 @@ class UnityWrapperProcess:
             reward: (NAgents, )
             done: (NAgents, ), bool
             max_step: (NAgents, ), bool
+            padding_mask: (NAgents, ), bool
         """
 
         if self.group_aggregation:
@@ -284,10 +306,11 @@ class UnityWrapperProcess:
 
                     ma_c_action[n] = unity_c_action
 
-        ma_obs_list = {}
-        ma_reward = {}
-        ma_done = {}
-        ma_max_step = {}
+        ma_obs_list: Dict[str, List[np.ndarray]] = {}
+        ma_reward: Dict[str, List[np.ndarray]] = {}
+        ma_done: Dict[str, List[np.ndarray]] = {}
+        ma_max_step: Dict[str, List[np.ndarray]] = {}
+        ma_padding_mask: Dict[str, List[np.ndarray]] = {}
 
         for n in self.behavior_names:
             agents_len = len(self._ma_agents_ids[n])
@@ -295,6 +318,7 @@ class UnityWrapperProcess:
             ma_reward[n] = np.zeros(agents_len, dtype=np.float32)
             ma_done[n] = np.zeros(len(self._ma_agents_ids[n]), dtype=bool)
             ma_max_step[n] = np.zeros(len(self._ma_agents_ids[n]), dtype=bool)
+            ma_padding_mask[n] = np.zeros(len(self._ma_agents_ids[n]), dtype=bool)
 
         visited_ma_agent_ids = {n: set() for n in self.behavior_names}
         ma_decision_steps_len = {n: 0 for n in self.behavior_names}
@@ -375,6 +399,13 @@ class UnityWrapperProcess:
 
                     visited_ma_agent_ids[n].add(agent_id)
 
+        for n in self.behavior_names:
+            if self.ma_padding_index[n] != -1:
+                mask = ma_obs_list[n][self.ma_padding_index[n]][:, 0] == 1
+                ma_padding_mask[n][mask] = True
+
+                del ma_obs_list[n][self.ma_padding_index[n]]
+
         if self.group_aggregation:
             for n in self.behavior_names:
                 group_ids = self._ma_group_ids[n]
@@ -405,7 +436,7 @@ class UnityWrapperProcess:
                 ma_done[n] = aggr_done
                 ma_max_step[n] = aggr_max_step
 
-        return ma_obs_list, ma_reward, ma_done, ma_max_step
+        return ma_obs_list, ma_reward, ma_done, ma_max_step, ma_padding_mask
 
     def close(self):
         self._env.close()
@@ -575,11 +606,13 @@ class UnityWrapper:
             reward: dict[str, (NAgents, )]
             done: dict[str, (NAgents, )], bool
             max_step: dict[str, (NAgents, )], bool
+            ma_padding_mask: dict[str, (NAgents, )], bool
         """
         ma_envs_obs_list = {n: [] for n in self.behavior_names}
         ma_envs_reward = {n: [] for n in self.behavior_names}
         ma_envs_done = {n: [] for n in self.behavior_names}
         ma_envs_max_step = {n: [] for n in self.behavior_names}
+        ma_envs_padding_mask = {n: [] for n in self.behavior_names}
 
         for i in range(self.env_length):
             tmp_ma_d_actions = {}
@@ -599,13 +632,15 @@ class UnityWrapper:
                 (ma_obs_list,
                  ma_reward,
                  ma_done,
-                 ma_max_step) = self._envs[i].step(tmp_ma_d_actions, tmp_ma_c_actions)
+                 ma_max_step,
+                 ma_padding_mask) = self._envs[i].step(tmp_ma_d_actions, tmp_ma_c_actions)
 
                 for n in self.behavior_names:
                     ma_envs_obs_list[n].append(ma_obs_list[n])
                     ma_envs_reward[n].append(ma_reward[n])
                     ma_envs_done[n].append(ma_done[n])
                     ma_envs_max_step[n].append(ma_max_step[n])
+                    ma_envs_padding_mask[n].append(ma_padding_mask[n])
             else:
                 self._conns[i].send((STEP, (tmp_ma_d_actions, tmp_ma_c_actions)))
 
@@ -617,13 +652,15 @@ class UnityWrapper:
                     (ma_obs_list,
                      ma_reward,
                      ma_done,
-                     ma_max_step) = conn.recv()
+                     ma_max_step,
+                     ma_padding_mask) = conn.recv()
 
                     for n in self.behavior_names:
                         ma_envs_obs_list[n].append(ma_obs_list[n])
                         ma_envs_reward[n].append(ma_reward[n])
                         ma_envs_done[n].append(ma_done[n])
                         ma_envs_max_step[n].append(ma_max_step[n])
+                        ma_envs_padding_mask[n].append(ma_padding_mask[n])
                 except:
                     self._conns[i] = None
                     succeeded = False
@@ -637,8 +674,9 @@ class UnityWrapper:
         ma_reward = {n: np.concatenate(ma_envs_reward[n]) for n in self.behavior_names}
         ma_done = {n: np.concatenate(ma_envs_done[n]) for n in self.behavior_names}
         ma_max_step = {n: np.concatenate(ma_envs_max_step[n]) for n in self.behavior_names}
+        ma_padding_mask = {n: np.concatenate(ma_envs_padding_mask[n]) for n in self.behavior_names}
 
-        return ma_obs_list, ma_reward, ma_done, ma_max_step
+        return ma_obs_list, ma_reward, ma_done, ma_max_step, ma_padding_mask
 
     def close(self):
         if self._seq_envs:
@@ -687,6 +725,6 @@ if __name__ == "__main__":
             ma_d_action[n] = d_action
             ma_c_action[n] = c_action
 
-            ma_obs_list, ma_reward, ma_done, ma_max_step = env.step(ma_d_action, ma_c_action)
+            ma_obs_list, ma_reward, ma_done, ma_max_step, ma_padding_mask = env.step(ma_d_action, ma_c_action)
 
     env.close()

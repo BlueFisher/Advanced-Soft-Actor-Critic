@@ -3,7 +3,7 @@ import math
 from collections import defaultdict
 from itertools import chain
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -17,7 +17,7 @@ from .replay_buffer import PrioritizedReplayBuffer
 from .utils import *
 
 
-class SAC_Base(object):
+class SAC_Base:
     def __init__(self,
                  obs_names: List[str],
                  obs_shapes: List[Tuple[int]],
@@ -212,14 +212,6 @@ class SAC_Base(object):
             self.summary_writer = SummaryWriter(str(summary_path))
             self.summary_available = True
 
-        if self.train_mode:
-            if self.use_replay_buffer:
-                replay_config = {} if replay_config is None else replay_config
-                self.replay_buffer = PrioritizedReplayBuffer(batch_size=batch_size, **replay_config)
-            else:
-                self.batch_buffer = BatchBuffer(self.burn_in_step,
-                                                self.n_step,
-                                                self.batch_size)
         if ma_name is None:
             self._logger = logging.getLogger('sac.base')
         else:
@@ -227,10 +219,21 @@ class SAC_Base(object):
 
         self._profiler = UnifiedElapsedTimer(self._logger)
 
+        self._init_replay_buffer(replay_config)
         self._build_model(nn, nn_config, init_log_alpha, learning_rate)
         self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
 
-    def _build_model(self, nn, nn_config: Optional[dict], init_log_alpha: float, learning_rate: float):
+    def _init_replay_buffer(self, replay_config: Optional[dict] = None) -> None:
+        if self.train_mode:
+            if self.use_replay_buffer:
+                replay_config = {} if replay_config is None else replay_config
+                self.replay_buffer = PrioritizedReplayBuffer(batch_size=self.batch_size, **replay_config)
+            else:
+                self.batch_buffer = BatchBuffer(self.burn_in_step,
+                                                self.n_step,
+                                                self.batch_size)
+
+    def _build_model(self, nn, nn_config: Optional[dict], init_log_alpha: float, learning_rate: float) -> None:
         """
         Initialize variables, network models and optimizers
         """
@@ -446,7 +449,7 @@ class SAC_Base(object):
                 param.requires_grad = False
             self.optimizer_rnd = adam_optimizer(self.model_rnd.parameters())
 
-    def _init_or_restore(self, last_ckpt: int):
+    def _init_or_restore(self, last_ckpt: int) -> None:
         """
         Initialize network weights from scratch or restore from model_abs_dir
         """
@@ -566,7 +569,7 @@ class SAC_Base(object):
                 self._logger.info('Initializing from scratch')
                 self._update_target_variables()
 
-    def save_model(self, save_replay_buffer=False):
+    def save_model(self, save_replay_buffer=False) -> None:
         if self.ckpt_dir:
             global_step = self.get_global_step()
             ckpt_path = self.ckpt_dir.joinpath(f'{global_step}.pth')
@@ -580,7 +583,7 @@ class SAC_Base(object):
             if self.use_replay_buffer and save_replay_buffer:
                 self.replay_buffer.save(self.ckpt_dir, global_step)
 
-    def write_constant_summaries(self, constant_summaries, iteration=None):
+    def write_constant_summaries(self, constant_summaries, iteration=None) -> None:
         """
         Write constant information from sac_main.py, such as reward, iteration, etc.
         """
@@ -591,15 +594,15 @@ class SAC_Base(object):
 
         self.summary_writer.flush()
 
-    def _increase_global_step(self):
+    def _increase_global_step(self) -> int:
         self.global_step.add_(1)
 
         return self.global_step.item()
 
-    def get_global_step(self):
+    def get_global_step(self) -> int:
         return self.global_step.item()
 
-    def get_initial_action(self, batch_size):
+    def get_initial_action(self, batch_size) -> np.ndarray:
         if self.d_action_sizes:
             d_actions = [np.random.randint(0, d_action_size, size=batch_size)
                          for d_action_size in self.d_action_sizes]
@@ -613,7 +616,7 @@ class SAC_Base(object):
 
         return np.concatenate([d_action, c_action], axis=-1)
 
-    def get_initial_seq_hidden_state(self, batch_size, get_numpy=True):
+    def get_initial_seq_hidden_state(self, batch_size, get_numpy=True) -> Union[np.ndarray, torch.Tensor]:
         assert self.seq_encoder is not None
 
         if get_numpy:
@@ -622,7 +625,7 @@ class SAC_Base(object):
             return torch.zeros([batch_size, *self.seq_hidden_state_shape], device=self.device)
 
     @torch.no_grad()
-    def _update_target_variables(self, tau=1.):
+    def _update_target_variables(self, tau=1.) -> None:
         """
         Soft (momentum) update target networks (default hard)
         """
@@ -643,7 +646,7 @@ class SAC_Base(object):
             )
 
     @torch.no_grad()
-    def _udpate_normalizer(self, obs_list: List[torch.Tensor]):
+    def _udpate_normalizer(self, obs_list: List[torch.Tensor]) -> None:
         self.normalizer_step.add_(obs_list[0].shape[0])
 
         input_to_old_means = [obs_list[i] - self.running_means[i] for i in range(len(obs_list))]
@@ -661,7 +664,7 @@ class SAC_Base(object):
 
     @torch.no_grad()
     def rnd_sample_d_action(self, state: torch.Tensor,
-                            d_policy: distributions.Categorical):
+                            d_policy: distributions.Categorical) -> torch.Tensor:
         """
         Sample action `self.rnd_n_sample` times, 
         choose the action that has the max (model_rnd(s, a) - model_target_rnd(s, a))**2
@@ -697,7 +700,7 @@ class SAC_Base(object):
 
     @torch.no_grad()
     def rnd_sample_c_action(self, state: torch.Tensor,
-                            c_policy: distributions.Normal):
+                            c_policy: distributions.Normal) -> torch.Tensor:
         """
         Sample action `self.rnd_n_sample` times, 
         choose the action that has the max (model_rnd(s, a) - model_target_rnd(s, a))**2
@@ -726,7 +729,7 @@ class SAC_Base(object):
         return c_actions[torch.arange(batch), c_idx]
 
     @torch.no_grad()
-    def _random_action(self, d_action, c_action):
+    def _random_action(self, d_action, c_action) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.action_noise is None:
             return d_action, c_action
 
@@ -754,7 +757,7 @@ class SAC_Base(object):
                        obs_list: List[torch.Tensor],
                        state: torch.Tensor,
                        disable_sample: bool = False,
-                       force_rnd_if_available: bool = False):
+                       force_rnd_if_available: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             state: [batch, state_size]
@@ -819,7 +822,7 @@ class SAC_Base(object):
     def choose_action(self,
                       obs_list: List[np.ndarray],
                       disable_sample: bool = False,
-                      force_rnd_if_available: bool = False):
+                      force_rnd_if_available: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         """
         Args:
             obs_list (np): list([batch, *obs_shapes_i], ...)
@@ -840,7 +843,9 @@ class SAC_Base(object):
                           pre_action: np.ndarray,
                           rnn_state: np.ndarray,
                           disable_sample: bool = False,
-                          force_rnd_if_available: bool = False):
+                          force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
+                                                                         np.ndarray,
+                                                                         np.ndarray]:
         """
         Args:
             obs_list (np): list([batch, *obs_shapes_i], ...)
@@ -871,17 +876,17 @@ class SAC_Base(object):
     @torch.no_grad()
     def choose_attn_action(self,
                            ep_indexes: np.ndarray,
-                           ep_padding_masks: np.ndarray,
                            ep_obses_list: List[np.ndarray],
                            ep_pre_actions: np.ndarray,
                            ep_attn_states: np.ndarray,
 
                            disable_sample: bool = False,
-                           force_rnd_if_available: bool = False):
+                           force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
+                                                                          np.ndarray,
+                                                                          np.ndarray]:
         """
         Args:
             ep_indexes (np.int32): [batch, episode_len]
-            ep_padding_masks (np.bool): [batch, episode_len]
             ep_obses_list (np): list([batch, episode_len, *obs_shapes_i], ...)
             ep_pre_actions (np): [batch, episode_len, action_size]
             ep_attn_states (np): [batch, episode_len, *seq_hidden_state_shape]
@@ -892,7 +897,6 @@ class SAC_Base(object):
             attn_state (np): [batch, *attn_state_shape]
         """
         ep_indexes = torch.from_numpy(ep_indexes).to(self.device)
-        ep_padding_masks = torch.from_numpy(ep_padding_masks).to(self.device)
         ep_obses_list = [torch.from_numpy(obs).to(self.device) for obs in ep_obses_list]
         ep_pre_actions = torch.from_numpy(ep_pre_actions).to(self.device)
         ep_attn_states = torch.from_numpy(ep_attn_states).to(self.device)
@@ -901,8 +905,7 @@ class SAC_Base(object):
                                                    ep_obses_list, ep_pre_actions,
                                                    query_length=1,
                                                    hidden_state=ep_attn_states,
-                                                   is_prev_hidden_state=False,
-                                                   padding_mask=ep_padding_masks)
+                                                   is_prev_hidden_state=False)
         # state: [batch, 1, state_size]
         # next_attn_state: [batch, 1, *attn_state_shape]
 
@@ -918,13 +921,46 @@ class SAC_Base(object):
                 prob.detach().cpu().numpy(),
                 next_attn_state.detach().cpu().numpy())
 
+    def get_m_data(self,
+                   bn_indexes: torch.Tensor,
+                   bn_padding_masks: torch.Tensor,
+                   bn_obses_list: List[torch.Tensor],
+                   bn_actions: torch.Tensor,
+                   next_obs_list: torch.Tensor) -> Tuple[torch.Tensor,
+                                                         torch.Tensor,
+                                                         List[torch.Tensor],
+                                                         torch.Tensor]:
+        """
+        Args:
+            bn_indexes (torch.int32): [batch, b + n]
+            bn_padding_masks (torch.bool): [batch, b + n]
+            bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
+            bn_actions: [batch, b + n, action_size]
+            next_obs_list: list([batch, *obs_shapes_i], ...)
+
+        Returns:
+            m_indexes: [batch, b + n + 1]
+            m_padding_masks: [batch, b + n + 1]
+            m_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
+            m_pre_actions: [batch, b + n + 1, action_size]
+        """
+
+        m_indexes = torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1)
+        m_padding_masks = torch.concat([bn_padding_masks,
+                                        torch.zeros_like(bn_padding_masks[:, -1:], dtype=torch.bool)], dim=1)
+        m_obses_list = [torch.cat([bn_obses, next_obs.unsqueeze(1)], dim=1)
+                        for bn_obses, next_obs in zip(bn_obses_list, next_obs_list)]
+        m_pre_actions = gen_pre_n_actions(bn_actions, keep_last_action=True)
+
+        return m_indexes, m_padding_masks, m_obses_list, m_pre_actions
+
     def get_l_states(self,
                      l_indexes: torch.Tensor,
                      l_padding_masks: torch.Tensor,
                      l_obses_list: List[torch.Tensor],
                      l_pre_actions: Optional[torch.Tensor] = None,
                      f_seq_hidden_states: Optional[torch.Tensor] = None,
-                     is_target=False):
+                     is_target=False) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             l_indexes: [batch, l]
@@ -966,12 +1002,15 @@ class SAC_Base(object):
 
                 return l_states, l_attn_states  # [batch, l, state_size], [batch, l, attn_state_size]
 
-    def get_l_states_with_seq_hidden_states(self,
-                                            l_indexes: torch.Tensor,
-                                            l_padding_masks: torch.Tensor,
-                                            l_obses_list: List[torch.Tensor],
-                                            l_pre_actions: Optional[torch.Tensor] = None,
-                                            f_seq_hidden_states: Optional[torch.Tensor] = None):
+    def get_l_states_with_seq_hidden_states(
+        self,
+        l_indexes: torch.Tensor,
+        l_padding_masks: torch.Tensor,
+        l_obses_list: List[torch.Tensor],
+        l_pre_actions: Optional[torch.Tensor] = None,
+        f_seq_hidden_states: Optional[torch.Tensor] = None
+    ) -> Tuple[torch.Tensor,
+               Optional[torch.Tensor]]:
         """
         Args:
             l_indexes (torch.int32): [batch, l]
@@ -1012,21 +1051,18 @@ class SAC_Base(object):
             return l_states, next_l_rnn_states
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN:
-            l_states, l_attn_states, _ = self.model_rep(l_indexes,
-                                                        l_obses_list,
-                                                        l_pre_actions,
-                                                        query_length=l_indexes.shape[1],
-                                                        hidden_state=f_seq_hidden_states,
-                                                        is_prev_hidden_state=True,
-                                                        padding_mask=l_padding_masks)
-
-            return l_states, l_attn_states
+            return self.get_l_states(l_indexes=l_indexes,
+                                     l_padding_masks=l_padding_masks,
+                                     l_obses_list=l_obses_list,
+                                     l_pre_actions=l_pre_actions,
+                                     f_seq_hidden_states=f_seq_hidden_states,
+                                     is_target=False)
 
     @torch.no_grad()
     def get_l_probs(self,
                     l_obses_list: List[torch.Tensor],
                     l_states: torch.Tensor,
-                    l_actions: torch.Tensor):
+                    l_actions: torch.Tensor) -> torch.Tensor:
         """
         Args:
             l_obses_list: list([batch, l, *obs_shapes_i], ...)
@@ -1054,42 +1090,12 @@ class SAC_Base(object):
 
         return probs  # [batch, l, action_size]
 
-    def get_m_data(self,
-                   bn_indexes: torch.Tensor,
-                   bn_padding_masks: torch.Tensor,
-                   bn_obses_list: List[torch.Tensor],
-                   bn_actions: torch.Tensor,
-                   next_obs_list: torch.Tensor):
-        """
-        Args:
-            bn_indexes (torch.int32): [batch, b + n]
-            bn_padding_masks (torch.bool): [batch, b + n]
-            bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
-            bn_actions: [batch, b + n, action_size]
-            next_obs_list: list([batch, *obs_shapes_i], ...)
-
-        Returns:
-            m_indexes: [batch, b + n + 1]
-            m_padding_masks: [batch, b + n + 1]
-            m_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
-            m_pre_actions: [batch, b + n + 1, action_size]
-        """
-
-        m_indexes = torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1)
-        m_padding_masks = torch.concat([bn_padding_masks,
-                                        torch.zeros_like(bn_padding_masks[:, -1:], dtype=torch.bool)], dim=1)
-        m_obses_list = [torch.cat([bn_obses, next_obs.unsqueeze(1)], dim=1)
-                        for bn_obses, next_obs in zip(bn_obses_list, next_obs_list)]
-        m_pre_actions = gen_pre_n_actions(bn_actions, keep_last_action=True)
-
-        return m_indexes, m_padding_masks, m_obses_list, m_pre_actions
-
     @torch.no_grad()
     def get_dqn_like_d_y(self,
                          n_rewards: torch.Tensor,
                          n_dones: torch.Tensor,
                          stacked_next_n_d_qs: torch.Tensor,
-                         stacked_next_target_n_d_qs: torch.Tensor):
+                         stacked_next_target_n_d_qs: torch.Tensor) -> torch.Tensor:
         """
         Args:
             n_rewards: [batch, n]
@@ -1135,7 +1141,7 @@ class SAC_Base(object):
                  n_mu_probs: torch.Tensor,
                  n_pi_probs: torch.Tensor,
                  n_vs: torch.Tensor,
-                 next_n_vs: torch.Tensor):
+                 next_n_vs: torch.Tensor) -> torch.Tensor:
         """
         Args:
             n_rewards: [batch, n]
@@ -1185,7 +1191,8 @@ class SAC_Base(object):
                next_obs_list: List[torch.Tensor],
                next_state: torch.Tensor,
                n_dones: torch.Tensor,
-               n_mu_probs: torch.Tensor = None):
+               n_mu_probs: torch.Tensor = None) -> Tuple[Optional[torch.Tensor],
+                                                         Optional[torch.Tensor]]:
         """
         Args:
             n_obses_list: list([batch, n, *obs_shapes_i], ...)
@@ -1336,7 +1343,10 @@ class SAC_Base(object):
                      next_target_state: torch.Tensor,
                      bn_dones: torch.Tensor,
                      bn_mu_probs: torch.Tensor,
-                     priority_is: Optional[torch.Tensor] = None,):
+                     priority_is: Optional[torch.Tensor] = None,) -> Tuple[torch.Tensor,
+                                                                           Optional[torch.Tensor],
+                                                                           Optional[torch.Tensor],
+                                                                           Optional[torch.Tensor]]:
         """
         Args:
             bn_indexes (torch.int32): [batch, b + n],
@@ -1464,7 +1474,7 @@ class SAC_Base(object):
     def calculate_adaptive_weights(self,
                                    grads_main: List[torch.Tensor],
                                    loss_list: List[torch.Tensor],
-                                   model: nn.Module):
+                                   model: nn.Module) -> None:
 
         grads_aux_list = [autograd.grad(loss, model.parameters(),
                                         allow_unused=True,
@@ -1492,7 +1502,8 @@ class SAC_Base(object):
                                                bn_indexes: torch.Tensor,
                                                bn_padding_masks: torch.Tensor,
                                                bn_obses_list: List[torch.Tensor],
-                                               bn_actions: torch.Tensor):
+                                               bn_actions: torch.Tensor) -> Tuple[torch.Tensor,
+                                                                                  Optional[torch.Tensor]]:
         """
         Args:
             grads_rep_main list(torch.Tensor)
@@ -1653,7 +1664,7 @@ class SAC_Base(object):
                    m_states,
                    m_target_states,
                    bn_actions,
-                   bn_rewards):
+                   bn_rewards) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         bn_obses_list = [m_obs[:, :-1, ...] for m_obs in m_obses_list]
         bn_states = m_states[:, :-1, ...]
 
@@ -1693,7 +1704,8 @@ class SAC_Base(object):
                       obs_list: List[torch.Tensor],
                       state: torch.Tensor,
                       action: torch.Tensor,
-                      mu_d_policy_probs: torch.Tensor = None):
+                      mu_d_policy_probs: torch.Tensor = None) -> Tuple[Optional[torch.Tensor],
+                                                                       Optional[torch.Tensor]]:
         batch = state.shape[0]
 
         d_policy, c_policy = self.model_policy(state, obs_list)
@@ -1758,7 +1770,7 @@ class SAC_Base(object):
 
     def _train_alpha(self,
                      obs_list: torch.Tensor,
-                     state: torch.Tensor):
+                     state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         batch = state.shape[0]
 
         with torch.no_grad():
@@ -1792,7 +1804,7 @@ class SAC_Base(object):
 
         return d_alpha, c_alpha
 
-    def _train_curiosity(self, m_states: torch.Tensor, bn_actions: torch.Tensor):
+    def _train_curiosity(self, m_states: torch.Tensor, bn_actions: torch.Tensor) -> torch.Tensor:
         n_states = m_states[:, self.burn_in_step:-1, ...]
         next_n_states = m_states[:, self.burn_in_step + 1:, ...]
         n_actions = bn_actions[:, self.burn_in_step:, ...]
@@ -1813,7 +1825,7 @@ class SAC_Base(object):
 
         return loss_curiosity
 
-    def _train_rnd(self, bn_states: torch.Tensor, bn_actions: torch.Tensor):
+    def _train_rnd(self, bn_states: torch.Tensor, bn_actions: torch.Tensor) -> torch.Tensor:
         n_states = bn_states[:, self.burn_in_step:, ...]
         n_actions = bn_actions[:, self.burn_in_step:, ...]
         d_n_actions = n_actions[..., :self.d_action_summed_size]  # [batch, n, d_action_summed_size]
@@ -1857,7 +1869,7 @@ class SAC_Base(object):
                bn_dones: torch.Tensor,
                bn_mu_probs: torch.Tensor,
                f_seq_hidden_states: torch.Tensor = None,
-               priority_is: torch.Tensor = None):
+               priority_is: torch.Tensor = None) -> torch.Tensor:
         """
         Args:
             bn_indexes (torch.int32): [batch, b + n]
@@ -1870,6 +1882,9 @@ class SAC_Base(object):
             bn_mu_probs: [batch, b + n, action_size]
             f_seq_hidden_states: [batch, 1, *seq_hidden_state_shape]
             priority_is: [batch, 1]
+
+        Returns:
+            m_target_states: [batch, b + n + 1, state_size]
         """
 
         if self.global_step % self.update_target_per_step == 0:
@@ -2001,7 +2016,7 @@ class SAC_Base(object):
                       next_obs_list: List[torch.Tensor],
                       next_target_state: torch.Tensor,
                       bn_dones: torch.Tensor,
-                      bn_mu_probs: torch.Tensor):
+                      bn_mu_probs: torch.Tensor) -> torch.Tensor:
         """
         Args:
             bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
@@ -2058,18 +2073,16 @@ class SAC_Base(object):
 
     def get_episode_td_error(self,
                              l_indexes: np.ndarray,
-                             l_padding_masks: np.ndarray,
                              l_obses_list: List[np.ndarray],
                              l_actions: np.ndarray,
                              l_rewards: np.ndarray,
                              next_obs_list: List[np.ndarray],
                              l_dones: np.ndarray,
                              l_mu_probs: np.ndarray = None,
-                             l_seq_hidden_states: np.ndarray = None):
+                             l_seq_hidden_states: np.ndarray = None) -> torch.Tensor:
         """
         Args:
             l_indexes: [1, episode_len]
-            l_padding_masks: [1, episode_len]
             l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
             l_actions: [1, episode_len, action_size]
             l_rewards: [1, episode_len]
@@ -2095,7 +2108,6 @@ class SAC_Base(object):
          f_seq_hidden_states) = episode_to_batch(bn=self.burn_in_step + self.n_step,
                                                  episode_length=l_indexes.shape[1],
                                                  l_indexes=l_indexes,
-                                                 l_padding_masks=l_padding_masks,
                                                  l_obses_list=l_obses_list,
                                                  l_actions=l_actions,
                                                  l_rewards=l_rewards,
@@ -2169,9 +2181,9 @@ class SAC_Base(object):
                                    np.zeros(ignore_size, dtype=np.float32)])
         return td_error
 
-    def put_episode(self, **episode_trans):
+    def put_episode(self, **episode_trans) -> None:
         # Ignore episodes which length is too short
-        if episode_trans['l_indexes'].shape[1] < self.burn_in_step + self.n_step:
+        if episode_trans['l_indexes'].shape[1] < self.n_step:
             return
 
         if self.use_replay_buffer:
@@ -2182,18 +2194,16 @@ class SAC_Base(object):
     @unified_elapsed_timer('_fill_replay_buffer', 10)
     def _fill_replay_buffer(self,
                             l_indexes: np.ndarray,
-                            l_padding_masks: np.ndarray,
                             l_obses_list: List[np.ndarray],
                             l_actions: np.ndarray,
                             l_rewards: np.ndarray,
                             next_obs_list: List[np.ndarray],
                             l_dones: np.ndarray,
                             l_probs: List[np.ndarray],
-                            l_seq_hidden_states: Optional[np.ndarray] = None):
+                            l_seq_hidden_states: Optional[np.ndarray] = None) -> None:
         """
         Args:
             l_indexes (np.int32): [1, episode_len]
-            l_padding_masks (bool): [1, episode_len]
             l_obses_list (np): list([1, episode_len, *obs_shapes_i], ...)
             l_actions (np): [1, episode_len, action_size]
             l_rewards (np): [1, episode_len]
@@ -2204,7 +2214,6 @@ class SAC_Base(object):
         """
         # Reshape [1, episode_len, ...] to [episode_len, ...]
         index = l_indexes.squeeze(0)
-        padding_mask = l_padding_masks.squeeze(0)
         obs_list = [l_obses.squeeze(0) for l_obses in l_obses_list]
         if self.use_normalization:
             self._udpate_normalizer([torch.from_numpy(obs).to(self.device) for obs in obs_list])
@@ -2216,8 +2225,6 @@ class SAC_Base(object):
         # Padding next_obs for episode experience replay
         index = np.concatenate([index,
                                 index[-1:] + 1])
-        padding_mask = np.concatenate([padding_mask,
-                                       np.zeros([1], dtype=bool)])
         obs_list = [np.concatenate([obs, next_obs]) for obs, next_obs in zip(obs_list, next_obs_list)]
         action = np.concatenate([action,
                                  np.zeros([1, action.shape[-1]], dtype=np.float32)])
@@ -2230,7 +2237,6 @@ class SAC_Base(object):
 
         storage_data = {
             'index': index,
-            'padding_mask': padding_mask,
             **{f'obs_{name}': obs for name, obs in zip(self.obs_names, obs_list)},
             'action': action,
             'reward': reward,
@@ -2247,7 +2253,6 @@ class SAC_Base(object):
         # n_step transitions except the first one and the last obs_, n_step - 1 + 1
         if self.use_add_with_td:
             td_error = self.get_episode_td_error(l_indexes=l_indexes,
-                                                 l_padding_masks=l_padding_masks,
                                                  l_obses_list=l_obses_list,
                                                  l_actions=l_actions,
                                                  l_rewards=l_rewards,
@@ -2256,30 +2261,29 @@ class SAC_Base(object):
                                                  l_mu_probs=l_probs,
                                                  l_seq_hidden_states=l_seq_hidden_states if self.seq_encoder is not None else None)
             self.replay_buffer.add_with_td_error(td_error, storage_data,
-                                                 ignore_size=self.burn_in_step + self.n_step)
+                                                 ignore_size=self.n_step)
         else:
             self.replay_buffer.add(storage_data,
-                                   ignore_size=self.burn_in_step + self.n_step)
+                                   ignore_size=self.n_step)
 
-        if self.seq_encoder == SEQ_ENCODER.ATTN and self.summary_writer is not None and self.summary_available:
+        if self.seq_encoder == SEQ_ENCODER.ATTN \
+                and self.summary_writer is not None \
+                and self.summary_available:
             self.summary_available = False
             with torch.no_grad():
-                l_indexes = l_indexes[:, self.burn_in_step:]
-                l_obses_list = [o[:, self.burn_in_step:] for o in l_obses_list]
-                l_pre_l_actions = gen_pre_n_actions(l_actions[:, self.burn_in_step:])
-                l_padding_masks = l_padding_masks[:, self.burn_in_step:]
+                pre_l_actions = gen_pre_n_actions(l_actions)
                 *_, attn_weights_list = self.model_rep(torch.from_numpy(l_indexes).to(self.device),
                                                        [torch.from_numpy(o).to(self.device) for o in l_obses_list],
-                                                       torch.from_numpy(l_pre_l_actions).to(self.device),
-                                                       query_length=l_indexes.shape[1],
-                                                       padding_mask=torch.from_numpy(l_padding_masks).to(self.device))
+                                                       torch.from_numpy(pre_l_actions).to(self.device),
+                                                       query_length=l_indexes.shape[1])
 
                 for i, attn_weight in enumerate(attn_weights_list):
                     image = plot_attn_weight(attn_weight[0].cpu().numpy())
                     self.summary_writer.add_images(f'attn_weight/{i}', image, self.global_step)
 
     @unified_elapsed_timer('_sample_from_replay_buffer', 10)
-    def _sample_from_replay_buffer(self):
+    def _sample_from_replay_buffer(self) -> Tuple[np.ndarray,
+                                                  Tuple[Union[np.ndarray, List[np.ndarray]], ...]]:
         """
         Sample from replay buffer
 
@@ -2287,7 +2291,6 @@ class SAC_Base(object):
             pointers: [batch, ]
             (
                 bn_indexes (np.int32): [batch, b + n]
-                bn_padding_masks (bool): [batch, b + n]
                 bn_obses_list (np): list([batch, b + n, *obs_shapes_i], ...)
                 bn_actions (np): [batch, b + n, action_size]
                 bn_rewards (np): [batch, b + n]
@@ -2305,7 +2308,6 @@ class SAC_Base(object):
         """
         trans:
             index (np.int32): [batch, ]
-            padding_mask (bool): [batch, ]
             obs_i: [batch, *obs_shapes_i]
             action: [batch, action_size]
             reward: [batch, ]
@@ -2315,17 +2317,33 @@ class SAC_Base(object):
         """
         pointers, trans, priority_is = sampled
 
-        # Get n_step transitions
+        # Get burn_in_step + n_step transitions
         # TODO: could be faster, no need get all data
-        trans = {k: [v] for k, v in trans.items()}
-        # k: [v, v, ...]
-        for i in range(1, self.burn_in_step + self.n_step + 1):
-            t_trans = self.replay_buffer.get_storage_data(pointers + i).items()
-            for k, v in t_trans:
-                trans[k].append(v)
+        batch = {k: np.zeros((v.shape[0],
+                              self.burn_in_step + self.n_step + 1,
+                              *v.shape[1:]), dtype=v.dtype)
+                 for k, v in trans.items()}
+        batch['padding_mask'] = np.zeros((trans['index'].shape[0],
+                                          self.burn_in_step + self.n_step + 1), dtype=bool)
 
         for k, v in trans.items():
-            trans[k] = np.concatenate([np.expand_dims(t, 1) for t in v], axis=1)
+            batch[k][:, self.burn_in_step] = v
+
+        for i in range(1, self.n_step + 1):
+            t_trans = self.replay_buffer.get_storage_data(pointers + i)
+            for k, v in t_trans.items():
+                batch[k][:, self.burn_in_step + i] = v
+
+        for i in range(self.burn_in_step):
+            t_trans = self.replay_buffer.get_storage_data(pointers - i - 1)
+            t_trans['padding_mask'] = np.zeros((t_trans['index'].shape[0], ), dtype=bool)
+
+            mask = (trans['index'] - t_trans['index']) != i + 1
+            t_trans['index'][mask] = -1
+            t_trans['padding_mask'][mask] = True
+
+            for k, v in t_trans.items():
+                batch[k][:, self.burn_in_step - i - 1] = v
 
         """
         m_indexes (np.int32): [batch, N + 1]
@@ -2337,13 +2355,13 @@ class SAC_Base(object):
         m_mu_probs: [batch, N + 1, action_size]
         m_seq_hidden_state: [batch, N + 1, *seq_hidden_state_shape]
         """
-        m_indexes = trans['index']
-        m_padding_masks = trans['padding_mask']
-        m_obses_list = [trans[f'obs_{name}'] for name in self.obs_names]
-        m_actions = trans['action']
-        m_rewards = trans['reward']
-        m_dones = trans['done']
-        m_mu_probs = trans['mu_prob']
+        m_indexes = batch['index']
+        m_padding_masks = batch['padding_mask']
+        m_obses_list = [batch[f'obs_{name}'] for name in self.obs_names]
+        m_actions = batch['action']
+        m_rewards = batch['reward']
+        m_dones = batch['done']
+        m_mu_probs = batch['mu_prob']
 
         bn_indexes = m_indexes[:, :-1]
         bn_padding_masks = m_padding_masks[:, :-1]
@@ -2355,7 +2373,7 @@ class SAC_Base(object):
         bn_mu_probs = m_mu_probs[:, :-1]
 
         if self.seq_encoder is not None:
-            m_seq_hidden_states = trans['seq_hidden_state']
+            m_seq_hidden_states = batch['seq_hidden_state']
             bn_seq_hidden_states = m_seq_hidden_states[:, :-1, ...]
 
         return pointers, (bn_indexes,
@@ -2369,7 +2387,7 @@ class SAC_Base(object):
                           bn_seq_hidden_states if self.seq_encoder is not None else None,
                           priority_is if self.use_priority else None)
 
-    def train(self):
+    def train(self) -> int:
         step = self.get_global_step()
 
         if self.use_replay_buffer:
@@ -2411,7 +2429,7 @@ class SAC_Base(object):
             bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
             bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
             for i, bn_obses in enumerate(bn_obses_list):
-                # obs is image
+                # obs is image. It is much faster to convert uint8 to float32 in GPU
                 if bn_obses.dtype == torch.uint8:
                     bn_obses_list[i] = bn_obses.type(torch.float32) / 255.
             bn_actions = torch.from_numpy(bn_actions).to(self.device)

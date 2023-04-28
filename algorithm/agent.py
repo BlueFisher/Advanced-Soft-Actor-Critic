@@ -1,6 +1,6 @@
 from copy import deepcopy
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -10,19 +10,19 @@ from algorithm.utils.operators import gen_pre_n_actions
 
 
 class Agent:
-    reward = 0  # The reward of the first complete episode
+    reward = 0  # The reward of the *first* completed episode (done == True)
     _last_reward = 0  # The reward of the last episode
-    steps = 0  # The step count of the first complete episode
+    steps = 0  # The step count of the *first* completed episode
     _last_steps = 0  # The step count of the last episode
-    done = False  # If has one complete episode
+    done = False  # If has one completed episode
     max_reached = False
 
     def __init__(self,
                  agent_id: int,
-                 obs_shapes: List[Tuple],
+                 obs_shapes: List[Tuple[int, ...]],
                  d_action_sizes: List[int],
                  c_action_size: int,
-                 seq_hidden_state_shape=None,
+                 seq_hidden_state_shape: Optional[Tuple[int, ...]] = None,
                  max_return_episode_trans=-1):
         self.agent_id = agent_id
         self.obs_shapes = obs_shapes
@@ -34,10 +34,9 @@ class Agent:
 
         self._tmp_episode_trans = self._generate_empty_episode_trans()
 
-    def _generate_empty_episode_trans(self, episode_length: int = 0):
+    def _generate_empty_episode_trans(self, episode_length: int = 0) -> Dict[str, Union[np.ndarray, List[np.ndarray]]]:
         return {
             'index': -np.ones((episode_length, ), dtype=int),
-            'padding_mask': np.ones((episode_length, ), dtype=bool),  # `True` indicates ignored
             'obs_list': [np.zeros((episode_length, *s), dtype=np.float32) for s in self.obs_shapes],
             'action': np.zeros((episode_length, self.d_action_summed_size + self.c_action_size), dtype=np.float32),
             'reward': np.zeros((episode_length, ), dtype=np.float32),
@@ -56,8 +55,8 @@ class Agent:
                        max_reached: bool,
                        next_obs_list: List[np.ndarray],
                        prob: np.ndarray,
-                       is_padding: bool = False,
-                       seq_hidden_state: Optional[np.ndarray] = None):
+                       seq_hidden_state: Optional[np.ndarray] = None) -> Optional[Dict[str,
+                                                                                       Union[np.ndarray, List[np.ndarray]]]]:
         """
         Args:
             obs_list: List([*obs_shapes_i], ...)
@@ -67,12 +66,10 @@ class Agent:
             max_reached: bool
             next_obs_list: List([*obs_shapes_i], ...)
             prob: [action_size, ]
-            is_padding: bool
             seq_hidden_state: [*seq_hidden_state_shape]
 
         Returns:
             ep_indexes (np.int32): [1, episode_len], int
-            ep_padding_masks (np.bool): [1, episode_len]
             ep_obses_list: List([1, episode_len, *obs_shapes_i], ...)
             ep_actions: [1, episode_len, action_size]
             ep_rewards: [1, episode_len]
@@ -82,8 +79,7 @@ class Agent:
             ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
         expaned_transition = {
-            'index': np.expand_dims(self._last_steps if not is_padding else -1, 0),
-            'padding_mask': np.expand_dims(is_padding, 0).astype(bool),
+            'index': np.expand_dims(self._last_steps, 0),
 
             'obs_list': [np.expand_dims(o, 0).astype(np.float32) for o in obs_list],
             'action': np.expand_dims(action, 0).astype(np.float32),
@@ -110,10 +106,9 @@ class Agent:
         if not self.done:
             self.reward += reward
             self.steps += 1
-        self._last_reward += reward
 
-        if not is_padding:
-            self._last_steps += 1
+        self._last_reward += reward
+        self._last_steps += 1
 
         self._extra_log(obs_list,
                         action,
@@ -136,8 +131,8 @@ class Agent:
             return episode_trans
 
     @property
-    def episode_length(self):
-        return len(self._tmp_episode_trans['obs_list'][0])
+    def episode_length(self) -> int:
+        return len(self._tmp_episode_trans['index'])
 
     def _extra_log(self,
                    obs_list,
@@ -146,14 +141,13 @@ class Agent:
                    local_done,
                    max_reached,
                    next_obs_list,
-                   prob):
+                   prob) -> None:
         pass
 
-    def get_episode_trans(self, force_length: int = None):
+    def get_episode_trans(self, force_length: int = None) -> Dict[str, Union[np.ndarray, List[np.ndarray]]]:
         """
         Returns:
             ep_indexes (np.int32): [1, episode_len]
-            ep_padding_masks (np.bool): [1, episode_len]
             ep_obses_list: List([1, episode_len, *obs_shapes_i], ...)
             ep_actions: [1, episode_len, action_size]
             ep_rewards: [1, episode_len]
@@ -186,8 +180,6 @@ class Agent:
 
         ep_indexes = np.expand_dims(tmp['index'], 0)
         # [1, episode_len]
-        ep_padding_masks = np.expand_dims(tmp['padding_mask'], 0)
-        # [1, episode_len]
         ep_obses_list = [np.expand_dims(o, 0) for o in tmp['obs_list']]
         # List([1, episode_len, *obs_shape_si], ...)
         ep_actions = np.expand_dims(tmp['action'], 0)  # [1, episode_len, action_size]
@@ -203,7 +195,6 @@ class Agent:
 
         return {
             'l_indexes': ep_indexes,
-            'l_padding_masks': ep_padding_masks,
             'l_obses_list': ep_obses_list,
             'l_actions': ep_actions,
             'l_rewards': ep_rewards,
@@ -213,17 +204,19 @@ class Agent:
             'l_seq_hidden_states': ep_seq_hidden_states
         }
 
-    def is_empty(self):
+    def is_empty(self) -> bool:
         return self.episode_length == 0
 
-    def clear(self):
+    def clear(self) -> None:
         self.reward = 0
         self.steps = 0
         self.done = False
         self.max_reached = False
+        self._last_reward = 0
+        self._last_steps = 0
         self._tmp_episode_trans = self._generate_empty_episode_trans()
 
-    def reset(self):
+    def reset(self) -> None:
         """
         The agent may continue in a new iteration but save its last status
         """
@@ -253,24 +246,24 @@ class AgentManager:
 
         self._data = {}
 
-    def __getitem__(self, k):
+    def __getitem__(self, k: str):
         return self._data[k]
 
-    def __setitem__(self, k, v):
+    def __setitem__(self, k: str, v):
         self._data[k] = v
 
-    def set_config(self, config):
+    def set_config(self, config) -> None:
         self.config = deepcopy(config)
 
-    def set_model_abs_dir(self, model_abs_dir: Path):
+    def set_model_abs_dir(self, model_abs_dir: Path) -> None:
         model_abs_dir.mkdir(parents=True, exist_ok=True)
         self.model_abs_dir = model_abs_dir
 
-    def set_rl(self, rl: SAC_Base):
+    def set_rl(self, rl: SAC_Base) -> None:
         self.rl = rl
         self.seq_encoder = rl.seq_encoder
 
-    def pre_run(self, num_agents: int):
+    def pre_run(self, num_agents: int) -> None:
         if self.rl is not None:
             self['initial_pre_action'] = self.rl.get_initial_action(num_agents)  # [n_envs, action_size]
             self['pre_action'] = self['initial_pre_action']
@@ -288,9 +281,14 @@ class AgentManager:
             for i in range(num_agents)
         ]
 
+    # Reset
+    def set_obs_list(self, obs_list):
+        self['obs_list'] = obs_list
+        self['padding_mask'] = np.zeros(len(self.agents), dtype=bool)
+
     def get_action(self,
                    disable_sample: bool = False,
-                   force_rnd_if_available: bool = False):
+                   force_rnd_if_available: bool = False) -> None:
         if self.seq_encoder == SEQ_ENCODER.RNN:
             action, prob, next_seq_hidden_state = self.rl.choose_rnn_action(
                 obs_list=self['obs_list'],
@@ -305,7 +303,6 @@ class AgentManager:
 
             all_episode_trans = [a.get_episode_trans(ep_length).values() for a in self.agents]
             (all_ep_indexes,
-             all_ep_padding_masks,
              all_ep_obses_list,
              all_ep_actions,
              all_all_ep_rewards,
@@ -315,22 +312,17 @@ class AgentManager:
              all_ep_attn_states) = zip(*all_episode_trans)
 
             ep_indexes = np.concatenate(all_ep_indexes)
-            ep_padding_masks = np.concatenate(all_ep_padding_masks)
             ep_obses_list = [np.concatenate(o) for o in zip(*all_ep_obses_list)]
             ep_actions = np.concatenate(all_ep_actions)
             ep_attn_states = np.concatenate(all_ep_attn_states)
 
             ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
-            ep_padding_masks = np.concatenate([ep_padding_masks,
-                                               np.zeros_like(ep_padding_masks[:, -1:], dtype=bool)], axis=1)
-            # `False` indicates not ignored
             ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
                              for o, t_o in zip(ep_obses_list, self['obs_list'])]
             ep_pre_actions = gen_pre_n_actions(ep_actions, True)
 
             action, prob, next_seq_hidden_state = self.rl.choose_attn_action(
                 ep_indexes=ep_indexes,
-                ep_padding_masks=ep_padding_masks,
                 ep_obses_list=ep_obses_list,
                 ep_pre_actions=ep_pre_actions,
                 ep_attn_states=ep_attn_states,
@@ -350,7 +342,7 @@ class AgentManager:
         self['prob'] = prob
         self['next_seq_hidden_state'] = next_seq_hidden_state
 
-    def get_test_action(self):
+    def get_test_action(self) -> None:
         action = np.zeros((len(self.agents), self.action_size), dtype=np.float32)
         d_action = c_action = None
 
@@ -373,31 +365,34 @@ class AgentManager:
         self['prob'] = np.random.rand(len(self.agents))
 
     def set_env_step(self,
-                     next_obs_list,
-                     reward,
-                     local_done,
-                     max_reached):
-        episode_trans_list = [
-            a.add_transition(
-                obs_list=[o[i] for o in self['obs_list']],
-                action=self['action'][i],
-                reward=reward[i],
-                local_done=local_done[i],
-                max_reached=max_reached[i],
-                next_obs_list=[o[i] for o in next_obs_list],
-                prob=self['prob'][i],
-                is_padding=False,
-                seq_hidden_state=self['seq_hidden_state'][i] if self.seq_encoder is not None else None,
-            ) for i, a in enumerate(self.agents)
-        ]
+                     next_obs_list: List[np.ndarray],
+                     reward: np.ndarray,
+                     local_done: np.ndarray,
+                     max_reached: np.ndarray) -> None:
+        episode_trans_list = []
 
-        self['episode_trans_list'] = [t for t in episode_trans_list if t is not None]
+        for i, a in enumerate(self.agents):
+            if not self['padding_mask'][i]:
+                episode_trans = a.add_transition(
+                    obs_list=[o[i] for o in self['obs_list']],
+                    action=self['action'][i],
+                    reward=reward[i],
+                    local_done=local_done[i],
+                    max_reached=max_reached[i],
+                    next_obs_list=[o[i] for o in next_obs_list],
+                    prob=self['prob'][i],
+                    seq_hidden_state=self['seq_hidden_state'][i] if self.seq_encoder is not None else None,
+                )
+                if episode_trans is not None:
+                    episode_trans_list.append(episode_trans)
 
-    def train(self):
+        self['episode_trans_list'] = episode_trans_list
+
+    def train(self) -> int:
         trained_steps = 0
 
         if len(self['episode_trans_list']) != 0:
-            # ep_indexes, ep_padding_masks,
+            # ep_indexes,
             # ep_obses_list, ep_actions, ep_rewards, next_obs_list, ep_dones, ep_probs,
             # ep_seq_hidden_states
             for episode_trans in self['episode_trans_list']:
@@ -407,8 +402,9 @@ class AgentManager:
 
         return trained_steps
 
-    def post_step(self, next_obs_list, local_done):
+    def post_step(self, next_obs_list, local_done, next_padding_mask) -> None:
         self['obs_list'] = next_obs_list
+        self['padding_mask'] = next_padding_mask
         self['pre_action'] = self['action']
         self['pre_action'][local_done] = self['initial_pre_action'][local_done]
         if self.seq_encoder is not None:
@@ -442,52 +438,36 @@ class MultiAgentsManager:
     def __getitem__(self, k) -> AgentManager:
         return self._ma_manager[k]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._ma_manager)
 
-    def pre_run(self, ma_num_agents):
+    def pre_run(self, ma_num_agents) -> None:
         for n, mgr in self:
             mgr.pre_run(ma_num_agents[n])
 
-    def is_max_reached(self):
+    def is_max_reached(self) -> bool:
         return any([any([a.max_reached for a in mgr.agents]) for n, mgr in self])
 
-    def is_done(self):
+    def is_done(self) -> bool:
         return all([all([a.done for a in mgr.agents]) for n, mgr in self])
 
-    def set_obs_list(self, ma_obs_list):
+    def set_obs_list(self, ma_obs_list) -> None:
         for n, mgr in self:
-            mgr['obs_list'] = ma_obs_list[n]
+            mgr.set_obs_list(ma_obs_list[n])
 
-    def clear(self):
+    def clear(self) -> None:
         for n, mgr in self:
             for a in mgr.agents:
                 a.clear()
 
-    def reset(self):
+    def reset(self) -> None:
         for n, mgr in self:
             for a in mgr.agents:
                 a.reset()
 
-    def burn_in_padding(self):
-        for n, mgr in self:
-            for a in [a for a in mgr.agents if a.is_empty()]:
-                for _ in range(mgr.rl.burn_in_step):
-                    a.add_transition(
-                        obs_list=[np.zeros(t, dtype=np.float32) for t in mgr.obs_shapes],
-                        action=mgr['initial_pre_action'][0],
-                        reward=0.,
-                        local_done=False,
-                        max_reached=False,
-                        next_obs_list=[np.zeros(t, dtype=np.float32) for t in mgr.obs_shapes],
-                        prob=np.zeros((a.d_action_summed_size + a.c_action_size, )),
-                        is_padding=True,
-                        seq_hidden_state=mgr['initial_seq_hidden_state'][0]
-                    )
-
     def get_ma_action(self,
                       disable_sample: bool = False,
-                      force_rnd_if_available: bool = False):
+                      force_rnd_if_available: bool = False) -> Tuple[Dict[str, np.ndarray]]:
         for n, mgr in self:
             mgr.get_action(disable_sample, force_rnd_if_available)
 
@@ -496,7 +476,7 @@ class MultiAgentsManager:
 
         return ma_d_action, ma_c_action
 
-    def get_test_ma_action(self):
+    def get_test_ma_action(self) -> Tuple[Dict[str, np.ndarray]]:
         for n, mgr in self:
             mgr.get_test_action()
 
@@ -509,73 +489,23 @@ class MultiAgentsManager:
                         ma_next_obs_list,
                         ma_reward,
                         ma_local_done,
-                        ma_max_reached):
+                        ma_max_reached) -> None:
         for n, mgr in self:
             mgr.set_env_step(ma_next_obs_list[n],
                              ma_reward[n],
                              ma_local_done[n],
                              ma_max_reached[n])
 
-    def train(self, trained_steps: int):
+    def train(self, trained_steps: int) -> int:
         for n, mgr in self:
             trained_steps = max(mgr.train(), trained_steps)
 
         return trained_steps
 
-    def post_step(self, ma_next_obs_list, ma_local_done):
+    def post_step(self, ma_next_obs_list, ma_local_done, ma_next_padding_mask) -> None:
         for n, mgr in self:
-            mgr.post_step(ma_next_obs_list[n], ma_local_done[n])
+            mgr.post_step(ma_next_obs_list[n], ma_local_done[n], ma_next_padding_mask[n])
 
-    def save_model(self, save_replay_buffer=False):
+    def save_model(self, save_replay_buffer=False) -> None:
         for n, mgr in self:
             mgr.rl.save_model(save_replay_buffer)
-
-
-if __name__ == "__main__":
-    obs_shapes = [(4,), (4, 4, 3)]
-    action_size = 2
-    rnn_state_size = 6
-    agent = Agent(0, obs_shapes, action_size, rnn_state_size)
-
-    def print_episode_trans(episode_trans):
-        for e in episode_trans:
-            if isinstance(e, list):
-                print([o.shape for o in e])
-            elif e is not None:
-                print(e.shape)
-            else:
-                print('None')
-
-    rnn_state = np.random.randn(rnn_state_size)
-    for i in range(10):
-        a = agent.add_transition([np.random.randn(*s) for s in obs_shapes],
-                                 np.random.randn(action_size), 1., False, False,
-                                 [np.random.randn(*s) for s in obs_shapes],
-                                 2.,
-                                 rnn_state=rnn_state)
-
-    # episode_trans = agent.add_transition([np.random.randn(*s) for s in obs_shapes],
-    #                                      np.random.randn(action_size), 1, True, False,
-    #                                      [np.random.randn(*s) for s in obs_shapes],
-    #                                      2.,
-    #                                      rnn_state=rnn_state)
-    episode_trans = agent.get_episode_trans(20)
-
-    for i in range(3):
-        a = agent.add_transition([np.random.randn(*s) for s in obs_shapes],
-                                 np.random.randn(action_size), 1., False, False,
-                                 [np.random.randn(*s) for s in obs_shapes],
-                                 2.,
-                                 rnn_state=rnn_state)
-
-    episode_trans = agent.get_episode_trans(20)
-    print_episode_trans(episode_trans)
-    print(agent.episode_length)
-    for i in range(3):
-        a = agent.add_transition([np.random.randn(*s) for s in obs_shapes],
-                                 np.random.randn(action_size), 1., False, False,
-                                 [np.random.randn(*s) for s in obs_shapes],
-                                 2.,
-                                 rnn_state=rnn_state)
-
-    print(agent.episode_length)

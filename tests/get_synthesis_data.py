@@ -55,7 +55,6 @@ def gen_batch_obs_for_attn(obs_shapes, d_action_sizes, c_action_size, seq_hidden
 
     return {
         'ep_indexes': np.expand_dims(np.arange(episode_len), 0).repeat(batch, 0),
-        'ep_padding_masks': np.random.randint(0, 2, size=(batch, episode_len), dtype=bool),
         'ep_obses_list': [np.random.randn(batch, episode_len, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
         'ep_pre_actions': get_action(batch, episode_len, d_action_sizes, c_action_size),
         'ep_attn_states': np.random.randn(batch, episode_len, *seq_hidden_state_shape).astype(np.float32)
@@ -90,7 +89,6 @@ def gen_batch_oc_obs_for_attn(obs_shapes, d_action_sizes, c_action_size,
 
     return {
         'ep_indexes': np.expand_dims(np.arange(episode_len), 0).repeat(batch, 0),
-        'ep_padding_masks': np.random.randint(0, 2, size=(batch, episode_len), dtype=bool),
         'ep_obses_list': [np.random.randn(batch, episode_len, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
         'ep_pre_actions': get_action(batch, episode_len, d_action_sizes, c_action_size),
         'ep_attn_states': np.random.randn(batch, episode_len, *seq_hidden_state_shape).astype(np.float32),
@@ -106,7 +104,6 @@ def gen_episode_trans(obs_shapes, d_action_sizes, c_action_size, seq_hidden_stat
 
     vanilla_episode_trans = {
         'l_indexes': np.expand_dims(np.arange(episode_len), 0),
-        'l_padding_masks': np.random.randint(0, 2, size=(1, episode_len), dtype=bool),
         'l_obses_list': [np.random.randn(1, episode_len, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
         'l_actions': get_action(1, episode_len, d_action_sizes, c_action_size),
         'l_rewards': np.random.randn(1, episode_len).astype(np.float32),

@@ -100,7 +100,7 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
                       key_length: int,
                       query_length: int,
                       key_padding_mask=None,
-                      device='cpu'):
+                      device='cpu') -> torch.Tensor:
         """
         Args:
             key_length: int

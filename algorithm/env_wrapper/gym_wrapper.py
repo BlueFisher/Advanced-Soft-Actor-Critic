@@ -61,7 +61,7 @@ class GymWrapper:
 
         obs, reward, done, max_step, info = self.env.step(action)
 
-        return {'gym': [obs]}, {'gym': reward}, {'gym': done}, {'gym': max_step}
+        return {'gym': [obs]}, {'gym': reward}, {'gym': done}, {'gym': max_step}, {'gym': np.zeros_like(done)}
 
     def close(self):
         self.env.close()

@@ -1,5 +1,5 @@
 import math
-from typing import List
+from typing import List, Union
 
 import numpy as np
 
@@ -20,17 +20,15 @@ class BatchBuffer:
 
     def put_episode(self,
                     l_indexes: np.ndarray,
-                    l_padding_masks: np.ndarray,
                     l_obses_list: List[np.ndarray],
                     l_actions: np.ndarray,
                     l_rewards: np.ndarray,
                     next_obs_list: List[np.ndarray],
                     l_dones: np.ndarray,
                     l_probs: List[np.ndarray],
-                    l_seq_hidden_states: np.ndarray = None):
+                    l_seq_hidden_states: np.ndarray = None) -> None:
         """
         bn_indexes: [episode_len - bn + 1, bn]
-        bn_padding_masks: [episode_len - bn + 1, bn]
         bn_obses_list: list([episode_len - bn + 1, bn, *obs_shapes_i], ...)
         bn_actions: [episode_len - bn + 1, bn, action_size]
         bn_rewards: [episode_len - bn + 1, bn]
@@ -44,7 +42,6 @@ class BatchBuffer:
         ori_batch = episode_to_batch(self.burn_in_step + self.n_step,
                                      l_indexes.shape[1],
                                      l_indexes,
-                                     l_padding_masks,
                                      l_obses_list,
                                      l_actions,
                                      l_rewards,
@@ -71,5 +68,5 @@ class BatchBuffer:
             else:
                 self._batch_list.append(batch)
 
-    def get_batch(self):
+    def get_batch(self) -> List[Union[np.ndarray, List[np.ndarray]]]:
         return self._batch_list

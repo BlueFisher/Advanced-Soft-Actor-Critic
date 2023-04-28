@@ -59,6 +59,9 @@ class TestWrapper:
         }, {
             'test0': [False] * self.n_envs,
             'test1': [False] * self.n_envs
+        }, {
+            'test0': [False] * self.n_envs,
+            'test1': [False] * self.n_envs
         })
 
     def close(self):

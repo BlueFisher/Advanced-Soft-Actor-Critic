@@ -19,7 +19,7 @@ def episode_to_batch(bn: int,
                      l_dones: np.ndarray,
                      l_probs: Optional[np.ndarray] = None,
                      l_seq_hidden_states: Optional[np.ndarray] = None,
-                     l_low_seq_hidden_states: np.ndarray = None):
+                     l_low_seq_hidden_states: np.ndarray = None) -> List[Union[np.ndarray, List[np.ndarray]]]:
     """
     Args:
         bn: int, burn_in_step + n_step
@@ -109,7 +109,7 @@ class BatchBuffer(BatchBuffer):
                     l_dones: np.ndarray,
                     l_probs: List[np.ndarray],
                     l_seq_hidden_states: np.ndarray = None,
-                    l_low_seq_hidden_states: np.ndarray = None):
+                    l_low_seq_hidden_states: np.ndarray = None) -> None:
         """
         Args:
             l_indexes: [1, episode_len]
