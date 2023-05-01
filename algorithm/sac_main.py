@@ -260,8 +260,10 @@ class Main:
                                                     ma_max_reached)
 
                     if self.train_mode:
-                        with self._profiler('train', repeat=10):
-                            trained_steps = self.ma_manager.train(trained_steps)
+                        with self._profiler('train', repeat=10) as profiler:
+                            next_trained_steps = self.ma_manager.train(trained_steps)
+                            if next_trained_steps == trained_steps:
+                                profiler.ignore()
 
                     with self._profiler('post_step', repeat=10):
                         self.ma_manager.post_step(ma_next_obs_list,

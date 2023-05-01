@@ -7,7 +7,7 @@ default:
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
       no_graphics: false
 
-    n_envs: 10
+    n_envs: 50
     max_step: 300000
     reset_on_iteration: false
 
@@ -21,5 +21,5 @@ default:
     save_model_per_step: 10000 # Save model every N steps
 
     n_step: 3
-    burn_in_step: 10
+    burn_in_step: 20
     seq_encoder: RNN

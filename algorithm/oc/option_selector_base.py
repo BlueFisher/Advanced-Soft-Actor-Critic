@@ -140,6 +140,12 @@ class OptionSelectorBase(SAC_Base):
                          action_noise,
                          replay_config)
 
+    def _set_logger(self):
+        if self.ma_name is None:
+            self._logger = logging.getLogger('option_selector')
+        else:
+            self._logger = logging.getLogger(f'option_selector.{self.ma_name}')
+
     def _build_model(self, nn, nn_config: Optional[dict], init_log_alpha: float, learning_rate: float) -> None:
         """
         Initialize variables, network models and optimizers
@@ -245,14 +251,6 @@ class OptionSelectorBase(SAC_Base):
 
         self.state_size = state_size
         self._logger.info(f'State size: {state_size}')
-
-        self._train_time = elapsed_timer(self._logger, '_train', repeat=50)
-        self._post_train_time = elapsed_timer(self._logger, '_post_train', repeat=50)
-
-        self._get_l_states_with_seq_hidden_states_time = elapsed_timer(self._logger, '_get_l_states_with_seq_hidden_states_time', repeat=50)
-        self._get_l_low_states_with_seq_hidden_states_time = elapsed_timer(self._logger, '_get_l_low_states_with_seq_hidden_states_time', repeat=50)
-        self._get_l_probs_time = elapsed_timer(self._logger, '_get_l_probs_time', repeat=50)
-        self._get_td_error_time = elapsed_timer(self._logger, '_get_td_error_time', repeat=50)
 
         if len(list(self.model_rep.parameters())) > 0:
             self.optimizer_rep = adam_optimizer(self.model_rep.parameters())
@@ -945,15 +943,15 @@ class OptionSelectorBase(SAC_Base):
 
         return l_low_obses_list
 
-    def get_l_low_states_with_seq_hidden_states(self,
-                                                l_indexes: torch.Tensor,
-                                                l_padding_masks: torch.Tensor,
-                                                l_low_obses_list: List[torch.Tensor],
-                                                l_option_indexes: torch.Tensor,
-                                                l_pre_actions: torch.Tensor,
-                                                f_low_seq_hidden_states: torch.Tensor = None,
-                                                is_target=False) -> Tuple[torch.Tensor,
-                                                                          torch.Tensor]:
+    def get_l_low_states(self,
+                         l_indexes: torch.Tensor,
+                         l_padding_masks: torch.Tensor,
+                         l_low_obses_list: List[torch.Tensor],
+                         l_option_indexes: torch.Tensor,
+                         l_pre_actions: torch.Tensor,
+                         f_low_seq_hidden_states: torch.Tensor = None,
+                         is_target=False) -> Tuple[torch.Tensor,
+                                                   torch.Tensor]:
         """
         Args:
             l_indexes (torch.int32): [batch, l]
@@ -966,58 +964,85 @@ class OptionSelectorBase(SAC_Base):
 
         Returns:
             l_low_states: [batch, l, low_state_size]
+            next_l_low_rnn_states (optional): [batch, 1, *low_seq_hidden_state_shape]
+            next_l_low_attn_states (optional): [batch, l, *low_seq_hidden_state_shape]
+        """
+
+        l_low_states = None
+        next_f_or_l_low_seq_hidden_states = None
+
+        for i, option in enumerate(self.option_list):
+            mask = (l_option_indexes == i)
+            if not torch.any(mask):
+                continue
+
+            o_l_states, o_next_f_or_l_low_seq_hidden_states = option.get_l_states(
+                l_indexes=l_indexes,
+                l_padding_masks=l_padding_masks,
+                l_obses_list=l_low_obses_list, 
+                l_pre_actions=l_pre_actions,
+                f_seq_hidden_states=f_low_seq_hidden_states,
+                is_target=is_target
+            )
+
+            if l_low_states is None:
+                l_low_states = o_l_states
+            else:
+                l_low_states[mask] = o_l_states[mask]
+
+            if next_f_or_l_low_seq_hidden_states is None:
+                next_f_or_l_low_seq_hidden_states = o_next_f_or_l_low_seq_hidden_states
+            else:
+                next_f_or_l_low_seq_hidden_states[mask] = o_next_f_or_l_low_seq_hidden_states[mask]
+
+        return l_low_states, next_f_or_l_low_seq_hidden_states
+
+    def get_l_low_states_with_seq_hidden_states(self,
+                                                l_indexes: torch.Tensor,
+                                                l_padding_masks: torch.Tensor,
+                                                l_low_obses_list: List[torch.Tensor],
+                                                l_option_indexes: torch.Tensor,
+                                                l_pre_actions: torch.Tensor,
+                                                f_low_seq_hidden_states: torch.Tensor = None) -> Tuple[torch.Tensor,
+                                                                                                       torch.Tensor]:
+        """
+        Args:
+            l_indexes (torch.int32): [batch, l]
+            l_padding_masks (torch.bool): [batch, l]
+            l_low_obses_list: list([batch, l, *low_obs_shapes_i], ...)
+            l_option_indexes (torch.int64): [batch, l]
+            l_pre_actions: [batch, l, action_size]
+            f_low_seq_hidden_states: [batch, 1, *low_seq_hidden_state_shape]
+
+        Returns:
+            l_low_states: [batch, l, low_state_size]
             next_l_low_seq_hidden_states: [batch, l, *low_seq_hidden_state_shape]
         """
-        batch, l, *_ = l_indexes.shape
-
         l_low_states = None
         next_l_low_seq_hidden_states = None
 
-        for t in range(l):
-            f_indexes = l_indexes[:, t:t + 1]
-            f_padding_masks = l_padding_masks[:, t:t + 1]
-            f_low_obses_list = [l_obses[:, t:t + 1, ...] for l_obses in l_low_obses_list]  # list([batch, 1, *obs_shapes_i])
-            f_pre_actions = l_pre_actions[:, t:t + 1, ...]  # [batch, 1, action_size]
-            option_index = l_option_indexes[:, t]  # [batch, ]
+        for i, option in enumerate(self.option_list):
+            mask = (l_option_indexes == i)
+            if not torch.any(mask):
+                continue
 
-            if self.seq_encoder is not None:
-                next_l_low_seq_hidden_states = torch.zeros((batch, l, *f_low_seq_hidden_states.shape[2:]), device=self.device)
+            o_l_states, o_next_l_low_seq_hidden_states = option.get_l_states_with_seq_hidden_states(
+                l_indexes=l_indexes,
+                l_padding_masks=l_padding_masks,
+                l_obses_list=l_low_obses_list,
+                l_pre_actions=l_pre_actions,
+                f_seq_hidden_states=f_low_seq_hidden_states
+            )
 
-            if t > 0 and self.seq_encoder is not None:
-                mask = l_option_indexes[:, t - 1] != option_index
-                f_low_seq_hidden_states[mask, 0] = self.get_initial_low_seq_hidden_state(batch, False)[mask]
+            if l_low_states is None:
+                l_low_states = o_l_states
+            else:
+                l_low_states[mask] = o_l_states[mask]
 
-            for i, option in enumerate(self.option_list):
-                mask = (option_index == i)
-                if not torch.any(mask):
-                    continue
-
-                o_f_indexes = f_indexes[mask]
-                o_f_padding_masks = f_padding_masks[mask]
-                o_f_obses_list = [f_low_obses[mask] for f_low_obses in f_low_obses_list]
-                if self.seq_encoder is not None:
-                    o_f_pre_actions = f_pre_actions[mask]
-                    o_f_low_seq_hidden_states = f_low_seq_hidden_states[mask]
-                else:
-                    o_f_pre_actions = None
-                    o_f_low_seq_hidden_states = None
-
-                o_f_states, o_tmp_f_low_seq_hidden_states = option.get_l_states(
-                    l_indexes=o_f_indexes,
-                    l_padding_masks=o_f_padding_masks,
-                    l_obses_list=o_f_obses_list,
-                    l_pre_actions=o_f_pre_actions,
-                    f_seq_hidden_states=o_f_low_seq_hidden_states,
-                    is_target=is_target
-                )
-
-                if l_low_states is None:
-                    l_low_states = torch.zeros((batch, l, *o_f_states.shape[2:]), device=self.device)
-                l_low_states[mask, t:t + 1] = o_f_states
-
-                if self.seq_encoder is not None:
-                    f_low_seq_hidden_states[mask] = o_tmp_f_low_seq_hidden_states
-                    next_l_low_seq_hidden_states[mask, t:t + 1] = o_tmp_f_low_seq_hidden_states
+            if next_l_low_seq_hidden_states is None:
+                next_l_low_seq_hidden_states = o_next_l_low_seq_hidden_states
+            else:
+                next_l_low_seq_hidden_states[mask] = o_next_l_low_seq_hidden_states[mask]
 
         return l_low_states, next_l_low_seq_hidden_states
 
@@ -1037,31 +1062,21 @@ class OptionSelectorBase(SAC_Base):
         Returns:
             l_low_probs: [batch, l, action_size]
         """
-        batch, l, *_ = l_low_states.shape
-
         l_low_probs = None
 
-        for t in range(l):
-            f_low_obses_list = [l_obses[:, t:t + 1, ...] for l_obses in l_low_obses_list]  # list([batch, 1, *obs_shapes_i])
-            f_low_states = l_low_states[:, t:t + 1, ...]  # [batch, 1, low_state_size]
-            f_actions = l_actions[:, t:t + 1, ...]  # [batch, 1, action_size]
-            option_index = l_option_indexes[:, t]  # [batch, ]
+        for i, option in enumerate(self.option_list):
+            mask = (l_option_indexes == i)
+            if not torch.any(mask):
+                continue
 
-            for i, option in enumerate(self.option_list):
-                mask = (option_index == i)
-                if not torch.any(mask):
-                    continue
+            o_l_probs = option.get_l_probs(l_obses_list=l_low_obses_list,
+                                           l_states=l_low_states,
+                                           l_actions=l_actions)
 
-                o_f_obses_list = [f_low_obses[mask] for f_low_obses in f_low_obses_list]
-                o_f_states = f_low_states[mask]
-                o_f_actions = f_actions[mask]
-
-                o_f_probs = option.get_l_probs(l_obses_list=o_f_obses_list,
-                                               l_states=o_f_states,
-                                               l_actions=o_f_actions)
-                if l_low_probs is None:
-                    l_low_probs = torch.zeros((batch, l, *o_f_probs.shape[2:]), device=self.device)
-                l_low_probs[mask, t:t + 1] = o_f_probs
+            if l_low_probs is None:
+                l_low_probs = o_l_probs
+            else:
+                l_low_probs[mask] = o_l_probs[mask]
 
         return l_low_probs
 
@@ -1240,7 +1255,7 @@ class OptionSelectorBase(SAC_Base):
                                              l_obses_list=_m_obses_list,
                                              l_pre_actions=_m_pre_actions,
                                              f_seq_hidden_states=_f_seq_hidden_states if self.seq_encoder is not None else None,
-                                             is_target=False)  # TODO
+                                             is_target=False)
 
             _m_target_states, _ = self.get_l_states(l_indexes=_m_indexes,
                                                     l_padding_masks=_m_padding_masks,
@@ -1259,7 +1274,7 @@ class OptionSelectorBase(SAC_Base):
                                                         option_index=_bn_options[:, -1])
             _m_option_indexes = torch.concat([_bn_options, _next_option.unsqueeze(1)], dim=1)
 
-            _om_low_states, _ = self.get_l_low_states_with_seq_hidden_states(
+            _om_low_states, _ = self.get_l_low_states(
                 l_indexes=_m_indexes[:, self.option_burn_in_from:],
                 l_padding_masks=_m_padding_masks[:, self.option_burn_in_from:],
                 l_low_obses_list=[_m_low_obses[:, self.option_burn_in_from:] for _m_low_obses in _m_low_obses_list],
@@ -1268,7 +1283,7 @@ class OptionSelectorBase(SAC_Base):
                 f_low_seq_hidden_states=_f_low_seq_hidden_states if self.seq_encoder is not None else None,
                 is_target=False)
 
-            _om_low_target_states, _ = self.get_l_low_states_with_seq_hidden_states(
+            _om_low_target_states, _ = self.get_l_low_states(
                 l_indexes=_m_indexes[:, self.option_burn_in_from:],
                 l_padding_masks=_m_padding_masks[:, self.option_burn_in_from:],
                 l_low_obses_list=[_m_low_target_obses[:, self.option_burn_in_from:] for _m_low_target_obses in _m_low_target_obses_list],
@@ -1680,7 +1695,6 @@ class OptionSelectorBase(SAC_Base):
         else:
             self.batch_buffer.put_episode(**episode_trans)
 
-    @unified_elapsed_timer('_fill_replay_buffer', 10)
     def _fill_replay_buffer(self,
                             l_indexes: np.ndarray,
                             l_obses_list: List[np.ndarray],
@@ -1759,7 +1773,8 @@ class OptionSelectorBase(SAC_Base):
             storage_data['low_seq_hidden_state'] = low_seq_hidden_state
 
         # n_step transitions except the first one and the last obs_, n_step - 1 + 1
-        if self.use_add_with_td:  # TODO
+        if self.use_add_with_td:
+            assert self.seq_encoder != SEQ_ENCODER.DILATED_ATTN
             td_error = self.get_episode_td_error(l_indexes=l_indexes,
                                                  l_obses_list=l_obses_list,
                                                  l_option_indexes=l_option_indexes,
@@ -1791,7 +1806,6 @@ class OptionSelectorBase(SAC_Base):
                     image = plot_attn_weight(attn_weight[0].cpu().numpy())
                     self.summary_writer.add_images(f'attn_weight/{i}', image, self.global_step)
 
-    @unified_elapsed_timer('_sample_from_replay_buffer', 10)
     def _sample_from_replay_buffer(self) -> Tuple[np.ndarray,
                                                   Tuple[Union[np.ndarray, List[np.ndarray]], ...],
                                                   Tuple[Union[np.ndarray, List[np.ndarray]], ...]]:
@@ -1948,19 +1962,24 @@ class OptionSelectorBase(SAC_Base):
                  priority_is if self.use_replay_buffer and self.use_priority else None),
                 key_batch)
 
-    def train(self) -> int:
+    @unified_elapsed_timer('train_all', 10)
+    def train(self, train_all_profiler) -> int:
         step = self.get_global_step()
 
         if self.use_replay_buffer:
-            train_data = self._sample_from_replay_buffer()
+            with self._profiler('sample_from_replay_buffer', repeat=10) as profiler:
+                train_data = self._sample_from_replay_buffer()
             if train_data is None:
+                profiler.ignore()
+                train_all_profiler.ignore()
                 return step
 
             pointers, batch, key_batch = train_data
             batch_list = [batch]
             key_batch_list = [key_batch]
         else:
-            batch_list = self.batch_buffer.get_batch()  # TODO
+            assert self.seq_encoder != SEQ_ENCODER.DILATED_ATTN
+            batch_list = self.batch_buffer.get_batch()
             batch_list = [(*batch, None) for batch in batch_list]
 
         for batch, key_batch in zip(batch_list, key_batch_list):
@@ -1991,53 +2010,54 @@ class OptionSelectorBase(SAC_Base):
             bn_low_seq_hidden_states: [batch, b + n, *low_seq_hidden_state_shape]
             priority_is: [batch, 1]
             """
-            bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
-            bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
-            bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
-            for i, bn_obses in enumerate(bn_obses_list):
-                # obs is image. It is much faster to convert uint8 to float32 in GPU
-                if bn_obses.dtype == torch.uint8:
-                    bn_obses_list[i] = bn_obses.type(torch.float32) / 255.
-            bn_option_indexes = torch.from_numpy(bn_option_indexes).type(torch.int64).to(self.device)
-            bn_actions = torch.from_numpy(bn_actions).to(self.device)
-            bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
-            next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
-            for i, next_obs in enumerate(next_obs_list):
-                # obs is image
-                if next_obs.dtype == torch.uint8:
-                    next_obs_list[i] = next_obs.type(torch.float32) / 255.
-            bn_dones = torch.from_numpy(bn_dones).to(self.device)
-            bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
-            if self.seq_encoder is not None:
-                f_seq_hidden_states = bn_seq_hidden_states[:, :1]
-                f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states).to(self.device)
-
-                f_low_seq_hidden_states = bn_low_seq_hidden_states[:, self.option_burn_in_from:self.option_burn_in_from + 1]
-                f_low_seq_hidden_states = torch.from_numpy(f_low_seq_hidden_states).to(self.device)
-            if self.use_replay_buffer and self.use_priority:
-                priority_is = torch.from_numpy(priority_is).to(self.device)
-
-            if key_batch is not None:
-                (key_indexes,
-                 key_padding_masks,
-                 key_obses_list,
-                 key_option_indexes) = key_batch
-
-                key_indexes = torch.from_numpy(key_indexes).to(self.device)
-                key_padding_masks = torch.from_numpy(key_padding_masks).to(self.device)
-                key_obses_list = [torch.from_numpy(t).to(self.device) for t in key_obses_list]
-                for i, key_obses in enumerate(key_obses_list):
+            with self._profiler('to gpu', repeat=10):
+                bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
+                bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
+                bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
+                for i, bn_obses in enumerate(bn_obses_list):
+                    # obs is image. It is much faster to convert uint8 to float32 in GPU
+                    if bn_obses.dtype == torch.uint8:
+                        bn_obses_list[i] = bn_obses.type(torch.float32) / 255.
+                bn_option_indexes = torch.from_numpy(bn_option_indexes).type(torch.int64).to(self.device)
+                bn_actions = torch.from_numpy(bn_actions).to(self.device)
+                bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
+                next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
+                for i, next_obs in enumerate(next_obs_list):
                     # obs is image
-                    if key_obses.dtype == torch.uint8:
-                        key_obses_list[i] = key_obses.type(torch.float32) / 255.
-                key_option_indexes = torch.from_numpy(key_option_indexes).to(self.device)
+                    if next_obs.dtype == torch.uint8:
+                        next_obs_list[i] = next_obs.type(torch.float32) / 255.
+                bn_dones = torch.from_numpy(bn_dones).to(self.device)
+                bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
+                if self.seq_encoder is not None:
+                    f_seq_hidden_states = bn_seq_hidden_states[:, :1]
+                    f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states).to(self.device)
 
-                key_batch = (key_indexes,
-                             key_padding_masks,
-                             key_obses_list,
-                             key_option_indexes)
+                    f_low_seq_hidden_states = bn_low_seq_hidden_states[:, self.option_burn_in_from:self.option_burn_in_from + 1]
+                    f_low_seq_hidden_states = torch.from_numpy(f_low_seq_hidden_states).to(self.device)
+                if self.use_replay_buffer and self.use_priority:
+                    priority_is = torch.from_numpy(priority_is).to(self.device)
 
-            with self._profiler('_train', repeat=10):
+                if key_batch is not None:
+                    (key_indexes,
+                     key_padding_masks,
+                     key_obses_list,
+                     key_option_indexes) = key_batch
+
+                    key_indexes = torch.from_numpy(key_indexes).to(self.device)
+                    key_padding_masks = torch.from_numpy(key_padding_masks).to(self.device)
+                    key_obses_list = [torch.from_numpy(t).to(self.device) for t in key_obses_list]
+                    for i, key_obses in enumerate(key_obses_list):
+                        # obs is image
+                        if key_obses.dtype == torch.uint8:
+                            key_obses_list[i] = key_obses.type(torch.float32) / 255.
+                    key_option_indexes = torch.from_numpy(key_option_indexes).to(self.device)
+
+                    key_batch = (key_indexes,
+                                 key_padding_masks,
+                                 key_obses_list,
+                                 key_option_indexes)
+
+            with self._profiler('train', repeat=10):
                 (m_target_states,
                  om_low_target_obses_list,
                  om_low_target_states) = self._train(
@@ -2062,20 +2082,21 @@ class OptionSelectorBase(SAC_Base):
             if self.use_replay_buffer:
                 bn_pre_actions = gen_pre_n_actions(bn_actions)  # [batch, b + n, action_size]
 
-                bn_states, next_bn_seq_hidden_states = self.get_l_states_with_seq_hidden_states(
-                    l_indexes=bn_indexes,
-                    l_padding_masks=bn_padding_masks,
-                    l_obses_list=bn_obses_list,
-                    l_pre_actions=bn_pre_actions,
+                with self._profiler('get_l_states_with_seq_hidden_states', repeat=10):
+                    bn_states, next_bn_seq_hidden_states = self.get_l_states_with_seq_hidden_states(
+                        l_indexes=bn_indexes,
+                        l_padding_masks=bn_padding_masks,
+                        l_obses_list=bn_obses_list,
+                        l_pre_actions=bn_pre_actions,
 
-                    key_batch=key_batch,
+                        key_batch=key_batch,
 
-                    f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None)
+                        f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None)
 
                 bn_low_obses_list = self.get_l_low_obses_list(l_obses_list=bn_obses_list,
                                                               l_states=bn_states)
 
-                with self._get_l_low_states_with_seq_hidden_states_time:
+                with self._profiler('get_l_low_states_with_seq_hidden_states', repeat=10):
                     (obn_low_states,
                      next_obn_low_seq_hidden_states) = self.get_l_low_states_with_seq_hidden_states(
                         l_indexes=bn_indexes[:, self.option_burn_in_from:],
@@ -2083,35 +2104,36 @@ class OptionSelectorBase(SAC_Base):
                         l_low_obses_list=[bn_low_obses[:, self.option_burn_in_from:] for bn_low_obses in bn_low_obses_list],
                         l_option_indexes=bn_option_indexes[:, self.option_burn_in_from:],
                         l_pre_actions=bn_pre_actions[:, self.option_burn_in_from:],
-                        f_low_seq_hidden_states=f_low_seq_hidden_states if self.seq_encoder is not None else None,
-                        is_target=False
+                        f_low_seq_hidden_states=f_low_seq_hidden_states if self.seq_encoder is not None else None
                     )
 
                 if self.use_n_step_is or (self.d_action_sizes and not self.discrete_dqn_like):
-                    with self._get_l_probs_time:
-                        obn_pi_probs_tensor = self.get_l_probs(l_low_obses_list=bn_low_obses_list,
-                                                               l_low_states=obn_low_states,
-                                                               l_option_indexes=bn_option_indexes[:, self.option_burn_in_from:],
-                                                               l_actions=bn_actions[:, self.option_burn_in_from:])
+                    with self._profiler('get_l_probs', repeat=10):
+                        obn_pi_probs_tensor = self.get_l_probs(
+                            l_low_obses_list=bn_low_obses_list,
+                            l_low_states=obn_low_states,
+                            l_option_indexes=bn_option_indexes[:, self.option_burn_in_from:],
+                            l_actions=bn_actions[:, self.option_burn_in_from:])
 
                 # Update td_error
                 if self.use_priority:
-                    td_error = self._get_td_error(
-                        bn_states=bn_states,
-                        bn_target_states=m_target_states[:, :-1, ...],
-                        bn_option_indexes=bn_option_indexes,
-                        obn_low_obses_list=[bn_low_obses[:, self.option_burn_in_from:] for bn_low_obses in bn_low_obses_list],
-                        obn_low_states=obn_low_states,
-                        obn_low_target_states=om_low_target_states[:, :-1, ...],
-                        bn_actions=bn_actions,
-                        bn_rewards=bn_rewards,
-                        next_target_state=m_target_states[:, -1, ...],
-                        next_low_obs_list=[m_low_target_obses[:, -1, ...]
-                                           for m_low_target_obses in om_low_target_obses_list],
-                        next_low_target_state=om_low_target_states[:, -1, ...],
-                        bn_dones=bn_dones,
-                        bn_mu_probs=bn_mu_probs
-                    ).detach().cpu().numpy()
+                    with self._profiler('get_td_error', repeat=10):
+                        td_error = self._get_td_error(
+                            bn_states=bn_states,
+                            bn_target_states=m_target_states[:, :-1, ...],
+                            bn_option_indexes=bn_option_indexes,
+                            obn_low_obses_list=[bn_low_obses[:, self.option_burn_in_from:] for bn_low_obses in bn_low_obses_list],
+                            obn_low_states=obn_low_states,
+                            obn_low_target_states=om_low_target_states[:, :-1, ...],
+                            bn_actions=bn_actions,
+                            bn_rewards=bn_rewards,
+                            next_target_state=m_target_states[:, -1, ...],
+                            next_low_obs_list=[m_low_target_obses[:, -1, ...]
+                                               for m_low_target_obses in om_low_target_obses_list],
+                            next_low_target_state=om_low_target_states[:, -1, ...],
+                            bn_dones=bn_dones,
+                            bn_mu_probs=bn_mu_probs
+                        ).detach().cpu().numpy()
                     self.replay_buffer.update(pointers, td_error)
 
                 # Update seq_hidden_states

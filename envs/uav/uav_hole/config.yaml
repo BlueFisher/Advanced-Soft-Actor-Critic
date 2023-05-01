@@ -19,7 +19,7 @@ default:
     save_model_per_step: 10000 # Save model every N steps
 
     n_step: 3
-    burn_in_step: 10
+    burn_in_step: 20
     seq_encoder: RNN
 
     target_d_alpha: 0.5 # Target discrete alpha ratio

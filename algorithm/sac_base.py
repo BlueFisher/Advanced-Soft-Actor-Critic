@@ -212,16 +212,19 @@ class SAC_Base:
             self.summary_writer = SummaryWriter(str(summary_path))
             self.summary_available = True
 
-        if ma_name is None:
-            self._logger = logging.getLogger('sac.base')
-        else:
-            self._logger = logging.getLogger(f'sac.base.{ma_name}')
+        self._set_logger()
 
         self._profiler = UnifiedElapsedTimer(self._logger)
 
         self._init_replay_buffer(replay_config)
         self._build_model(nn, nn_config, init_log_alpha, learning_rate)
         self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
+
+    def _set_logger(self):
+        if self.ma_name is None:
+            self._logger = logging.getLogger('sac.base')
+        else:
+            self._logger = logging.getLogger(f'sac.base.{self.ma_name}')
 
     def _init_replay_buffer(self, replay_config: Optional[dict] = None) -> None:
         if self.train_mode:
@@ -972,7 +975,7 @@ class SAC_Base:
         Returns:
             l_states: [batch, l, state_size]
             next_f_rnn_states (optional): [batch, 1, rnn_state_size]
-            l_attn_states (optional): [batch, l, attn_state_size]
+            next_l_attn_states (optional): [batch, l, attn_state_size]
         """
 
         model_rep = self.model_target_rep if is_target else self.model_rep
@@ -2191,7 +2194,6 @@ class SAC_Base:
         else:
             self.batch_buffer.put_episode(**episode_trans)
 
-    @unified_elapsed_timer('_fill_replay_buffer', 10)
     def _fill_replay_buffer(self,
                             l_indexes: np.ndarray,
                             l_obses_list: List[np.ndarray],
@@ -2281,7 +2283,6 @@ class SAC_Base:
                     image = plot_attn_weight(attn_weight[0].cpu().numpy())
                     self.summary_writer.add_images(f'attn_weight/{i}', image, self.global_step)
 
-    @unified_elapsed_timer('_sample_from_replay_buffer', 10)
     def _sample_from_replay_buffer(self) -> Tuple[np.ndarray,
                                                   Tuple[Union[np.ndarray, List[np.ndarray]], ...]]:
         """
@@ -2387,13 +2388,17 @@ class SAC_Base:
                           bn_seq_hidden_states if self.seq_encoder is not None else None,
                           priority_is if self.use_priority else None)
 
-    def train(self) -> int:
+    @unified_elapsed_timer('train_all', 10)
+    def train(self, train_all_profiler) -> int:
         step = self.get_global_step()
 
         if self.use_replay_buffer:
-            train_data = self._sample_from_replay_buffer()
-            if train_data is None:
-                return step
+            with self._profiler('sample_from_replay_buffer', repeat=10) as profiler:
+                train_data = self._sample_from_replay_buffer()
+                if train_data is None:
+                    profiler.ignore()
+                    train_all_profiler.ignore()
+                    return step
 
             pointers, batch = train_data
             batch_list = [batch]
@@ -2425,39 +2430,41 @@ class SAC_Base:
             bn_seq_hidden_states: [batch, b + n, *seq_hidden_state_shape]
             priority_is: [batch, 1]
             """
-            bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
-            bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
-            bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
-            for i, bn_obses in enumerate(bn_obses_list):
-                # obs is image. It is much faster to convert uint8 to float32 in GPU
-                if bn_obses.dtype == torch.uint8:
-                    bn_obses_list[i] = bn_obses.type(torch.float32) / 255.
-            bn_actions = torch.from_numpy(bn_actions).to(self.device)
-            bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
-            next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
-            for i, next_obs in enumerate(next_obs_list):
-                # obs is image
-                if next_obs.dtype == torch.uint8:
-                    next_obs_list[i] = next_obs.type(torch.float32) / 255.
-            bn_dones = torch.from_numpy(bn_dones).to(self.device)
-            bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
-            if self.seq_encoder is not None:
-                f_seq_hidden_states = bn_seq_hidden_states[:, :1]
-                f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states).to(self.device)
-            if self.use_replay_buffer and self.use_priority:
-                priority_is = torch.from_numpy(priority_is).to(self.device)
+            with self._profiler('to gpu', repeat=10):
+                bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
+                bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
+                bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
+                for i, bn_obses in enumerate(bn_obses_list):
+                    # obs is image. It is much faster to convert uint8 to float32 in GPU
+                    if bn_obses.dtype == torch.uint8:
+                        bn_obses_list[i] = bn_obses.type(torch.float32) / 255.
+                bn_actions = torch.from_numpy(bn_actions).to(self.device)
+                bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
+                next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
+                for i, next_obs in enumerate(next_obs_list):
+                    # obs is image
+                    if next_obs.dtype == torch.uint8:
+                        next_obs_list[i] = next_obs.type(torch.float32) / 255.
+                bn_dones = torch.from_numpy(bn_dones).to(self.device)
+                bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
+                if self.seq_encoder is not None:
+                    f_seq_hidden_states = bn_seq_hidden_states[:, :1]
+                    f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states).to(self.device)
+                if self.use_replay_buffer and self.use_priority:
+                    priority_is = torch.from_numpy(priority_is).to(self.device)
 
-            m_target_states = self._train(
-                bn_indexes=bn_indexes,
-                bn_padding_masks=bn_padding_masks,
-                bn_obses_list=bn_obses_list,
-                bn_actions=bn_actions,
-                bn_rewards=bn_rewards,
-                next_obs_list=next_obs_list,
-                bn_dones=bn_dones,
-                bn_mu_probs=bn_mu_probs,
-                f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None,
-                priority_is=priority_is if self.use_replay_buffer and self.use_priority else None)
+            with self._profiler('train', repeat=10):
+                m_target_states = self._train(
+                    bn_indexes=bn_indexes,
+                    bn_padding_masks=bn_padding_masks,
+                    bn_obses_list=bn_obses_list,
+                    bn_actions=bn_actions,
+                    bn_rewards=bn_rewards,
+                    next_obs_list=next_obs_list,
+                    bn_dones=bn_dones,
+                    bn_mu_probs=bn_mu_probs,
+                    f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None,
+                    priority_is=priority_is if self.use_replay_buffer and self.use_priority else None)
 
             if step % self.save_model_per_step == 0:
                 self.save_model()
@@ -2465,29 +2472,34 @@ class SAC_Base:
             if self.use_replay_buffer:
                 bn_pre_actions = gen_pre_n_actions(bn_actions)  # [batch, b + n, action_size]
 
-                bn_states, next_bn_seq_hidden_states = self.get_l_states_with_seq_hidden_states(
-                    l_indexes=bn_indexes,
-                    l_padding_masks=bn_padding_masks,
-                    l_obses_list=bn_obses_list,
-                    l_pre_actions=bn_pre_actions,
-                    f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None)
+                with self._profiler('get_l_states_with_seq_hidden_states', repeat=10):
+                    bn_states, next_bn_seq_hidden_states = self.get_l_states_with_seq_hidden_states(
+                        l_indexes=bn_indexes,
+                        l_padding_masks=bn_padding_masks,
+                        l_obses_list=bn_obses_list,
+                        l_pre_actions=bn_pre_actions,
+                        f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None)
 
                 if self.use_n_step_is or (self.d_action_sizes and not self.discrete_dqn_like):
-                    bn_pi_probs_tensor = self.get_l_probs(l_obses_list=bn_obses_list,
-                                                          l_states=bn_states,
-                                                          l_actions=bn_actions)
+                    with self._profiler('get_l_probs', repeat=10):
+                        bn_pi_probs_tensor = self.get_l_probs(
+                            l_obses_list=bn_obses_list,
+                            l_states=bn_states,
+                            l_actions=bn_actions)
 
                 # Update td_error
                 if self.use_priority:
-                    td_error = self._get_td_error(bn_obses_list=bn_obses_list,
-                                                  bn_states=bn_states,
-                                                  bn_target_states=m_target_states[:, :-1, ...],
-                                                  bn_actions=bn_actions,
-                                                  bn_rewards=bn_rewards,
-                                                  next_obs_list=next_obs_list,
-                                                  next_target_state=m_target_states[:, -1, ...],
-                                                  bn_dones=bn_dones,
-                                                  bn_mu_probs=bn_pi_probs_tensor).detach().cpu().numpy()
+                    with self._profiler('get_td_error', repeat=10):
+                        td_error = self._get_td_error(
+                            bn_obses_list=bn_obses_list,
+                            bn_states=bn_states,
+                            bn_target_states=m_target_states[:, :-1, ...],
+                            bn_actions=bn_actions,
+                            bn_rewards=bn_rewards,
+                            next_obs_list=next_obs_list,
+                            next_target_state=m_target_states[:, -1, ...],
+                            bn_dones=bn_dones,
+                            bn_mu_probs=bn_pi_probs_tensor).detach().cpu().numpy()
                     self.replay_buffer.update(pointers, td_error)
 
                 # Update seq_hidden_states

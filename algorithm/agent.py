@@ -316,7 +316,10 @@ class AgentManager:
             ep_actions = np.concatenate(all_ep_actions)
             ep_attn_states = np.concatenate(all_ep_attn_states)
 
-            ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
+            if ep_indexes.shape[1] == 0:
+                ep_indexes = np.zeros((ep_indexes.shape[0], 1), dtype=ep_indexes.dtype)
+            else:
+                ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
             ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
                              for o, t_o in zip(ep_obses_list, self['obs_list'])]
             ep_pre_actions = gen_pre_n_actions(ep_actions, True)
@@ -389,8 +392,6 @@ class AgentManager:
         self['episode_trans_list'] = episode_trans_list
 
     def train(self) -> int:
-        trained_steps = 0
-
         if len(self['episode_trans_list']) != 0:
             # ep_indexes,
             # ep_obses_list, ep_actions, ep_rewards, next_obs_list, ep_dones, ep_probs,
@@ -495,6 +496,10 @@ class MultiAgentsManager:
                              ma_reward[n],
                              ma_local_done[n],
                              ma_max_reached[n])
+
+    def put_episode(self) -> None:
+        for n, mgr in self:
+            mgr.put_episode()
 
     def train(self, trained_steps: int) -> int:
         for n, mgr in self:

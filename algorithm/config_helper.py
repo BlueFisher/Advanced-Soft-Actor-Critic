@@ -161,3 +161,4 @@ def set_logger(logger_file=None, debug=False):
         logger.addHandler(fh)
 
     logging.getLogger('PIL').setLevel(logging.WARNING)
+    logging.getLogger('matplotlib').setLevel(logging.WARNING)
