@@ -4,32 +4,44 @@ import numpy as np
 import torch
 
 
-def squash_correction_log_prob(dist, x) -> torch.Tensor:
+def squash_correction_log_prob(dist: torch.distributions.Distribution,
+                               x: torch.Tensor) -> torch.Tensor:
     return dist.log_prob(x) - torch.log(torch.maximum(1 - torch.square(torch.tanh(x)), torch.tensor(1e-2)))
 
 
-def squash_correction_prob(dist, x) -> torch.Tensor:
+def squash_correction_prob(dist: torch.distributions.Distribution,
+                           x: torch.Tensor) -> torch.Tensor:
     return torch.exp(dist.log_prob(x)) / (torch.maximum(1 - torch.square(torch.tanh(x)), torch.tensor(1e-2)))
 
 
-def gen_pre_n_actions(n_actions, keep_last_action=False) -> Union[torch.Tensor, np.ndarray]:
+def gen_pre_n_actions(n_actions: Union[torch.Tensor, np.ndarray],
+                      keep_last_action=False) -> Union[torch.Tensor, np.ndarray]:
     if isinstance(n_actions, torch.Tensor):
+        if n_actions.shape[1] == 0 and keep_last_action:
+            return torch.zeros((n_actions.shape[0], 1, *n_actions.shape[2:]),
+                               dtype=n_actions.dtype,
+                               device=n_actions.device)
+
         return torch.cat([
             torch.zeros_like(n_actions[:, 0:1, ...]),
             n_actions if keep_last_action else n_actions[:, :-1, ...]
         ], dim=1)
     else:
+        if n_actions.shape[1] == 0 and keep_last_action:
+            return np.zeros((n_actions.shape[0], 1, *n_actions.shape[2:]),
+                            dtype=n_actions.dtype)
+
         return np.concatenate([
             np.zeros_like(n_actions[:, 0:1, ...]),
             n_actions if keep_last_action else n_actions[:, :-1, ...]
         ], axis=1)
 
 
-def scale_h(x, epsilon=0.001) -> torch.Tensor:
+def scale_h(x: torch.Tensor, epsilon=0.001) -> torch.Tensor:
     return torch.sign(x) * (torch.sqrt(torch.abs(x) + 1) - 1) + epsilon * x
 
 
-def scale_inverse_h(x, epsilon=0.001) -> torch.Tensor:
+def scale_inverse_h(x: torch.Tensor, epsilon=0.001) -> torch.Tensor:
     t = 1 + 4 * epsilon * (torch.abs(x) + 1 + epsilon)
     return torch.sign(x) * ((torch.sqrt(t) - 1) / (2 * epsilon) - 1)
 

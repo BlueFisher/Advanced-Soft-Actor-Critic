@@ -1,6 +1,6 @@
 default:
   base_config:
-    env_name: UAVFoodCollector
+    env_name: UAVFormation
     unity_args:
       build_path:
         win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
@@ -19,8 +19,8 @@ default:
     save_model_per_step: 10000 # Save model every N steps
 
     n_step: 3
-    burn_in_step: 10
+    burn_in_step: 20
     seq_encoder: RNN
 
-    # use_rnd: true
-    # rnd_n_sample: 50
+    use_rnd: true
+    rnd_n_sample: 50

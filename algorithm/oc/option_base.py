@@ -10,6 +10,12 @@ from ..utils import *
 
 
 class OptionBase(SAC_Base):
+    def _set_logger(self):
+        if self.ma_name is None:
+            self._logger = logging.getLogger('option')
+        else:
+            self._logger = logging.getLogger(f'option.{self.ma_name}')
+
     def _init_replay_buffer(self, replay_config):
         return
 
@@ -120,7 +126,7 @@ class OptionBase(SAC_Base):
     def _get_y(self,
                next_n_terminations: torch.Tensor,
 
-               next_n_v_over_options_list,
+               next_n_v_over_options_list: List[torch.Tensor],
 
                n_obses_list: List[torch.Tensor],
                n_states: torch.Tensor,
@@ -303,9 +309,9 @@ class OptionBase(SAC_Base):
         return v
 
     def train_rep_q(self,
-                    next_n_terminations,
+                    next_n_terminations: torch.Tensor,
 
-                    next_n_v_over_options_list,
+                    next_n_v_over_options_list: List[torch.Tensor],
 
                     bn_indexes: torch.Tensor,
                     bn_padding_masks: torch.Tensor,
@@ -321,7 +327,7 @@ class OptionBase(SAC_Base):
                     next_target_state: torch.Tensor,
                     bn_dones: torch.Tensor,
                     bn_mu_probs: torch.Tensor,
-                    priority_is: torch.Tensor = None) -> None:
+                    priority_is: Optional[torch.Tensor] = None) -> None:
         """
         Args:
             next_n_terminations: [batch, n],

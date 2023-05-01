@@ -10,7 +10,6 @@ from ..utils import *
 def episode_to_batch(bn: int,
                      episode_length: int,
                      l_indexes: np.ndarray,
-                     l_padding_masks: np.ndarray,
                      l_obses_list: List[np.ndarray],
                      l_option_indexes: np.ndarray,
                      l_actions: np.ndarray,
@@ -25,7 +24,6 @@ def episode_to_batch(bn: int,
         bn: int, burn_in_step + n_step
         episode_length: int, Indicates true episode_len, not MAX_EPISODE_LENGTH
         l_indexes: [1, episode_len]
-        l_padding_masks: [1, episode_len]
         l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
         l_option_indexes: [1, episode_len]
         l_actions: [1, episode_len, action_size]
@@ -38,7 +36,6 @@ def episode_to_batch(bn: int,
 
     Returns:
         bn_indexes: [episode_len - bn + 1, bn]
-        bn_padding_masks: [episode_len - bn + 1, bn]
         bn_obses_list: list([episode_len - bn + 1, bn, *obs_shapes_i], ...)
         bn_options: [episode_len - bn + 1, bn]
         bn_actions: [episode_len - bn + 1, bn, action_size]
@@ -51,8 +48,6 @@ def episode_to_batch(bn: int,
     """
     bn_indexes = np.concatenate([l_indexes[:, i:i + bn]
                                 for i in range(episode_length - bn + 1)], axis=0)
-    bn_padding_masks = np.concatenate([l_padding_masks[:, i:i + bn]
-                                       for i in range(episode_length - bn + 1)], axis=0)
     tmp_bn_obses_list = [None] * len(l_obses_list)
     for j, l_obses in enumerate(l_obses_list):
         tmp_bn_obses_list[j] = np.concatenate([l_obses[:, i:i + bn]
@@ -85,7 +80,6 @@ def episode_to_batch(bn: int,
                                                   for i in range(episode_length - bn + 1)], axis=0)
 
     return [bn_indexes,
-            bn_padding_masks,
             tmp_bn_obses_list,
             bn_options,
             bn_actions,
@@ -100,7 +94,6 @@ def episode_to_batch(bn: int,
 class BatchBuffer(BatchBuffer):
     def put_episode(self,
                     l_indexes: np.ndarray,
-                    l_padding_masks: np.ndarray,
                     l_obses_list: List[np.ndarray],
                     l_option_indexes: np.ndarray,
                     l_actions: np.ndarray,
@@ -113,7 +106,6 @@ class BatchBuffer(BatchBuffer):
         """
         Args:
             l_indexes: [1, episode_len]
-            l_padding_masks: [1, episode_len]
             l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
             l_option_indexes: [1, episode_len]
             l_actions: [1, episode_len, action_size]
@@ -129,7 +121,6 @@ class BatchBuffer(BatchBuffer):
         ori_batch = episode_to_batch(bn=self.burn_in_step + self.n_step,
                                      episode_length=l_indexes.shape[1],
                                      l_indexes=l_indexes,
-                                     l_padding_masks=l_padding_masks,
                                      l_obses_list=l_obses_list,
                                      l_option_indexes=l_option_indexes,
                                      l_actions=l_actions,

@@ -156,8 +156,7 @@ class OC_Agent(Agent):
             return episode_trans
 
     def get_episode_trans(self,
-                          force_length: int = None,
-                          spec_keys: Optional[List[str]] = None):
+                          force_length: int = None):
         """
         Returns:
             ep_indexes (np.int32): [1, episode_len]
@@ -172,7 +171,27 @@ class OC_Agent(Agent):
             ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
             ep_low_seq_hidden_states: [1, episode_len, *low_seq_hidden_state_shape]
         """
-        tmp = self._tmp_episode_trans
+        tmp = self._tmp_episode_trans.copy()
+
+        if force_length is not None:
+            delta = force_length - self.episode_length
+            if delta <= 0:
+                for k in tmp:
+                    if k == 'obs_list':
+                        tmp[k] = [o[-force_length:] for o in tmp[k]]
+                    elif k == 'next_obs_list':
+                        pass
+                    elif tmp[k] is not None:
+                        tmp[k] = tmp[k][-force_length:]
+            else:
+                tmp_empty = self._generate_empty_episode_trans(delta)
+                for k in tmp:
+                    if k == 'obs_list':
+                        tmp[k] = [np.concatenate([t_o, o]) for t_o, o in zip(tmp_empty[k], tmp[k])]
+                    elif k == 'next_obs_list':
+                        pass
+                    elif tmp[k] is not None:
+                        tmp[k] = np.concatenate([tmp_empty[k], tmp[k]])
 
         ep_indexes = np.expand_dims(tmp['index'], 0)
         # [1, episode_len]
@@ -193,7 +212,7 @@ class OC_Agent(Agent):
         ep_low_seq_hidden_states = np.expand_dims(tmp['low_seq_hidden_state'], 0) if tmp['low_seq_hidden_state'] is not None else None
         # [1, episode_len, *seq_hidden_state_shape]
 
-        ep_trans = {
+        return {
             'l_indexes': ep_indexes,
             'l_obses_list': ep_obses_list,
             'l_option_indexes': ep_option_indexes,
@@ -206,33 +225,6 @@ class OC_Agent(Agent):
             'l_seq_hidden_states': ep_seq_hidden_states,
             'l_low_seq_hidden_states': ep_low_seq_hidden_states
         }
-
-        if spec_keys is not None:
-            ep_trans = {k: ep_trans[k] for k in spec_keys}
-
-        if force_length is None:
-            return ep_trans
-
-        delta = force_length - self.episode_length
-        if delta <= 0:
-            for k in ep_trans:
-                if k == 'l_obses_list':
-                    ep_trans[k] = [o[:, -force_length:] for o in ep_trans[k]]
-                elif k == 'next_obs_list':
-                    pass
-                elif ep_trans[k] is not None:
-                    ep_trans[k] = ep_trans[k][:, -force_length:]
-        else:
-            delta_trans = self._generate_empty_episode_trans(delta)
-            for k in ep_trans:
-                if k == 'l_obses_list':
-                    ep_trans[k] = [np.concatenate([d_o, o]) for d_o, o in zip(delta_trans[k], ep_trans[k])]
-                elif k == 'next_obs_list':
-                    pass
-                elif ep_trans[k] is not None:
-                    ep_trans[k] = np.concatenate([delta_trans[k], ep_trans[k]])
-
-        return ep_trans
 
     @property
     def key_trans_length(self):
@@ -348,12 +340,13 @@ class OC_AgentManager(AgentManager):
             )
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN:
-            ep_length = min(512, max([a.episode_length for a in self.agents]))
+            ep_length = min(512, max([a.episode_length for a in self.agents] + [1]))
 
             all_episode_trans = [a.get_episode_trans(ep_length).values() for a in self.agents]
             (all_ep_indexes,
              all_ep_obses_list,
              all_option_indexes,
+             all_option_changed_indexes,
              all_ep_actions,
              all_all_ep_rewards,
              all_next_obs_list,
@@ -367,7 +360,10 @@ class OC_AgentManager(AgentManager):
             ep_actions = np.concatenate(all_ep_actions)
             ep_attn_states = np.concatenate(all_ep_attn_states)
 
-            ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
+            if ep_indexes.shape[1] == 0:
+                ep_indexes = np.zeros((ep_indexes.shape[0], 1), dtype=ep_indexes.dtype)
+            else:
+                ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
             ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
                              for o, t_o in zip(ep_obses_list, self['obs_list'])]
             ep_pre_actions = gen_pre_n_actions(ep_actions, True)
@@ -406,7 +402,10 @@ class OC_AgentManager(AgentManager):
             all_last_indexes = [a.get_last_index() for a in self.agents]
             last_indexes = np.concatenate(all_last_indexes)
 
-            key_indexes = np.concatenate([key_indexes, last_indexes + 1], axis=1)
+            if key_indexes.shape[1] == 0:
+                key_indexes = np.zeros((key_indexes.shape[0], 1), dtype=key_indexes.dtype)
+            else:
+                key_indexes = np.concatenate([key_indexes, last_indexes + 1], axis=1)
             key_padding_masks = np.concatenate([key_padding_masks,
                                                 np.zeros((key_padding_masks.shape[0], 1), dtype=bool)], axis=1)
             key_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
