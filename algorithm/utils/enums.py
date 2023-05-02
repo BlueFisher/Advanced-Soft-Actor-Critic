@@ -4,7 +4,6 @@ from enum import Enum
 class SEQ_ENCODER(Enum):
     RNN = 1
     ATTN = 2
-    DILATED_ATTN = 3
 
 
 class SIAMESE(Enum):

@@ -298,6 +298,7 @@ class OC_AgentManager(AgentManager):
     def set_rl(self, rl: OptionSelectorBase):
         self.rl = rl
         self.seq_encoder = rl.seq_encoder
+        self.use_dilated_attn = rl.use_dilated_attn
 
     def pre_run(self, num_agents: int):
         self['initial_option_index'] = self.rl.get_initial_option_index(num_agents)  # [n_envs, action_size]
@@ -339,7 +340,7 @@ class OC_AgentManager(AgentManager):
                 low_rnn_state=self['low_seq_hidden_state']
             )
 
-        elif self.seq_encoder == SEQ_ENCODER.ATTN:
+        elif self.seq_encoder == SEQ_ENCODER.ATTN and not self.use_dilated_attn:
             ep_length = min(512, max([a.episode_length for a in self.agents] + [1]))
 
             all_episode_trans = [a.get_episode_trans(ep_length).values() for a in self.agents]
@@ -385,7 +386,7 @@ class OC_AgentManager(AgentManager):
                 force_rnd_if_available=force_rnd_if_available
             )
 
-        elif self.seq_encoder == SEQ_ENCODER.DILATED_ATTN:
+        elif self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilated_attn:
             key_trans_length = max([a.key_trans_length for a in self.agents])
 
             all_key_trans = [a.get_key_trans(key_trans_length) for a in self.agents]

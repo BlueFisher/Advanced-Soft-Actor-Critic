@@ -20,6 +20,7 @@ sac_base.BatchBuffer = BatchBuffer
 class OptionSelectorBase(SAC_Base):
     def __init__(self,
                  num_options: int,
+                 use_dilated_attn: bool,
                  option_burn_in_step: int,
                  option_nn_config: dict,
 
@@ -85,6 +86,7 @@ class OptionSelectorBase(SAC_Base):
                  replay_config: Optional[dict] = None):
 
         self.num_options = num_options
+        self.use_dilated_attn = use_dilated_attn
         self.option_burn_in_step = option_burn_in_step
         self.option_nn_config = option_nn_config
 
@@ -212,7 +214,7 @@ class OptionSelectorBase(SAC_Base):
                                                         test_pre_action)
             state_size, self.seq_hidden_state_shape = test_state.shape[-1], test_rnn_state.shape[1:]
 
-        elif self.seq_encoder in (SEQ_ENCODER.ATTN, SEQ_ENCODER.DILATED_ATTN):
+        elif self.seq_encoder == SEQ_ENCODER.ATTN:
             self.model_rep: ModelBaseAttentionRep = ModelRep(self.obs_shapes,
                                                              self.d_action_sizes, self.c_action_size,
                                                              False, self.train_mode,
@@ -273,7 +275,7 @@ class OptionSelectorBase(SAC_Base):
         if self.option_burn_in_step == -1:
             self.option_burn_in_step = self.burn_in_step
 
-        if self.seq_encoder == SEQ_ENCODER.DILATED_ATTN:
+        if self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilated_attn:
             assert self.burn_in_step == self.option_burn_in_step
 
         self.option_burn_in_from = self.burn_in_step - self.option_burn_in_step
@@ -282,7 +284,7 @@ class OptionSelectorBase(SAC_Base):
         del option_kwargs['self']
         option_kwargs['obs_names'] = ['state', *self.obs_names]
         option_kwargs['obs_shapes'] = [(self.state_size, ), *self.obs_shapes]
-        option_kwargs['seq_encoder'] = SEQ_ENCODER.RNN if self.seq_encoder in (SEQ_ENCODER.ATTN, SEQ_ENCODER.DILATED_ATTN) else self.seq_encoder
+        option_kwargs['seq_encoder'] = SEQ_ENCODER.RNN if self.seq_encoder == SEQ_ENCODER.ATTN else self.seq_encoder
         option_kwargs['burn_in_step'] = self.option_burn_in_step
 
         if self.option_nn_config is None:
@@ -850,7 +852,7 @@ class OptionSelectorBase(SAC_Base):
             l_attn_states (optional): [batch, l, attn_state_size]
         """
 
-        if self.seq_encoder == SEQ_ENCODER.DILATED_ATTN:
+        if self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilated_attn:
             query_length = l_indexes.shape[1]
 
             (key_indexes,
@@ -910,7 +912,7 @@ class OptionSelectorBase(SAC_Base):
             l_states: [batch, l, state_size]
             l_seq_hidden_state: [batch, l, *seq_hidden_state_shape]
         """
-        if self.seq_encoder == SEQ_ENCODER.DILATED_ATTN:
+        if self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilated_attn:
             return self.get_l_states(l_indexes=l_indexes,
                                      l_padding_masks=l_padding_masks,
                                      l_obses_list=l_obses_list,
@@ -1774,7 +1776,7 @@ class OptionSelectorBase(SAC_Base):
 
         # n_step transitions except the first one and the last obs_, n_step - 1 + 1
         if self.use_add_with_td:
-            assert self.seq_encoder != SEQ_ENCODER.DILATED_ATTN
+            assert not (self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilated_attn)
             td_error = self.get_episode_td_error(l_indexes=l_indexes,
                                                  l_obses_list=l_obses_list,
                                                  l_option_indexes=l_option_indexes,
@@ -1791,7 +1793,7 @@ class OptionSelectorBase(SAC_Base):
             self.replay_buffer.add(storage_data,
                                    ignore_size=self.n_step)
 
-        if self.seq_encoder in (SEQ_ENCODER.ATTN, SEQ_ENCODER.DILATED_ATTN)\
+        if self.seq_encoder == SEQ_ENCODER.ATTN \
                 and self.summary_writer is not None \
                 and self.summary_available:
             self.summary_available = False
@@ -1914,7 +1916,7 @@ class OptionSelectorBase(SAC_Base):
             bn_low_seq_hidden_states = m_low_seq_hidden_states[:, :-1, ...]
 
         key_batch = None
-        if self.seq_encoder == SEQ_ENCODER.DILATED_ATTN:
+        if self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilated_attn:
             tmp_pointers = pointers
             key_tran = self.replay_buffer.get_storage_data(tmp_pointers)
             key_trans = {k: [v] for k, v in key_tran.items()}
@@ -1978,7 +1980,7 @@ class OptionSelectorBase(SAC_Base):
             batch_list = [batch]
             key_batch_list = [key_batch]
         else:
-            assert self.seq_encoder != SEQ_ENCODER.DILATED_ATTN
+            assert not (self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilated_attn)
             batch_list = self.batch_buffer.get_batch()
             batch_list = [(*batch, None) for batch in batch_list]
 

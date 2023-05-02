@@ -51,6 +51,7 @@ class OC_Main(Main):
             mgr.config['sac_config']['nn'] = nn
 
             mgr.set_rl(OptionSelectorBase(num_options=mgr.config['oc_config']['num_options'],
+                                          use_dilated_attn=mgr.config['oc_config']['use_dilated_attn'],
                                           option_burn_in_step=mgr.config['oc_config']['option_burn_in_step'],
                                           option_nn_config=mgr.config['oc_config']['nn_config'],
 

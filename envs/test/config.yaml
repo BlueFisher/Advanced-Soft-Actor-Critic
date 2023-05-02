@@ -60,7 +60,7 @@ attn:
 dilated_attn:
   sac_config:
     burn_in_step: 3
-    seq_encoder: DILATED_ATTN
+    seq_encoder: ATTN
 
     batch_size: 10
   
@@ -69,6 +69,7 @@ dilated_attn:
       pe: nope
 
   oc_config:
+    use_dilated_attn: true
     option_burn_in_step: 3
 
   ma_config:
