@@ -134,9 +134,17 @@ def gen_episode_oc_trans(obs_shapes, d_action_sizes, c_action_size,
                                               seq_hidden_state_shape=seq_hidden_state_shape,
                                               episode_len=episode_len)
 
+    l_option_indexes = np.random.randint(0, num_options, size=(1, episode_len), dtype=np.int8)
+    l_option_changed_indexes = np.zeros((1, episode_len), dtype=np.int32)
+    for i in range(1, episode_len):
+        mask = l_option_indexes[:, i] == l_option_indexes[:, i - 1]
+        l_option_changed_indexes[mask, i] = l_option_changed_indexes[mask, i - 1]
+        l_option_changed_indexes[~mask, i] = i
+
     vanilla_episode_trans = {
         **vanilla_episode_trans,
-        'l_option_indexes': np.random.randint(0, num_options, size=(1, episode_len), dtype=np.int64)
+        'l_option_indexes': l_option_indexes,
+        'l_option_changed_indexes': l_option_changed_indexes
     }
 
     if low_seq_hidden_state_shape:
