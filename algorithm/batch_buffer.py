@@ -28,25 +28,26 @@ class BatchBuffer:
                     l_probs: List[np.ndarray],
                     l_seq_hidden_states: np.ndarray = None) -> None:
         """
-        bn_indexes: [episode_len - bn + 1, bn]
-        bn_obses_list: list([episode_len - bn + 1, bn, *obs_shapes_i], ...)
-        bn_actions: [episode_len - bn + 1, bn, action_size]
-        bn_rewards: [episode_len - bn + 1, bn]
-        next_obs_list: list([episode_len - bn + 1, *obs_shapes_i], ...)
-        bn_dones: [episode_len - bn + 1, bn]
-        bn_probs: [episode_len - bn + 1, bn, action_size]
-        f_seq_hidden_states: [episode_len - bn + 1, 1, *seq_hidden_state_shape]
+        Args:
+            l_indexes (np.int32): [1, episode_len]
+            l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
+            l_actions: [1, episode_len, action_size]
+            l_rewards: [1, episode_len]
+            next_obs_list: list([1, *obs_shapes_i], ...)
+            l_dones (bool): [1, episode_len]
+            l_probs: [1, episode_len, action_size]
+            l_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
         self._batch_list.clear()
 
-        ori_batch = episode_to_batch(self.burn_in_step + self.n_step,
-                                     l_indexes.shape[1],
-                                     l_indexes,
-                                     l_obses_list,
-                                     l_actions,
-                                     l_rewards,
-                                     next_obs_list,
-                                     l_dones,
+        ori_batch = episode_to_batch(burn_in_step=self.burn_in_step,
+                                     n_step=self.n_step,
+                                     l_indexes=l_indexes,
+                                     l_obses_list=l_obses_list,
+                                     l_actions=l_actions,
+                                     l_rewards=l_rewards,
+                                     next_obs_list=next_obs_list,
+                                     l_dones=l_dones,
                                      l_probs=l_probs,
                                      l_seq_hidden_states=l_seq_hidden_states)
 

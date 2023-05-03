@@ -2081,7 +2081,7 @@ class SAC_Base:
                              l_rewards: np.ndarray,
                              next_obs_list: List[np.ndarray],
                              l_dones: np.ndarray,
-                             l_mu_probs: np.ndarray = None,
+                             l_probs: np.ndarray = None,
                              l_seq_hidden_states: np.ndarray = None) -> torch.Tensor:
         """
         Args:
@@ -2091,7 +2091,7 @@ class SAC_Base:
             l_rewards: [1, episode_len]
             next_obs_list: list([1, *obs_shapes_i], ...)
             l_dones: [1, episode_len]
-            l_mu_probs: [1, episode_len, action_size]
+            l_probs: [1, episode_len, action_size]
             l_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
 
         Returns:
@@ -2107,16 +2107,16 @@ class SAC_Base:
          bn_rewards,
          next_obs_list,
          bn_dones,
-         bn_mu_probs,
-         f_seq_hidden_states) = episode_to_batch(bn=self.burn_in_step + self.n_step,
-                                                 episode_length=l_indexes.shape[1],
+         bn_probs,
+         f_seq_hidden_states) = episode_to_batch(burn_in_step=self.burn_in_step,
+                                                 n_step=self.n_step,
                                                  l_indexes=l_indexes,
                                                  l_obses_list=l_obses_list,
                                                  l_actions=l_actions,
                                                  l_rewards=l_rewards,
                                                  next_obs_list=next_obs_list,
                                                  l_dones=l_dones,
-                                                 l_probs=l_mu_probs,
+                                                 l_probs=l_probs,
                                                  l_seq_hidden_states=l_seq_hidden_states)
 
         """
@@ -2127,7 +2127,7 @@ class SAC_Base:
         bn_rewards: [episode_len - bn + 1, bn]
         next_obs_list: list([episode_len - bn + 1, *obs_shapes_i], ...)
         bn_dones: [episode_len - bn + 1, bn]
-        bn_mu_probs: [episode_len - bn + 1, bn, action_size]
+        bn_probs: [episode_len - bn + 1, bn, action_size]
         f_seq_hidden_states: [episode_len - bn + 1, 1, *seq_hidden_state_shape]
         """
 
@@ -2144,7 +2144,7 @@ class SAC_Base:
             _bn_rewards = torch.from_numpy(bn_rewards[b_i:b_j]).to(self.device)
             _next_obs_list = [torch.from_numpy(o[b_i:b_j]).to(self.device) for o in next_obs_list]
             _bn_dones = torch.from_numpy(bn_dones[b_i:b_j]).to(self.device)
-            _bn_mu_probs = torch.from_numpy(bn_mu_probs[b_i:b_j]).to(self.device)
+            _bn_probs = torch.from_numpy(bn_probs[b_i:b_j]).to(self.device)
             _f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states[b_i:b_j]).to(self.device) if self.seq_encoder is not None else None
 
             (_m_indexes,
@@ -2155,6 +2155,7 @@ class SAC_Base:
                                                bn_obses_list=_bn_obses_list,
                                                bn_actions=_bn_actions,
                                                next_obs_list=_next_obs_list)
+
             _m_states, _ = self.get_l_states(l_indexes=_m_indexes,
                                              l_padding_masks=_m_padding_masks,
                                              l_obses_list=_m_obses_list,
@@ -2177,7 +2178,7 @@ class SAC_Base:
                                           next_obs_list=_next_obs_list,
                                           next_target_state=_m_target_states[:, -1, ...],
                                           bn_dones=_bn_dones,
-                                          bn_mu_probs=_bn_mu_probs).detach().cpu().numpy()
+                                          bn_mu_probs=_bn_probs).detach().cpu().numpy()
             td_error_list.append(td_error.flatten())
 
         td_error = np.concatenate([*td_error_list,
@@ -2260,7 +2261,7 @@ class SAC_Base:
                                                  l_rewards=l_rewards,
                                                  next_obs_list=next_obs_list,
                                                  l_dones=l_dones,
-                                                 l_mu_probs=l_probs,
+                                                 l_probs=l_probs,
                                                  l_seq_hidden_states=l_seq_hidden_states if self.seq_encoder is not None else None)
             self.replay_buffer.add_with_td_error(td_error, storage_data,
                                                  ignore_size=self.n_step)
@@ -2330,11 +2331,13 @@ class SAC_Base:
         for k, v in trans.items():
             batch[k][:, self.burn_in_step] = v
 
+        # Get next n_step data
         for i in range(1, self.n_step + 1):
             t_trans = self.replay_buffer.get_storage_data(pointers + i)
             for k, v in t_trans.items():
                 batch[k][:, self.burn_in_step + i] = v
 
+        # Get previous burn_in_step data
         for i in range(self.burn_in_step):
             t_trans = self.replay_buffer.get_storage_data(pointers - i - 1)
             t_trans['padding_mask'] = np.zeros((t_trans['index'].shape[0], ), dtype=bool)
@@ -2404,7 +2407,7 @@ class SAC_Base:
             batch_list = [batch]
         else:
             batch_list = self.batch_buffer.get_batch()
-            batch_list = [(*batch, None) for batch in batch_list]
+            batch_list = [(*batch, None) for batch in batch_list]  # None is priority_is
 
         for batch in batch_list:
             (bn_indexes,

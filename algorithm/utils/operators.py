@@ -76,43 +76,69 @@ def traverse_lists(data: Union[Any, Tuple], process) -> List:
     return buffer
 
 
-def episode_to_batch(bn: int,
-                     episode_length: int,
+def episode_to_batch(burn_in_step: int,
+                     n_step: int,
                      l_indexes: np.ndarray,
                      l_obses_list: List[np.ndarray],
                      l_actions: np.ndarray,
                      l_rewards: np.ndarray,
                      next_obs_list: List[np.ndarray],
                      l_dones: np.ndarray,
-                     l_probs: Optional[np.ndarray] = None,
+                     l_probs: np.ndarray,
                      l_seq_hidden_states: Optional[np.ndarray] = None) -> List[Union[np.ndarray, List[np.ndarray]]]:
     """
     Args:
-        bn: int, burn_in_step + n_step
-        episode_length: int, Indicates true episode_len, not MAX_EPISODE_LENGTH
-        l_indexes: [1, episode_len]
+        burn_in_step: int
+        n_step: int
+        l_indexes (np.int32): [1, episode_len]
         l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
         l_actions: [1, episode_len, action_size]
         l_rewards: [1, episode_len]
         next_obs_list: list([1, *obs_shapes_i], ...)
-        l_dones: [1, episode_len]
-        l_probs: [1, episode_len]
+        l_dones (np.int32): [1, episode_len]
+        l_probs: [1, episode_len, action_size]
         l_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
 
     Returns:
-        bn_indexes: [episode_len - bn + 1, bn]
-        bn_padding_masks: [episode_len - bn + 1, bn]
+        bn_indexes (np.int32): [episode_len - bn + 1, bn]
+        bn_padding_masks (bool): [episode_len - bn + 1, bn]
         bn_obses_list: list([episode_len - bn + 1, bn, *obs_shapes_i], ...)
         bn_actions: [episode_len - bn + 1, bn, action_size]
         bn_rewards: [episode_len - bn + 1, bn]
         next_obs_list: list([episode_len - bn + 1, *obs_shapes_i], ...)
-        bn_dones: [episode_len - bn + 1, bn]
-        bn_probs: [episode_len - bn + 1, bn]
+        bn_dones (bool): [episode_len - bn + 1, bn]
+        bn_probs: [episode_len - bn + 1, bn, action_size]
         f_seq_hidden_states: [episode_len - bn + 1, 1, *seq_hidden_state_shape]
     """
+
+    bn = burn_in_step + n_step
+    episode_length = l_indexes.shape[1]
+
+    # Padding burn_in_step
+    l_indexes = np.concatenate([np.full((1, burn_in_step), -1, dtype=l_indexes.dtype),
+                                l_indexes], axis=1)
+    l_padding_mask = np.concatenate([np.ones((1, burn_in_step), dtype=bool),
+                                     np.zeros((1, episode_length), dtype=bool)], axis=1)
+    for j, l_obses in enumerate(l_obses_list):
+        l_obses_list[j] = np.concatenate([np.zeros((1, burn_in_step, *l_obses.shape[2:]), dtype=l_obses.dtype),
+                                          l_obses], axis=1)
+    l_actions = np.concatenate([np.zeros((1, burn_in_step, *l_actions.shape[2:]), dtype=l_actions.dtype),
+                                l_actions], axis=1)
+    l_rewards = np.concatenate([np.zeros((1, burn_in_step), dtype=l_rewards.dtype),
+                                l_rewards], axis=1)
+    l_dones = np.concatenate([np.zeros((1, burn_in_step), dtype=l_dones.dtype),
+                              l_dones], axis=1)
+    l_probs = np.concatenate([np.zeros((1, burn_in_step, *l_probs.shape[2:]), dtype=l_probs.dtype),
+                              l_probs], axis=1)
+    if l_seq_hidden_states is not None:
+        l_seq_hidden_states = np.concatenate([np.zeros((1, burn_in_step, *l_seq_hidden_states.shape[2:]), dtype=l_seq_hidden_states.dtype),
+                                              l_seq_hidden_states], axis=1)
+
+    # Generate batch
     bn_indexes = np.concatenate([l_indexes[:, i:i + bn]
                                 for i in range(episode_length - bn + 1)], axis=0)
-    bn_padding_masks = np.zeros(bn_indexes.shape, dtype=bool)
+    bn_padding_masks = np.concatenate([l_padding_mask[:, i:i + bn]
+                                       for i in range(episode_length - bn + 1)], axis=0)
     tmp_bn_obses_list = [None] * len(l_obses_list)
     for j, l_obses in enumerate(l_obses_list):
         tmp_bn_obses_list[j] = np.concatenate([l_obses[:, i:i + bn]
@@ -129,10 +155,8 @@ def episode_to_batch(bn: int,
                                               axis=0)
     bn_dones = np.concatenate([l_dones[:, i:i + bn]
                               for i in range(episode_length - bn + 1)], axis=0)
-
-    if l_probs is not None:
-        bn_probs = np.concatenate([l_probs[:, i:i + bn]
-                                   for i in range(episode_length - bn + 1)], axis=0)
+    bn_probs = np.concatenate([l_probs[:, i:i + bn]
+                               for i in range(episode_length - bn + 1)], axis=0)
 
     if l_seq_hidden_states is not None:
         f_seq_hidden_states = np.concatenate([l_seq_hidden_states[:, i:i + 1]
@@ -145,5 +169,5 @@ def episode_to_batch(bn: int,
             bn_rewards,
             tmp_next_obs_list,
             bn_dones,
-            bn_probs if l_probs is not None else None,
+            bn_probs,
             f_seq_hidden_states if l_seq_hidden_states is not None else None]

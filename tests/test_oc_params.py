@@ -20,6 +20,7 @@ class TestOCVanillaModel(unittest.TestCase):
 
         sac = OptionSelectorBase(
             num_options=NUM_OPTIONS,
+            use_dilated_attn=False,
             option_burn_in_step=-1,
             option_nn_config=None,
 
@@ -53,7 +54,10 @@ class TestOCSeqEncoderModel(unittest.TestCase):
         if param_dict['seq_encoder'] == SEQ_ENCODER.RNN:
             import tests.nn_conv_rnn as nn_conv
         elif param_dict['seq_encoder'] == SEQ_ENCODER.ATTN:
-            import tests.nn_conv_attn as nn_conv
+            if param_dict['use_dilated_attn']:
+                import tests.nn_conv_dilated_attn as nn_conv
+            else:
+                import tests.nn_conv_attn as nn_conv
 
         importlib.reload(nn_conv)
 
@@ -140,11 +144,13 @@ def __gen_vanilla():
 
 def __gen_seq_encoder():
     param_dict_candidates = {
+        'use_dilated_attn': [True, False],
+        'option_burn_in_step': [-1, 2],
+
         'd_action_sizes': [[2, 3, 4]],
         'c_action_size': [4],
         'use_replay_buffer': [True, False],
         'burn_in_step': [5],
-        'option_burn_in_step': [-1, 2],
         'n_step': [3],
         'discrete_dqn_like': [True, False],
         'seq_encoder': ['RNN', 'ATTN'],
@@ -160,6 +166,14 @@ def __gen_seq_encoder():
 
     i = 0
     for param_dict in possible_param_dicts:
+        if param_dict['seq_encoder'] == 'RNN' and param_dict['use_dilated_attn']:
+            continue
+        if param_dict['seq_encoder'] == 'ATTN' and param_dict['use_dilated_attn']:
+            if not param_dict['use_replay_buffer'] or param_dict['use_add_with_td']:
+                continue
+            if param_dict['option_burn_in_step'] != '-1':
+                continue
+
         if not param_dict['d_action_sizes'] and not param_dict['c_action_size']:
             continue
 
