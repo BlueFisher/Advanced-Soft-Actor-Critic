@@ -219,11 +219,13 @@ class OptionSelectorBase(SAC_Base):
                                                              self.d_action_sizes, self.c_action_size,
                                                              False, self.train_mode,
                                                              self.model_abs_dir,
+                                                             use_dilated_attn=self.use_dilated_attn,
                                                              **nn_config['rep']).to(self.device)
             self.model_target_rep: ModelBaseAttentionRep = ModelRep(self.obs_shapes,
                                                                     self.d_action_sizes, self.c_action_size,
                                                                     True, self.train_mode,
                                                                     self.model_abs_dir,
+                                                                    use_dilated_attn=self.use_dilated_attn,
                                                                     **nn_config['rep']).to(self.device)
             # Get represented state and seq_hidden_state_shape
             test_index = torch.zeros((self.batch_size, 1), dtype=torch.int32, device=self.device)

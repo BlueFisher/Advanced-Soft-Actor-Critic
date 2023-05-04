@@ -50,18 +50,31 @@ class TestWrapper:
         return get_ma_obs_list(self.n_envs, self._ma_obs_shapes)
 
     def step(self, ma_d_action, ma_c_action):
+        """
+        Returns:
+            ma_next_obs_list
+            ma_reward
+            ma_local_done
+            ma_max_reached
+            ma_next_padding_mask
+        """
+
+        ma_local_done = {
+            'test0': np.random.rand(self.n_envs) < 0.1,
+            'test1': np.random.rand(self.n_envs) < 0.1
+        }
+
+        ma_max_reached = {
+            'test0': np.logical_and(np.random.rand(self.n_envs) < 0.1, ma_local_done['test0']),
+            'test1': np.logical_and(np.random.rand(self.n_envs) < 0.1, ma_local_done['test1'])
+        }
+
         return (get_ma_obs_list(self.n_envs, self._ma_obs_shapes), {
             'test0': np.random.randn(self.n_envs).astype(np.float32),
             'test1': np.random.randn(self.n_envs).astype(np.float32),
-        }, {
-            'test0': [False] * self.n_envs,
-            'test1': [False] * self.n_envs
-        }, {
-            'test0': [False] * self.n_envs,
-            'test1': [False] * self.n_envs
-        }, {
-            'test0': [False] * self.n_envs,
-            'test1': [False] * self.n_envs
+        }, ma_local_done, ma_max_reached, {
+            'test0': np.random.choice([False, True], self.n_envs),
+            'test1': np.random.choice([False, True], self.n_envs)
         })
 
     def close(self):

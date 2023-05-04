@@ -3,7 +3,7 @@ default:
     env_type: TEST
     env_name: TEST
 
-    max_iter: 5
+    max_step: 10
     max_step_each_iter: 100
     n_envs: 2
 

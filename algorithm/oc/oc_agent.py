@@ -274,8 +274,10 @@ class OC_Agent(Agent):
             key_seq_hidden_states,
         )
 
-    def get_last_index(self):
+    def get_last_index(self) -> np.ndarray:
         index = self._tmp_episode_trans['index'][-1:]
+        if len(index) == 0:
+            index = np.full((1, ), -1, dtype=np.int32)
         index = np.expand_dims(index, 0)
 
         return index
@@ -341,7 +343,7 @@ class OC_AgentManager(AgentManager):
             )
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN and not self.use_dilated_attn:
-            ep_length = min(512, max([a.episode_length for a in self.agents] + [1]))
+            ep_length = min(512, max([a.episode_length for a in self.agents]))
 
             all_episode_trans = [a.get_episode_trans(ep_length).values() for a in self.agents]
             (all_ep_indexes,
