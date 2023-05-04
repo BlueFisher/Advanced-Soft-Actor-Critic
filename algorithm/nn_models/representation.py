@@ -25,10 +25,13 @@ class ModelBaseSimpleRep(nn.Module):
     def forward(self, obs_list: List[torch.Tensor]):
         raise Exception("ModelSimpleRep not implemented")
 
-    def get_augmented_encoders(self, obs_list) -> Union[torch.Tensor, Tuple[torch.Tensor]]:
+    def get_augmented_encoders(self,
+                               obs_list: List[torch.Tensor]) -> Union[torch.Tensor, Tuple[torch.Tensor]]:
         raise Exception("get_augmented_encoders not implemented")
 
-    def get_state_from_encoders(self, obs_list, encoders) -> torch.Tensor:
+    def get_state_from_encoders(self,
+                                obs_list: List[torch.Tensor],
+                                encoders: Union[torch.Tensor, Tuple[torch.Tensor]]) -> torch.Tensor:
         raise Exception("get_state_from_encoders not implemented")
 
 
@@ -56,7 +59,9 @@ class ModelBaseRNNRep(nn.Module):
     def _build_model(self, **kwargs):
         pass
 
-    def forward(self, obs_list: List[torch.Tensor], pre_action: torch.Tensor,
+    def forward(self,
+                obs_list: List[torch.Tensor],
+                pre_action: torch.Tensor,
                 rnn_state: Optional[torch.Tensor] = None,
                 padding_mask: Optional[torch.Tensor] = None):
         """
@@ -68,28 +73,59 @@ class ModelBaseRNNRep(nn.Module):
         """
         raise Exception("ModelRNNRep not implemented")
 
-    def get_augmented_encoders(self, obs_list) -> Union[torch.Tensor, Tuple[torch.Tensor]]:
+    def get_augmented_encoders(self, obs_list: List[torch.Tensor]) -> Union[torch.Tensor, Tuple[torch.Tensor]]:
         raise Exception("get_augmented_encoders not implemented")
 
-    def get_state_from_encoders(self, obs_list, encoders, pre_action,
-                                rnn_state=None,
+    def get_state_from_encoders(self,
+                                obs_list: List[torch.Tensor],
+                                encoders: Union[torch.Tensor, Tuple[torch.Tensor]],
+                                pre_action: torch.Tensor,
+                                rnn_state: Optional[torch.Tensor] = None,
                                 padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         raise Exception("get_state_from_encoders not implemented")
 
 
-class ModelBaseAttentionRep(ModelBaseRNNRep):
-    def forward(self, index, obs_list, pre_action,
+class ModelBaseAttentionRep(nn.Module):
+    def __init__(self,
+                 obs_shapes: List[Tuple],
+                 d_action_sizes: List[int], c_action_size: int,
+                 is_target: bool, train_mode: bool,
+                 model_abs_dir: Optional[Path] = None,
+                 use_dilated_attn=False,  # For option critic
+                 **kwargs):
+        super().__init__()
+        self.obs_shapes = obs_shapes
+        self.d_action_sizes = d_action_sizes
+        self.c_action_size = c_action_size
+        self.train_mode = train_mode
+        self.is_target = is_target
+        self.model_abs_dir = model_abs_dir
+        self.use_dilated_attn = use_dilated_attn
+
+        self._build_model(**kwargs)
+
+    def forward(self,
+                index: torch.Tensor,
+                obs_list: List[torch.Tensor],
+                pre_action: Optional[torch.Tensor] = None,
                 query_length=1,
-                hidden_state=None,
+                hidden_state: Optional[torch.Tensor] = None,
                 is_prev_hidden_state=False,
-                padding_mask=None):
+                padding_mask: Optional[torch.Tensor] = None):
         raise Exception('ModelAttentionRep not implemented')
 
-    def get_state_from_encoders(self, index, obs_list, encoders, pre_action,
+    def get_augmented_encoders(self, obs_list: List[torch.Tensor]) -> Union[torch.Tensor, Tuple[torch.Tensor]]:
+        raise Exception("get_augmented_encoders not implemented")
+
+    def get_state_from_encoders(self,
+                                index: torch.Tensor,
+                                obs_list: List[torch.Tensor],
+                                encoders: Union[torch.Tensor, Tuple[torch.Tensor]],
+                                pre_action: Optional[torch.Tensor] = None,
                                 query_length=1,
-                                hidden_state=None,
+                                hidden_state: Optional[torch.Tensor] = None,
                                 is_prev_hidden_state=False,
-                                padding_mask=None) -> torch.Tensor:
+                                padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         raise Exception("get_state_from_encoders not implemented")
 
 

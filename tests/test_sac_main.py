@@ -2,9 +2,7 @@ import argparse
 import unittest
 from pathlib import Path
 
-from algorithm.sac_base import SAC_Base
 from algorithm.sac_main import Main
-from tests.get_synthesis_data import *
 
 
 class TestSACMain(unittest.TestCase):
@@ -21,13 +19,14 @@ class TestSACMain(unittest.TestCase):
 
             port=None,
             editor=None,
+            timescale=None,
 
             name=None,
-            nn=None,
             disable_sample=False,
             use_env_nn=False,
             device='cpu',
-            ckpt=None
+            ckpt=None,
+            nn=None,
         )
 
         root_dir = Path(__file__).resolve().parent.parent
@@ -46,13 +45,14 @@ class TestSACMain(unittest.TestCase):
 
             port=None,
             editor=None,
+            timescale=None,
 
             name=None,
-            nn=None,
             disable_sample=False,
             use_env_nn=False,
             device='cpu',
-            ckpt=None
+            ckpt=None,
+            nn=None,
         )
 
         root_dir = Path(__file__).resolve().parent.parent
