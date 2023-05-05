@@ -2,6 +2,7 @@ import logging
 import logging.handlers
 import random
 import string
+import sys
 import time
 from copy import copy, deepcopy
 from pathlib import Path
@@ -135,12 +136,12 @@ class ColoredFormatter(logging.Formatter):
         return logging.Formatter.format(self, colored_record)
 
 
-def set_logger(logger_file=None, debug=False):
+def set_logger(debug=False):
     # logger config
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG if debug else logging.INFO)
     # Remove default root logger handler
-    logger.handlers = []
+    logger.handlers.clear()
 
     # Create stream handler
     sh = logging.StreamHandler()
@@ -150,15 +151,18 @@ def set_logger(logger_file=None, debug=False):
     sh.setFormatter(ColoredFormatter('[%(levelname)s] - [%(name)s] - %(message)s'))
     logger.addHandler(sh)
 
-    if logger_file is not None:
-        # Create file handler
-        fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=10 * 1024 * 1024, backupCount=20)
-        fh.setLevel(logging.DEBUG if debug else logging.INFOO)
-
-        # Add handler and formatter to logger
-        fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
-
-        logger.addHandler(fh)
-
     logging.getLogger('PIL').setLevel(logging.WARNING)
     logging.getLogger('matplotlib').setLevel(logging.WARNING)
+
+
+def add_file_logger(logger_file: Path):
+    logger = logging.getLogger()
+
+    # Create file handler
+    fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=10 * 1024 * 1024, backupCount=20)
+    fh.setLevel(logger.level)
+
+    # Add handler and formatter to logger
+    fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
+
+    logger.addHandler(fh)

@@ -81,7 +81,7 @@ class Main:
         self.model_abs_dir = model_abs_dir
 
         if args.logger_in_file:
-            config_helper.set_logger(model_abs_dir.joinpath(f'log.log'))
+            config_helper.add_file_logger(model_abs_dir.joinpath(f'log.log'))
 
         if self.train_mode:
             config_helper.save_config(config, model_abs_dir, 'config.yaml')

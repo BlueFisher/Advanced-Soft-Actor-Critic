@@ -2,7 +2,8 @@ import logging
 import time
 from typing import Dict, Optional
 
-CLEAR_EACH_LOG = False
+CLEAR_EACH_LOG = True
+FORCE_REPEAT = 1
 
 
 class UnifiedElapsedTimer:
@@ -41,6 +42,8 @@ class ElapsedTimer:
         self._log = log
         self._logger = logger
         self._repeat = repeat
+        if FORCE_REPEAT != -1:
+            self._repeat = FORCE_REPEAT
         self._force_report = force_report
 
         self._step = 1
