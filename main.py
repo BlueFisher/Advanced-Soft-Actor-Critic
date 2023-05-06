@@ -5,7 +5,7 @@ from pathlib import Path
 from algorithm.config_helper import set_logger
 
 HITTED_ENVS = {'roller',
-               'square', 'square/obstacle' 'pyramid',
+               'square', 'square/obstacle', 'pyramid',
                'uav',
                'ugv', 'ugv/ugv_soccer_search',
                'usv'}
