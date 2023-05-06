@@ -778,6 +778,8 @@ class OptionSelectorBase(SAC_Base):
         pre_action = torch.from_numpy(pre_action).to(self.device)
         low_rnn_state = torch.from_numpy(low_rnn_state).to(self.device)
 
+        # self._logger.debug(f'choose {key_indexes.shape}')
+
         state, next_attn_state, _ = self.model_rep(key_indexes,
                                                    key_obses_list,
                                                    pre_action=None,
@@ -860,7 +862,8 @@ class OptionSelectorBase(SAC_Base):
             (key_indexes,
              key_padding_masks,
              key_obses_list,
-             key_option_indexes) = key_batch
+             key_option_indexes,
+             key_seq_hidden_states) = key_batch
 
             l_indexes = torch.concat([key_indexes[:, :-1], l_indexes], dim=1)
             l_padding_masks = torch.concat([key_padding_masks[:, :-1], l_padding_masks], dim=1)
@@ -871,7 +874,7 @@ class OptionSelectorBase(SAC_Base):
                                                         l_obses_list,
                                                         pre_action=None,
                                                         query_length=query_length,
-                                                        hidden_state=None,
+                                                        hidden_state=key_seq_hidden_states,
                                                         is_prev_hidden_state=True,
                                                         padding_mask=l_padding_masks)
 
@@ -1895,7 +1898,7 @@ class OptionSelectorBase(SAC_Base):
         m_rewards: [batch, N + 1]
         m_dones (bool): [batch, N + 1]
         m_mu_probs: [batch, N + 1, action_size]
-        m_seq_hidden_state: [batch, N + 1, *seq_hidden_state_shape]
+        m_seq_hidden_states: [batch, N + 1, *seq_hidden_state_shape]
         m_low_seq_hidden_states: [batch, N + 1, *low_seq_hidden_state_shape]
         """
         m_indexes = batch['index']
@@ -1930,21 +1933,28 @@ class OptionSelectorBase(SAC_Base):
             key_tran = self.replay_buffer.get_storage_data(tmp_pointers)
             key_trans = {k: [v] for k, v in key_tran.items()}
             key_trans['padding_mask'] = [np.zeros_like(key_tran['index'], dtype=bool)]
+            delta = None
 
-            while np.any(key_trans['index'][0] != 0):  # All keys are the first keys in episodes
-                tmp_tran_index = key_trans['index'][0]  # Pre key index in an episode
-                tmp_option_changed_index = self.replay_buffer.get_storage_data(tmp_pointers - 1)['option_changed_index']
-                # The previous option changed key index of the pre key in an episode
+            while delta is None or np.any(delta != 0):  # All keys are the first keys in episodes
+                tmp_tran_index = key_trans['index'][0]  # The current key tran index in an episode
+                tmp_pre_tran = self.replay_buffer.get_storage_data(tmp_pointers - 1)  # The previous tran of the current key tran
+                tmp_option_changed_index = tmp_pre_tran['option_changed_index']
+                # The previous option changed key index in an episode
                 delta = tmp_tran_index - tmp_option_changed_index
 
-                padding_mask = tmp_tran_index == 0  # The pre key is the first key in an episode
+                padding_mask = tmp_tran_index == 0  # The current key tran is the first key in an episode
+                padding_mask = np.logical_or(padding_mask, tmp_tran_index - tmp_pre_tran['index'] != 1)
+                # The previous tran is not the actually the previous tran of the current key tran
 
                 delta[padding_mask] = 0
                 tmp_pointers = (tmp_pointers - delta).astype(pointers.dtype)
                 tmp_tran = self.replay_buffer.get_storage_data(tmp_pointers)
                 tmp_tran['padding_mask'] = np.zeros_like(tmp_tran_index, dtype=bool)
                 tmp_tran['padding_mask'][padding_mask] = True
+                for name in self.obs_names:
+                    tmp_tran[f'obs_{name}'][padding_mask] = 0.
                 tmp_tran['option_index'][padding_mask] = -1
+                tmp_tran['seq_hidden_state'][padding_mask] = 0.
                 for k, v in tmp_tran.items():
                     key_trans[k].insert(0, v)
 
@@ -1955,7 +1965,8 @@ class OptionSelectorBase(SAC_Base):
                 key_trans['index'],
                 key_trans['padding_mask'],
                 [key_trans[f'obs_{name}'] for name in self.obs_names],
-                key_trans['option_index']
+                key_trans['option_index'],
+                key_trans['seq_hidden_state']
             )
 
         return (pointers,
@@ -2053,7 +2064,8 @@ class OptionSelectorBase(SAC_Base):
                     (key_indexes,
                      key_padding_masks,
                      key_obses_list,
-                     key_option_indexes) = key_batch
+                     key_option_indexes,
+                     key_seq_hidden_states) = key_batch
 
                     key_indexes = torch.from_numpy(key_indexes).to(self.device)
                     key_padding_masks = torch.from_numpy(key_padding_masks).to(self.device)
@@ -2063,11 +2075,15 @@ class OptionSelectorBase(SAC_Base):
                         if key_obses.dtype == torch.uint8:
                             key_obses_list[i] = key_obses.type(torch.float32) / 255.
                     key_option_indexes = torch.from_numpy(key_option_indexes).to(self.device)
+                    key_seq_hidden_states = torch.from_numpy(key_seq_hidden_states).to(self.device)
+
+                    # self._logger.debug(f'train {key_indexes.shape}')
 
                     key_batch = (key_indexes,
                                  key_padding_masks,
                                  key_obses_list,
-                                 key_option_indexes)
+                                 key_option_indexes,
+                                 key_seq_hidden_states)
 
             with self._profiler('train', repeat=10):
                 (m_target_states,
