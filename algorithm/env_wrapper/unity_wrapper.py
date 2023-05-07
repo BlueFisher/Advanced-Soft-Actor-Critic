@@ -1,3 +1,4 @@
+import json
 import logging
 import math
 import multiprocessing
@@ -30,10 +31,10 @@ class OptionChannel(SideChannel):
     def __init__(self) -> None:
         super().__init__(uuid.UUID("621f0a70-4f87-11ea-a6bf-784f4387d1f7"))
 
-    def send_option(self, data: int) -> None:
+    def send_option(self, data: Dict[str, int]) -> None:
         # Add the string to an OutgoingMessage
         msg = OutgoingMessage()
-        msg.write_int32(data)
+        msg.write_string(json.dumps(data))
         # We call this method to queue the data we want to send
         super().queue_message_to_send(msg)
 
@@ -542,7 +543,8 @@ class UnityWrapper:
 
                 self._process_id += 1
 
-    def send_option(self, option: int):
+    def send_option(self, option: Dict[str, int]):
+        # TODO multiple envs
         self._envs[0].option_channel.send_option(option)
 
     def init(self):
@@ -590,7 +592,8 @@ class UnityWrapper:
 
             envs_ma_obs_list = [conn.recv() for conn in self._conns]
 
-        ma_obs_list = {n: [np.concatenate(env_obs_list) for env_obs_list in zip(*[ma_obs_list[n] for ma_obs_list in envs_ma_obs_list])]
+        ma_obs_list = {n: [np.concatenate(env_obs_list)
+                           for env_obs_list in zip(*[ma_obs_list[n] for ma_obs_list in envs_ma_obs_list])]
                        for n in self.behavior_names}
 
         return ma_obs_list

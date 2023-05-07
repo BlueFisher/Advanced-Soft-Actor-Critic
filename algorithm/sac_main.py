@@ -4,6 +4,7 @@ import shutil
 import sys
 import time
 from pathlib import Path
+from typing import Dict
 
 import numpy as np
 
@@ -19,6 +20,8 @@ class Main:
     train_mode = True
     render = False
     unity_run_in_editor = False
+
+    ma_manager: MultiAgentsManager
 
     def __init__(self, root_dir, config_dir, args):
         """
@@ -242,6 +245,7 @@ class Main:
                          ma_local_done,
                          ma_max_reached,
                          ma_next_padding_mask) = self.env.step(ma_d_action, ma_c_action)
+                        self._extra_step(ma_d_action, ma_c_action)
 
                     if ma_next_obs_list is None:
                         force_reset = True
@@ -296,6 +300,11 @@ class Main:
             self.env.close()
 
             self._logger.info('Training terminated')
+
+    def _extra_step(self,
+                    ma_d_action: Dict[str, np.ndarray],
+                    ma_c_action: Dict[str, np.ndarray]):
+        pass
 
     def _log_episode_summaries(self):
         for n, mgr in self.ma_manager:
