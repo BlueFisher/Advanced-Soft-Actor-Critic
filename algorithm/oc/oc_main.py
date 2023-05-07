@@ -3,6 +3,9 @@ import logging
 import shutil
 from collections import defaultdict
 from pathlib import Path
+from typing import Dict
+
+import numpy as np
 
 from .. import sac_main
 from ..sac_main import Main
@@ -15,6 +18,8 @@ sac_main.MultiAgentsManager = OC_MultiAgentsManager
 
 
 class OC_Main(Main):
+    ma_manager: OC_MultiAgentsManager
+
     def __init__(self, root_dir, config_dir, args):
         """
         config_path: the directory of config file
@@ -69,6 +74,15 @@ class OC_Main(Main):
                                           **mgr.config['sac_config'],
 
                                           replay_config=mgr.config['replay_config']))
+
+    def _extra_step(self,
+                    ma_d_action: Dict[str, np.ndarray],
+                    ma_c_action: Dict[str, np.ndarray]):
+        ma_option = self.ma_manager.get_option()
+
+        # TODO multiple agent options
+        ma_option = {n: int(option[0]) for n, option in ma_option.items()}
+        self.env.send_option(ma_option)
 
     def _log_episode_info(self, iteration, iter_time):
         for n, mgr in self.ma_manager:

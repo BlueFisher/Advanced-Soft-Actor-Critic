@@ -468,7 +468,8 @@ class MultiAgentsManager:
 
     def get_ma_action(self,
                       disable_sample: bool = False,
-                      force_rnd_if_available: bool = False) -> Tuple[Dict[str, np.ndarray]]:
+                      force_rnd_if_available: bool = False) -> Tuple[Dict[str, np.ndarray],
+                                                                     Dict[str, np.ndarray]]:
         for n, mgr in self:
             mgr.get_action(disable_sample, force_rnd_if_available)
 
@@ -477,7 +478,8 @@ class MultiAgentsManager:
 
         return ma_d_action, ma_c_action
 
-    def get_test_ma_action(self) -> Tuple[Dict[str, np.ndarray]]:
+    def get_test_ma_action(self) -> Tuple[Dict[str, np.ndarray],
+                                          Dict[str, np.ndarray]]:
         for n, mgr in self:
             mgr.get_test_action()
 

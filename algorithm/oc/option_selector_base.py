@@ -1882,6 +1882,7 @@ class OptionSelectorBase(SAC_Base):
             t_trans = self.replay_buffer.get_storage_data(pointers - i - 1)
             t_trans['padding_mask'] = np.zeros((t_trans['index'].shape[0], ), dtype=bool)
 
+            # Padding the tran that does not belong to the current episode
             mask = (trans['index'] - t_trans['index']) != i + 1
             t_trans['index'][mask] = -1
             t_trans['padding_mask'][mask] = True
@@ -1944,7 +1945,7 @@ class OptionSelectorBase(SAC_Base):
 
                 padding_mask = tmp_tran_index == 0  # The current key tran is the first key in an episode
                 padding_mask = np.logical_or(padding_mask, tmp_tran_index - tmp_pre_tran['index'] != 1)
-                # The previous tran is not the actually the previous tran of the current key tran
+                # The previous tran is not actually the previous tran of the current key tran
 
                 delta[padding_mask] = 0
                 tmp_pointers = (tmp_pointers - delta).astype(pointers.dtype)
