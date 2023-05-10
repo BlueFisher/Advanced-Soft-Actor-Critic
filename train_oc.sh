@@ -4,4 +4,4 @@ set -e
 /etc/bootstrap.sh
 export DISPLAY=:0
 export MPLBACKEND=agg
-python -u /data/asac/main.py $@
+python -u /data/asac/main_oc.py $@
