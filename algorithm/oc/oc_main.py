@@ -82,7 +82,7 @@ class OC_Main(Main):
 
         # TODO multiple agent options
         ma_option = {n: int(option[0]) for n, option in ma_option.items()}
-        self.env.send_option(ma_option)
+        # self.env.send_option(ma_option)
 
     def _log_episode_info(self, iteration, iter_time):
         for n, mgr in self.ma_manager:

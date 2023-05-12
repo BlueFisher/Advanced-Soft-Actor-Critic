@@ -1,0 +1,91 @@
+default:
+  base_config:
+    env_name: MemoryCorridor
+    unity_args:
+      build_path:
+        win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
+        linux: /data/linux-RL-Envs/RLEnvironments.x86_64
+      no_graphics: false
+
+    reset_on_iteration: true
+    n_envs: 50
+
+  reset_config:
+    force_reset: true
+
+  sac_config:
+    burn_in_step: 10
+    n_step: 3
+    seq_encoder: RNN
+
+    use_rnd: true
+    rnd_n_sample: 50
+
+attn:
+  sac_config:
+    nn: nn_attn
+    seq_encoder: ATTN
+
+oc_2:
+  base_config:
+    name: oc2_{time}
+  oc_config:
+    num_options: 2
+
+oc_3:
+  base_config:
+    name: oc3_{time}
+  oc_config:
+    num_options: 3
+
+oc_4:
+  base_config:
+    name: oc4_{time}
+  oc_config:
+    num_options: 4
+
+oc_2_attn:
+  inherited: oc_2
+  base_config:
+    name: oc2_attn_{time}
+  sac_config:
+    nn: nn_attn
+    seq_encoder: ATTN
+
+oc_3_attn:
+  inherited: oc_3
+  base_config:
+    name: oc3_attn_{time}
+  sac_config:
+    nn: nn_attn
+    seq_encoder: ATTN
+
+oc_4_attn:
+  inherited: oc_4
+  base_config:
+    name: oc4_attn_{time}
+  sac_config:
+    nn: nn_attn
+    seq_encoder: ATTN
+
+oc_2_attn_dilated:
+  inherited: oc_2_attn
+  base_config:
+    name: oc2_dilated_{time}
+  oc_config:
+    use_dilated_attn: true
+
+oc_3_attn_dilated:
+  inherited: oc_3_attn
+  base_config:
+    name: oc3_dilated_{time}
+  oc_config:
+    num_options: 3
+    use_dilated_attn: true
+
+oc_4_attn_dilated:
+  inherited: oc_4_attn
+  base_config:
+    name: oc4_dilated_{time}
+  oc_config:
+    use_dilated_attn: true

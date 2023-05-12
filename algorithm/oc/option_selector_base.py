@@ -1673,7 +1673,7 @@ class OptionSelectorBase(SAC_Base):
 
             option.train_policy_alpha(bn_obses_list=[o_m_obses[:, :-1, ...]
                                                      for o_m_obses in o_m_low_obses_list],
-                                      bn_states=o_m_low_states[:, :-1, ...],
+                                      m_states=o_m_low_states,
                                       bn_actions=bn_actions[mask, self.option_burn_in_from:],
                                       bn_mu_probs=bn_mu_probs[mask, self.option_burn_in_from:])
 
