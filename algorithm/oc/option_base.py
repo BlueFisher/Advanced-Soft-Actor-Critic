@@ -486,11 +486,12 @@ class OptionBase(SAC_Base):
 
     def train_policy_alpha(self,
                            bn_obses_list: List[torch.Tensor],
-                           bn_states: torch.Tensor,
+                           m_states: torch.Tensor,
                            bn_actions: torch.Tensor,
                            bn_mu_probs: torch.Tensor) -> None:
 
         obs_list = [bn_obses[:, self.burn_in_step, ...] for bn_obses in bn_obses_list]
+        bn_states = m_states[:, :-1, ...]
         state = bn_states[:, self.burn_in_step, ...]
         action = bn_actions[:, self.burn_in_step, ...]
         mu_d_policy_probs = bn_mu_probs[:, self.burn_in_step, :self.d_action_summed_size]
@@ -503,6 +504,13 @@ class OptionBase(SAC_Base):
         if self.use_auto_alpha and ((self.d_action_sizes and not self.discrete_dqn_like) or self.c_action_size):
             d_alpha, c_alpha = self._train_alpha(obs_list, state)
 
+        if self.curiosity is not None:
+            loss_curiosity = self._train_curiosity(m_states, bn_actions)
+
+        if self.use_rnd:
+            bn_states = m_states[:, :-1, ...]
+            loss_rnd = self._train_rnd(bn_states, bn_actions)
+
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             self.summary_available = True
 
@@ -514,6 +522,12 @@ class OptionBase(SAC_Base):
                 self.summary_writer.add_scalar('loss/c_entropy', c_policy_entropy, self.global_step)
                 if self.use_auto_alpha:
                     self.summary_writer.add_scalar('loss/c_alpha', c_alpha, self.global_step)
+
+            if self.curiosity is not None:
+                self.summary_writer.add_scalar('loss/curiosity', loss_curiosity, self.global_step)
+
+            if self.use_rnd:
+                self.summary_writer.add_scalar('loss/rnd', loss_rnd, self.global_step)
 
             self.summary_writer.flush()
 
