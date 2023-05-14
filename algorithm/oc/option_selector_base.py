@@ -277,9 +277,6 @@ class OptionSelectorBase(SAC_Base):
         if self.option_burn_in_step == -1:
             self.option_burn_in_step = self.burn_in_step
 
-        if self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilated_attn:
-            assert self.burn_in_step == self.option_burn_in_step
-
         self.option_burn_in_from = self.burn_in_step - self.option_burn_in_step
 
         option_kwargs = self._kwargs
@@ -1878,7 +1875,7 @@ class OptionSelectorBase(SAC_Base):
                 batch[k][:, self.burn_in_step + i] = v
 
         # Get previous burn_in_step data
-        for i in range(self.burn_in_step):
+        for i in range(self.burn_in_step):  # TODO: option_burn_in_step is enough in dilated attn
             t_trans = self.replay_buffer.get_storage_data(pointers - i - 1)
             t_trans['padding_mask'] = np.zeros((t_trans['index'].shape[0], ), dtype=bool)
 
@@ -1934,9 +1931,8 @@ class OptionSelectorBase(SAC_Base):
             key_tran = self.replay_buffer.get_storage_data(tmp_pointers)
             key_trans = {k: [v] for k, v in key_tran.items()}
             key_trans['padding_mask'] = [np.zeros_like(key_tran['index'], dtype=bool)]
-            delta = None
 
-            while delta is None or np.any(delta != 0):  # All keys are the first keys in episodes
+            for _ in range(self.burn_in_step):  # All keys are the first keys in episodes
                 tmp_tran_index = key_trans['index'][0]  # The current key tran index in an episode
                 tmp_pre_tran = self.replay_buffer.get_storage_data(tmp_pointers - 1)  # The previous tran of the current key tran
                 tmp_option_changed_index = tmp_pre_tran['option_changed_index']
