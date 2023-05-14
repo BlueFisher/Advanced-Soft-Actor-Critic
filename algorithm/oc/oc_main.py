@@ -78,11 +78,12 @@ class OC_Main(Main):
     def _extra_step(self,
                     ma_d_action: Dict[str, np.ndarray],
                     ma_c_action: Dict[str, np.ndarray]):
-        ma_option = self.ma_manager.get_option()
+        if not self.train_mode:
+            ma_option = self.ma_manager.get_option()
 
-        # TODO multiple agent options
-        ma_option = {n: int(option[0]) for n, option in ma_option.items()}
-        # self.env.send_option(ma_option)
+            # TODO multiple agent options
+            ma_option = {n: int(option[0]) for n, option in ma_option.items()}
+            self.env.send_option(ma_option)
 
     def _log_episode_info(self, iteration, iter_time):
         for n, mgr in self.ma_manager:
