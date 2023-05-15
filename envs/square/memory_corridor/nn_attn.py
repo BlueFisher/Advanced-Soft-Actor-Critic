@@ -10,7 +10,7 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         self.bbox_mlp = m.LinearLayers(2 * 7, output_size=16)
 
-        if self.use_dilated_attn:
+        if self.use_dilation:
             self.mlp = m.LinearLayers(16 + self.obs_shapes[1][0], 64, 1)
         else:
             self.mlp = m.LinearLayers(16 + self.obs_shapes[1][0] + self.c_action_size, 64, 1)
@@ -27,7 +27,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         bbox_obs = bbox_obs.reshape(*bbox_obs.shape[:-2], -1)
         bbox_obs = self.bbox_mlp(bbox_obs)
 
-        if self.use_dilated_attn:
+        if self.use_dilation:
             x = self.mlp(torch.cat([bbox_obs, vec_obs], dim=-1))
         else:
             x = self.mlp(torch.cat([bbox_obs, vec_obs, pre_action], dim=-1))

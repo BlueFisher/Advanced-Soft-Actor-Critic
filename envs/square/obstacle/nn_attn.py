@@ -9,7 +9,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         assert self.obs_shapes[0] == (55,)
         assert self.obs_shapes[1] == (6,)
 
-        if self.use_dilated_attn:
+        if self.use_dilation:
             self.mlp = m.LinearLayers(self.obs_shapes[0][0] + self.obs_shapes[1][0], 64, 1)
         else:
             self.mlp = m.LinearLayers(self.obs_shapes[0][0] + self.obs_shapes[1][0] + self.c_action_size, 64, 1)
@@ -23,7 +23,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                 padding_mask=None):
         ray_obs, vec_obs = obs_list
 
-        if self.use_dilated_attn:
+        if self.use_dilation:
             x = self.mlp(torch.cat([ray_obs, vec_obs], dim=-1))
         else:
             x = self.mlp(torch.cat([ray_obs, vec_obs, pre_action], dim=-1))

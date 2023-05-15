@@ -7,7 +7,7 @@ class ModelRep(m.ModelBaseAttentionRep):
     def _build_model(self, pe: str):
         self.pe = pe
 
-        if self.use_dilated_attn:
+        if self.use_dilation:
             embed_dim = self.obs_shapes[0][0]
         else:
             embed_dim = self.obs_shapes[0][0] + self.c_action_size + sum(self.d_action_sizes)
@@ -30,7 +30,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                 is_prev_hidden_state=False,
                 padding_mask=None):
 
-        if self.use_dilated_attn:
+        if self.use_dilation:
             x = torch.concat([obs_list[0]], dim=-1)
         else:
             x = torch.concat([obs_list[0], pre_action], dim=-1)

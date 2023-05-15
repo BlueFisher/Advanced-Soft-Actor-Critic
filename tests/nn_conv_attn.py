@@ -12,7 +12,7 @@ class ModelRep(m.ModelBaseAttentionRep):
     def _build_model(self):
         self.conv = m.ConvLayers(30, 30, 3, 'simple', out_dense_depth=2, output_size=8)
 
-        if self.use_dilated_attn:
+        if self.use_dilation:
             embed_dim = self.conv.output_size
         else:
             embed_dim = self.conv.output_size + sum(self.d_action_sizes) + self.c_action_size
@@ -34,7 +34,7 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         vis = self.conv(obs_vis)
 
-        if self.use_dilated_attn:
+        if self.use_dilation:
             state, hn, attn_weights_list = self.attn(vis,
                                                      query_length,
                                                      hidden_state,
@@ -68,7 +68,7 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         vis_encoder = encoders
 
-        if self.use_dilated_attn:
+        if self.use_dilation:
             state, *_ = self.attn(vis_encoder,
                                   query_length,
                                   hidden_state,

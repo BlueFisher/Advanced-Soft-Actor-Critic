@@ -85,7 +85,7 @@ sac_config:
 
 oc_config:
   num_options: 4
-  use_dilated_attn: false
+  use_dilation: false
   option_burn_in_step: -1
 
   nn_config:

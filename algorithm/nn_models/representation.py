@@ -46,7 +46,7 @@ class ModelBaseRNNRep(nn.Module):
                  d_action_sizes: List[int], c_action_size: int,
                  is_target: bool, train_mode: bool,
                  model_abs_dir: Optional[Path] = None,
-                 use_dilated_attn=False,  # For option critic
+                 use_dilation=False,  # For option critic
                  **kwargs):
         super().__init__()
         self.obs_shapes = obs_shapes
@@ -55,7 +55,7 @@ class ModelBaseRNNRep(nn.Module):
         self.train_mode = train_mode
         self.is_target = is_target
         self.model_abs_dir = model_abs_dir
-        self.use_dilated_attn = use_dilated_attn
+        self.use_dilation = use_dilation
 
         self._build_model(**kwargs)
 
@@ -94,7 +94,7 @@ class ModelBaseAttentionRep(nn.Module):
                  d_action_sizes: List[int], c_action_size: int,
                  is_target: bool, train_mode: bool,
                  model_abs_dir: Optional[Path] = None,
-                 use_dilated_attn=False,  # For option critic
+                 use_dilation=False,  # For option critic
                  **kwargs):
         super().__init__()
         self.obs_shapes = obs_shapes
@@ -103,7 +103,7 @@ class ModelBaseAttentionRep(nn.Module):
         self.train_mode = train_mode
         self.is_target = is_target
         self.model_abs_dir = model_abs_dir
-        self.use_dilated_attn = use_dilated_attn
+        self.use_dilation = use_dilation
 
         self._build_model(**kwargs)
 

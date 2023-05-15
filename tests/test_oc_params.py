@@ -20,7 +20,7 @@ class TestOCVanillaModel(unittest.TestCase):
 
         sac = OptionSelectorBase(
             num_options=NUM_OPTIONS,
-            use_dilated_attn=False,
+            use_dilation=False,
             option_burn_in_step=-1,
             option_nn_config=None,
 
@@ -141,7 +141,7 @@ def __gen_vanilla():
 
 def __gen_seq_encoder():
     param_dict_candidates = {
-        'use_dilated_attn': [True, False],
+        'use_dilation': [True, False],
         'option_burn_in_step': [-1, 2],
 
         'd_action_sizes': [[2, 3, 4]],
@@ -163,7 +163,7 @@ def __gen_seq_encoder():
 
     i = 0
     for param_dict in possible_param_dicts:
-        if param_dict['use_dilated_attn']:
+        if param_dict['use_dilation']:
             if not param_dict['use_replay_buffer'] or param_dict['use_add_with_td']:
                 continue
 
