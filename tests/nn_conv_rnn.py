@@ -10,7 +10,7 @@ class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):
         self.conv = m.ConvLayers(30, 30, 3, 'simple', out_dense_depth=2, output_size=8)
 
-        if self.use_dilated_attn:
+        if self.use_dilation:
             self.rnn = m.GRU(self.conv.output_size, 8, 2)
         else:
             self.rnn = m.GRU(self.conv.output_size + sum(self.d_action_sizes) + self.c_action_size, 8, 2)
@@ -26,7 +26,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
         vis = self.conv(obs_vis)
 
-        if self.use_dilated_attn:
+        if self.use_dilation:
             state, hn = self.rnn(vis, rnn_state)
         else:
             state, hn = self.rnn(torch.cat([vis, pre_action], dim=-1), rnn_state)
@@ -50,7 +50,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
         state, _ = self.rnn(torch.cat([vis_encoder, pre_action], dim=-1), rnn_state)
 
-        if self.use_dilated_attn:
+        if self.use_dilation:
             state, _ = self.rnn(vis_encoder, rnn_state)
         else:
             state, _ = self.rnn(torch.cat([vis_encoder, pre_action], dim=-1), rnn_state)

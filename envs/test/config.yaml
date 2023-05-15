@@ -39,7 +39,7 @@ dilated_rnn:
   inherited: rnn
 
   oc_config:
-    use_dilated_attn: true
+    use_dilation: true
 
 attn:
   sac_config:
@@ -67,4 +67,4 @@ dilated_attn:
   inherited: attn
 
   oc_config:
-    use_dilated_attn: true
+    use_dilation: true

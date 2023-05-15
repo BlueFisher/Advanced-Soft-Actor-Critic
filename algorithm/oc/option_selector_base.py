@@ -20,7 +20,7 @@ sac_base.BatchBuffer = BatchBuffer
 class OptionSelectorBase(SAC_Base):
     def __init__(self,
                  num_options: int,
-                 use_dilated_attn: bool,
+                 use_dilation: bool,
                  option_burn_in_step: int,
                  option_nn_config: dict,
 
@@ -86,7 +86,7 @@ class OptionSelectorBase(SAC_Base):
                  replay_config: Optional[dict] = None):
 
         self.num_options = num_options
-        self.use_dilated_attn = use_dilated_attn
+        self.use_dilation = use_dilation
         self.option_burn_in_step = option_burn_in_step
         self.option_nn_config = option_nn_config
 
@@ -201,13 +201,13 @@ class OptionSelectorBase(SAC_Base):
                                                        self.d_action_sizes, self.c_action_size,
                                                        False, self.train_mode,
                                                        self.model_abs_dir,
-                                                       use_dilated_attn=self.use_dilated_attn,
+                                                       use_dilation=self.use_dilation,
                                                        **nn_config['rep']).to(self.device)
             self.model_target_rep: ModelBaseRNNRep = ModelRep(self.obs_shapes,
                                                               self.d_action_sizes, self.c_action_size,
                                                               True, self.train_mode,
                                                               self.model_abs_dir,
-                                                              use_dilated_attn=self.use_dilated_attn,
+                                                              use_dilation=self.use_dilation,
                                                               **nn_config['rep']).to(self.device)
             # Get represented state and seq_hidden_state_shape
             test_obs_list = [torch.rand(self.batch_size, 1, *obs_shape, device=self.device) for obs_shape in self.obs_shapes]
@@ -221,13 +221,13 @@ class OptionSelectorBase(SAC_Base):
                                                              self.d_action_sizes, self.c_action_size,
                                                              False, self.train_mode,
                                                              self.model_abs_dir,
-                                                             use_dilated_attn=self.use_dilated_attn,
+                                                             use_dilation=self.use_dilation,
                                                              **nn_config['rep']).to(self.device)
             self.model_target_rep: ModelBaseAttentionRep = ModelRep(self.obs_shapes,
                                                                     self.d_action_sizes, self.c_action_size,
                                                                     True, self.train_mode,
                                                                     self.model_abs_dir,
-                                                                    use_dilated_attn=self.use_dilated_attn,
+                                                                    use_dilation=self.use_dilation,
                                                                     **nn_config['rep']).to(self.device)
             # Get represented state and seq_hidden_state_shape
             test_index = torch.zeros((self.batch_size, 1), dtype=torch.int32, device=self.device)
@@ -858,7 +858,7 @@ class OptionSelectorBase(SAC_Base):
         """
         model_rep = self.model_target_rep if is_target else self.model_rep
 
-        if self.seq_encoder == SEQ_ENCODER.RNN and self.use_dilated_attn:
+        if self.seq_encoder == SEQ_ENCODER.RNN and self.use_dilation:
             (key_indexes,
              key_padding_masks,
              key_obses_list,
@@ -879,7 +879,7 @@ class OptionSelectorBase(SAC_Base):
                                         f_seq_hidden_states=next_key_rnn_state.unsqueeze(1),
                                         is_target=is_target)
 
-        elif self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilated_attn:
+        elif self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilation:
             query_length = l_indexes.shape[1]
 
             (key_indexes,
@@ -940,7 +940,7 @@ class OptionSelectorBase(SAC_Base):
             l_states: [batch, l, state_size]
             l_seq_hidden_state: [batch, l, *seq_hidden_state_shape]
         """
-        if self.seq_encoder == SEQ_ENCODER.RNN and self.use_dilated_attn:
+        if self.seq_encoder == SEQ_ENCODER.RNN and self.use_dilation:
             (key_indexes,
              key_padding_masks,
              key_obses_list,
@@ -962,7 +962,7 @@ class OptionSelectorBase(SAC_Base):
                 f_seq_hidden_states=next_key_rnn_state.unsqueeze(1)
             )
 
-        elif self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilated_attn:
+        elif self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilation:
             return self.get_l_states(l_indexes=l_indexes,
                                      l_padding_masks=l_padding_masks,
                                      l_obses_list=l_obses_list,
@@ -1830,7 +1830,7 @@ class OptionSelectorBase(SAC_Base):
 
         # n_step transitions except the first one and the last obs_, n_step - 1 + 1
         if self.use_add_with_td:
-            assert not self.use_dilated_attn
+            assert not self.use_dilation
             td_error = self.get_episode_td_error(l_indexes=l_indexes,
                                                  l_obses_list=l_obses_list,
                                                  l_option_indexes=l_option_indexes,
@@ -1974,7 +1974,7 @@ class OptionSelectorBase(SAC_Base):
             bn_low_seq_hidden_states = m_low_seq_hidden_states[:, :-1, ...]
 
         key_batch = None
-        if self.use_dilated_attn:
+        if self.use_dilation:
             tmp_pointers = pointers
             key_tran = self.replay_buffer.get_storage_data(tmp_pointers)
             key_trans = {k: [v] for k, v in key_tran.items()}
@@ -2045,7 +2045,7 @@ class OptionSelectorBase(SAC_Base):
             batch_list = [batch]
             key_batch_list = [key_batch]
         else:
-            assert not self.use_dilated_attn
+            assert not self.use_dilation
             batch_list = self.batch_buffer.get_batch()
             batch_list = [(*batch, None) for batch in batch_list]  # None is priority_is
             key_batch_list = [None] * len(batch_list)

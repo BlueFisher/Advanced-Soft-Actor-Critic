@@ -301,7 +301,7 @@ class OC_AgentManager(AgentManager):
     def set_rl(self, rl: OptionSelectorBase):
         self.rl = rl
         self.seq_encoder = rl.seq_encoder
-        self.use_dilated_attn = rl.use_dilated_attn
+        self.use_dilation = rl.use_dilation
 
     def pre_run(self, num_agents: int):
         self['option_index'] = -1
@@ -312,7 +312,7 @@ class OC_AgentManager(AgentManager):
         if self.seq_encoder is not None:
             self['initial_seq_hidden_state'] = self.rl.get_initial_seq_hidden_state(num_agents)  # [n_envs, *seq_hidden_state_shape]
             self['seq_hidden_state'] = self['initial_seq_hidden_state']
-            if self.use_dilated_attn:
+            if self.use_dilation:
                 self['key_seq_hidden_state'] = self['initial_seq_hidden_state'].copy()
 
             self['initial_low_seq_hidden_state'] = self.rl.get_initial_low_seq_hidden_state(num_agents)  # [n_envs, *los_seq_hidden_state_shape]
@@ -333,7 +333,7 @@ class OC_AgentManager(AgentManager):
     def get_action(self,
                    disable_sample: bool = False,
                    force_rnd_if_available: bool = False):
-        if self.seq_encoder == SEQ_ENCODER.RNN and not self.use_dilated_attn:
+        if self.seq_encoder == SEQ_ENCODER.RNN and not self.use_dilation:
             (option_index,
              action,
              prob,
@@ -349,7 +349,7 @@ class OC_AgentManager(AgentManager):
                 force_rnd_if_available=force_rnd_if_available
             )
 
-        elif self.seq_encoder == SEQ_ENCODER.RNN and self.use_dilated_attn:
+        elif self.seq_encoder == SEQ_ENCODER.RNN and self.use_dilation:
             (option_index,
              action,
              prob,
@@ -365,7 +365,7 @@ class OC_AgentManager(AgentManager):
                 force_rnd_if_available=force_rnd_if_available
             )
 
-        elif self.seq_encoder == SEQ_ENCODER.ATTN and not self.use_dilated_attn:
+        elif self.seq_encoder == SEQ_ENCODER.ATTN and not self.use_dilation:
             ep_length = min(512, max([a.episode_length for a in self.agents]))
 
             all_episode_trans = [a.get_episode_trans(ep_length).values() for a in self.agents]
@@ -413,7 +413,7 @@ class OC_AgentManager(AgentManager):
                 force_rnd_if_available=force_rnd_if_available
             )
 
-        elif self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilated_attn:
+        elif self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilation:
             key_trans_length = max([a.key_trans_length for a in self.agents])
 
             all_key_trans = [a.get_key_trans(key_trans_length) for a in self.agents]
@@ -467,7 +467,7 @@ class OC_AgentManager(AgentManager):
             next_seq_hidden_state = None
             next_low_seq_hidden_state = None
 
-        if self.use_dilated_attn:
+        if self.use_dilation:
             key_mask = self['option_index'] != option_index
             self['key_seq_hidden_state'][key_mask] = next_seq_hidden_state[key_mask]
 
