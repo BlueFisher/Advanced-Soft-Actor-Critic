@@ -54,10 +54,7 @@ class TestOCSeqEncoderModel(unittest.TestCase):
         if param_dict['seq_encoder'] == SEQ_ENCODER.RNN:
             import tests.nn_conv_rnn as nn_conv
         elif param_dict['seq_encoder'] == SEQ_ENCODER.ATTN:
-            if param_dict['use_dilated_attn']:
-                import tests.nn_conv_dilated_attn as nn_conv
-            else:
-                import tests.nn_conv_attn as nn_conv
+            import tests.nn_conv_attn as nn_conv
 
         importlib.reload(nn_conv)
 
@@ -166,12 +163,8 @@ def __gen_seq_encoder():
 
     i = 0
     for param_dict in possible_param_dicts:
-        if param_dict['seq_encoder'] == 'RNN' and param_dict['use_dilated_attn']:
-            continue
-        if param_dict['seq_encoder'] == 'ATTN' and param_dict['use_dilated_attn']:
+        if param_dict['use_dilated_attn']:
             if not param_dict['use_replay_buffer'] or param_dict['use_add_with_td']:
-                continue
-            if param_dict['option_burn_in_step'] != '-1':
                 continue
 
         if not param_dict['d_action_sizes'] and not param_dict['c_action_size']:

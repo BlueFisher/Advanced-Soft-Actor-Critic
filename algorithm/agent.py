@@ -294,6 +294,7 @@ class AgentManager:
                 obs_list=self['obs_list'],
                 pre_action=self['pre_action'],
                 rnn_state=self['seq_hidden_state'],
+
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
@@ -323,18 +324,22 @@ class AgentManager:
             ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
                              for o, t_o in zip(ep_obses_list, self['obs_list'])]
             ep_pre_actions = gen_pre_n_actions(ep_actions, True)
+            ep_attn_states = np.concatenate([ep_attn_states,
+                                             np.expand_dimes(self['seq_hidden_state'], 1)], axis=1)
 
             action, prob, next_seq_hidden_state = self.rl.choose_attn_action(
                 ep_indexes=ep_indexes,
                 ep_obses_list=ep_obses_list,
                 ep_pre_actions=ep_pre_actions,
                 ep_attn_states=ep_attn_states,
+
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
 
         else:
             action, prob = self.rl.choose_action(self['obs_list'],
+
                                                  disable_sample=disable_sample,
                                                  force_rnd_if_available=force_rnd_if_available)
             next_seq_hidden_state = None

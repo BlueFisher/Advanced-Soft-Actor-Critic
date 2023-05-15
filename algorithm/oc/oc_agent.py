@@ -15,7 +15,8 @@ class OC_Agent(Agent):
     _last_option_changed_index = -1  # The latest option start index
     _last_option_index = -1  # The latest option index
 
-    def __init__(self, agent_id: int,
+    def __init__(self,
+                 agent_id: int,
                  obs_shapes: List[Tuple],
                  d_action_sizes: List[int],
                  c_action_size: int,
@@ -303,6 +304,7 @@ class OC_AgentManager(AgentManager):
         self.use_dilated_attn = rl.use_dilated_attn
 
     def pre_run(self, num_agents: int):
+        self['option_index'] = -1
         self['initial_option_index'] = self.rl.get_initial_option_index(num_agents)  # [n_envs, action_size]
         self['pre_option_index'] = self['initial_option_index']
         self['initial_pre_action'] = self.rl.get_initial_action(num_agents)  # [n_envs, action_size]
@@ -310,6 +312,8 @@ class OC_AgentManager(AgentManager):
         if self.seq_encoder is not None:
             self['initial_seq_hidden_state'] = self.rl.get_initial_seq_hidden_state(num_agents)  # [n_envs, *seq_hidden_state_shape]
             self['seq_hidden_state'] = self['initial_seq_hidden_state']
+            if self.use_dilated_attn:
+                self['key_seq_hidden_state'] = self['initial_seq_hidden_state'].copy()
 
             self['initial_low_seq_hidden_state'] = self.rl.get_initial_low_seq_hidden_state(num_agents)  # [n_envs, *los_seq_hidden_state_shape]
             self['low_seq_hidden_state'] = self['initial_low_seq_hidden_state']
@@ -329,7 +333,7 @@ class OC_AgentManager(AgentManager):
     def get_action(self,
                    disable_sample: bool = False,
                    force_rnd_if_available: bool = False):
-        if self.seq_encoder == SEQ_ENCODER.RNN:
+        if self.seq_encoder == SEQ_ENCODER.RNN and not self.use_dilated_attn:
             (option_index,
              action,
              prob,
@@ -339,7 +343,26 @@ class OC_AgentManager(AgentManager):
                 pre_option_index=self['pre_option_index'],
                 pre_action=self['pre_action'],
                 rnn_state=self['seq_hidden_state'],
-                low_rnn_state=self['low_seq_hidden_state']
+                low_rnn_state=self['low_seq_hidden_state'],
+
+                disable_sample=disable_sample,
+                force_rnd_if_available=force_rnd_if_available
+            )
+
+        elif self.seq_encoder == SEQ_ENCODER.RNN and self.use_dilated_attn:
+            (option_index,
+             action,
+             prob,
+             next_seq_hidden_state,
+             next_low_seq_hidden_state) = self.rl.choose_rnn_action(
+                obs_list=self['obs_list'],
+                pre_option_index=self['pre_option_index'],
+                pre_action=self['pre_action'],
+                rnn_state=self['key_seq_hidden_state'],  # The previous key rnn_state
+                low_rnn_state=self['low_seq_hidden_state'],
+
+                disable_sample=disable_sample,
+                force_rnd_if_available=force_rnd_if_available
             )
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN and not self.use_dilated_attn:
@@ -370,6 +393,8 @@ class OC_AgentManager(AgentManager):
             ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
                              for o, t_o in zip(ep_obses_list, self['obs_list'])]
             ep_pre_actions = gen_pre_n_actions(ep_actions, True)
+            ep_attn_states = np.concatenate([ep_attn_states,
+                                             np.expand_dims(self['seq_hidden_state'], 1)], axis=1)
 
             (option_index,
              action,
@@ -413,6 +438,8 @@ class OC_AgentManager(AgentManager):
                                                 np.zeros((key_padding_masks.shape[0], 1), dtype=bool)], axis=1)
             key_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
                               for o, t_o in zip(key_obses_list, self['obs_list'])]
+            key_attn_states = np.concatenate([key_attn_states,
+                                              np.expand_dims(self['key_seq_hidden_state'], 1)], axis=1)
 
             (option_index,
              action,
@@ -439,6 +466,10 @@ class OC_AgentManager(AgentManager):
             )
             next_seq_hidden_state = None
             next_low_seq_hidden_state = None
+
+        if self.use_dilated_attn:
+            key_mask = self['option_index'] != option_index
+            self['key_seq_hidden_state'][key_mask] = next_seq_hidden_state[key_mask]
 
         self['option_index'] = option_index
         self['action'] = action

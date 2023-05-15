@@ -1027,21 +1027,21 @@ class SAC_Base:
             l_seq_hidden_state: [batch, l, *seq_hidden_state_shape]
         """
 
-        batch, l, *_ = l_indexes.shape
-
         if self.seq_encoder is None:
             l_states = self.model_rep(l_obses_list)
 
             return l_states, None  # [batch, l, state_size]
 
         elif self.seq_encoder == SEQ_ENCODER.RNN:
+            batch, l, *_ = l_indexes.shape
+
             l_states = None
             next_l_rnn_states = torch.zeros((batch, l, *f_seq_hidden_states.shape[2:]), device=self.device)
 
             rnn_state = f_seq_hidden_states[:, 0]
             for t in range(l):
                 f_states, rnn_state = self.model_rep([l_obses[:, t:t + 1, ...] for l_obses in l_obses_list],
-                                                     l_pre_actions[:, t:t + 1, ...],
+                                                     l_pre_actions[:, t:t + 1, ...] if l_pre_actions is not None else None,
                                                      rnn_state,
                                                      padding_mask=l_padding_masks[:, t:t + 1, ...])
 
@@ -2505,23 +2505,26 @@ class SAC_Base:
                             bn_mu_probs=bn_pi_probs_tensor).detach().cpu().numpy()
                     self.replay_buffer.update(pointers, td_error)
 
+                bn_padding_masks = bn_padding_masks.detach().cpu().numpy()
+                padding_mask = bn_padding_masks.reshape(-1)
+
                 # Update seq_hidden_states
                 if self.seq_encoder is not None:
-                    pointers_list = [pointers + 1 + i for i in range(self.burn_in_step + self.n_step)]
+                    pointers_list = [pointers + 1 + i for i in range(-self.burn_in_step, self.n_step)]
                     tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
 
                     next_bn_seq_hidden_states = next_bn_seq_hidden_states.detach().cpu().numpy()
                     seq_hidden_state = next_bn_seq_hidden_states.reshape(-1, *next_bn_seq_hidden_states.shape[2:])
-                    self.replay_buffer.update_transitions(tmp_pointers, 'seq_hidden_state', seq_hidden_state)
+                    self.replay_buffer.update_transitions(tmp_pointers[~padding_mask], 'seq_hidden_state', seq_hidden_state[~padding_mask])
 
                 # Update n_mu_probs
                 if self.use_n_step_is or (self.d_action_sizes and not self.discrete_dqn_like):
-                    pointers_list = [pointers + i for i in range(self.burn_in_step + self.n_step)]
+                    pointers_list = [pointers + i for i in range(-self.burn_in_step, self.n_step)]
                     tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
 
                     pi_probs = bn_pi_probs_tensor.detach().cpu().numpy()
                     pi_prob = pi_probs.reshape(-1, *pi_probs.shape[2:])
-                    self.replay_buffer.update_transitions(tmp_pointers, 'mu_prob', pi_prob)
+                    self.replay_buffer.update_transitions(tmp_pointers[~padding_mask], 'mu_prob', pi_prob[~padding_mask])
 
             step = self._increase_global_step()
 

@@ -12,7 +12,11 @@ class ModelRep(m.ModelBaseAttentionRep):
     def _build_model(self):
         self.conv = m.ConvLayers(30, 30, 3, 'simple', out_dense_depth=2, output_size=8)
 
-        embed_dim = self.conv.output_size + sum(self.d_action_sizes) + self.c_action_size
+        if self.use_dilated_attn:
+            embed_dim = self.conv.output_size
+        else:
+            embed_dim = self.conv.output_size + sum(self.d_action_sizes) + self.c_action_size
+
         self.attn = m.EpisodeMultiheadAttention(embed_dim, 1, num_layers=3)
 
         self.dense = nn.Sequential(
@@ -30,11 +34,18 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         vis = self.conv(obs_vis)
 
-        state, hn, attn_weights_list = self.attn(torch.cat([vis, pre_action], dim=-1),
-                                                 query_length,
-                                                 hidden_state,
-                                                 is_prev_hidden_state,
-                                                 padding_mask)
+        if self.use_dilated_attn:
+            state, hn, attn_weights_list = self.attn(vis,
+                                                     query_length,
+                                                     hidden_state,
+                                                     is_prev_hidden_state,
+                                                     padding_mask)
+        else:
+            state, hn, attn_weights_list = self.attn(torch.cat([vis, pre_action], dim=-1),
+                                                     query_length,
+                                                     hidden_state,
+                                                     is_prev_hidden_state,
+                                                     padding_mask)
 
         state = self.dense(torch.cat([obs_vec[:, -query_length:], state], dim=-1))
 
@@ -57,11 +68,18 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         vis_encoder = encoders
 
-        state, *_ = self.attn(torch.cat([vis_encoder, pre_action], dim=-1),
-                              query_length,
-                              hidden_state,
-                              is_prev_hidden_state,
-                              padding_mask)
+        if self.use_dilated_attn:
+            state, *_ = self.attn(vis_encoder,
+                                  query_length,
+                                  hidden_state,
+                                  is_prev_hidden_state,
+                                  padding_mask)
+        else:
+            state, *_ = self.attn(torch.cat([vis_encoder, pre_action], dim=-1),
+                                  query_length,
+                                  hidden_state,
+                                  is_prev_hidden_state,
+                                  padding_mask)
 
         state = self.dense(torch.cat([obs_vec, state], dim=-1))
 
