@@ -7,7 +7,10 @@ class ModelRep(m.ModelBaseAttentionRep):
     def _build_model(self, pe: str):
         self.pe = pe
 
-        embed_dim = self.obs_shapes[0][0] + self.c_action_size + sum(self.d_action_sizes)
+        if self.use_dilated_attn:
+            embed_dim = self.obs_shapes[0][0]
+        else:
+            embed_dim = self.obs_shapes[0][0] + self.c_action_size + sum(self.d_action_sizes)
 
         self.mlp = m.LinearLayers(embed_dim, output_size=8)
 
@@ -20,13 +23,18 @@ class ModelRep(m.ModelBaseAttentionRep):
         else:
             self.attn = m.EpisodeMultiheadAttention(8, 2, num_layers=2)
 
-    def forward(self, index, obs_list, pre_action,
+    def forward(self, index, obs_list,
+                pre_action=None,
                 query_length=1,
                 hidden_state=None,
                 is_prev_hidden_state=False,
                 padding_mask=None):
 
-        x = torch.concat([obs_list[0], pre_action], dim=-1)
+        if self.use_dilated_attn:
+            x = torch.concat([obs_list[0]], dim=-1)
+        else:
+            x = torch.concat([obs_list[0], pre_action], dim=-1)
+
         x = self.mlp(x)
 
         if self.pe == 'cat':

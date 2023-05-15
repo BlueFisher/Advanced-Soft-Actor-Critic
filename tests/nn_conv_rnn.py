@@ -10,20 +10,26 @@ class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):
         self.conv = m.ConvLayers(30, 30, 3, 'simple', out_dense_depth=2, output_size=8)
 
-        self.rnn = m.GRU(self.conv.output_size + sum(self.d_action_sizes) + self.c_action_size, 8, 2)
+        if self.use_dilated_attn:
+            self.rnn = m.GRU(self.conv.output_size, 8, 2)
+        else:
+            self.rnn = m.GRU(self.conv.output_size + sum(self.d_action_sizes) + self.c_action_size, 8, 2)
 
         self.dense = nn.Sequential(
             nn.Linear(self.obs_shapes[0][0] - EXTRA_SIZE + 8, 8),
             nn.Tanh()
         )
 
-    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
+    def forward(self, obs_list, pre_action=None, rnn_state=None, padding_mask=None):
         obs_vec, obs_vis = obs_list
         obs_vec = obs_vec[..., EXTRA_SIZE:]
 
         vis = self.conv(obs_vis)
 
-        state, hn = self.rnn(torch.cat([vis, pre_action], dim=-1), rnn_state)
+        if self.use_dilated_attn:
+            state, hn = self.rnn(vis, rnn_state)
+        else:
+            state, hn = self.rnn(torch.cat([vis, pre_action], dim=-1), rnn_state)
 
         state = self.dense(torch.cat([obs_vec, state], dim=-1))
 
@@ -43,6 +49,11 @@ class ModelRep(m.ModelBaseRNNRep):
         vis_encoder = encoders
 
         state, _ = self.rnn(torch.cat([vis_encoder, pre_action], dim=-1), rnn_state)
+
+        if self.use_dilated_attn:
+            state, _ = self.rnn(vis_encoder, rnn_state)
+        else:
+            state, _ = self.rnn(torch.cat([vis_encoder, pre_action], dim=-1), rnn_state)
 
         state = self.dense(torch.cat([obs_vec, state], dim=-1))
 

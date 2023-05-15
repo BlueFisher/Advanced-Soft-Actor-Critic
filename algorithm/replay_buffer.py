@@ -15,7 +15,7 @@ class DataStorage:
 
     def __init__(self, capacity):
         self.capacity = capacity
-        self.max_id = 10 * capacity
+        self.max_id = 10 * capacity  # For multithreading storage
 
         self._data_key_is_image = {}
 
@@ -28,7 +28,7 @@ class DataStorage:
 
         if self._buffer is None:
             self._buffer = dict()
-            self._buffer['_id'] = np.zeros(self.capacity, dtype=np.uint64)
+            self._buffer['_id'] = np.zeros(self.capacity, dtype=np.int64)
             for k, v in data.items():
                 # Store uint8 if data is image
                 self._data_key_is_image[k] = ('camera' in k.lower()

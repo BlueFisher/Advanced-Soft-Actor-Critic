@@ -83,4 +83,3 @@ class ModelPolicy(m.ModelPolicy):
 class ModelRND(m.ModelRND):
     def _build_model(self):
         return super()._build_model(dense_n=128, dense_depth=2, output_size=128)
-    

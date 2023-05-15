@@ -45,7 +45,9 @@ class ModelBaseRNNRep(nn.Module):
                  obs_shapes: List[Tuple],
                  d_action_sizes: List[int], c_action_size: int,
                  is_target: bool, train_mode: bool,
-                 model_abs_dir: Optional[Path] = None, **kwargs):
+                 model_abs_dir: Optional[Path] = None,
+                 use_dilated_attn=False,  # For option critic
+                 **kwargs):
         super().__init__()
         self.obs_shapes = obs_shapes
         self.d_action_sizes = d_action_sizes
@@ -53,6 +55,7 @@ class ModelBaseRNNRep(nn.Module):
         self.train_mode = train_mode
         self.is_target = is_target
         self.model_abs_dir = model_abs_dir
+        self.use_dilated_attn = use_dilated_attn
 
         self._build_model(**kwargs)
 
@@ -61,7 +64,7 @@ class ModelBaseRNNRep(nn.Module):
 
     def forward(self,
                 obs_list: List[torch.Tensor],
-                pre_action: torch.Tensor,
+                pre_action: Optional[torch.Tensor] = None,
                 rnn_state: Optional[torch.Tensor] = None,
                 padding_mask: Optional[torch.Tensor] = None):
         """
