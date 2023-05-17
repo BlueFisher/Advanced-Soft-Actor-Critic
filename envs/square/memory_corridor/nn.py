@@ -11,7 +11,10 @@ class ModelRep(m.ModelBaseRNNRep):
 
         self.bbox_mlp = m.LinearLayers(2 * 7, output_size=16)
 
-        self.rnn = m.GRU(16 + self.c_action_size, 64, 1)
+        if self.use_dilation:
+            self.rnn = m.GRU(16, 64, 1)
+        else:
+            self.rnn = m.GRU(16 + self.c_action_size, 64, 1)
 
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         bbox_obs, vec_obs = obs_list
@@ -19,7 +22,10 @@ class ModelRep(m.ModelBaseRNNRep):
         bbox_obs = bbox_obs.reshape(*bbox_obs.shape[:-2], -1)
         bbox_obs = self.bbox_mlp(bbox_obs)
 
-        output, hn = self.rnn(torch.cat([bbox_obs, pre_action], dim=-1), rnn_state)
+        if self.use_dilation:
+            output, hn = self.rnn(bbox_obs, rnn_state)
+        else:
+            output, hn = self.rnn(torch.cat([bbox_obs, pre_action], dim=-1), rnn_state)
 
         state = torch.cat([vec_obs, output], dim=-1)
 

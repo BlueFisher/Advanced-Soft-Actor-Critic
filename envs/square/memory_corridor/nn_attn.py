@@ -21,6 +21,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                 query_length=1,
                 hidden_state=None,
                 is_prev_hidden_state=False,
+                query_only_attend_to_reset_key=False,
                 padding_mask=None):
         bbox_obs, vec_obs = obs_list
 
@@ -38,6 +39,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                                                   query_length,
                                                   hidden_state,
                                                   is_prev_hidden_state,
+                                                  query_only_attend_to_reset_key,
                                                   padding_mask)
 
         return output, hn, attn_weights_list
