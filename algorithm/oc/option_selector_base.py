@@ -858,6 +858,8 @@ class OptionSelectorBase(SAC_Base):
         """
         model_rep = self.model_target_rep if is_target else self.model_rep
 
+        batch, l, *_ = l_indexes.shape
+
         if self.seq_encoder == SEQ_ENCODER.RNN and self.use_dilation:
             (key_indexes,
              key_padding_masks,
@@ -865,19 +867,23 @@ class OptionSelectorBase(SAC_Base):
              key_option_indexes,
              key_seq_hidden_states) = key_batch
 
-            key_padding_masks = key_padding_masks[:, :-1]
-            key_obses_list = [key_obses[:, :-1] for key_obses in key_obses_list]
             _, next_key_rnn_state = model_rep(key_obses_list,
                                               None,
                                               key_seq_hidden_states[:, 0],
                                               padding_mask=key_padding_masks)
+            l_states = None
+            for t in range(l):
+                f_states, next_rnn_state = model_rep([l_obses[:, t:t + 1, ...] for l_obses in l_obses_list],
+                                                     l_pre_actions[:, t:t + 1, ...] if l_pre_actions is not None else None,
+                                                     next_key_rnn_state,
+                                                     padding_mask=l_padding_masks[:, t:t + 1, ...])
+                if l_states is None:
+                    l_states = torch.zeros((batch, l, *f_states.shape[2:]), device=self.device)
+                l_states[:, t:t + 1] = f_states
 
-            return super().get_l_states(l_indexes=l_indexes,
-                                        l_padding_masks=l_padding_masks,
-                                        l_obses_list=l_obses_list,
-                                        l_pre_actions=None,
-                                        f_seq_hidden_states=next_key_rnn_state.unsqueeze(1),
-                                        is_target=is_target)
+            next_f_rnn_states = next_rnn_state.unsqueeze(dim=1)
+
+            return l_states, next_f_rnn_states
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilation:
             query_length = l_indexes.shape[1]
@@ -888,9 +894,9 @@ class OptionSelectorBase(SAC_Base):
              key_option_indexes,
              key_seq_hidden_states) = key_batch
 
-            l_indexes = torch.concat([key_indexes[:, :-1], l_indexes], dim=1)
-            l_padding_masks = torch.concat([key_padding_masks[:, :-1], l_padding_masks], dim=1)
-            l_obses_list = [torch.concat([key_obses[:, :-1], l_obses], dim=1)
+            l_indexes = torch.concat([key_indexes, l_indexes], dim=1)
+            l_padding_masks = torch.concat([key_padding_masks, l_padding_masks], dim=1)
+            l_obses_list = [torch.concat([key_obses, l_obses], dim=1)
                             for key_obses, l_obses in zip(key_obses_list, l_obses_list)]
 
             l_states, l_attn_states, _ = model_rep(l_indexes,
@@ -899,6 +905,7 @@ class OptionSelectorBase(SAC_Base):
                                                    query_length=query_length,
                                                    hidden_state=key_seq_hidden_states,
                                                    is_prev_hidden_state=True,
+                                                   query_only_attend_to_reset_key=True,
                                                    padding_mask=l_padding_masks)
 
             return l_states, l_attn_states
@@ -2004,6 +2011,7 @@ class OptionSelectorBase(SAC_Base):
                     key_trans[k].insert(0, v)
 
             for k, v in key_trans.items():
+                del v[-1]
                 key_trans[k] = np.concatenate([np.expand_dims(t, 1) for t in v], axis=1)
 
             key_batch = (
