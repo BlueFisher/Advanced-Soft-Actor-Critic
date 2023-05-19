@@ -858,8 +858,6 @@ class OptionSelectorBase(SAC_Base):
         """
         model_rep = self.model_target_rep if is_target else self.model_rep
 
-        batch, l, *_ = l_indexes.shape
-
         if self.seq_encoder == SEQ_ENCODER.RNN and self.use_dilation:
             (key_indexes,
              key_padding_masks,
@@ -871,7 +869,11 @@ class OptionSelectorBase(SAC_Base):
                                               None,
                                               key_seq_hidden_states[:, 0],
                                               padding_mask=key_padding_masks)
+
+            batch, l, *_ = l_indexes.shape
+
             l_states = None
+
             for t in range(l):
                 f_states, next_rnn_state = model_rep([l_obses[:, t:t + 1, ...] for l_obses in l_obses_list],
                                                      l_pre_actions[:, t:t + 1, ...] if l_pre_actions is not None else None,
@@ -961,13 +963,24 @@ class OptionSelectorBase(SAC_Base):
                                                    key_seq_hidden_states[:, 0],
                                                    padding_mask=key_padding_masks)
 
-            return super().get_l_states_with_seq_hidden_states(
-                l_indexes=l_indexes,
-                l_padding_masks=l_padding_masks,
-                l_obses_list=l_obses_list,
-                l_pre_actions=None,
-                f_seq_hidden_states=next_key_rnn_state.unsqueeze(1)
-            )
+            batch, l, *_ = l_indexes.shape
+
+            l_states = None
+            next_l_rnn_states = torch.zeros((batch, l, *f_seq_hidden_states.shape[2:]), device=self.device)
+
+            for t in range(l):
+                f_states, rnn_state = self.model_rep([l_obses[:, t:t + 1, ...] for l_obses in l_obses_list],
+                                                     l_pre_actions[:, t:t + 1, ...] if l_pre_actions is not None else None,
+                                                     next_key_rnn_state,
+                                                     padding_mask=l_padding_masks[:, t:t + 1, ...])
+
+                if l_states is None:
+                    l_states = torch.zeros((batch, l, *f_states.shape[2:]), device=self.device)
+                l_states[:, t:t + 1] = f_states
+
+                next_l_rnn_states[:, t] = rnn_state
+
+            return l_states, next_l_rnn_states
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilation:
             return self.get_l_states(l_indexes=l_indexes,
