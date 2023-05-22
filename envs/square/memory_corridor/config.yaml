@@ -5,10 +5,10 @@ default:
       build_path:
         win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
-      no_graphics: false
+      no_graphics: true
 
     reset_on_iteration: true
-    n_envs: 50
+    n_envs: 20
 
   reset_config:
     force_reset: true

@@ -1873,15 +1873,25 @@ class OptionSelectorBase(SAC_Base):
                 and self.summary_available:
             self.summary_available = False
             with torch.no_grad():
-                pre_l_actions = gen_pre_n_actions(l_actions)
-                * _, attn_weights_list = self.model_rep(torch.from_numpy(l_indexes).to(self.device),
-                                                        [torch.from_numpy(o).to(self.device) for o in l_obses_list],
-                                                        torch.from_numpy(pre_l_actions).to(self.device),
-                                                        query_length=l_indexes.shape[1])
+                if self.use_dilation:
+                    key_option_changed_indexes = np.unique(l_option_changed_indexes)  # [key_len, ]
+                    key_indexes = l_indexes[:, key_option_changed_indexes]  # [1, key_len]
+                    key_obses_list = [l_obses[:, key_option_changed_indexes] for l_obses in l_obses_list]  # [1, key_len, state_size]
+                    *_, attn_weights_list = self.model_rep(torch.from_numpy(key_indexes).to(self.device),
+                                                           [torch.from_numpy(o).to(self.device) for o in key_obses_list],
+                                                           pre_action=None,
+                                                           query_length=key_indexes.shape[1])
+
+                else:
+                    pre_l_actions = gen_pre_n_actions(l_actions)
+                    *_, attn_weights_list = self.model_rep(torch.from_numpy(l_indexes).to(self.device),
+                                                           [torch.from_numpy(o).to(self.device) for o in l_obses_list],
+                                                           pre_action=torch.from_numpy(pre_l_actions).to(self.device),
+                                                           query_length=l_indexes.shape[1])
 
                 for i, attn_weight in enumerate(attn_weights_list):
                     image = plot_attn_weight(attn_weight[0].cpu().numpy())
-                    self.summary_writer.add_images(f'attn_weight/{i}', image, self.global_step)
+                    self.summary_writer.add_figure(f'attn_weight/{i}', image, self.global_step)
 
     def _sample_from_replay_buffer(self) -> Tuple[np.ndarray,
                                                   Tuple[Union[np.ndarray, List[np.ndarray]], ...],

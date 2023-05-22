@@ -2277,12 +2277,12 @@ class SAC_Base:
                 pre_l_actions = gen_pre_n_actions(l_actions)
                 *_, attn_weights_list = self.model_rep(torch.from_numpy(l_indexes).to(self.device),
                                                        [torch.from_numpy(o).to(self.device) for o in l_obses_list],
-                                                       torch.from_numpy(pre_l_actions).to(self.device),
+                                                       pre_action=torch.from_numpy(pre_l_actions).to(self.device),
                                                        query_length=l_indexes.shape[1])
 
                 for i, attn_weight in enumerate(attn_weights_list):
                     image = plot_attn_weight(attn_weight[0].cpu().numpy())
-                    self.summary_writer.add_images(f'attn_weight/{i}', image, self.global_step)
+                    self.summary_writer.add_figure(f'attn_weight/{i}', image, self.global_step)
 
     def _sample_from_replay_buffer(self) -> Tuple[np.ndarray,
                                                   Tuple[Union[np.ndarray, List[np.ndarray]], ...]]:

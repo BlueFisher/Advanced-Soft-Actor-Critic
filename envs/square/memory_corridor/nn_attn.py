@@ -5,10 +5,10 @@ import algorithm.nn_models as m
 
 class ModelRep(m.ModelBaseAttentionRep):
     def _build_model(self):
-        assert self.obs_shapes[0] == (2, 7)
+        assert self.obs_shapes[0] == (56,)
         assert self.obs_shapes[1] == (4,)
 
-        self.bbox_mlp = m.LinearLayers(2 * 7, output_size=16)
+        self.ray_mlp = m.LinearLayers(56, output_size=16)
 
         if self.use_dilation:
             self.mlp = m.LinearLayers(16 + self.obs_shapes[1][0], 64, 1)
@@ -23,15 +23,14 @@ class ModelRep(m.ModelBaseAttentionRep):
                 is_prev_hidden_state=False,
                 query_only_attend_to_reset_key=False,
                 padding_mask=None):
-        bbox_obs, vec_obs = obs_list
+        ray_obs, vec_obs = obs_list
 
-        bbox_obs = bbox_obs.reshape(*bbox_obs.shape[:-2], -1)
-        bbox_obs = self.bbox_mlp(bbox_obs)
+        ray_obs = self.ray_mlp(ray_obs)
 
         if self.use_dilation:
-            x = self.mlp(torch.cat([bbox_obs, vec_obs], dim=-1))
+            x = self.mlp(torch.cat([ray_obs, vec_obs], dim=-1))
         else:
-            x = self.mlp(torch.cat([bbox_obs, vec_obs, pre_action], dim=-1))
+            x = self.mlp(torch.cat([ray_obs, vec_obs, pre_action], dim=-1))
         pe = self.pos(index)
         x = x + pe
 
@@ -48,20 +47,19 @@ class ModelRep(m.ModelBaseAttentionRep):
 class ModelOptionRep(m.ModelBaseRNNRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (64,)
-        assert self.obs_shapes[1] == (2, 7)
+        assert self.obs_shapes[1] == (56,)
         assert self.obs_shapes[2] == (4,)
 
-        self.bbox_mlp = m.LinearLayers(2 * 7, output_size=16)
+        self.ray_mlp = m.LinearLayers(56, output_size=16)
 
         self.rnn = m.GRU(self.obs_shapes[0][0] + 16 + self.c_action_size, 64, 1)
 
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
-        high_state, bbox_obs, vec_obs = obs_list
+        high_state, ray_obs, vec_obs = obs_list
 
-        bbox_obs = bbox_obs.reshape(*bbox_obs.shape[:-2], -1)
-        bbox_obs = self.bbox_mlp(bbox_obs)
+        ray_obs = self.ray_mlp(ray_obs)
 
-        output, hn = self.rnn(torch.cat([high_state, bbox_obs, pre_action], dim=-1), rnn_state)
+        output, hn = self.rnn(torch.cat([high_state, ray_obs, pre_action], dim=-1), rnn_state)
 
         state = torch.cat([vec_obs, output], dim=-1)
 
