@@ -4,7 +4,7 @@ from typing import List, Optional
 
 import numpy as np
 import torch
-from torch import nn, optim
+from torch import distributions, nn, optim
 
 from algorithm.oc.option_base import OptionBase
 
@@ -437,6 +437,8 @@ class OptionSelectorBase(SAC_Base):
             new_option_index (torch.int64): [batch, ]
             new_option_mask (torch.bool): [batch, ]
         """
+        pre_option_index = option_index.clone()
+
         v_over_options = self.model_v_over_options_list[0](state)  # [batch, num_options]
         new_option_index = v_over_options.argmax(dim=-1)  # [batch, ]
 
@@ -449,13 +451,15 @@ class OptionSelectorBase(SAC_Base):
         termination_mask = termination > .5
         option_index[termination_mask] = new_option_index[termination_mask]
 
-        mask = torch.logical_or(none_option_mask, termination_mask)
         if not disable_sample:
             random_mask = torch.rand_like(option_index, dtype=torch.float32) < 0.2  # TODO HYPERPARAMETER
-            option_index[random_mask] = new_option_index[random_mask]
-            mask = torch.logical_or(mask, random_mask)
+            dist = distributions.Categorical(logits=torch.ones((option_index.shape[0], self.num_options),
+                                                               device=self.device))
+            random_option_index = dist.sample()  # [batch, ]
 
-        return option_index, mask
+            option_index[random_mask] = random_option_index[random_mask]
+
+        return option_index, pre_option_index != option_index
 
     def _choose_action(self,
                        obs_list: List[torch.Tensor],
