@@ -783,7 +783,8 @@ class SAC_Base:
                 if self.train_mode:
                     mask = torch.rand(batch) < 0.2
 
-                    d_dist_list = [distributions.OneHotCategorical(logits=torch.ones((batch, d_action_size), device=self.device))
+                    d_dist_list = [distributions.OneHotCategorical(logits=torch.ones((batch, d_action_size),
+                                                                                     device=self.device))
                                    for d_action_size in self.d_action_sizes]
                     random_d_action = torch.concat([dist.sample() for dist in d_dist_list], dim=-1)
 
