@@ -127,7 +127,7 @@ class ModelPolicy(ModelBasePolicy):
         return d_policy, c_policy
 
 
-class ModelQOverOption(nn.Module):
+class ModelVOverOption(nn.Module):
     def __init__(self, state_size, num_options):
         super().__init__()
         self.state_size = state_size
@@ -143,17 +143,15 @@ class ModelQOverOption(nn.Module):
         return self.dense(state)
 
 
-class ModelTerminationOverOption(nn.Module):
-    def __init__(self, state_size, num_options):
+class ModelTermination(nn.Module):
+    def __init__(self, state_size):
         super().__init__()
         self.state_size = state_size
-        self.num_options = num_options
 
         self._build_model()
 
     def _build_model(self, dense_n=64, dense_depth=2):
-        self.dense = LinearLayers(self.state_size, dense_n, dense_depth,
-                                  self.num_options)
+        self.dense = LinearLayers(self.state_size, dense_n, dense_depth, output_size=1)
 
     def forward(self, state):
         return torch.sigmoid(self.dense(state))

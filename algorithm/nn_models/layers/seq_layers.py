@@ -1,10 +1,8 @@
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import torch
 from torch import nn
-
-from .linear_layers import LinearLayers
 
 
 class GRU(nn.GRU):
@@ -89,12 +87,17 @@ class MultiheadAttention(nn.MultiheadAttention):
 
 class EpisodeMultiheadAttentionBlock(nn.Module):
     def __init__(self, embed_dim: int, num_heads: int,
-                 use_residual: bool = True):
+                 use_residual: bool = True,
+                 use_layer_norm: bool = True):
         super().__init__()
 
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.use_residual = use_residual
+        self.use_layer_norm = use_layer_norm
+
+        if self.use_layer_norm:
+            self.layer_norm = nn.LayerNorm(self.embed_dim)
 
         self.attn = MultiheadAttention(embed_dim, num_heads)
 
@@ -176,6 +179,9 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
         output, attn_weights = self.attn(query, key, key,
                                          attn_mask=attn_mask)
 
+        if self.use_layer_norm:
+            output = self.layer_norm(output)
+
         if self.use_residual:
             output = output + query
 
@@ -185,7 +191,8 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
 class EpisodeMultiheadAttention(nn.Module):
     def __init__(self, embed_dim: int, num_heads: int,
                  num_layers: int = 2,
-                 use_residual: bool = True):
+                 use_residual: bool = True,
+                 use_layer_norm: bool = False):
         super().__init__()
 
         self.embed_dim = embed_dim
@@ -194,7 +201,8 @@ class EpisodeMultiheadAttention(nn.Module):
 
         self._attn_list = nn.ModuleList(
             [EpisodeMultiheadAttentionBlock(embed_dim, num_heads,
-                                            use_residual=use_residual) for _ in range(num_layers)]
+                                            use_residual=use_residual,
+                                            use_layer_norm=use_layer_norm) for _ in range(num_layers)]
         )
 
     def forward(self,
@@ -203,11 +211,11 @@ class EpisodeMultiheadAttention(nn.Module):
                 hidden_state: Optional[torch.Tensor] = None,
                 is_prev_hidden_state: bool = False,
 
-                query_only_attend_to_reset_key=False,
+                query_only_attend_to_reset_key: bool = False,
                 key_padding_mask: Optional[torch.Tensor] = None):
         """
         Args:
-            [batch, key_length, embed_dim],
+            key: [batch, key_length, embed_dim],
             query_length: int
             hidden_state: [batch, hidden_state_length, embed_dim]
             is_prev_hidden_state: bool
@@ -273,6 +281,8 @@ class EpisodeMultiheadAttention(nn.Module):
 
             if self.num_layers > 1:
                 hidden_state_list = hidden_state.chunk(self.num_layers - 1, dim=-1)
+            else:
+                output = output[:, -query_length:]
 
             for i, attn in enumerate(self._attn_list[1:-1]):
                 _k = output[:, -key_length:]

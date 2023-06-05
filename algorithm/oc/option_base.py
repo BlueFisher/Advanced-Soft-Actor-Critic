@@ -1,12 +1,18 @@
 from typing import List, Optional
 
 import torch
-from torch import nn
+from torch import nn, optim
 from torch.nn import functional
+
+from algorithm.nn_models import Optional
+from algorithm.utils import Optional
 
 from ..nn_models import *
 from ..sac_base import SAC_Base
 from ..utils import *
+
+
+TERMINAL_ENTROPY = 0.01
 
 
 class OptionBase(SAC_Base):
@@ -18,6 +24,17 @@ class OptionBase(SAC_Base):
 
     def _init_replay_buffer(self, replay_config):
         return
+
+    def _build_model(self, nn, nn_config: Optional[dict], init_log_alpha: float, learning_rate: float) -> None:
+        super()._build_model(nn, nn_config, init_log_alpha, learning_rate)
+
+        self.model_termination = nn.ModelTermination(self.state_size).to(self.device)
+        self.optimizer_termination = optim.Adam(self.model_termination.parameters(), lr=learning_rate)
+
+    def _build_ckpt(self) -> None:
+        super()._build_ckpt()
+
+        self.ckpt_dict['model_termination'] = self.model_termination
 
     @torch.no_grad()
     def choose_action(self,
@@ -124,9 +141,9 @@ class OptionBase(SAC_Base):
 
     @torch.no_grad()
     def _get_y(self,
-               next_n_terminations: torch.Tensor,
-
                next_n_v_over_options_list: List[torch.Tensor],
+
+               next_n_terminations: torch.Tensor,
 
                n_obses_list: List[torch.Tensor],
                n_states: torch.Tensor,
@@ -139,9 +156,9 @@ class OptionBase(SAC_Base):
                                                                    Optional[torch.Tensor]]:
         """
         Args:
-            next_n_terminations: [batch, n]
-
             next_n_v_over_options_list: [batch, n, num_options], ...
+
+            next_n_terminations: [batch, n]
 
             n_obses_list: list([batch, n, *obs_shapes_i], ...)
             n_states: [batch, n, state_size]
@@ -309,8 +326,6 @@ class OptionBase(SAC_Base):
         return v
 
     def train_rep_q(self,
-                    next_n_terminations: torch.Tensor,
-
                     next_n_v_over_options_list: List[torch.Tensor],
 
                     bn_indexes: torch.Tensor,
@@ -330,8 +345,6 @@ class OptionBase(SAC_Base):
                     priority_is: Optional[torch.Tensor] = None) -> None:
         """
         Args:
-            next_n_terminations: [batch, n],
-
             next_n_v_over_options_list: list([batch, n, num_options], ...),
 
             bn_indexes (torch.int32): [batch, b + n],
@@ -348,6 +361,11 @@ class OptionBase(SAC_Base):
             bn_mu_probs: [batch, b + n, action_size]
             priority_is: [batch, 1]
         """
+        next_n_target_states = torch.concat([bn_target_states[:, self.burn_in_step + 1:, ...],
+                                             next_target_state.unsqueeze(1)], dim=1)  # [batch, n, state_size]
+        next_n_terminations = self.model_termination(next_n_target_states)  # [batch, n, 1]
+        next_n_terminations = next_n_terminations.squeeze(-1)  # [batch, n]
+
         state = bn_states[:, self.burn_in_step, ...]
 
         batch = state.shape[0]
@@ -361,9 +379,9 @@ class OptionBase(SAC_Base):
         d_q_list = [q[0] for q in q_list]  # [batch, action_size]
         c_q_list = [q[1] for q in q_list]  # [batch, 1]
 
-        d_y, c_y = self._get_y(next_n_terminations=next_n_terminations,
+        d_y, c_y = self._get_y(next_n_v_over_options_list=next_n_v_over_options_list,
 
-                               next_n_v_over_options_list=next_n_v_over_options_list,
+                               next_n_terminations=next_n_terminations,
 
                                n_obses_list=[bn_target_obses[:, self.burn_in_step:, ...] for bn_target_obses in bn_target_obses_list],
                                n_states=bn_target_states[:, self.burn_in_step:, ...],
@@ -489,6 +507,13 @@ class OptionBase(SAC_Base):
                            m_states: torch.Tensor,
                            bn_actions: torch.Tensor,
                            bn_mu_probs: torch.Tensor) -> None:
+        """
+        Args:
+            bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
+            m_states: [batch, b + n + 1, state_size]
+            bn_actions: [batch, b + n, action_size]
+            bn_mu_probs: [batch, b + n, action_size]
+        """
 
         obs_list = [bn_obses[:, self.burn_in_step, ...] for bn_obses in bn_obses_list]
         bn_states = m_states[:, :-1, ...]
@@ -531,10 +556,38 @@ class OptionBase(SAC_Base):
 
             self.summary_writer.flush()
 
+    def train_termination(self,
+                          next_state: torch.Tensor,
+                          next_v_over_options: torch.Tensor,
+                          next_v: torch.Tensor,
+                          done: torch.Tensor):
+        """
+        Args:
+            next_state: [batch, state_size]
+            next_v_over_options: [batch, num_options]
+            next_v: [batch, 1]
+            done (torch.bool): [batch, ]
+        """
+        next_termination = self.model_termination(next_state).squeeze(-1)  # [batch, ]
+
+        max_next_v_over_options, _ = next_v_over_options.max(-1)
+
+        loss_termination = next_termination * (next_v.squeeze(-1) - max_next_v_over_options + TERMINAL_ENTROPY) * ~done  # [batch, ]
+        loss_termination = torch.mean(loss_termination)
+
+        self.optimizer_termination.zero_grad()
+        loss_termination.backward(retain_graph=True)
+        self.optimizer_termination.step()
+
+        if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
+            self.summary_available = True
+
+            self.summary_writer.add_scalar('loss/termination', loss_termination, self.global_step)
+
+            self.summary_writer.flush()
+
     @torch.no_grad()
     def _get_td_error(self,
-                      next_n_terminations: torch.Tensor,
-
                       next_n_v_over_options_list: List[torch.Tensor],
 
                       bn_obses_list: List[torch.Tensor],
@@ -548,8 +601,6 @@ class OptionBase(SAC_Base):
                       bn_mu_probs: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            next_n_terminations: [batch, n]
-
             next_n_v_over_options_list: list([batch, n, num_options], ...)
 
             bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
@@ -565,6 +616,11 @@ class OptionBase(SAC_Base):
         Returns:
             The td-error of observations, [batch, 1]
         """
+
+        next_n_target_states = torch.concat([bn_target_states[:, self.burn_in_step + 1:, ...],
+                                             next_target_state.unsqueeze(1)], dim=1)  # [batch, n, state_size]
+        next_n_terminations = self.model_termination(next_n_target_states)  # [batch, n, 1]
+        next_n_terminations = next_n_terminations.squeeze(-1)  # [batch, n]
 
         state = bn_states[:, self.burn_in_step, ...]
         action = bn_actions[:, self.burn_in_step, ...]
@@ -583,9 +639,9 @@ class OptionBase(SAC_Base):
                         for q in d_q_list]
             # [batch, 1]
 
-        d_y, c_y = self._get_y(next_n_terminations=next_n_terminations,
+        d_y, c_y = self._get_y(next_n_v_over_options_list=next_n_v_over_options_list,
 
-                               next_n_v_over_options_list=next_n_v_over_options_list,
+                               next_n_terminations=next_n_terminations,
 
                                n_obses_list=[bn_obses[:, self.burn_in_step:, ...] for bn_obses in bn_obses_list],
                                n_states=bn_target_states[:, self.burn_in_step:, ...],

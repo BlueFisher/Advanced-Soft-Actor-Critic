@@ -218,6 +218,7 @@ class SAC_Base:
 
         self._init_replay_buffer(replay_config)
         self._build_model(nn, nn_config, init_log_alpha, learning_rate)
+        self._build_ckpt()
         self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
 
     def _set_logger(self):
@@ -452,10 +453,7 @@ class SAC_Base:
                 param.requires_grad = False
             self.optimizer_rnd = adam_optimizer(self.model_rnd.parameters())
 
-    def _init_or_restore(self, last_ckpt: int) -> None:
-        """
-        Initialize network weights from scratch or restore from model_abs_dir
-        """
+    def _build_ckpt(self) -> None:
         self.ckpt_dict = ckpt_dict = {
             'global_step': self.global_step
         }
@@ -522,6 +520,10 @@ class SAC_Base:
             ckpt_dict['model_rnd'] = self.model_rnd
             ckpt_dict['optimizer_rnd'] = self.optimizer_rnd
 
+    def _init_or_restore(self, last_ckpt: int) -> None:
+        """
+        Initialize network weights from scratch or restore from model_abs_dir
+        """
         self.ckpt_dir = None
         if self.model_abs_dir:
             self.ckpt_dir = ckpt_dir = self.model_abs_dir.joinpath('model')
@@ -542,7 +544,7 @@ class SAC_Base:
 
                 ckpt_restore_path = ckpt_dir.joinpath(f'{last_ckpt}.pth')
                 ckpt_restore = torch.load(ckpt_restore_path, map_location=self.device)
-                for name, model in ckpt_dict.items():
+                for name, model in self.ckpt_dict.items():
                     if name not in ckpt_restore:
                         self._logger.warning(f'{name} not in {last_ckpt}.pth')
                         continue
@@ -880,6 +882,7 @@ class SAC_Base:
     @torch.no_grad()
     def choose_attn_action(self,
                            ep_indexes: np.ndarray,
+                           ep_padding_masks: np.ndarray,
                            ep_obses_list: List[np.ndarray],
                            ep_pre_actions: np.ndarray,
                            ep_attn_states: np.ndarray,
@@ -891,6 +894,7 @@ class SAC_Base:
         """
         Args:
             ep_indexes (np.int32): [batch, episode_len]
+            ep_padding_masks (bool): [batch, episode_len]
             ep_obses_list (np): list([batch, episode_len, *obs_shapes_i], ...)
             ep_pre_actions (np): [batch, episode_len, action_size]
             ep_attn_states (np): [batch, episode_len, *seq_hidden_state_shape]
@@ -901,6 +905,7 @@ class SAC_Base:
             attn_state (np): [batch, *attn_state_shape]
         """
         ep_indexes = torch.from_numpy(ep_indexes).to(self.device)
+        ep_padding_masks = torch.from_numpy(ep_padding_masks).to(self.device)
         ep_obses_list = [torch.from_numpy(obs).to(self.device) for obs in ep_obses_list]
         ep_pre_actions = torch.from_numpy(ep_pre_actions).to(self.device)
         ep_attn_states = torch.from_numpy(ep_attn_states).to(self.device)
@@ -909,7 +914,8 @@ class SAC_Base:
                                                    ep_obses_list, ep_pre_actions,
                                                    query_length=1,
                                                    hidden_state=ep_attn_states,
-                                                   is_prev_hidden_state=False)
+                                                   is_prev_hidden_state=False,
+                                                   padding_mask=ep_padding_masks)
         # state: [batch, 1, state_size]
         # next_attn_state: [batch, 1, *attn_state_shape]
 

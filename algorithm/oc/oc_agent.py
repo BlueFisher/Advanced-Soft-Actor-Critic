@@ -38,10 +38,10 @@ class OC_Agent(Agent):
 
     def _generate_empty_episode_trans(self, episode_length: int = 0):
         return {
-            'index': -np.ones((episode_length, ), dtype=int),
+            'index': -np.ones((episode_length, ), dtype=np.int32),
             'obs_list': [np.zeros((episode_length, *s), dtype=np.float32) for s in self.obs_shapes],
             'option_index': np.full((episode_length, ), -1, dtype=np.int8),
-            'option_changed_index': np.full((episode_length, ), -1, dtype=int),
+            'option_changed_index': np.full((episode_length, ), -1, dtype=np.int32),
             'action': np.zeros((episode_length, self.d_action_summed_size + self.c_action_size), dtype=np.float32),
             'reward': np.zeros((episode_length, ), dtype=np.float32),
             'local_done': np.zeros((episode_length, ), dtype=bool),
@@ -95,11 +95,11 @@ class OC_Agent(Agent):
             self._tmp_option_changed_indexes.append(self._last_steps)
 
         expaned_transition = {
-            'index': np.expand_dims(self._last_steps, 0),
+            'index': np.expand_dims(self._last_steps, 0).astype(np.int32),
 
             'obs_list': [np.expand_dims(o, 0).astype(np.float32) for o in obs_list],
             'option_index': np.expand_dims(option_index, 0).astype(np.int8),
-            'option_changed_index': np.expand_dims(option_changed_index, 0).astype(int),
+            'option_changed_index': np.expand_dims(option_changed_index, 0).astype(np.int32),
             'action': np.expand_dims(action, 0).astype(np.float32),
             'reward': np.expand_dims(reward, 0).astype(np.float32),
             'local_done': np.expand_dims(local_done, 0).astype(bool),
@@ -258,7 +258,7 @@ class OC_Agent(Agent):
 
         delta = force_length - self.key_trans_length
         if delta > 0:
-            delta_key_indexes = -np.ones((1, delta), dtype=int)
+            delta_key_indexes = -np.ones((1, delta), dtype=np.int32)
             delta_padding_masks = np.ones((1, delta), dtype=bool)  # `True` indicates ignored
             delta_obses_list = [np.zeros((1, delta, *s), dtype=np.float32) for s in self.obs_shapes]
             delta_seq_hidden_states = np.zeros((1, delta, *self.seq_hidden_state_shape), dtype=np.float32)
@@ -390,6 +390,7 @@ class OC_AgentManager(AgentManager):
                 ep_indexes = np.zeros((ep_indexes.shape[0], 1), dtype=ep_indexes.dtype)
             else:
                 ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
+            ep_padding_masks = ep_indexes == -1
             ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
                              for o, t_o in zip(ep_obses_list, self['obs_list'])]
             ep_pre_actions = gen_pre_n_actions(ep_actions, True)
@@ -402,6 +403,7 @@ class OC_AgentManager(AgentManager):
              next_seq_hidden_state,
              next_low_seq_hidden_state) = self.rl.choose_attn_action(
                 ep_indexes=ep_indexes,
+                ep_padding_masks=ep_padding_masks,
                 ep_obses_list=ep_obses_list,
                 ep_pre_actions=ep_pre_actions,
                 ep_attn_states=ep_attn_states,

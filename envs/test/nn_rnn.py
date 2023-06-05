@@ -2,6 +2,9 @@ import torch
 
 import algorithm.nn_models as m
 
+ModelVOverOption = m.ModelVOverOption
+ModelTermination = m.ModelTermination
+
 
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):

@@ -36,7 +36,7 @@ class Agent:
 
     def _generate_empty_episode_trans(self, episode_length: int = 0) -> Dict[str, Union[np.ndarray, List[np.ndarray]]]:
         return {
-            'index': -np.ones((episode_length, ), dtype=int),
+            'index': -np.ones((episode_length, ), dtype=np.int32),
             'obs_list': [np.zeros((episode_length, *s), dtype=np.float32) for s in self.obs_shapes],
             'action': np.zeros((episode_length, self.d_action_summed_size + self.c_action_size), dtype=np.float32),
             'reward': np.zeros((episode_length, ), dtype=np.float32),
@@ -79,7 +79,7 @@ class Agent:
             ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
         expaned_transition = {
-            'index': np.expand_dims(self._last_steps, 0),
+            'index': np.expand_dims(self._last_steps, 0).astype(np.int32),
 
             'obs_list': [np.expand_dims(o, 0).astype(np.float32) for o in obs_list],
             'action': np.expand_dims(action, 0).astype(np.float32),
@@ -321,14 +321,16 @@ class AgentManager:
                 ep_indexes = np.zeros((ep_indexes.shape[0], 1), dtype=ep_indexes.dtype)
             else:
                 ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
+            ep_padding_masks = ep_indexes == -1
             ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
                              for o, t_o in zip(ep_obses_list, self['obs_list'])]
             ep_pre_actions = gen_pre_n_actions(ep_actions, True)
             ep_attn_states = np.concatenate([ep_attn_states,
-                                             np.expand_dimes(self['seq_hidden_state'], 1)], axis=1)
+                                             np.expand_dims(self['seq_hidden_state'], 1)], axis=1)
 
             action, prob, next_seq_hidden_state = self.rl.choose_attn_action(
                 ep_indexes=ep_indexes,
+                ep_padding_masks=ep_padding_masks,
                 ep_obses_list=ep_obses_list,
                 ep_pre_actions=ep_pre_actions,
                 ep_attn_states=ep_attn_states,
