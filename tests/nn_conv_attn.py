@@ -17,7 +17,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         else:
             embed_dim = self.conv.output_size + sum(self.d_action_sizes) + self.c_action_size
 
-        self.attn = m.EpisodeMultiheadAttention(embed_dim, 1, num_layers=3)
+        self.attn = m.EpisodeMultiheadAttention(embed_dim, 1, num_layers=1)
 
         self.dense = nn.Sequential(
             nn.Linear(self.obs_shapes[0][0] - EXTRA_SIZE + embed_dim, 8),
@@ -124,3 +124,5 @@ ModelForwardDynamic = m.ModelForwardDynamic
 ModelRND = m.ModelRND
 ModelRepProjection = m.ModelRepProjection
 ModelRepPrediction = m.ModelRepPrediction
+ModelVOverOption = m.ModelVOverOption
+ModelTermination = m.ModelTermination

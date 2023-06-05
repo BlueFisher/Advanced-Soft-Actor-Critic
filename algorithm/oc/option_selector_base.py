@@ -263,18 +263,17 @@ class OptionSelectorBase(SAC_Base):
         else:
             self.optimizer_rep = None
 
-        self.model_v_over_options_list = [ModelQOverOption(state_size, self.num_options).to(self.device) for _ in range(self.ensemble_q_num)]
-        self.model_target_v_over_options_list = [ModelQOverOption(state_size, self.num_options).to(self.device) for _ in range(self.ensemble_q_num)]
+        self.model_v_over_options_list = [nn.ModelVOverOption(state_size, self.num_options).to(self.device)
+                                          for _ in range(self.ensemble_q_num)]
+        self.model_target_v_over_options_list = [nn.ModelVOverOption(state_size, self.num_options).to(self.device)
+                                                 for _ in range(self.ensemble_q_num)]
         for model_target_v_over_options in self.model_target_v_over_options_list:
             for param in model_target_v_over_options.parameters():
                 param.requires_grad = False
         self.optimizer_v_list = [adam_optimizer(self.model_v_over_options_list[i].parameters()) for i in range(self.ensemble_q_num)]
 
-        self.model_termination_over_options = ModelTerminationOverOption(state_size, self.num_options).to(self.device)
-        self.optimizer_termination = adam_optimizer(self.model_termination_over_options.parameters())
-
         """
-        Initialize each Option
+        Initialize each option
         """
         if self.option_burn_in_step == -1:
             self.option_burn_in_step = self.burn_in_step
@@ -285,6 +284,7 @@ class OptionSelectorBase(SAC_Base):
         del option_kwargs['self']
         option_kwargs['obs_names'] = ['state', *self.obs_names]
         option_kwargs['obs_shapes'] = [(self.state_size, ), *self.obs_shapes]
+        # seq_encoder of option can only be RNN or VANILLA
         option_kwargs['seq_encoder'] = SEQ_ENCODER.RNN if self.seq_encoder == SEQ_ENCODER.ATTN else self.seq_encoder
         option_kwargs['burn_in_step'] = self.option_burn_in_step
 
@@ -312,10 +312,7 @@ class OptionSelectorBase(SAC_Base):
         if self.seq_encoder is not None:
             self.low_seq_hidden_state_shape = self.option_list[0].seq_hidden_state_shape
 
-    def _init_or_restore(self, last_ckpt: int) -> None:
-        """
-        Initialize network weights from scratch or restore from model_abs_dir
-        """
+    def _build_ckpt(self) -> None:
         self.ckpt_dict = ckpt_dict = {
             'global_step': self.global_step
         }
@@ -338,8 +335,10 @@ class OptionSelectorBase(SAC_Base):
             ckpt_dict[f'model_target_v_over_options_{i}'] = self.model_target_v_over_options_list[i]
             ckpt_dict[f'optimizer_v_over_options_{i}'] = self.optimizer_v_list[i]
 
-        ckpt_dict[f'model_termination_over_options_{i}'] = self.model_termination_over_options
-
+    def _init_or_restore(self, last_ckpt: int) -> None:
+        """
+        Initialize network weights from scratch or restore from model_abs_dir
+        """
         self.ckpt_dir = None
         if self.model_abs_dir:
             self.ckpt_dir = ckpt_dir = self.model_abs_dir.joinpath('model')
@@ -361,7 +360,7 @@ class OptionSelectorBase(SAC_Base):
                 ckpt_restore_path = ckpt_dir.joinpath(f'{last_ckpt}.pth')
                 ckpt_restore = torch.load(ckpt_restore_path, map_location=self.device)
                 self.global_step = self.global_step.to('cpu')
-                for name, model in ckpt_dict.items():
+                for name, model in self.ckpt_dict.items():
                     if name not in ckpt_restore:
                         self._logger.warning(f'{name} not in {last_ckpt}.pth')
                         continue
@@ -424,19 +423,28 @@ class OptionSelectorBase(SAC_Base):
             option._update_target_variables(tau)
 
     def _choose_option_index(self,
-                             state: torch.Tensor,
                              option_index: torch.Tensor,
+                             state: torch.Tensor,
+                             low_obs_list: List[torch.Tensor],
+                             pre_action: Optional[torch.Tensor] = None,
+                             low_seq_state: Optional[torch.Tensor] = None,
                              disable_sample: bool = False) -> Tuple[torch.Tensor,
                                                                     torch.Tensor]:
         """
         Args:
-            state: [batch, state_size]
             option_index (torch.int64): [batch, ]
+            state: [batch, state_size]
+            low_obs_list: list([batch, *low_obs_shapes_i], ...)
+            pre_action: [batch, action_size]
+            low_seq_state: [batch, low_seq_state_size]
+            disable_sample (bool)
 
         Returns:
             new_option_index (torch.int64): [batch, ]
             new_option_mask (torch.bool): [batch, ]
         """
+        batch = option_index.shape[0]
+
         pre_option_index = option_index.clone()
 
         v_over_options = self.model_v_over_options_list[0](state)  # [batch, num_options]
@@ -445,15 +453,28 @@ class OptionSelectorBase(SAC_Base):
         none_option_mask = option_index == -1
         option_index[none_option_mask] = new_option_index[none_option_mask]
 
-        termination_over_options = self.model_termination_over_options(state)  # [batch, num_options]
-        termination = termination_over_options.gather(1, option_index.unsqueeze(-1))  # [batch, 1]
+        termination = torch.zeros((batch, 1), device=self.device)  # [batch, 1]
+        for i, option in enumerate(self.option_list):
+            mask = (option_index == i)
+            if not torch.any(mask):
+                continue
+
+            o_low_f_state, _ = option.get_l_states(l_indexes=None,  # option is not ATTN
+                                                   l_padding_masks=None,
+                                                   l_obses_list=[low_obs[mask].unsqueeze(1) for low_obs in low_obs_list],
+                                                   l_pre_actions=pre_action[mask].unsqueeze(1) if pre_action is not None else None,
+                                                   f_seq_hidden_states=low_seq_state[mask].unsqueeze(1) if low_seq_state is not None else None)
+            o_low_state = o_low_f_state.squeeze(1)
+
+            termination[mask] = option.model_termination(o_low_state)
+
         termination = termination.squeeze(-1)
         termination_mask = termination > .5
         option_index[termination_mask] = new_option_index[termination_mask]
 
         if not disable_sample:
             random_mask = torch.rand_like(option_index, dtype=torch.float32) < 0.2  # TODO HYPERPARAMETER
-            dist = distributions.Categorical(logits=torch.ones((option_index.shape[0], self.num_options),
+            dist = distributions.Categorical(logits=torch.ones((batch, self.num_options),
                                                                device=self.device))
             random_option_index = dist.sample()  # [batch, ]
 
@@ -461,20 +482,20 @@ class OptionSelectorBase(SAC_Base):
 
         return option_index, pre_option_index != option_index
 
-    def _choose_action(self,
-                       obs_list: List[torch.Tensor],
-                       state: torch.Tensor,
-                       option_index: torch.Tensor,
+    def _choose_option_action(self,
+                              obs_list: List[torch.Tensor],
+                              state: torch.Tensor,
+                              pre_option_index: torch.Tensor,
 
-                       disable_sample: bool = False,
-                       force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
-                                                                      torch.Tensor,
-                                                                      torch.Tensor]:
+                              disable_sample: bool = False,
+                              force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
+                                                                             torch.Tensor,
+                                                                             torch.Tensor]:
         """
         Args:
             obs_list: list([batch, 1, *obs_shapes_i], ...)
             state: [batch, 1, d_action_summed_size + c_action_size]
-            option_index (torch.int64): [batch, ]
+            pre_option_index (torch.int64): [batch, ]
 
         Returns:
             new_option_index (torch.int64): [batch, ]
@@ -482,8 +503,12 @@ class OptionSelectorBase(SAC_Base):
             prob: [batch, action_size]
         """
 
-        option_index, _ = self._choose_option_index(state=state,
-                                                    option_index=option_index,
+        low_obs_list = self.get_l_low_obses_list(obs_list, state)
+        option_index, _ = self._choose_option_index(option_index=pre_option_index,
+                                                    state=state,
+                                                    low_obs_list=low_obs_list,
+                                                    pre_action=None,
+                                                    low_seq_state=None,
                                                     disable_sample=disable_sample)
 
         batch = state.shape[0]
@@ -493,16 +518,15 @@ class OptionSelectorBase(SAC_Base):
         prob = torch.ones((batch,
                            self.d_action_summed_size + self.c_action_size),
                           device=self.device)
-        obs_list = [state] + obs_list
 
         for i, option in enumerate(self.option_list):
             mask = (option_index == i)
             if not torch.any(mask):
                 continue
 
-            o_obs_list = [obs[mask] for obs in obs_list]
+            o_low_obs_list = [low_obs[mask] for low_obs in low_obs_list]
 
-            o_action, o_prob = option.choose_action(o_obs_list,
+            o_action, o_prob = option.choose_action(o_low_obs_list,
                                                     disable_sample=disable_sample,
                                                     force_rnd_if_available=force_rnd_if_available)
             action[mask] = o_action
@@ -510,23 +534,23 @@ class OptionSelectorBase(SAC_Base):
 
         return option_index, action, prob
 
-    def _choose_rnn_action(self,
-                           obs_list: List[torch.Tensor],
-                           state: torch.Tensor,
-                           option_index: torch.Tensor,
-                           pre_action: torch.Tensor,
-                           low_rnn_state: torch.Tensor,
+    def _choose_option_rnn_action(self,
+                                  obs_list: List[torch.Tensor],
+                                  state: torch.Tensor,
+                                  pre_option_index: torch.Tensor,
+                                  pre_action: torch.Tensor,
+                                  low_rnn_state: torch.Tensor,
 
-                           disable_sample: bool = False,
-                           force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
-                                                                          torch.Tensor,
-                                                                          torch.Tensor,
-                                                                          torch.Tensor]:
+                                  disable_sample: bool = False,
+                                  force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
+                                                                                 torch.Tensor,
+                                                                                 torch.Tensor,
+                                                                                 torch.Tensor]:
         """
         Args:
             obs_list: list([batch, *obs_shapes_i], ...)
             state: [batch, d_action_summed_size + c_action_size]
-            option_index (torch.int64): [batch, ]
+            pre_option_index (torch.int64): [batch, ]
             pre_action: [batch, action_size]
             low_rnn_state: [batch, *low_seq_hidden_state_shape]
 
@@ -537,8 +561,13 @@ class OptionSelectorBase(SAC_Base):
             next_low_rnn_state: [batch, *low_seq_hidden_state_shape]
         """
 
-        option_index, new_option_index_mask = self._choose_option_index(state=state,
-                                                                        option_index=option_index,
+        low_obs_list = self.get_l_low_obses_list(obs_list, state)
+
+        option_index, new_option_index_mask = self._choose_option_index(option_index=pre_option_index,
+                                                                        state=state,
+                                                                        low_obs_list=low_obs_list,
+                                                                        pre_action=pre_action,
+                                                                        low_seq_state=low_rnn_state,
                                                                         disable_sample=disable_sample)
 
         batch = state.shape[0]
@@ -551,16 +580,15 @@ class OptionSelectorBase(SAC_Base):
                            self.d_action_summed_size + self.c_action_size),
                           device=self.device)
         next_low_rnn_state = torch.zeros_like(low_rnn_state)
-        obs_list = [state] + obs_list
 
         for i, option in enumerate(self.option_list):
             mask = (option_index == i)
             if not torch.any(mask):
                 continue
 
-            o_obs_list = [obs[mask] for obs in obs_list]
+            o_low_obs_list = [low_obs[mask] for low_obs in low_obs_list]
 
-            o_action, o_prob, o_next_low_rnn_state = option.choose_rnn_action(o_obs_list,
+            o_action, o_prob, o_next_low_rnn_state = option.choose_rnn_action(o_low_obs_list,
                                                                               pre_action[mask],
                                                                               low_rnn_state[mask],
                                                                               disable_sample=disable_sample,
@@ -595,11 +623,11 @@ class OptionSelectorBase(SAC_Base):
 
         state = self.model_rep(obs_list)
 
-        option_index, action, prob = self._choose_action(obs_list,
-                                                         state,
-                                                         pre_option_index,
-                                                         disable_sample=disable_sample,
-                                                         force_rnd_if_available=force_rnd_if_available)
+        option_index, action, prob = self._choose_option_action(obs_list,
+                                                                state,
+                                                                pre_option_index,
+                                                                disable_sample=disable_sample,
+                                                                force_rnd_if_available=force_rnd_if_available)
 
         return (option_index.detach().cpu().numpy().astype(np.int8),
                 action.detach().cpu().numpy(),
@@ -653,13 +681,13 @@ class OptionSelectorBase(SAC_Base):
         (option_index,
          action,
          prob,
-         next_low_rnn_state) = self._choose_rnn_action(obs_list,
-                                                       state,
-                                                       pre_option_index,
-                                                       pre_action,
-                                                       low_rnn_state,
-                                                       disable_sample=disable_sample,
-                                                       force_rnd_if_available=force_rnd_if_available)
+         next_low_rnn_state) = self._choose_option_rnn_action(obs_list,
+                                                              state,
+                                                              pre_option_index,
+                                                              pre_action,
+                                                              low_rnn_state,
+                                                              disable_sample=disable_sample,
+                                                              force_rnd_if_available=force_rnd_if_available)
 
         return (option_index.detach().cpu().numpy().astype(np.int8),
                 action.detach().cpu().numpy(),
@@ -670,6 +698,7 @@ class OptionSelectorBase(SAC_Base):
     @torch.no_grad()
     def choose_attn_action(self,
                            ep_indexes: np.ndarray,
+                           ep_padding_masks: np.ndarray,
                            ep_obses_list: List[np.ndarray],
                            ep_pre_actions: np.ndarray,
                            ep_attn_states: np.ndarray,
@@ -686,6 +715,7 @@ class OptionSelectorBase(SAC_Base):
         """
         Args:
             ep_indexes (np.int32): [batch, episode_len]
+            ep_padding_masks (bool): [batch, episode_len]
             ep_obses_list (np): list([batch, episode_len, *obs_shapes_i], ...)
             ep_pre_actions (np): [batch, episode_len, d_action_summed_size + c_action_size]
             ep_attn_states (np): [batch, episode_len, *seq_hidden_state_shape]
@@ -701,6 +731,7 @@ class OptionSelectorBase(SAC_Base):
             next_low_rnn_state (np): [batch, *low_rnn_state_shape]
         """
         ep_indexes = torch.from_numpy(ep_indexes).to(self.device)
+        ep_padding_masks = torch.from_numpy(ep_padding_masks).to(self.device)
         ep_obses_list = [torch.from_numpy(obs).to(self.device) for obs in ep_obses_list]
         ep_pre_actions = torch.from_numpy(ep_pre_actions).to(self.device)
         ep_attn_states = torch.from_numpy(ep_attn_states).to(self.device)
@@ -711,8 +742,9 @@ class OptionSelectorBase(SAC_Base):
         state, next_attn_state, _ = self.model_rep(ep_indexes,
                                                    ep_obses_list, ep_pre_actions,
                                                    query_length=1,
-                                                   hidden_state=ep_attn_states,
-                                                   is_prev_hidden_state=False)
+                                                #    hidden_state=ep_attn_states,
+                                                #    is_prev_hidden_state=False,
+                                                   padding_mask=ep_padding_masks)
         # state: [batch, 1, state_size]
         # next_attn_state: [batch, 1, *attn_state_shape]
 
@@ -724,13 +756,13 @@ class OptionSelectorBase(SAC_Base):
         (option_index,
          action,
          prob,
-         next_low_rnn_state) = self._choose_rnn_action(obs_list,
-                                                       state,
-                                                       pre_option_index,
-                                                       pre_action,
-                                                       low_rnn_state,
-                                                       disable_sample=disable_sample,
-                                                       force_rnd_if_available=force_rnd_if_available)
+         next_low_rnn_state) = self._choose_option_rnn_action(obs_list,
+                                                              state,
+                                                              pre_option_index,
+                                                              pre_action,
+                                                              low_rnn_state,
+                                                              disable_sample=disable_sample,
+                                                              force_rnd_if_available=force_rnd_if_available)
 
         return (option_index.detach().cpu().numpy().astype(np.int8),
                 action.detach().cpu().numpy(),
@@ -802,13 +834,13 @@ class OptionSelectorBase(SAC_Base):
         (option_index,
          action,
          prob,
-         next_low_rnn_state) = self._choose_rnn_action(obs_list,
-                                                       state,
-                                                       pre_option_index,
-                                                       pre_action,
-                                                       low_rnn_state,
-                                                       disable_sample=disable_sample,
-                                                       force_rnd_if_available=force_rnd_if_available)
+         next_low_rnn_state) = self._choose_option_rnn_action(obs_list,
+                                                              state,
+                                                              pre_option_index,
+                                                              pre_action,
+                                                              low_rnn_state,
+                                                              disable_sample=disable_sample,
+                                                              force_rnd_if_available=force_rnd_if_available)
 
         return (option_index.detach().cpu().numpy().astype(np.int8),
                 action.detach().cpu().numpy(),
@@ -854,6 +886,13 @@ class OptionSelectorBase(SAC_Base):
             l_obses_list: list([batch, l, *obs_shapes_i], ...)
             l_pre_actions: [batch, l, action_size]
             f_seq_hidden_states: [batch, 1, *seq_hidden_state_shape]
+
+            key_batch:
+                key_indexes: [batch, key_len]
+                key_padding_masks: [batch, key_len]
+                key_obses_list: list([batch, key_len, *obs_shapes_i], ...)
+                key_option_indexes: [batch, key_len]
+                key_seq_hidden_states: [batch, key_len, *seq_hidden_state_shape]
 
         Returns:
             l_states: [batch, l, state_size]
@@ -948,6 +987,13 @@ class OptionSelectorBase(SAC_Base):
             l_obses_list: list([batch, l, *obs_shapes_i], ...)
             l_pre_actions: [batch, l, action_size]
             f_seq_hidden_states: [batch, 1, *seq_hidden_state_shape]
+
+            key_batch:
+                key_indexes: [batch, key_len]
+                key_padding_masks: [batch, key_len]
+                key_obses_list: list([batch, key_len, *obs_shapes_i], ...)
+                key_option_indexes: [batch, key_len]
+                key_seq_hidden_states: [batch, key_len, *seq_hidden_state_shape]
 
         Returns:
             l_states: [batch, l, state_size]
@@ -1199,10 +1245,6 @@ class OptionSelectorBase(SAC_Base):
         n_option_indexes = bn_option_indexes[:, self.burn_in_step:]  # [batch, n]
         option_index = n_option_indexes[:, 0]  # [batch, ]
 
-        next_n_terminations_over_options = self.model_termination_over_options(next_n_states)  # [batch, n, num_options]
-        next_n_terminations = next_n_terminations_over_options.gather(2, n_option_indexes.unsqueeze(-1))  # [batch, n, 1]
-        next_n_terminations = next_n_terminations.squeeze(-1)  # [batch, n]
-
         next_n_v_over_options_list = [v(next_n_states) for v in self.model_target_v_over_options_list]  # [batch, n, num_options]
 
         batch = bn_states.shape[0]
@@ -1214,8 +1256,6 @@ class OptionSelectorBase(SAC_Base):
                 continue
 
             o_td_error = option._get_td_error(
-                next_n_terminations=next_n_terminations[mask],
-
                 next_n_v_over_options_list=[next_n_v_over_options[mask]
                                             for next_n_v_over_options in next_n_v_over_options_list],
 
@@ -1249,7 +1289,7 @@ class OptionSelectorBase(SAC_Base):
         Args:
             l_indexes (np.int32): [1, episode_len]
             l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-            l_option_indexes (np.uint8): [1, episode_len]
+            l_option_indexes (np.int8): [1, episode_len]
             l_option_changed_indexes (np.int32): [1, episode_len]
             l_actions: [1, episode_len, action_size]
             l_rewards: [1, episode_len]
@@ -1293,7 +1333,7 @@ class OptionSelectorBase(SAC_Base):
         bn_indexes (np.int32): [episode_len - bn + 1, bn]
         bn_padding_masks (bool): [episode_len - bn + 1, bn]
         bn_obses_list: list([episode_len - bn + 1, bn, *obs_shapes_i], ...)
-        bn_option_indexes (np.uint8): [episode_len - bn + 1, bn]
+        bn_option_indexes (np.int8): [episode_len - bn + 1, bn]
         bn_actions: [episode_len - bn + 1, bn, action_size]
         bn_rewards: [episode_len - bn + 1, bn]
         next_obs_list: list([episode_len - bn + 1, *obs_shapes_i], ...)
@@ -1393,8 +1433,6 @@ class OptionSelectorBase(SAC_Base):
         return td_error
 
     def _train_rep_q(self,
-                     next_n_terminations: torch.Tensor,
-
                      next_n_v_over_options_list: List[torch.Tensor],
 
                      bn_indexes: torch.Tensor,
@@ -1412,8 +1450,6 @@ class OptionSelectorBase(SAC_Base):
                      priority_is: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
-            next_n_terminations: [batch, n],
-
             next_n_v_over_options_list: list([batch, n, num_options], ...),
 
             bn_indexes (torch.int32): [batch, b + n],
@@ -1497,9 +1533,7 @@ class OptionSelectorBase(SAC_Base):
             om_low_states[mask] = o_m_low_states
             om_low_target_states[mask] = o_m_low_target_states
 
-            option.train_rep_q(next_n_terminations=next_n_terminations[mask],
-
-                               next_n_v_over_options_list=[next_n_v_over_options[mask] for next_n_v_over_options in next_n_v_over_options_list],
+            option.train_rep_q(next_n_v_over_options_list=[next_n_v_over_options[mask] for next_n_v_over_options in next_n_v_over_options_list],
 
                                bn_indexes=bn_indexes[mask, self.option_burn_in_from:],
                                bn_padding_masks=bn_padding_masks[mask, self.option_burn_in_from:],
@@ -1533,6 +1567,7 @@ class OptionSelectorBase(SAC_Base):
                               low_obs_list: List[torch.Tensor],
                               low_state: torch.Tensor,
                               next_state: torch.Tensor,
+                              next_low_state: torch.Tensor,
                               done: torch.Tensor) -> Tuple[torch.Tensor,
                                                            torch.Tensor]:
         """
@@ -1543,6 +1578,7 @@ class OptionSelectorBase(SAC_Base):
             low_obs_list: list([batch, *low_obs_shapes_i], ...)
             low_state: [batch, low_state_size]
             next_state: [batch, state_size]
+            next_low_state: [batch, low_state_size]
             done (torch.bool): [batch, ]
 
         Returns:
@@ -1578,19 +1614,21 @@ class OptionSelectorBase(SAC_Base):
             loss_v.backward()
             optimizer.step()
 
-        next_termination_over_options = self.model_termination_over_options(next_state)  # [batch, num_options]
-        next_termination = next_termination_over_options.gather(1, last_option_index.unsqueeze(-1))  # [batch, 1]
         with torch.no_grad():
             next_v_over_options = self.model_target_v_over_options_list[0](next_state)  # [batch, num_options]
             next_v = next_v_over_options.gather(1, last_option_index.unsqueeze(-1))  # [batch, 1]
-        loss_termination = next_termination * (next_v - next_v_over_options.max(-1, keepdims=True)[0] + 0.01) * ~done
-        loss_termination = torch.mean(loss_termination)
+        for i, option in enumerate(self.option_list):
+            mask = (option_index == i)
+            if not torch.any(mask):
+                continue
 
-        self.optimizer_termination.zero_grad()
-        loss_termination.backward()
-        self.optimizer_termination.step()
+            o_next_low_state = next_low_state[mask]
+            option.train_termination(next_state=o_next_low_state,
+                                     next_v_over_options=next_v_over_options[mask],
+                                     next_v=next_v[mask],
+                                     done=done[mask])
 
-        return loss_v, loss_termination
+        return loss_v
 
     def _train(self,
                bn_indexes: torch.Tensor,
@@ -1623,6 +1661,13 @@ class OptionSelectorBase(SAC_Base):
             f_low_seq_hidden_states: [batch, 1, *low_seq_hidden_state_shape]
                 (start from self.option_burn_in_from)
             priority_is: [batch, 1]
+
+            key_batch:
+                key_indexes: [batch, key_len]
+                key_padding_masks: [batch, key_len]
+                key_obses_list: list([batch, key_len, *obs_shapes_i], ...)
+                key_option_indexes: [batch, key_len]
+                key_seq_hidden_states: [batch, key_len, *seq_hidden_state_shape]
 
         Returns:
             m_target_states: [batch, b + n + 1, state_size]
@@ -1668,10 +1713,6 @@ class OptionSelectorBase(SAC_Base):
         n_option_indexes = bn_option_indexes[:, self.burn_in_step:]  # [batch, n]
         option_index = n_option_indexes[:, 0]  # [batch, ]
 
-        next_n_terminations_over_options = self.model_termination_over_options(next_n_states)  # [batch, n, num_options]
-        next_n_terminations = next_n_terminations_over_options.gather(2, n_option_indexes.unsqueeze(-1))  # [batch, n, 1]
-        next_n_terminations = next_n_terminations.squeeze(-1)  # [batch, n]
-
         next_n_v_over_options_list = [v(next_n_states) for v in self.model_target_v_over_options_list]  # [batch, n, num_options]
 
         om_low_obses_list = self.get_l_low_obses_list(l_obses_list=[m_obses[:, self.option_burn_in_from:] for m_obses in m_obses_list],
@@ -1680,8 +1721,7 @@ class OptionSelectorBase(SAC_Base):
                                                              l_states=m_target_states[:, self.option_burn_in_from:])
 
         (om_low_states,
-         om_low_target_states) = self._train_rep_q(next_n_terminations=next_n_terminations,
-                                                   next_n_v_over_options_list=next_n_v_over_options_list,
+         om_low_target_states) = self._train_rep_q(next_n_v_over_options_list=next_n_v_over_options_list,
 
                                                    bn_indexes=bn_indexes,
                                                    bn_padding_masks=bn_padding_masks,
@@ -1746,20 +1786,20 @@ class OptionSelectorBase(SAC_Base):
                                       bn_actions=bn_actions[mask, self.option_burn_in_from:],
                                       bn_mu_probs=bn_mu_probs[mask, self.option_burn_in_from:])
 
-        loss_v, loss_termination = self._train_v_terminations(state=m_states[:, self.burn_in_step, ...],
-                                                              option_index=bn_option_indexes[:, self.burn_in_step],
-                                                              last_option_index=bn_option_indexes[:, -1],
-                                                              low_obs_list=[om_low_obses[:, self.option_burn_in_step, ...]
-                                                                            for om_low_obses in om_low_obses_list],
-                                                              low_state=om_low_states[:, self.option_burn_in_step, ...],
-                                                              next_state=m_states[:, -1, ...],
-                                                              done=bn_dones[:, self.burn_in_step])
+        loss_v = self._train_v_terminations(state=m_states[:, self.burn_in_step, ...],
+                                            option_index=bn_option_indexes[:, self.burn_in_step],
+                                            last_option_index=bn_option_indexes[:, -1],
+                                            low_obs_list=[om_low_obses[:, self.option_burn_in_step, ...]
+                                                          for om_low_obses in om_low_obses_list],
+                                            low_state=om_low_states[:, self.option_burn_in_step, ...],
+                                            next_state=m_states[:, -1, ...],
+                                            next_low_state=om_low_states[:, -1, ...],
+                                            done=bn_dones[:, self.burn_in_step])
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             self.summary_available = True
 
             self.summary_writer.add_scalar('loss/v', loss_v, self.global_step)
-            self.summary_writer.add_scalar('loss/loss_termination', loss_termination, self.global_step)
 
             self.summary_writer.flush()
 
@@ -1801,6 +1841,10 @@ class OptionSelectorBase(SAC_Base):
             l_seq_hidden_states (np): [1, episode_len, *seq_hidden_state_shape]
             l_low_seq_hidden_states (np): [1, episode_len, *low_seq_hidden_state_shape]
         """
+        assert l_indexes.dtype == np.int32, l_indexes.dtype
+        assert l_option_indexes.dtype == np.int8, l_option_indexes.dtype
+        assert l_option_changed_indexes.dtype == np.int32, l_option_changed_indexes.dtype
+
         # Reshape [1, episode_len, ...] to [episode_len, ...]
         index = l_indexes.squeeze(0)
         obs_list = [l_obses.squeeze(0) for l_obses in l_obses_list]
@@ -2113,6 +2157,9 @@ class OptionSelectorBase(SAC_Base):
             bn_low_seq_hidden_states: [batch, b + n, *low_seq_hidden_state_shape]
             priority_is: [batch, 1]
             """
+            assert bn_indexes.dtype == np.int32
+            assert bn_option_indexes.dtype == np.int8
+
             with self._profiler('to gpu', repeat=10):
                 bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
                 bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)

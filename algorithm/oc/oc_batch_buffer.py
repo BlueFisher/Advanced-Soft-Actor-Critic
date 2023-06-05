@@ -27,7 +27,7 @@ def episode_to_batch(burn_in_step: int,
         n_step: int
         l_indexes (np.int32): [1, episode_len]
         l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-        l_option_indexes (np.uint8): [1, episode_len]
+        l_option_indexes (np.int8): [1, episode_len]
         l_option_changed_indexes (np.int32): [1, episode_len]
         l_actions: [1, episode_len, action_size]
         l_rewards: [1, episode_len]
@@ -41,7 +41,7 @@ def episode_to_batch(burn_in_step: int,
         bn_indexes (np.int32): [episode_len - bn + 1, bn]
         bn_padding_masks (bool): [episode_len - bn + 1, bn]
         bn_obses_list: list([episode_len - bn + 1, bn, *obs_shapes_i], ...)
-        bn_option_indexes (np.uint8): [episode_len - bn + 1, bn]
+        bn_option_indexes (np.int8): [episode_len - bn + 1, bn]
         bn_actions: [episode_len - bn + 1, bn, action_size]
         bn_rewards: [episode_len - bn + 1, bn]
         next_obs_list: list([episode_len - bn + 1, *obs_shapes_i], ...)
@@ -117,7 +117,7 @@ class BatchBuffer(BatchBuffer):
         Args:
             l_indexes (np.int32): [1, episode_len]
             l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-            l_option_indexes (np.uint8): [1, episode_len]
+            l_option_indexes (np.int8): [1, episode_len]
             l_option_changed_indexes (np.int32): [1, episode_len]
             l_actions: [1, episode_len, action_size]
             l_rewards: [1, episode_len]

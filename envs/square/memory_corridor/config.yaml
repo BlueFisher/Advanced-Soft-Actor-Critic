@@ -12,6 +12,10 @@ default:
 
   reset_config:
     force_reset: true
+    block_layer_count: 1
+    success_reward: 1
+    passage_reward: 0.1
+    failure_reward: -0.1
 
   sac_config:
     burn_in_step: 10
@@ -22,6 +26,8 @@ default:
     rnd_n_sample: 50
 
 attn:
+  base_config:
+    name: attn_{time}
   sac_config:
     nn: nn_attn
     seq_encoder: ATTN

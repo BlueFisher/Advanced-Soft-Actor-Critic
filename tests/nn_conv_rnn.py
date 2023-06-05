@@ -135,3 +135,5 @@ ModelForwardDynamic = m.ModelForwardDynamic
 ModelRND = m.ModelRND
 ModelRepProjection = m.ModelRepProjection
 ModelRepPrediction = m.ModelRepPrediction
+ModelVOverOption = m.ModelVOverOption
+ModelTermination = m.ModelTermination

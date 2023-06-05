@@ -293,6 +293,9 @@ class Main:
                     p_model.unlink()
 
                 iteration += 1
+        
+        except KeyboardInterrupt:
+            self._logger.warning('KeyboardInterrupt')
 
         finally:
             if self.train_mode:
