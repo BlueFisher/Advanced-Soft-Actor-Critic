@@ -88,7 +88,7 @@ class MultiheadAttention(nn.MultiheadAttention):
 class EpisodeMultiheadAttentionBlock(nn.Module):
     def __init__(self, embed_dim: int, num_heads: int,
                  use_residual: bool = True,
-                 use_layer_norm: bool = True):
+                 use_layer_norm: bool = False):
         super().__init__()
 
         self.embed_dim = embed_dim
