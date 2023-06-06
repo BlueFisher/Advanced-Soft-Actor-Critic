@@ -287,6 +287,7 @@ class OptionSelectorBase(SAC_Base):
         # seq_encoder of option can only be RNN or VANILLA
         option_kwargs['seq_encoder'] = SEQ_ENCODER.RNN if self.seq_encoder == SEQ_ENCODER.ATTN else self.seq_encoder
         option_kwargs['burn_in_step'] = self.option_burn_in_step
+        option_kwargs['use_replay_buffer'] = False
 
         if self.option_nn_config is None:
             self.option_nn_config = {}
