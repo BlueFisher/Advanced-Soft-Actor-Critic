@@ -4,15 +4,24 @@ from pathlib import Path
 
 from algorithm.config_helper import set_logger
 
+try:
+    import memory_corridor
+except:
+    pass
+
+
 HITTED_ENVS = {'roller',
                'square', 'square/obstacle', 'pyramid',
                'uav',
                'ugv', 'ugv/ugv_soccer_search',
-               'usv'}
+               'usv',
+               'gym/memory_corridor'}
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('env')
+    parser.add_argument('--oc', action='store_true', default=False)
+
     parser.add_argument('--config', '-c', help='config file')
     parser.add_argument('--run', action='store_true', help='inference mode')
     parser.add_argument('--logger_in_file', action='store_true', help='logging into a file')
@@ -40,9 +49,15 @@ if __name__ == '__main__':
     set_logger(debug=args.debug)
 
     if args.env in HITTED_ENVS:
-        from algorithm.sac_main_hitted import MainHitted as Main
+        if args.oc:
+            from algorithm.oc.oc_main_hitted import OC_MainHitted as Main
+        else:
+            from algorithm.sac_main_hitted import MainHitted as Main
     else:
-        from algorithm.sac_main import Main
+        if args.oc:
+            from algorithm.oc.oc_main import OC_Main as Main
+        else:
+            from algorithm.sac_main import Main
 
     root_dir = Path(__file__).resolve().parent
     if sys.platform == 'win32':

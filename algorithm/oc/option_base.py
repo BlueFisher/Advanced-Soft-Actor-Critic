@@ -99,15 +99,15 @@ class OptionBase(SAC_Base):
             min_next_n_max_vs: [batch, n]
             n_rewards: [batch, n]
             n_dones (torch.bool): [batch, n]
-            stacked_next_n_d_qs: [ensemble_q_sample, Batch, n, d_action_summed_size]
-            stacked_next_target_n_d_qs: [ensemble_q_sample, Batch, n, d_action_summed_size]
+            stacked_next_n_d_qs: [ensemble_q_sample, batch, n, d_action_summed_size]
+            stacked_next_target_n_d_qs: [ensemble_q_sample, batch, n, d_action_summed_size]
 
         Returns:
             y: [batch, 1]
         """
 
-        stacked_next_q = stacked_next_n_d_qs[..., -1, :]  # [ensemble_q_sample, Batch, d_action_summed_size]
-        stacked_next_target_q = stacked_next_target_n_d_qs[..., -1, :]  # [ensemble_q_sample, Batch, d_action_summed_size]
+        stacked_next_q = stacked_next_n_d_qs[..., -1, :]  # [ensemble_q_sample, batch, d_action_summed_size]
+        stacked_next_target_q = stacked_next_target_n_d_qs[..., -1, :]  # [ensemble_q_sample, batch, d_action_summed_size]
 
         done = n_dones[:, -1:]  # [batch, 1]
 
@@ -117,12 +117,12 @@ class OptionBase(SAC_Base):
                                                   d_action_size)
                                for stacked_next_q, d_action_size in zip(stacked_next_q_list, self.d_action_sizes)]
         mask_stacked_q = torch.concat(mask_stacked_q_list, dim=-1)
-        # [ensemble_q_sample, Batch, d_action_summed_size]
+        # [ensemble_q_sample, batch, d_action_summed_size]
 
         stacked_max_next_target_q = torch.sum(stacked_next_target_q * mask_stacked_q,
                                               dim=-1,
                                               keepdim=True)
-        # [ensemble_q_sample, Batch, 1]
+        # [ensemble_q_sample, batch, 1]
         stacked_max_next_target_q = stacked_max_next_target_q / self.d_action_branch_size
 
         next_q, _ = torch.min(stacked_max_next_target_q, dim=0)
@@ -183,7 +183,7 @@ class OptionBase(SAC_Base):
         next_n_max_vs_list = [next_n_v_over_options.max(-1)[0] for next_n_v_over_options in next_n_v_over_options_list]  # [batch, n]
 
         stacked_next_n_max_vs = torch.stack(next_n_max_vs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
-        # [ensemble_q_num, Batch, n] -> [ensemble_q_sample, Batch, n]
+        # [ensemble_q_num, batch, n] -> [ensemble_q_sample, batch, n]
 
         min_next_n_max_vs, _ = stacked_next_n_max_vs.min(dim=0)  # [batch, n]
 
@@ -211,12 +211,12 @@ class OptionBase(SAC_Base):
 
         if self.d_action_sizes:
             stacked_next_n_d_qs = torch.stack(next_n_d_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
-            # [ensemble_q_num, Batch, n, d_action_summed_size] -> [ensemble_q_sample, Batch, n, d_action_summed_size]
+            # [ensemble_q_num, batch, n, d_action_summed_size] -> [ensemble_q_sample, batch, n, d_action_summed_size]
 
             if self.discrete_dqn_like:
                 next_n_d_eval_qs_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled))[0] for q in self.model_q_list]
                 stacked_next_n_d_eval_qs = torch.stack(next_n_d_eval_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
-                # [ensemble_q_num, Batch, n, d_action_summed_size] -> [ensemble_q_sample, Batch, n, d_action_summed_size]
+                # [ensemble_q_num, batch, n, d_action_summed_size] -> [ensemble_q_sample, batch, n, d_action_summed_size]
 
                 d_y = self.get_dqn_like_d_y(next_n_terminations=next_n_terminations,
                                             min_next_n_max_vs=min_next_n_max_vs,
@@ -226,7 +226,7 @@ class OptionBase(SAC_Base):
                                             stacked_next_target_n_d_qs=stacked_next_n_d_qs)
             else:
                 stacked_n_d_qs = torch.stack(n_d_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
-                # [ensemble_q_num, Batch, n, d_action_summed_size] -> [ensemble_q_sample, Batch, n, d_action_summed_size]
+                # [ensemble_q_num, batch, n, d_action_summed_size] -> [ensemble_q_sample, batch, n, d_action_summed_size]
 
                 min_n_d_qs, _ = torch.min(stacked_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
                 min_next_n_d_qs, _ = torch.min(stacked_next_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
@@ -265,9 +265,9 @@ class OptionBase(SAC_Base):
             next_n_actions_log_prob = torch.sum(squash_correction_log_prob(next_c_policy, next_n_c_actions_sampled), dim=-1)  # [batch, n]
 
             stacked_n_c_qs = torch.stack(n_c_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
-            # [ensemble_q_num, Batch, n, 1] -> [ensemble_q_sample, Batch, n, 1]
+            # [ensemble_q_num, batch, n, 1] -> [ensemble_q_sample, batch, n, 1]
             stacked_next_n_c_qs = torch.stack(next_n_c_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
-            # [ensemble_q_num, Batch, n, 1] -> [ensemble_q_sample, Batch, n, 1]
+            # [ensemble_q_num, batch, n, 1] -> [ensemble_q_sample, batch, n, 1]
 
             min_n_c_qs, _ = stacked_n_c_qs.min(dim=0)
             min_n_c_qs = min_n_c_qs.squeeze(dim=-1)  # [batch, n]
@@ -310,18 +310,68 @@ class OptionBase(SAC_Base):
     def get_v(self,
               obs_list: List[torch.Tensor],
               state: torch.Tensor) -> torch.Tensor:
-        # TODO D_POLICY
-        o_d_policy, o_c_policy = self.model_policy(state, obs_list)
-        o_c_action_sampled = o_c_policy.rsample()  # [batch, c_action_size]
-        o_c_action_log_prob = squash_correction_log_prob(o_c_policy, o_c_action_sampled)  # [batch, c_action_size]
-        o_c_action_log_prob = torch.sum(o_c_action_log_prob, dim=-1, keepdim=True)  # [batch, 1]
-        o_c_q_list = [q(state, torch.tanh(o_c_action_sampled))[1] for q in self.model_q_list]  # [[batch, 1], ...]
-        stacked_o_c_q = torch.stack(o_c_q_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
-        # [ensemble_q_num, Batch, 1] -> [ensemble_q_sample, Batch, 1]
+        """
+        Args:
+            obs_list: list([batch, *obs_shapes_i], ...)
+            state: [batch, state_size]
 
-        min_o_c_q, _ = torch.min(stacked_o_c_q, dim=0)  # [ensemble_q_sample, Batch, 1] -> [batch, 1]
+        Returns:
+            v: [batch, 1]
+        """
+        v = torch.zeros((state.shape[0], 1), dtype=torch.float32, device=self.device)
 
-        v = min_o_c_q - torch.exp(self.log_c_alpha) * o_c_action_log_prob
+        d_policy, c_policy = self.model_policy(state, obs_list)
+
+        if self.c_action_size:
+            c_action_sampled = c_policy.rsample()  # [batch, c_action_size]
+
+        else:
+            c_action_sampled = torch.zeros(0, device=self.device)
+
+        q_list = [q(state, torch.tanh(c_action_sampled)) for q in self.model_q_list]
+        # [([batch, 1], [batch, d_action_summed_size]), ...]
+        d_q_list = [q[0] for q in q_list]  # [[batch, d_action_summed_size], ...]
+        c_q_list = [q[1] for q in q_list]  # [[batch, 1], ...]
+
+        if self.d_action_sizes:
+            stacked_d_q = torch.stack(d_q_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
+            # [ensemble_q_sample, batch, d_action_summed_size]
+
+            if self.discrete_dqn_like:
+                stacked_d_q_list = stacked_d_q.split(self.d_action_sizes, dim=-1)
+                mask_stacked_d_q_list = [functional.one_hot(torch.argmax(stacked_next_q, dim=-1),
+                                                            d_action_size)
+                                         for stacked_next_q, d_action_size in zip(stacked_d_q_list, self.d_action_sizes)]
+                mask_stacked_d_q = torch.concat(mask_stacked_d_q_list, dim=-1)  # [ensemble_q_sample, batch, d_action_summed_size]
+                stacked_max_d_q = torch.sum(stacked_d_q * mask_stacked_d_q,
+                                            dim=-1,
+                                            keepdim=True)
+                # [ensemble_q_sample, batch, 1]
+                stacked_max_d_q = stacked_max_d_q / self.d_action_branch_size
+
+                min_max_d_q, _ = torch.min(stacked_max_d_q, dim=0)
+                v += min_max_d_q
+
+            else:
+                mean_d_q = torch.mean(stacked_d_q)  # [batch, d_action_summed_size]
+                probs = d_policy.probs  # [batch, d_action_summed_size]
+                # ! Note that the probs here is not strict probabilities
+                # ! sum(probs) == self.d_action_branch_size
+                clipped_prob = probs.clamp(min=1e-8)  # [batch, d_action_summed_size]
+                tmp_v = mean_d_q - torch.exp(self.log_d_alpha) * torch.log(clipped_prob)  # [batch, d_action_summed_size]
+
+                v += torch.sum(probs * tmp_v, dim=-1, keepdim=True) / self.d_action_branch_size  # [batch, 1]
+
+        if self.c_action_size:
+            c_action_log_prob = squash_correction_log_prob(c_policy, c_action_sampled)  # [batch, c_action_size]
+            c_action_log_prob = torch.sum(c_action_log_prob, dim=-1, keepdim=True)  # [batch, 1]
+
+            stacked_c_q = torch.stack(c_q_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
+            # [ensemble_q_num, batch, 1] -> [ensemble_q_sample, batch, 1]
+
+            min_c_q, _ = torch.min(stacked_c_q, dim=0)  # [ensemble_q_sample, batch, 1] -> [batch, 1]
+
+            v += min_c_q - torch.exp(self.log_c_alpha) * c_action_log_prob
 
         return v
 
@@ -540,9 +590,10 @@ class OptionBase(SAC_Base):
             self.summary_available = True
 
             if self.d_action_sizes:
-                self.summary_writer.add_scalar('loss/d_entropy', d_policy_entropy, self.global_step)
-                if self.use_auto_alpha and not self.discrete_dqn_like:
-                    self.summary_writer.add_scalar('loss/d_alpha', d_alpha, self.global_step)
+                if self.d_action_sizes and not self.discrete_dqn_like:
+                    self.summary_writer.add_scalar('loss/d_entropy', d_policy_entropy, self.global_step)
+                    if self.use_auto_alpha and not self.discrete_dqn_like:
+                        self.summary_writer.add_scalar('loss/d_alpha', d_alpha, self.global_step)
             if self.c_action_size:
                 self.summary_writer.add_scalar('loss/c_entropy', c_policy_entropy, self.global_step)
                 if self.use_auto_alpha:

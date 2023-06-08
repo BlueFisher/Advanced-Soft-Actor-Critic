@@ -1,0 +1,101 @@
+default:
+  base_config:
+    env_type: GYM
+    env_name: MemoryCorridor-v0
+
+    n_envs: 20
+
+  reset_config:
+    block_layer_count: 1
+    block_gap: 3
+    success_reward: 1.
+    passage_reward: 0.05
+    failure_reward: -0.1
+    max_episode_steps: 50
+
+  sac_config:
+    burn_in_step: 10
+    n_step: 3
+    seq_encoder: RNN
+
+    discrete_dqn_like: true
+
+    use_rnd: true
+    rnd_n_sample: 50
+
+attn:
+  base_config:
+    name: attn_{time}
+  sac_config:
+    nn: nn_attn
+    seq_encoder: ATTN
+
+oc_2:
+  base_config:
+    name: oc_2_{time}
+  oc_config:
+    num_options: 2
+
+oc_3:
+  base_config:
+    name: oc_3_{time}
+  oc_config:
+    num_options: 3
+
+oc_4:
+  base_config:
+    name: oc_4_{time}
+  oc_config:
+    num_options: 4
+
+oc_2_dilated:
+  inherited: oc_2
+  base_config:
+    name: oc_2_dilated_{time}
+  oc_config:
+    use_dilation: true
+
+oc_2_attn:
+  inherited: oc_2
+  base_config:
+    name: oc_2_attn_{time}
+  sac_config:
+    nn: nn_attn
+    seq_encoder: ATTN
+
+oc_3_attn:
+  inherited: oc_3
+  base_config:
+    name: oc_3_attn_{time}
+  sac_config:
+    nn: nn_attn
+    seq_encoder: ATTN
+
+oc_4_attn:
+  inherited: oc_4
+  base_config:
+    name: oc_4_attn_{time}
+  sac_config:
+    nn: nn_attn
+    seq_encoder: ATTN
+
+oc_2_attn_dilated:
+  inherited: oc_2_attn
+  base_config:
+    name: oc_2_dilated_attn_{time}
+  oc_config:
+    use_dilation: true
+
+oc_3_attn_dilated:
+  inherited: oc_3_attn
+  base_config:
+    name: oc_3_dilated_attn_{time}
+  oc_config:
+    use_dilation: true
+
+oc_4_attn_dilated:
+  inherited: oc_4_attn
+  base_config:
+    name: oc_4_dilated_attn_{time}
+  oc_config:
+    use_dilation: true

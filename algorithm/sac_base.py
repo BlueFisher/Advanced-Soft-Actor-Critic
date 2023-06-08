@@ -1110,15 +1110,15 @@ class SAC_Base:
         Args:
             n_rewards: [batch, n]
             n_dones (torch.bool): [batch, n]
-            stacked_next_n_d_qs: [ensemble_q_sample, Batch, n, d_action_summed_size]
-            stacked_next_target_n_d_qs: [ensemble_q_sample, Batch, n, d_action_summed_size]
+            stacked_next_n_d_qs: [ensemble_q_sample, batch, n, d_action_summed_size]
+            stacked_next_target_n_d_qs: [ensemble_q_sample, batch, n, d_action_summed_size]
 
         Returns:
             y: [batch, 1]
         """
 
-        stacked_next_q = stacked_next_n_d_qs[..., -1, :]  # [ensemble_q_sample, Batch, d_action_summed_size]
-        stacked_next_target_q = stacked_next_target_n_d_qs[..., -1, :]  # [ensemble_q_sample, Batch, d_action_summed_size]
+        stacked_next_q = stacked_next_n_d_qs[..., -1, :]  # [ensemble_q_sample, batch, d_action_summed_size]
+        stacked_next_target_q = stacked_next_target_n_d_qs[..., -1, :]  # [ensemble_q_sample, batch, d_action_summed_size]
 
         done = n_dones[:, -1:]  # [batch, 1]
 
@@ -1128,12 +1128,12 @@ class SAC_Base:
                                                   d_action_size)
                                for stacked_next_q, d_action_size in zip(stacked_next_q_list, self.d_action_sizes)]
         mask_stacked_q = torch.concat(mask_stacked_q_list, dim=-1)
-        # [ensemble_q_sample, Batch, d_action_summed_size]
+        # [ensemble_q_sample, batch, d_action_summed_size]
 
         stacked_max_next_target_q = torch.sum(stacked_next_target_q * mask_stacked_q,
                                               dim=-1,
                                               keepdim=True)
-        # [ensemble_q_sample, Batch, 1]
+        # [ensemble_q_sample, batch, 1]
         stacked_max_next_target_q = stacked_max_next_target_q / self.d_action_branch_size
 
         next_q, _ = torch.min(stacked_max_next_target_q, dim=0)
@@ -1246,9 +1246,9 @@ class SAC_Base:
             n_c_actions_sampled = torch.zeros(0, device=self.device)
             next_n_c_actions_sampled = torch.zeros(0, device=self.device)
 
-        # ([batch, n, d_action_summed_size], [batch, n, 1])
         n_qs_list = [q(n_states, torch.tanh(n_c_actions_sampled)) for q in self.model_target_q_list]
         next_n_qs_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled)) for q in self.model_target_q_list]
+        # ([batch, n, d_action_summed_size], [batch, n, 1])
 
         n_d_qs_list = [q[0] for q in n_qs_list]  # [batch, n, d_action_summed_size]
         n_c_qs_list = [q[1] for q in n_qs_list]  # [batch, n, 1]
@@ -1260,12 +1260,12 @@ class SAC_Base:
 
         if self.d_action_sizes:
             stacked_next_n_d_qs = torch.stack(next_n_d_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
-            # [ensemble_q_num, Batch, n, d_action_summed_size] -> [ensemble_q_sample, Batch, n, d_action_summed_size]
+            # [ensemble_q_num, batch, n, d_action_summed_size] -> [ensemble_q_sample, batch, n, d_action_summed_size]
 
             if self.discrete_dqn_like:
                 next_n_d_eval_qs_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled))[0] for q in self.model_q_list]
                 stacked_next_n_d_eval_qs = torch.stack(next_n_d_eval_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
-                # [ensemble_q_num, Batch, n, d_action_summed_size] -> [ensemble_q_sample, Batch, n, d_action_summed_size]
+                # [ensemble_q_num, batch, n, d_action_summed_size] -> [ensemble_q_sample, batch, n, d_action_summed_size]
 
                 d_y = self.get_dqn_like_d_y(n_rewards=n_rewards,
                                             n_dones=n_dones,
@@ -1273,7 +1273,7 @@ class SAC_Base:
                                             stacked_next_target_n_d_qs=stacked_next_n_d_qs)
             else:
                 stacked_n_d_qs = torch.stack(n_d_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
-                # [ensemble_q_num, Batch, n, d_action_summed_size] -> [ensemble_q_sample, Batch, n, d_action_summed_size]
+                # [ensemble_q_num, batch, n, d_action_summed_size] -> [ensemble_q_sample, batch, n, d_action_summed_size]
 
                 mean_n_qs = torch.mean(stacked_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
                 mean_next_n_qs = torch.mean(stacked_next_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
@@ -1310,9 +1310,9 @@ class SAC_Base:
             next_n_actions_log_prob = torch.sum(squash_correction_log_prob(next_c_policy, next_n_c_actions_sampled), dim=-1)  # [batch, n]
 
             stacked_n_c_qs = torch.stack(n_c_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
-            # [ensemble_q_num, Batch, n, 1] -> [ensemble_q_sample, Batch, n, 1]
+            # [ensemble_q_num, batch, n, 1] -> [ensemble_q_sample, batch, n, 1]
             stacked_next_n_c_qs = torch.stack(next_n_c_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
-            # [ensemble_q_num, Batch, n, 1] -> [ensemble_q_sample, Batch, n, 1]
+            # [ensemble_q_num, batch, n, 1] -> [ensemble_q_sample, batch, n, 1]
 
             min_n_c_qs, _ = stacked_n_c_qs.min(dim=0)
             min_n_c_qs = min_n_c_qs.squeeze(dim=-1)  # [batch, n]
@@ -1738,9 +1738,9 @@ class SAC_Base:
             d_q_list = [q[0] for q in q_list]  # [batch, d_action_summed_size]
 
             stacked_d_q = torch.stack(d_q_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
-            # [ensemble_q_num, Batch, d_action_summed_size] -> [ensemble_q_sample, Batch, d_action_summed_size]
+            # [ensemble_q_num, batch, d_action_summed_size] -> [ensemble_q_sample, batch, d_action_summed_size]
             mean_d_q = torch.mean(stacked_d_q, dim=0)
-            # [ensemble_q_sample, Batch, d_action_summed_size] -> [batch, d_action_summed_size]
+            # [ensemble_q_sample, batch, d_action_summed_size] -> [batch, d_action_summed_size]
 
             _loss_policy = d_alpha * torch.log(clipped_probs) - mean_d_q.detach()  # [batch, d_action_summed_size]
             loss_d_policy = torch.sum(probs * _loss_policy, dim=1, keepdim=True) / self.d_action_branch_size  # [batch, 1]
@@ -1757,13 +1757,13 @@ class SAC_Base:
             # [[batch, 1], ...]
 
             stacked_c_q_for_gradient = torch.stack(c_q_for_gradient_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
-            # [ensemble_q_num, Batch, 1] -> [ensemble_q_sample, Batch, 1]
+            # [ensemble_q_num, batch, 1] -> [ensemble_q_sample, batch, 1]
 
             log_prob = torch.sum(squash_correction_log_prob(c_policy, action_sampled), dim=1, keepdim=True)
             # [batch, 1]
 
             min_c_q_for_gradient, _ = torch.min(stacked_c_q_for_gradient, dim=0)
-            # [ensemble_q_sample, Batch, 1] -> [batch, 1]
+            # [ensemble_q_sample, batch, 1] -> [batch, 1]
 
             loss_c_policy = c_alpha * log_prob - min_c_q_for_gradient
             # [batch, 1]
