@@ -223,12 +223,14 @@ class Main:
                 if self.base_config['reset_on_iteration'] \
                         or self.ma_manager.is_max_reached() \
                         or force_reset:
+                    self._logger.info('reset')
                     ma_obs_list = self.env.reset(reset_config=self.reset_config)
                     self.ma_manager.set_obs_list(ma_obs_list)
                     self.ma_manager.clear()
 
                     force_reset = False
                 else:
+                    self._logger.info('reset11')
                     self.ma_manager.reset()
 
                 step = 0
