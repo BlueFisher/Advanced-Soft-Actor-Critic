@@ -1,5 +1,10 @@
 import numpy as np
 
+if __name__ in ('__main__', '__mp_main__'):
+    from env_wrapper import EnvWrapper
+else:
+    from .env_wrapper import EnvWrapper
+
 
 def get_ma_obs_list(n_envs, ma_obs_shapes):
     return {
@@ -8,7 +13,7 @@ def get_ma_obs_list(n_envs, ma_obs_shapes):
     }
 
 
-class TestWrapper:
+class TestWrapper(EnvWrapper):
     def __init__(self, env_args, n_envs=1):
         self.env_args = [] if env_args is None else env_args
         self.n_envs = n_envs

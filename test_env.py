@@ -8,6 +8,11 @@ import algorithm.config_helper as config_helper
 from algorithm.agent import MultiAgentsManager
 from algorithm.config_helper import set_logger
 
+try:
+    import memory_corridor
+except:
+    pass
+
 
 class Main(object):
     def __init__(self, root_dir, config_dir, args):
@@ -41,8 +46,8 @@ class Main(object):
         if args.port is not None:
             config['base_config']['unity_args']['port'] = args.port
 
-        if args.agents is not None:
-            config['base_config']['n_envs'] = args.agents
+        if args.envs is not None:
+            config['base_config']['n_envs'] = args.envs
 
         config['base_config']['name'] = config_helper.generate_base_name(config['base_config']['name'])
 
@@ -71,20 +76,20 @@ class Main(object):
                                         n_envs=self.base_config['n_envs'])
             else:
                 self.env = UnityWrapper(train_mode=self.train_mode,
-                                        file_name=self.base_config['unity_args']['build_path'][sys.platform],
+                                        env_name=self.base_config['unity_args']['build_path'][sys.platform],
+                                        n_envs=self.base_config['n_envs'],
                                         base_port=self.base_config['unity_args']['port'],
                                         no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
                                         scene=self.base_config['env_name'],
-                                        additional_args=self.base_config['env_args'],
-                                        n_envs=self.base_config['n_envs'])
+                                        additional_args=self.base_config['env_args'])
 
         elif self.base_config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
 
             self.env = GymWrapper(train_mode=self.train_mode,
                                   env_name=self.base_config['env_name'],
-                                  render=self.render,
-                                  n_envs=self.base_config['n_envs'])
+                                  n_envs=self.base_config['n_envs'],
+                                  render=self.render)
 
         elif self.base_config['env_type'] == 'DM_CONTROL':
             from algorithm.env_wrapper.dm_control_wrapper import \
@@ -92,15 +97,16 @@ class Main(object):
 
             self.env = DMControlWrapper(train_mode=self.train_mode,
                                         env_name=self.base_config['env_name'],
-                                        render=self.render,
-                                        n_envs=self.base_config['n_envs'])
+                                        n_envs=self.base_config['n_envs'],
+                                        render=self.render)
 
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
-        ma_obs_shapes, ma_d_action_size, ma_c_action_size = self.env.init()
-        self.ma_manager = MultiAgentsManager(ma_obs_shapes,
-                                             ma_d_action_size,
+        ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size = self.env.init()
+        self.ma_manager = MultiAgentsManager(ma_obs_names,
+                                             ma_obs_shapes,
+                                             ma_d_action_sizes,
                                              ma_c_action_size,
                                              self.model_abs_dir)
         for n, mgr in self.ma_manager:
@@ -111,14 +117,17 @@ class Main(object):
                 mgr.set_config(self.ma_configs[n])
 
             self._logger.info(f'{n} observation shapes: {mgr.obs_shapes}')
-            self._logger.info(f'{n} action shapes: {mgr.d_action_size}, {mgr.c_action_size}')
+            self._logger.info(f'{n} discrete action sizes: {mgr.d_action_sizes}')
+            self._logger.info(f'{n} continuous action size: {mgr.c_action_size}')
 
         self._logger.info(f'{self.base_config["env_name"]} initialized')
 
     def _run(self):
-        self.ma_manager.pre_run(self.base_config['n_envs'])
-
         ma_obs_list = self.env.reset(reset_config=self.reset_config)
+
+        self.ma_manager.pre_run({
+            n: obs_list[0].shape[0] for n, obs_list in ma_obs_list.items()
+        })
         self.ma_manager.set_obs_list(ma_obs_list)
 
         force_reset = False
@@ -150,7 +159,8 @@ class Main(object):
                     (ma_next_obs_list,
                      ma_reward,
                      ma_local_done,
-                     ma_max_reached) = self.env.step(ma_d_action, ma_c_action)
+                     ma_max_reached,
+                     ma_next_padding_mask) = self.env.step(ma_d_action, ma_c_action)
 
                     if ma_next_obs_list is None:
                         force_reset = True
@@ -194,10 +204,11 @@ if __name__ == '__main__':
     parser.add_argument('--run', action='store_true', help='inference mode')
 
     parser.add_argument('--render', action='store_true', help='render')
-    parser.add_argument('--editor', action='store_true', help='running in Unity Editor')
     parser.add_argument('--env_args', help='additional args for Unity')
-    parser.add_argument('--port', '-p', type=int, default=5005, help='communication port')
-    parser.add_argument('--agents', type=int, help='number of agents')
+    parser.add_argument('--envs', type=int, help='number of env copies')
+
+    parser.add_argument('--port', '-p', type=int, default=5005, help='UNITY: communication port')
+    parser.add_argument('--editor', action='store_true', help='UNITY: running in Unity Editor')
 
     args = parser.parse_args()
 

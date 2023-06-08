@@ -743,8 +743,8 @@ class OptionSelectorBase(SAC_Base):
         state, next_attn_state, _ = self.model_rep(ep_indexes,
                                                    ep_obses_list, ep_pre_actions,
                                                    query_length=1,
-                                                #    hidden_state=ep_attn_states,
-                                                #    is_prev_hidden_state=False,
+                                                   #    hidden_state=ep_attn_states,
+                                                   #    is_prev_hidden_state=False,
                                                    padding_mask=ep_padding_masks)
         # state: [batch, 1, state_size]
         # next_attn_state: [batch, 1, *attn_state_shape]

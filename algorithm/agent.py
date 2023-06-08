@@ -372,7 +372,7 @@ class AgentManager:
         self['action'] = action
         self['d_action'] = d_action
         self['c_action'] = c_action
-        self['prob'] = np.random.rand(len(self.agents))
+        self['prob'] = np.random.rand(len(self.agents), self.action_size)
 
     def set_env_step(self,
                      next_obs_list: List[np.ndarray],
