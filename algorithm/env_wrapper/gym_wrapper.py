@@ -1,7 +1,14 @@
 import logging
+from typing import Dict, Optional
 
 import gymnasium as gym
 import numpy as np
+
+if __name__ in ('__main__', '__mp_main__'):
+    from env_wrapper import EnvWrapper
+else:
+    from .env_wrapper import EnvWrapper
+
 
 try:
     import memory_corridor
@@ -9,16 +16,16 @@ except Exception as e:
     print('MemoryCorridor is not installed')
 
 
-class GymWrapper:
+class GymWrapper(EnvWrapper):
     def __init__(self,
-                 train_mode=True,
-                 env_name=None,
-                 render=False,
-                 n_envs=1):
-        self.train_mode = train_mode
-        self.env_name = env_name
+                 train_mode: bool = True,
+                 env_name: str = None,
+                 n_envs: int = 1,
+
+                 render=False):
+        super().__init__(train_mode, env_name, n_envs)
+
         self.render = render
-        self.n_envs = n_envs
 
         self._logger = logging.getLogger('GymWrapper')
 
@@ -47,14 +54,17 @@ class GymWrapper:
                 {'gym': d_action_sizes},
                 {'gym': c_action_size})
 
-    def reset(self, reset_config=None):
-        obs, info = self.env.reset(options={**reset_config} if reset_config is not None else None)
+    def reset(self, reset_config: Optional[Dict] = None):
+        obs, info = self.env.reset(options={**reset_config}
+                                   if reset_config is not None else None)
 
         obs = obs.astype(np.float32)
 
         return {'gym': [obs]}
 
-    def step(self, ma_d_action, ma_c_action):
+    def step(self,
+             ma_d_action: Dict[str, np.ndarray],
+             ma_c_action: Dict[str, np.ndarray]):
         if self.is_discrete:
             d_action = ma_d_action['gym']
             # Convert one-hot to label

@@ -20,6 +20,8 @@ from mlagents_envs.side_channel.side_channel import (IncomingMessage,
                                                      OutgoingMessage,
                                                      SideChannel)
 
+from .env_wrapper import EnvWrapper
+
 INIT = 0
 RESET = 1
 STEP = 2
@@ -444,40 +446,40 @@ class UnityWrapperProcess:
         self._logger.warning(f'Process {os.getpid()} exits')
 
 
-class UnityWrapper:
+class UnityWrapper(EnvWrapper):
     def __init__(self,
-                 train_mode=True,
-                 file_name=None,
+                 train_mode: bool = True,
+                 env_name: str = None,
+                 n_envs: int = 1,
+
                  base_port=5005,
                  no_graphics=True,
                  time_scale=None,
                  seed=None,
                  scene=None,
                  additional_args=None,
-                 n_envs=1,
                  group_aggregation=False,
                  force_seq=None):
         """
         Args:
             train_mode: If in train mode, Unity will run in the highest quality
-            file_name: The executable path. The UnityEnvironment will run in editor if None
+            env_name: The executable path. The UnityEnvironment will run in editor if None
+            n_envs: The env copies count
+
             base_port: The port that communicate to Unity. It will be set to 5004 automatically if in editor.
             no_graphics: If Unity runs in no graphic mode. It must be set to False if Unity has camera sensor.
             time_scale: Time scale of Unity. If None: time_scale = 20 if train_mode else 1
             seed: Random seed
             scene: The scene name
-            n_envs: The env copies count
             group_aggregation: If aggregate group agents
         """
-        self.train_mode = train_mode
-        self.file_name = file_name
+        super().__init__(train_mode, env_name, n_envs)
         self.base_port = base_port
         self.no_graphics = no_graphics
         self.time_scale = time_scale
         self.seed = seed
         self.scene = scene
         self.additional_args = additional_args
-        self.n_envs = n_envs
         self.group_aggregation = group_aggregation
 
         # If use multiple processes
@@ -497,7 +499,7 @@ class UnityWrapper:
             for i in range(self.env_length):
                 self._envs.append(UnityWrapperProcess(conn=None,
                                                       train_mode=train_mode,
-                                                      file_name=file_name,
+                                                      file_name=env_name,
                                                       worker_id=i,
                                                       base_port=base_port,
                                                       no_graphics=no_graphics,
@@ -524,7 +526,7 @@ class UnityWrapper:
                 p = multiprocessing.Process(target=UnityWrapperProcess,
                                             args=(child_conn,
                                                   self.train_mode,
-                                                  self.file_name,
+                                                  self.env_name,
                                                   self._process_id,
                                                   self.base_port,
                                                   self.no_graphics,
@@ -548,13 +550,6 @@ class UnityWrapper:
         self._envs[0].option_channel.send_option(option)
 
     def init(self):
-        """
-        Returns:
-            observation shapes: dict[str, tuple[(o1, ), (o2, ), (o3_1, o3_2, o3_3), ...]]
-            discrete action sizes: dict[str, list[int]], list of all action branches
-            continuous action size: dict[str, int]
-        """
-
         self.ma_n_agents_list = defaultdict(list)
 
         if self._seq_envs:
@@ -580,10 +575,6 @@ class UnityWrapper:
         return ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size
 
     def reset(self, reset_config=None):
-        """
-        return:
-            observation: dict[str, list[(NAgents, o1), (NAgents, o2), (NAgents, o3_1, o3_2, o3_3)]]
-        """
         if self._seq_envs:
             envs_ma_obs_list = [env.reset(reset_config) for env in self._envs]
         else:
@@ -598,19 +589,9 @@ class UnityWrapper:
 
         return ma_obs_list
 
-    def step(self, ma_d_action, ma_c_action):
-        """
-        Args:
-            d_action: dict[str, (NAgents, discrete_action_size)], one hot like action
-            c_action: dict[str, (NAgents, continuous_action_size)]
-
-        Returns:
-            observation: dict[str, list[(NAgents, o1), (NAgents, o2), (NAgents, o3_1, o3_2, o3_3)]]
-            reward: dict[str, (NAgents, )]
-            done: dict[str, (NAgents, )], bool
-            max_step: dict[str, (NAgents, )], bool
-            ma_padding_mask: dict[str, (NAgents, )], bool
-        """
+    def step(self,
+             ma_d_action: Dict[str, np.ndarray],
+             ma_c_action: Dict[str, np.ndarray]):
         ma_envs_obs_list = {n: [] for n in self.behavior_names}
         ma_envs_reward = {n: [] for n in self.behavior_names}
         ma_envs_done = {n: [] for n in self.behavior_names}

@@ -12,6 +12,11 @@ RESET = 0
 STEP = 1
 CLOSE = 2
 
+if __name__ in ('__main__', '__mp_main__'):
+    from env_wrapper import EnvWrapper
+else:
+    from .env_wrapper import EnvWrapper
+
 
 def start_dm_control_process(domain, task, render, conn):
     try:
@@ -51,17 +56,16 @@ def start_dm_control_process(domain, task, render, conn):
     logger.warning(f'Process {os.getpid()} exits')
 
 
-class DMControlWrapper:
+class DMControlWrapper(EnvWrapper):
     def __init__(self,
                  train_mode=True,
                  env_name=None,
-                 render=False,
                  n_envs=1,
+
+                 render=False,
                  force_seq=None):
-        self.train_mode = train_mode
-        self.env_name = env_name
+        super().__init__(train_mode, env_name, n_envs)
         self.render = render
-        self.n_envs = n_envs
 
         # If use multiple processes
         if force_seq is None:

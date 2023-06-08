@@ -110,18 +110,18 @@ class Main:
 
             if self.unity_run_in_editor:
                 self.env = UnityWrapper(train_mode=self.train_mode,
-                                        time_scale=self.unity_time_scale,
                                         n_envs=self.base_config['n_envs'],
+                                        time_scale=self.unity_time_scale,
                                         group_aggregation=self.base_config['unity_args']['group_aggregation'])
             else:
                 self.env = UnityWrapper(train_mode=self.train_mode,
-                                        file_name=self.base_config['unity_args']['build_path'][sys.platform],
+                                        env_name=self.base_config['unity_args']['build_path'][sys.platform],
+                                        n_envs=self.base_config['n_envs'],
                                         base_port=self.base_config['unity_args']['port'],
                                         no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
                                         time_scale=self.unity_time_scale,
                                         scene=self.base_config['env_name'],
                                         additional_args=self.base_config['env_args'],
-                                        n_envs=self.base_config['n_envs'],
                                         group_aggregation=self.base_config['unity_args']['group_aggregation'])
 
         elif self.base_config['env_type'] == 'GYM':
@@ -129,8 +129,8 @@ class Main:
 
             self.env = GymWrapper(train_mode=self.train_mode,
                                   env_name=self.base_config['env_name'],
-                                  render=self.render,
-                                  n_envs=self.base_config['n_envs'])
+                                  n_envs=self.base_config['n_envs'],
+                                  render=self.render)
 
         elif self.base_config['env_type'] == 'DM_CONTROL':
             from algorithm.env_wrapper.dm_control_wrapper import \
@@ -138,8 +138,8 @@ class Main:
 
             self.env = DMControlWrapper(train_mode=self.train_mode,
                                         env_name=self.base_config['env_name'],
-                                        render=self.render,
-                                        n_envs=self.base_config['n_envs'])
+                                        n_envs=self.base_config['n_envs'],
+                                        render=self.render)
 
         elif self.base_config['env_type'] == 'TEST':
             from algorithm.env_wrapper.test_wrapper import TestWrapper
@@ -295,7 +295,7 @@ class Main:
                     p_model.unlink()
 
                 iteration += 1
-        
+
         except KeyboardInterrupt:
             self._logger.warning('KeyboardInterrupt')
 
