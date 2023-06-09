@@ -473,6 +473,10 @@ class MultiAgentsManager:
             for a in mgr.agents:
                 a.reset()
 
+    def set_train_mode(self, train_mode: bool = True):
+        for n, mgr in self:
+            mgr.rl.train_mode = train_mode
+
     def get_ma_action(self,
                       disable_sample: bool = False,
                       force_rnd_if_available: bool = False) -> Tuple[Dict[str, np.ndarray],

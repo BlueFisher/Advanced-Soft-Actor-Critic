@@ -6,7 +6,7 @@ default:
     n_envs: 20
 
   reset_config:
-    block_layer_count: 1
+    block_layer_count: 3
     block_gap: 3
     success_reward: 1.
     passage_reward: 0.05

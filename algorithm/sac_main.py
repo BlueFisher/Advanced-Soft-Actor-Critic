@@ -211,6 +211,8 @@ class Main:
         })
         self.ma_manager.set_obs_list(ma_obs_list)
 
+        training_iteration = self.train_mode
+
         force_reset = False
         iteration = 0
         trained_steps = 0
@@ -237,7 +239,6 @@ class Main:
                 while not self.ma_manager.is_done():
                     with self._profiler('get_ma_action', repeat=10):
                         ma_d_action, ma_c_action = self.ma_manager.get_ma_action(disable_sample=self.disable_sample)
-                        # ma_d_action, ma_c_action = self.ma_manager.get_test_ma_action()
 
                     with self._profiler('env.step', repeat=10):
                         (ma_next_obs_list,
@@ -263,11 +264,12 @@ class Main:
                                                     ma_local_done,
                                                     ma_max_reached)
 
-                    if self.train_mode:
+                    if self.train_mode and training_iteration:
                         with self._profiler('train', repeat=10) as profiler:
                             next_trained_steps = self.ma_manager.train(trained_steps)
                             if next_trained_steps == trained_steps:
                                 profiler.ignore()
+                            trained_steps = next_trained_steps
 
                     with self._profiler('post_step', repeat=10):
                         self.ma_manager.post_step(ma_next_obs_list,
@@ -276,10 +278,15 @@ class Main:
 
                     step += 1
 
-                if self.train_mode:
+                if self.train_mode and not training_iteration:
                     self._log_episode_summaries()
 
-                self._log_episode_info(iteration, time.time() - iter_time)
+                if not training_iteration:
+                    self._log_episode_info(iteration, time.time() - iter_time)
+
+                if self.train_mode:
+                    training_iteration = not training_iteration
+                    self.ma_manager.set_train_mode(training_iteration)
 
                 p_model = self.model_abs_dir.joinpath('save_model')
                 if self.train_mode and p_model.exists():
@@ -292,7 +299,8 @@ class Main:
 
                     p_model.unlink()
 
-                iteration += 1
+                if not training_iteration:
+                    iteration += 1
 
         except KeyboardInterrupt:
             self._logger.warning('KeyboardInterrupt')

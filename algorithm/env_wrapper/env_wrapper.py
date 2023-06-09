@@ -50,3 +50,6 @@ class EnvWrapper:
 
     def close(self):
         raise NotImplementedError()
+
+    def send_option(self, option: Dict[str, int]):
+        pass
