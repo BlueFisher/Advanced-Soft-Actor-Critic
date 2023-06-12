@@ -475,7 +475,7 @@ class MultiAgentsManager:
 
     def set_train_mode(self, train_mode: bool = True):
         for n, mgr in self:
-            mgr.rl.train_mode = train_mode
+            mgr.rl.set_train_mode(train_mode)
 
     def get_ma_action(self,
                       disable_sample: bool = False,

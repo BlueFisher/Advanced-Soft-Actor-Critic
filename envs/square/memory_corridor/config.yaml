@@ -32,6 +32,12 @@ attn:
     nn: nn_attn
     seq_encoder: ATTN
 
+oc_1:
+  base_config:
+    name: oc_1_{time}
+  oc_config:
+    num_options: 1
+
 oc_2:
   base_config:
     name: oc2_{time}
@@ -56,6 +62,14 @@ oc_2_dilated:
     name: oc2_dilated_{time}
   oc_config:
     use_dilation: true
+
+oc_1_attn:
+  inherited: oc_1
+  base_config:
+    name: oc_1_attn_{time}
+  sac_config:
+    nn: nn_attn
+    seq_encoder: ATTN
 
 oc_2_attn:
   inherited: oc_2

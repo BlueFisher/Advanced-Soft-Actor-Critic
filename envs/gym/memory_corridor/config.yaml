@@ -14,8 +14,8 @@ default:
     max_episode_steps: 50
 
   sac_config:
-    burn_in_step: 10
-    n_step: 3
+    burn_in_step: 5
+    n_step: 1
     seq_encoder: RNN
 
     discrete_dqn_like: true
@@ -29,6 +29,12 @@ attn:
   sac_config:
     nn: nn_attn
     seq_encoder: ATTN
+
+oc_1:
+  base_config:
+    name: oc_1_{time}
+  oc_config:
+    num_options: 1
 
 oc_2:
   base_config:
@@ -54,6 +60,14 @@ oc_2_dilated:
     name: oc_2_dilated_{time}
   oc_config:
     use_dilation: true
+
+oc_1_attn:
+  inherited: oc_1
+  base_config:
+    name: oc_1_attn_{time}
+  sac_config:
+    nn: nn_attn
+    seq_encoder: ATTN
 
 oc_2_attn:
   inherited: oc_2

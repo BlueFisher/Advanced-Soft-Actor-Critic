@@ -574,6 +574,9 @@ class SAC_Base:
                 self._logger.info('Initializing from scratch')
                 self._update_target_variables()
 
+    def set_train_mode(self, train_mode=True):
+        self.train_mode = train_mode
+
     def save_model(self, save_replay_buffer=False) -> None:
         if self.ckpt_dir:
             global_step = self.get_global_step()
@@ -1221,7 +1224,7 @@ class SAC_Base:
         c_alpha = torch.exp(self.log_c_alpha)
 
         next_n_obses_list = [torch.cat([n_obses[:, 1:, ...], next_obs.unsqueeze(1)], dim=1)
-                             for n_obses, next_obs in zip(n_obses_list, next_obs_list)]
+                             for n_obses, next_obs in zip(n_obses_list, next_obs_list)]  # list([batch, n, *obs_shapes_i], ...)
         next_n_states = torch.cat([n_states[:, 1:, ...], next_state.unsqueeze(1)], dim=1)  # [batch, n, state_size]
 
         d_policy, c_policy = self.model_policy(n_states, n_obses_list)
@@ -1429,7 +1432,7 @@ class SAC_Base:
                 for i in range(self.ensemble_q_num):
                     loss_q_list[i] += loss_none_mse(c_q_list[i], c_y)  # [batch, 1]
 
-        if self.use_replay_buffer and self.use_priority:
+        if priority_is is not None:
             loss_q_list = [loss_q * priority_is for loss_q in loss_q_list]
 
         loss_q_list = [torch.mean(loss) for loss in loss_q_list]
