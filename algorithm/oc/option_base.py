@@ -190,15 +190,15 @@ class OptionBase(SAC_Base):
         next_d_policy, next_c_policy = self.model_policy(next_n_states, next_n_obses_list)
 
         if self.c_action_size:
-            n_c_actions_sampled = c_policy.rsample()  # [batch, n, action_size]
-            next_n_c_actions_sampled = next_c_policy.rsample()  # [batch, n, action_size]
+            n_c_actions_sampled = c_policy.rsample()  # [batch, n, c_action_size]
+            next_n_c_actions_sampled = next_c_policy.rsample()  # [batch, n, c_action_size]
         else:
             n_c_actions_sampled = torch.zeros(0, device=self.device)
             next_n_c_actions_sampled = torch.zeros(0, device=self.device)
 
-        # ([batch, n, d_action_summed_size], [batch, n, 1])
         n_qs_list = [q(n_states, torch.tanh(n_c_actions_sampled)) for q in self.model_target_q_list]
         next_n_qs_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled)) for q in self.model_target_q_list]
+        # ([batch, n, d_action_summed_size], [batch, n, 1])
 
         n_d_qs_list = [q[0] for q in n_qs_list]  # [batch, n, d_action_summed_size]
         n_c_qs_list = [q[1] for q in n_qs_list]  # [batch, n, 1]
@@ -327,7 +327,7 @@ class OptionBase(SAC_Base):
         else:
             c_action_sampled = torch.zeros(0, device=self.device)
 
-        q_list = [q(state, torch.tanh(c_action_sampled)) for q in self.model_q_list]
+        q_list = [q(state, torch.tanh(c_action_sampled)) for q in self.model_target_q_list]
         # [([batch, 1], [batch, d_action_summed_size]), ...]
         d_q_list = [q[0] for q in q_list]  # [[batch, d_action_summed_size], ...]
         c_q_list = [q[1] for q in q_list]  # [[batch, 1], ...]
@@ -338,17 +338,13 @@ class OptionBase(SAC_Base):
 
             if self.discrete_dqn_like:
                 stacked_d_q_list = stacked_d_q.split(self.d_action_sizes, dim=-1)
-                mask_stacked_d_q_list = [functional.one_hot(torch.argmax(stacked_next_q, dim=-1),
-                                                            d_action_size)
-                                         for stacked_next_q, d_action_size in zip(stacked_d_q_list, self.d_action_sizes)]
-                mask_stacked_d_q = torch.concat(mask_stacked_d_q_list, dim=-1)  # [ensemble_q_sample, batch, d_action_summed_size]
-                stacked_max_d_q = torch.sum(stacked_d_q * mask_stacked_d_q,
-                                            dim=-1,
-                                            keepdim=True)
+                max_stacked_d_q_list = [stacked_d_q.max(dim=-1, keepdims=True)[0] for stacked_d_q in stacked_d_q_list]
+                # list([ensemble_q_sample, batch, 1], ...)
+                max_stacked_d_q = torch.concat(max_stacked_d_q_list, dim=-1)  # [ensemble_q_sample, batch, d_action_branch_size]
+                max_stacked_d_q = torch.mean(max_stacked_d_q, dim=-1, keepdims=True)
                 # [ensemble_q_sample, batch, 1]
-                stacked_max_d_q = stacked_max_d_q / self.d_action_branch_size
 
-                min_max_d_q, _ = torch.min(stacked_max_d_q, dim=0)
+                min_max_d_q, _ = torch.min(max_stacked_d_q, dim=0)  # [batch, 1]
                 v += min_max_d_q
 
             else:
@@ -469,7 +465,7 @@ class OptionBase(SAC_Base):
                 for i in range(self.ensemble_q_num):
                     loss_q_list[i] += loss_none_mse(c_q_list[i], c_y)  # [batch, 1]
 
-        if self.use_replay_buffer and self.use_priority:
+        if priority_is is not None:
             loss_q_list = [loss_q * priority_is for loss_q in loss_q_list]
 
         loss_q_list = [torch.mean(loss) for loss in loss_q_list]

@@ -389,6 +389,11 @@ class OptionSelectorBase(SAC_Base):
                 self._logger.info('Initializing from scratch')
                 self._update_target_variables()
 
+    def set_train_mode(self, train_mode=True):
+        self.train_mode = train_mode
+        for option in self.option_list:
+            option.set_train_mode(train_mode)
+
     def save_model(self, save_replay_buffer=False) -> None:
         super().save_model(save_replay_buffer)
 
@@ -473,7 +478,7 @@ class OptionSelectorBase(SAC_Base):
         termination_mask = termination > .5
         option_index[termination_mask] = new_option_index[termination_mask]
 
-        if not disable_sample:
+        if self.train_mode:
             random_mask = torch.rand_like(option_index, dtype=torch.float32) < 0.2  # TODO HYPERPARAMETER
             dist = distributions.Categorical(logits=torch.ones((batch, self.num_options),
                                                                device=self.device))
@@ -1569,8 +1574,9 @@ class OptionSelectorBase(SAC_Base):
                               low_state: torch.Tensor,
                               next_state: torch.Tensor,
                               next_low_state: torch.Tensor,
-                              done: torch.Tensor) -> Tuple[torch.Tensor,
-                                                           torch.Tensor]:
+                              done: torch.Tensor,
+                              priority_is: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor,
+                                                                                   torch.Tensor]:
         """
         Args:
             state: [batch, state_size]
@@ -1581,6 +1587,7 @@ class OptionSelectorBase(SAC_Base):
             next_state: [batch, state_size]
             next_low_state: [batch, low_state_size]
             done (torch.bool): [batch, ]
+            priority_is: [batch, 1]
 
         Returns:
             loss_v: torch.float32
@@ -1602,12 +1609,16 @@ class OptionSelectorBase(SAC_Base):
             y_for_v[mask] = option.get_v(obs_list=o_low_obs_list,
                                          state=o_state)
 
-        loss_mse = nn.MSELoss()
+        loss_none_mse = nn.MSELoss(reduction='none')
         for i, model_v_over_options in enumerate(self.model_v_over_options_list):
             v_over_options = model_v_over_options(state)  # [batch, num_options]
             v = v_over_options.gather(1, option_index.unsqueeze(-1))  # [batch, 1]
 
-            loss_v = loss_mse(v, y_for_v)
+            loss_v = loss_none_mse(v, y_for_v)  # [batch, 1]
+            if priority_is is not None:
+                loss_v = loss_v * priority_is  # [batch, 1]
+
+            loss_v = torch.mean(loss_v)
 
             optimizer = self.optimizer_v_list[i]
 
@@ -1795,7 +1806,8 @@ class OptionSelectorBase(SAC_Base):
                                             low_state=om_low_states[:, self.option_burn_in_step, ...],
                                             next_state=m_states[:, -1, ...],
                                             next_low_state=om_low_states[:, -1, ...],
-                                            done=bn_dones[:, self.burn_in_step])
+                                            done=bn_dones[:, self.burn_in_step],
+                                            priority_is=priority_is)
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             self.summary_available = True
