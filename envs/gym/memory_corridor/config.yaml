@@ -15,13 +15,13 @@ default:
 
   sac_config:
     burn_in_step: 5
-    n_step: 1
+    n_step: 3
     seq_encoder: RNN
 
     discrete_dqn_like: true
 
-    use_rnd: true
-    rnd_n_sample: 50
+    # use_rnd: true
+    # rnd_n_sample: 50
 
 attn:
   base_config:

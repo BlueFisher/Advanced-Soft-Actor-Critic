@@ -120,7 +120,6 @@ sac_config:
   use_rnd: false # Whether using RND
   rnd_n_sample: 10 # RND sample times
   use_normalization: false # Whether using observation normalization
-  use_add_with_td: false # Whether add transitions in replay buffer with td-error
   action_noise: null # [noise_min, noise_max]
 
 ma_config: null

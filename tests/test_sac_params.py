@@ -1,4 +1,5 @@
 import importlib
+import sys
 import unittest
 
 from algorithm.sac_base import SAC_Base
@@ -88,7 +89,7 @@ class TestSeqEncoderModel(unittest.TestCase):
         return func
 
 
-def __gen_vanilla():
+def __gen_vanilla(test_from: int):
     param_dict_candidates = {
         'd_action_sizes': [[2, 3, 4]],
         'c_action_size': [4],
@@ -100,7 +101,6 @@ def __gen_vanilla():
         'siamese_use_q': [False, True],
         'siamese_use_adaptive': [False, True],
         'use_rnd': [True, False],
-        'use_add_with_td': [False, True],
         'action_noise': [None, [0.1, 0.1]]
     }
     possible_param_dicts = get_product(param_dict_candidates)
@@ -114,7 +114,11 @@ def __gen_vanilla():
             if param_dict['siamese_use_q'] or param_dict['siamese_use_adaptive']:
                 continue
 
-        func_name = f'test_{i:03d}'
+        if i < test_from:
+            i += 1
+            continue
+
+        func_name = f'test_{i:04d}'
         for k, v in param_dict.items():
             v = str(v).replace('.', '_')
             if len(param_dict_candidates[k]) > 1:
@@ -126,7 +130,7 @@ def __gen_vanilla():
         i += 1
 
 
-def __gen_seq_encoder():
+def __gen_seq_encoder(test_from: int):
     param_dict_candidates = {
         'd_action_sizes': [[2, 3, 4]],
         'c_action_size': [4],
@@ -141,7 +145,6 @@ def __gen_seq_encoder():
         'siamese_use_q': [False, True],
         'siamese_use_adaptive': [False, True],
         'use_rnd': [True, False],
-        'use_add_with_td': [False, True],
         'action_noise': [None, [0.1, 0.1]]
     }
 
@@ -160,7 +163,11 @@ def __gen_seq_encoder():
             if param_dict['siamese_use_q'] or param_dict['siamese_use_adaptive']:
                 continue
 
-        func_name = f'test_{i:03d}'
+        if i < test_from:
+            i += 1
+            continue
+
+        func_name = f'test_{i:04d}'
         for k, v in param_dict.items():
             v = str(v).replace('.', '_')
             if len(param_dict_candidates[k]) > 1:
@@ -172,5 +179,10 @@ def __gen_seq_encoder():
         i += 1
 
 
-__gen_vanilla()
-__gen_seq_encoder()
+test_from = 0
+for arg in sys.argv:
+    if arg.startswith('--from'):
+        test_from = int(arg.split('--from=')[1])
+
+__gen_vanilla(test_from)
+__gen_seq_encoder(test_from)
