@@ -88,6 +88,7 @@ class OptionBase(SAC_Base):
 
                          min_next_n_max_vs: torch.Tensor,
 
+                         n_padding_masks: torch.Tensor,
                          n_rewards: torch.Tensor,
                          n_dones: torch.Tensor,
                          stacked_next_n_d_qs: torch.Tensor,
@@ -96,6 +97,7 @@ class OptionBase(SAC_Base):
         Args:
             next_n_terminations: [batch, n]
             min_next_n_max_vs: [batch, n]
+            n_padding_masks (torch.bool): [batch, n]
             n_rewards: [batch, n]
             n_dones (torch.bool): [batch, n]
             stacked_next_n_d_qs: [ensemble_q_sample, batch, n, d_action_summed_size]
@@ -104,11 +106,14 @@ class OptionBase(SAC_Base):
         Returns:
             y: [batch, 1]
         """
+        batch_tensor = torch.arange(n_padding_masks.shape[0], device=self.device)
+        last_solid_index = get_last_false_indexes(n_padding_masks, dim=1)  # [batch, ]
 
-        stacked_next_q = stacked_next_n_d_qs[..., -1, :]  # [ensemble_q_sample, batch, d_action_summed_size]
-        stacked_next_target_q = stacked_next_target_n_d_qs[..., -1, :]  # [ensemble_q_sample, batch, d_action_summed_size]
-
-        done = n_dones[:, -1:]  # [batch, 1]
+        done = n_dones[batch_tensor, last_solid_index].unsqueeze(-1)  # [batch, 1]
+        stacked_next_q = stacked_next_n_d_qs[:, batch_tensor, last_solid_index, :]
+        # [ensemble_q_sample, batch, d_action_summed_size]
+        stacked_next_target_q = stacked_next_target_n_d_qs[:, batch_tensor, last_solid_index, :]
+        # [ensemble_q_sample, batch, d_action_summed_size]
 
         stacked_next_q_list = stacked_next_q.split(self.d_action_sizes, dim=-1)
 
@@ -134,7 +139,7 @@ class OptionBase(SAC_Base):
             next_termination * min_next_max_v  # [batch, 1]
 
         g = torch.sum(self._gamma_ratio * n_rewards, dim=-1, keepdim=True)  # [batch, 1]
-        y = g + self.gamma**self.n_step * next_q * ~done  # [batch, 1]
+        y = g + torch.pow(self.gamma, last_solid_index.unsqueeze(-1) + 1) * next_q * ~done  # [batch, 1]
 
         return y
 
@@ -144,6 +149,7 @@ class OptionBase(SAC_Base):
 
                next_n_terminations: torch.Tensor,
 
+               n_padding_masks: torch.Tensor,
                n_obses_list: List[torch.Tensor],
                n_states: torch.Tensor,
                n_actions: torch.Tensor,
@@ -159,6 +165,7 @@ class OptionBase(SAC_Base):
 
             next_n_terminations: [batch, n]
 
+            n_padding_masks (torch.bool): [batch, n]
             n_obses_list: list([batch, n, *obs_shapes_i], ...)
             n_states: [batch, n, state_size]
             n_option_indexes (torch.int64): [batch, n]
@@ -219,6 +226,7 @@ class OptionBase(SAC_Base):
 
                 d_y = self.get_dqn_like_d_y(next_n_terminations=next_n_terminations,
                                             min_next_n_max_vs=min_next_n_max_vs,
+                                            n_padding_masks=n_padding_masks,
                                             n_rewards=n_rewards,
                                             n_dones=n_dones,
                                             stacked_next_n_d_qs=stacked_next_n_d_eval_qs,
@@ -252,7 +260,8 @@ class OptionBase(SAC_Base):
                     n_d_mu_probs = n_d_mu_probs.prod(-1)  # [batch, n]
                     n_d_pi_probs = torch.exp(d_policy.log_prob(n_d_actions).sum(-1))  # [batch, n]
 
-                d_y = self._v_trace(n_rewards=n_rewards,
+                d_y = self._v_trace(n_padding_masks=n_padding_masks,
+                                    n_rewards=n_rewards,
                                     n_dones=n_dones,
                                     n_mu_probs=n_d_mu_probs if self.use_n_step_is else None,
                                     n_pi_probs=n_d_pi_probs if self.use_n_step_is else None,
@@ -296,7 +305,8 @@ class OptionBase(SAC_Base):
                 n_c_pi_probs = squash_correction_prob(c_policy, torch.atanh(n_c_actions))
                 # [batch, n, c_action_size]
 
-            c_y = self._v_trace(n_rewards=n_rewards,
+            c_y = self._v_trace(n_padding_masks=n_padding_masks,
+                                n_rewards=n_rewards,
                                 n_dones=n_dones,
                                 n_mu_probs=n_c_mu_probs.prod(-1) if self.use_n_step_is else None,
                                 n_pi_probs=n_c_pi_probs.prod(-1) if self.use_n_step_is else None,
@@ -428,6 +438,7 @@ class OptionBase(SAC_Base):
 
                                next_n_terminations=next_n_terminations,
 
+                               n_padding_masks=bn_padding_masks[:, self.burn_in_step:, ...],
                                n_obses_list=[bn_target_obses[:, self.burn_in_step:, ...] for bn_target_obses in bn_target_obses_list],
                                n_states=bn_target_states[:, self.burn_in_step:, ...],
                                n_actions=bn_actions[:, self.burn_in_step:, ...],
@@ -548,12 +559,14 @@ class OptionBase(SAC_Base):
             self.summary_writer.flush()
 
     def train_policy_alpha(self,
+                           bn_padding_masks: torch.Tensor,
                            bn_obses_list: List[torch.Tensor],
                            m_states: torch.Tensor,
                            bn_actions: torch.Tensor,
                            bn_mu_probs: torch.Tensor) -> None:
         """
         Args:
+            bn_padding_masks (bool): [batch, b + n]
             bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
             m_states: [batch, b + n + 1, state_size]
             bn_actions: [batch, b + n, action_size]
@@ -575,11 +588,11 @@ class OptionBase(SAC_Base):
             d_alpha, c_alpha = self._train_alpha(obs_list, state)
 
         if self.curiosity is not None:
-            loss_curiosity = self._train_curiosity(m_states, bn_actions)
+            loss_curiosity = self._train_curiosity(bn_padding_masks, m_states, bn_actions)
 
         if self.use_rnd:
             bn_states = m_states[:, :-1, ...]
-            loss_rnd = self._train_rnd(bn_states, bn_actions)
+            loss_rnd = self._train_rnd(bn_padding_masks, bn_states, bn_actions)
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             self.summary_available = True
@@ -636,6 +649,7 @@ class OptionBase(SAC_Base):
     def _get_td_error(self,
                       next_n_v_over_options_list: List[torch.Tensor],
 
+                      bn_padding_masks: torch.Tensor,
                       bn_obses_list: List[torch.Tensor],
                       bn_states: torch.Tensor,
                       bn_target_states: torch.Tensor,
@@ -649,6 +663,7 @@ class OptionBase(SAC_Base):
         Args:
             next_n_v_over_options_list: list([batch, n, num_options], ...)
 
+            bn_padding_masks (torch.bool): [batch, b + n]
             bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
             bn_states: [batch, b + n, state_size]
             bn_target_states: [batch, b + n, state_size]
@@ -689,6 +704,7 @@ class OptionBase(SAC_Base):
 
                                next_n_terminations=next_n_terminations,
 
+                               n_padding_masks=bn_padding_masks[:, self.burn_in_step:, ...],
                                n_obses_list=[bn_obses[:, self.burn_in_step:, ...] for bn_obses in bn_obses_list],
                                n_states=bn_target_states[:, self.burn_in_step:, ...],
                                n_actions=bn_actions[:, self.burn_in_step:, ...],
