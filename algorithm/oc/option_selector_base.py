@@ -1912,7 +1912,7 @@ class OptionSelectorBase(SAC_Base):
             t['padding_mask'][mask] = True
             for n in self.obs_names:
                 t[f'obs_{n}'][mask] = 0.
-            t['option_index'][mask] = 0
+            t['option_index'][mask] = -1
             t['option_changed_index'][mask] = 0
             t['action'][mask] = self._padding_action
             t['reward'][mask] = 0.
@@ -1937,7 +1937,7 @@ class OptionSelectorBase(SAC_Base):
         for i in range(self.burn_in_step):  # TODO: option_burn_in_step is enough in dilated attn
             t_trans = self.replay_buffer.get_storage_data(pointers - i - 1)
 
-            mask = (t_trans['index'] - trans['index']) != i
+            mask = (trans['index'] - t_trans['index']) != i + 1
             set_padding(t_trans, mask)
 
             for k, v in t_trans.items():

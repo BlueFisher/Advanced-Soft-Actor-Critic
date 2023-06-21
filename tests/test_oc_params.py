@@ -110,10 +110,7 @@ def __gen_vanilla(test_from: int):
         'use_priority': [True, False],
         'n_step': [3],
         'discrete_dqn_like': [True, False],
-        'siamese': [None, 'ATC', 'BYOL'],
-        'siamese_use_q': [False, True],
         'use_rnd': [True, False],
-        'siamese_use_adaptive': [False, True],
         'action_noise': [None, [0.1, 0.1]]
     }
     possible_param_dicts = get_product(param_dict_candidates)
@@ -122,10 +119,6 @@ def __gen_vanilla(test_from: int):
     for param_dict in possible_param_dicts:
         if not param_dict['d_action_sizes'] and not param_dict['c_action_size']:
             continue
-
-        if not param_dict['siamese']:
-            if param_dict['siamese_use_q'] or param_dict['siamese_use_adaptive']:
-                continue
 
         if i < test_from:
             i += 1
@@ -157,9 +150,6 @@ def __gen_seq_encoder(test_from: int):
         'seq_encoder': ['RNN', 'ATTN'],
         'use_prediction': [True, False],
         'use_extra_data': [True, False],
-        'siamese': [None, 'ATC', 'BYOL'],
-        'siamese_use_q': [False, True],
-        'siamese_use_adaptive': [False, True],
     }
 
     possible_param_dicts = get_product(param_dict_candidates)
@@ -175,10 +165,6 @@ def __gen_seq_encoder(test_from: int):
 
         if not param_dict['use_prediction']:
             if param_dict['use_extra_data']:
-                continue
-
-        if not param_dict['siamese']:
-            if param_dict['siamese_use_q'] or param_dict['siamese_use_adaptive']:
                 continue
 
         if i < test_from:
