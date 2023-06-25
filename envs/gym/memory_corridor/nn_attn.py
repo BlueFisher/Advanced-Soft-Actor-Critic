@@ -16,7 +16,11 @@ class ModelRep(m.ModelBaseAttentionRep):
         embed_size = 4 * 3 * 4
 
         self.pos = m.AbsolutePositionalEncoding(embed_size)
-        self.attn = m.EpisodeMultiheadAttention(embed_size, 1, num_layers=2, use_layer_norm=True)
+        self.attn = m.EpisodeMultiheadAttention(embed_size, 1,
+                                                num_layers=2,
+                                                use_layer_norm=True,
+                                                use_residual=False,
+                                                use_gated=True)
         self.layer_norm = nn.LayerNorm(embed_size)
 
         self.mlp = m.LinearLayers(embed_size, output_size=embed_size)
@@ -41,8 +45,6 @@ class ModelRep(m.ModelBaseAttentionRep):
                                                   is_prev_hidden_state,
                                                   query_only_attend_to_reset_key,
                                                   padding_mask)
-
-        output = output + self.mlp(self.layer_norm(output))
 
         return output, hn, attn_weights_list
 
