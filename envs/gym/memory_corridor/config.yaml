@@ -3,9 +3,12 @@ default:
     env_type: GYM
     env_name: MemoryCorridor-v0
 
+    name: rnn_{time}
+
     n_envs: 20
 
   reset_config:
+    level_count: 2
     block_layer_count: 3
     block_gap: 3
     success_reward: 1.
@@ -15,7 +18,7 @@ default:
 
   sac_config:
     burn_in_step: 5
-    n_step: 3
+    n_step: 1
     seq_encoder: RNN
 
     discrete_dqn_like: true
@@ -32,32 +35,32 @@ attn:
 
 oc_1:
   base_config:
-    name: oc_1_{time}
+    name: oc_1_rnn_{time}
   oc_config:
     num_options: 1
 
 oc_2:
   base_config:
-    name: oc_2_{time}
+    name: oc_2_rnn_{time}
   oc_config:
     num_options: 2
 
 oc_3:
   base_config:
-    name: oc_3_{time}
+    name: oc_3_rnn_{time}
   oc_config:
     num_options: 3
 
 oc_4:
   base_config:
-    name: oc_4_{time}
+    name: oc_4_rnn_{time}
   oc_config:
     num_options: 4
 
 oc_2_dilated:
   inherited: oc_2
   base_config:
-    name: oc_2_dilated_{time}
+    name: oc_2_dilated_rnn_{time}
   oc_config:
     use_dilation: true
 

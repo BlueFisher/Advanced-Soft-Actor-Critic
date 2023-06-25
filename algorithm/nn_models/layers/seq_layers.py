@@ -88,13 +88,25 @@ class MultiheadAttention(nn.MultiheadAttention):
 class EpisodeMultiheadAttentionBlock(nn.Module):
     def __init__(self, embed_dim: int, num_heads: int,
                  use_residual: bool = True,
+                 use_gated: bool = True,
                  use_layer_norm: bool = False):
         super().__init__()
 
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.use_residual = use_residual
+        self.use_gated = use_gated
         self.use_layer_norm = use_layer_norm
+
+        if self.use_gated:
+            self.dense_x_r = nn.Linear(embed_dim, embed_dim)
+            self.dense_y_r = nn.Linear(embed_dim, embed_dim)
+
+            self.dense_x_z = nn.Linear(embed_dim, embed_dim)
+            self.dense_y_z = nn.Linear(embed_dim, embed_dim)
+
+            self.dense_x_g = nn.Linear(embed_dim, embed_dim)
+            self.dense_y_g = nn.Linear(embed_dim, embed_dim)
 
         if self.use_layer_norm:
             self.layer_norm = nn.LayerNorm(self.embed_dim)
@@ -160,6 +172,11 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
         """
         key_length = key.shape[1]
 
+        ori_key = key
+        ori_query = ori_key[:, -query_length:]
+        if self.use_layer_norm:
+            key = self.layer_norm(key)
+
         if key_padding_mask is not None:
             key_padding_mask_length = key_padding_mask.shape[1]
             assert key_padding_mask_length <= key_length
@@ -179,11 +196,14 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
         output, attn_weights = self.attn(query, key, key,
                                          attn_mask=attn_mask)
 
-        if self.use_layer_norm:
-            output = self.layer_norm(output)
-
         if self.use_residual:
-            output = output + query
+            output = torch.relu(output + ori_query)
+
+        if self.use_gated:
+            _r = torch.relu(self.dense_x_r(ori_query) + self.dense_y_r(output))
+            _z = torch.relu(self.dense_x_z(ori_query) + self.dense_y_z(output))
+            _h = torch.tanh(self.dense_x_g(_r * ori_query) + self.dense_y_g(output))
+            output = (1 - _z) * ori_query + _z * _h
 
         return output, attn_weights
 
@@ -192,6 +212,7 @@ class EpisodeMultiheadAttention(nn.Module):
     def __init__(self, embed_dim: int, num_heads: int,
                  num_layers: int = 2,
                  use_residual: bool = True,
+                 use_gated: bool = True,
                  use_layer_norm: bool = False):
         super().__init__()
 
@@ -202,6 +223,7 @@ class EpisodeMultiheadAttention(nn.Module):
         self._attn_list = nn.ModuleList(
             [EpisodeMultiheadAttentionBlock(embed_dim, num_heads,
                                             use_residual=use_residual,
+                                            use_gated=use_gated,
                                             use_layer_norm=use_layer_norm) for _ in range(num_layers)]
         )
 
