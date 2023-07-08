@@ -11,17 +11,14 @@ class ModelRep(m.ModelBaseAttentionRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (4, 3, 4)
 
-        self.ray_mlp = m.LinearLayers(35, output_size=16)
-
         embed_size = 4 * 3 * 4
 
         self.pos = m.AbsolutePositionalEncoding(embed_size)
-        self.attn = m.EpisodeMultiheadAttention(embed_size, 1,
+        self.attn = m.EpisodeMultiheadAttention(embed_size * 2, 1,
                                                 num_layers=2,
-                                                use_layer_norm=True,
-                                                use_residual=False,
-                                                use_gated=True)
-        self.layer_norm = nn.LayerNorm(embed_size)
+                                                use_residual=True,
+                                                use_gated=False,
+                                                use_layer_norm=False)
 
         self.mlp = m.LinearLayers(embed_size, output_size=embed_size)
 
@@ -29,7 +26,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                 query_length=1,
                 hidden_state=None,
                 is_prev_hidden_state=False,
-                query_only_attend_to_reset_key=False,
+                query_only_attend_to_rest_key=False,
                 padding_mask=None):
         vec_obs = obs_list[0]
         vec_obs = vec_obs.reshape(*vec_obs.shape[:-3], 4 * 3 * 4)
@@ -37,13 +34,13 @@ class ModelRep(m.ModelBaseAttentionRep):
         x = vec_obs
 
         pe = self.pos(index)
-        x = x + pe
+        x = torch.concat([x, pe], dim=-1)
 
         output, hn, attn_weights_list = self.attn(x,
                                                   query_length,
                                                   hidden_state,
                                                   is_prev_hidden_state,
-                                                  query_only_attend_to_reset_key,
+                                                  query_only_attend_to_rest_key,
                                                   padding_mask)
 
         return output, hn, attn_weights_list

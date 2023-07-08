@@ -114,7 +114,7 @@ class ModelBaseAttentionRep(nn.Module):
                 query_length=1,
                 hidden_state: Optional[torch.Tensor] = None,
                 is_prev_hidden_state=False,
-                query_only_attend_to_reset_key=False,
+                query_only_attend_to_rest_key=False,
                 padding_mask: Optional[torch.Tensor] = None):
         raise Exception('ModelAttentionRep not implemented')
 
@@ -129,7 +129,7 @@ class ModelBaseAttentionRep(nn.Module):
                                 query_length=1,
                                 hidden_state: Optional[torch.Tensor] = None,
                                 is_prev_hidden_state=False,
-                                query_only_attend_to_reset_key=False,
+                                query_only_attend_to_rest_key=False,
                                 padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         raise Exception("get_state_from_encoders not implemented")
 

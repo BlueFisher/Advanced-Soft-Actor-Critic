@@ -22,7 +22,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                 query_length=1,
                 hidden_state=None,
                 is_prev_hidden_state=False,
-                query_only_attend_to_reset_key=False,
+                query_only_attend_to_rest_key=False,
                 padding_mask=None):
         obs = obs_list[0][..., :-EXTRA_SIZE]
 
@@ -37,7 +37,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                                                   query_length,
                                                   hidden_state,
                                                   is_prev_hidden_state,
-                                                  query_only_attend_to_reset_key,
+                                                  query_only_attend_to_rest_key,
                                                   padding_mask)
 
         return output, hn, attn_weights_list
