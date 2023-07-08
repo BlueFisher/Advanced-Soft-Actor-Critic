@@ -958,7 +958,7 @@ class OptionSelectorBase(SAC_Base):
                                                    query_length=query_length,
                                                    hidden_state=key_seq_hidden_states,
                                                    is_prev_hidden_state=True,
-                                                   query_only_attend_to_reset_key=True,
+                                                   query_only_attend_to_rest_key=True,
                                                    padding_mask=l_padding_masks)
 
             return l_states, l_attn_states
@@ -1337,6 +1337,7 @@ class OptionSelectorBase(SAC_Base):
         om_low_obses_list_options = [None] * len(self.option_list)
         om_low_target_obses_list_options = [None] * len(self.option_list)
 
+        # Get all states of all options, then replace them according to option_indexes
         for i, option in enumerate(self.option_list):
             (om_indexes,
              om_padding_masks,
@@ -2000,19 +2001,25 @@ class OptionSelectorBase(SAC_Base):
 
         key_batch = None
         if self.use_dilation:
-            tmp_pointers = pointers
-            key_tran = self.replay_buffer.get_storage_data(tmp_pointers)
-            key_trans = {k: [v] for k, v in key_tran.items()}
-            key_trans['padding_mask'] = [np.zeros_like(key_tran['index'], dtype=bool)]
+            key_trans = {k: np.zeros((v.shape[0],
+                                      self.burn_in_step + 1,
+                                      *v.shape[1:]), dtype=v.dtype)
+                         for k, v in trans.items()}
+            for k, v in batch.items():
+                key_trans[k][:, -1] = v[:, 0]
 
-            for _ in range(self.burn_in_step):  # All keys are the first keys in episodes
-                tmp_tran_index = key_trans['index'][0]  # The current key tran index in an episode
+            tmp_pointers = pointers - self.burn_in_step
+
+            for i in range(self.burn_in_step, 0, -1):  # All keys are the first keys in episodes
+                tmp_tran_index = key_trans['index'][:, i]  # The current key tran index in an episode
+                tmp_tran_padding_mask = key_trans['padding_mask'][:, i]  # The current key tran padding mask in an episode
                 tmp_pre_tran = self.replay_buffer.get_storage_data(tmp_pointers - 1)  # The previous tran of the current key tran
                 tmp_option_changed_index = tmp_pre_tran['option_changed_index']
                 # The previous option changed key index in an episode
                 delta = tmp_tran_index - tmp_option_changed_index
 
-                padding_mask = tmp_tran_index == 0  # The current key tran is the first key in an episode
+                padding_mask = np.logical_or(tmp_tran_index == 0, tmp_tran_padding_mask)
+                # The current key tran is the first key in an episode OR is padding already
                 padding_mask = np.logical_or(padding_mask, tmp_tran_index - tmp_pre_tran['index'] != 1)
                 # The previous tran is not actually the previous tran of the current key tran
 
@@ -2021,11 +2028,10 @@ class OptionSelectorBase(SAC_Base):
                 tmp_tran = self.replay_buffer.get_storage_data(tmp_pointers)
                 set_padding(tmp_tran, padding_mask)
                 for k, v in tmp_tran.items():
-                    key_trans[k].insert(0, v)
+                    key_trans[k][:, i - 1] = v
 
             for k, v in key_trans.items():
-                del v[-1]
-                key_trans[k] = np.concatenate([np.expand_dims(t, 1) for t in v], axis=1)
+                key_trans[k] = v[:, :-1]
 
             key_batch = (
                 key_trans['index'],

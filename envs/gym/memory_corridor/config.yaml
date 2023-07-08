@@ -32,6 +32,8 @@ attn:
   sac_config:
     nn: nn_attn
     seq_encoder: ATTN
+    burn_in_step: 5
+    batch_size: 32
 
 oc_1:
   base_config:
@@ -65,36 +67,32 @@ oc_2_dilated:
     use_dilation: true
 
 oc_1_attn:
-  inherited: oc_1
+  inherited:
+    - oc_1
+    - attn
   base_config:
     name: oc_1_attn_{time}
-  sac_config:
-    nn: nn_attn
-    seq_encoder: ATTN
 
 oc_2_attn:
-  inherited: oc_2
+  inherited:
+    - oc_2
+    - attn
   base_config:
     name: oc_2_attn_{time}
-  sac_config:
-    nn: nn_attn
-    seq_encoder: ATTN
 
 oc_3_attn:
-  inherited: oc_3
+  inherited:
+    - oc_3
+    - attn
   base_config:
     name: oc_3_attn_{time}
-  sac_config:
-    nn: nn_attn
-    seq_encoder: ATTN
 
 oc_4_attn:
-  inherited: oc_4
+  inherited:
+    - oc_4
+    - attn
   base_config:
     name: oc_4_attn_{time}
-  sac_config:
-    nn: nn_attn
-    seq_encoder: ATTN
 
 oc_2_attn_dilated:
   inherited: oc_2_attn

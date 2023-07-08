@@ -28,7 +28,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                 query_length=1,
                 hidden_state=None,
                 is_prev_hidden_state=False,
-                query_only_attend_to_reset_key=False,
+                query_only_attend_to_rest_key=False,
                 padding_mask=None):
         obs_vec, obs_vis = obs_list
         obs_vec = obs_vec[..., EXTRA_SIZE:]
@@ -40,14 +40,14 @@ class ModelRep(m.ModelBaseAttentionRep):
                                                      query_length,
                                                      hidden_state,
                                                      is_prev_hidden_state,
-                                                     query_only_attend_to_reset_key,
+                                                     query_only_attend_to_rest_key,
                                                      padding_mask)
         else:
             state, hn, attn_weights_list = self.attn(torch.cat([vis, pre_action], dim=-1),
                                                      query_length,
                                                      hidden_state,
                                                      is_prev_hidden_state,
-                                                     query_only_attend_to_reset_key,
+                                                     query_only_attend_to_rest_key,
                                                      padding_mask)
 
         state = self.dense(torch.cat([obs_vec[:, -query_length:], state], dim=-1))
@@ -65,7 +65,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                                 query_length=1,
                                 hidden_state=None,
                                 is_prev_hidden_state=False,
-                                query_only_attend_to_reset_key=False,
+                                query_only_attend_to_rest_key=False,
                                 padding_mask=None):
         obs_vec, obs_vis = obs_list
         obs_vec = obs_vec[..., EXTRA_SIZE:]
@@ -77,14 +77,14 @@ class ModelRep(m.ModelBaseAttentionRep):
                                   query_length,
                                   hidden_state,
                                   is_prev_hidden_state,
-                                  query_only_attend_to_reset_key,
+                                  query_only_attend_to_rest_key,
                                   padding_mask)
         else:
             state, *_ = self.attn(torch.cat([vis_encoder, pre_action], dim=-1),
                                   query_length,
                                   hidden_state,
                                   is_prev_hidden_state,
-                                  query_only_attend_to_reset_key,
+                                  query_only_attend_to_rest_key,
                                   padding_mask)
 
         state = self.dense(torch.cat([obs_vec, state], dim=-1))

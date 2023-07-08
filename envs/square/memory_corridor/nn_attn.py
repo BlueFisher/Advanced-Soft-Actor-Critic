@@ -29,7 +29,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                 query_length=1,
                 hidden_state=None,
                 is_prev_hidden_state=False,
-                query_only_attend_to_reset_key=False,
+                query_only_attend_to_rest_key=False,
                 padding_mask=None):
         ray_obs, vec_obs = obs_list
         vec_obs = torch.concat([vec_obs, torch.zeros_like(vec_obs)[..., :1]], dim=-1)
@@ -48,7 +48,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                                                   query_length,
                                                   hidden_state,
                                                   is_prev_hidden_state,
-                                                  query_only_attend_to_reset_key,
+                                                  query_only_attend_to_rest_key,
                                                   padding_mask)
 
         output = output + self.mlp(self.layer_norm(output))
