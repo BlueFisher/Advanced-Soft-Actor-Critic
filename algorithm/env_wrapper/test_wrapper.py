@@ -74,13 +74,15 @@ class TestWrapper(EnvWrapper):
             'test1': np.logical_and(np.random.rand(self.n_envs) < 0.1, ma_local_done['test1'])
         }
 
+        ma_padding_mask = {
+            'test0': np.logical_and(np.random.rand(self.n_envs) < 0.5, ~ma_local_done['test0']),
+            'test1': np.logical_and(np.random.rand(self.n_envs) < 0.5, ~ma_local_done['test1'])
+        }
+
         return (get_ma_obs_list(self.n_envs, self._ma_obs_shapes), {
             'test0': np.random.randn(self.n_envs).astype(np.float32),
             'test1': np.random.randn(self.n_envs).astype(np.float32),
-        }, ma_local_done, ma_max_reached, {
-            'test0': np.random.choice([False, True], self.n_envs),
-            'test1': np.random.choice([False, True], self.n_envs)
-        })
+        }, ma_local_done, ma_max_reached, ma_padding_mask)
 
     def close(self):
         pass

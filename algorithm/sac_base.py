@@ -996,26 +996,26 @@ class SAC_Base:
             l_states = model_rep(l_obses_list)
 
             return l_states, None  # [batch, l, state_size]
-        else:
-            if self.seq_encoder == SEQ_ENCODER.RNN:
-                l_states, next_rnn_state = model_rep(l_obses_list,
-                                                     l_pre_actions,
-                                                     f_seq_hidden_states[:, 0],
-                                                     padding_mask=l_padding_masks)
-                next_f_rnn_states = next_rnn_state.unsqueeze(dim=1)
 
-                return l_states, next_f_rnn_states  # [batch, l, state_size], [batch, 1, rnn_state_size]
+        elif self.seq_encoder == SEQ_ENCODER.RNN:
+            l_states, next_rnn_state = model_rep(l_obses_list,
+                                                 l_pre_actions,
+                                                 f_seq_hidden_states[:, 0],
+                                                 padding_mask=l_padding_masks)
+            next_f_rnn_states = next_rnn_state.unsqueeze(dim=1)
 
-            elif self.seq_encoder == SEQ_ENCODER.ATTN:
-                l_states, l_attn_states, _ = model_rep(l_indexes,
-                                                       l_obses_list,
-                                                       l_pre_actions,
-                                                       query_length=l_indexes.shape[1],
-                                                       hidden_state=f_seq_hidden_states,
-                                                       is_prev_hidden_state=True,
-                                                       padding_mask=l_padding_masks)
+            return l_states, next_f_rnn_states  # [batch, l, state_size], [batch, 1, rnn_state_size]
 
-                return l_states, l_attn_states  # [batch, l, state_size], [batch, l, attn_state_size]
+        elif self.seq_encoder == SEQ_ENCODER.ATTN:
+            l_states, l_attn_states, _ = model_rep(l_indexes,
+                                                   l_obses_list,
+                                                   l_pre_actions,
+                                                   query_length=l_indexes.shape[1],
+                                                   hidden_state=f_seq_hidden_states,
+                                                   is_prev_hidden_state=True,
+                                                   padding_mask=l_padding_masks)
+
+            return l_states, l_attn_states  # [batch, l, state_size], [batch, l, attn_state_size]
 
     def get_l_states_with_seq_hidden_states(
         self,
@@ -1055,7 +1055,7 @@ class SAC_Base:
                 f_states, rnn_state = self.model_rep([l_obses[:, t:t + 1, ...] for l_obses in l_obses_list],
                                                      l_pre_actions[:, t:t + 1, ...] if l_pre_actions is not None else None,
                                                      rnn_state,
-                                                     padding_mask=l_padding_masks[:, t:t + 1, ...])
+                                                     padding_mask=l_padding_masks[:, t:t + 1])
 
                 if l_states is None:
                     l_states = torch.zeros((batch, l, *f_states.shape[2:]), device=self.device)
@@ -1546,7 +1546,7 @@ class SAC_Base:
             loss_siamese
             loss_siamese_q
         """
-        
+
         n_padding_masks = bn_padding_masks[:, self.burn_in_step:]
         n_obses_list = [bn_obses[:, self.burn_in_step:, ...] for bn_obses in bn_obses_list]
         encoder_list = self.model_rep.get_augmented_encoders(n_obses_list)  # [batch, n, f], ...
@@ -1567,8 +1567,8 @@ class SAC_Base:
 
             padding_mask = n_padding_masks.reshape(batch * n, 1)  # [batch * n, 1]
 
-            loss_siamese_list = [functional.binary_cross_entropy_with_logits(logits, 
-                                                                             contrastive_labels, 
+            loss_siamese_list = [functional.binary_cross_entropy_with_logits(logits,
+                                                                             contrastive_labels,
                                                                              reduction='none')
                                  for logits in logits_list]
             loss_siamese_list = [(loss * padding_mask).mean() for loss in loss_siamese_list]

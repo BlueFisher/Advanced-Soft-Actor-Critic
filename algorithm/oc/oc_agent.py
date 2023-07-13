@@ -304,7 +304,7 @@ class OC_AgentManager(AgentManager):
         self.use_dilation = rl.use_dilation
 
     def pre_run(self, num_agents: int):
-        self['option_index'] = -1
+        self['option_index'] = np.full(num_agents, -1, dtype=np.int8)
         self['initial_option_index'] = self.rl.get_initial_option_index(num_agents)  # [n_envs, action_size]
         self['pre_option_index'] = self['initial_option_index']
         self['initial_pre_action'] = self.rl.get_initial_action(num_agents)  # [n_envs, action_size]

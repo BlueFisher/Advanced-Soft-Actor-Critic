@@ -66,6 +66,20 @@ oc_2_dilated:
   oc_config:
     use_dilation: true
 
+oc_3_dilated:
+  inherited: oc_3
+  base_config:
+    name: oc_3_dilated_rnn_{time}
+  oc_config:
+    use_dilation: true
+
+oc_4_dilated:
+  inherited: oc_4
+  base_config:
+    name: oc_4_dilated_rnn_{time}
+  oc_config:
+    use_dilation: true
+
 oc_1_attn:
   inherited:
     - oc_1
