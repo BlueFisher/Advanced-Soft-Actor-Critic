@@ -467,8 +467,12 @@ class OptionSelectorBase(SAC_Base):
             if not torch.any(mask):
                 continue
 
-            o_low_f_state, _ = option.get_l_states(l_indexes=None,  # option is not ATTN
-                                                   l_padding_masks=None,
+            o_low_f_state, _ = option.get_l_states(l_indexes=torch.zeros((torch.count_nonzero(mask), 1),
+                                                                         dtype=torch.int32,
+                                                                         device=self.device),  # option is not ATTN
+                                                   l_padding_masks=torch.zeros((torch.count_nonzero(mask), 1),
+                                                                               dtype=bool,
+                                                                               device=self.device),
                                                    l_obses_list=[low_obs[mask].unsqueeze(1) for low_obs in low_obs_list],
                                                    l_pre_actions=pre_action[mask].unsqueeze(1) if pre_action is not None else None,
                                                    f_seq_hidden_states=low_seq_state[mask].unsqueeze(1) if low_seq_state is not None else None)
@@ -856,6 +860,8 @@ class OptionSelectorBase(SAC_Base):
                 next_attn_state.detach().cpu().numpy(),
                 next_low_rnn_state.detach().cpu().numpy())
 
+    #################### ! GET STATES ####################
+
     def get_m_data(self,
                    bn_indexes: torch.Tensor,
                    bn_padding_masks: torch.Tensor,
@@ -1108,7 +1114,8 @@ class OptionSelectorBase(SAC_Base):
 
             o_l_states, o_next_f_or_l_low_seq_hidden_states = option.get_l_states(
                 l_indexes=l_indexes,
-                l_padding_masks=l_padding_masks,
+                l_padding_masks=torch.logical_or(l_padding_masks,
+                                                 l_option_indexes != i),
                 l_obses_list=l_low_obses_list,
                 l_pre_actions=l_pre_actions,
                 f_seq_hidden_states=f_low_seq_hidden_states,
@@ -1161,7 +1168,8 @@ class OptionSelectorBase(SAC_Base):
 
             o_l_states, o_next_l_low_seq_hidden_states = option.get_l_states_with_seq_hidden_states(
                 l_indexes=l_indexes,
-                l_padding_masks=l_padding_masks,
+                l_padding_masks=torch.logical_or(l_padding_masks,
+                                                 l_option_indexes != i),
                 l_obses_list=l_low_obses_list,
                 l_pre_actions=l_pre_actions,
                 f_seq_hidden_states=f_low_seq_hidden_states
@@ -1212,6 +1220,8 @@ class OptionSelectorBase(SAC_Base):
                 l_low_probs[mask] = o_l_probs[mask]
 
         return l_low_probs
+
+    #################### ! COMPUTE LOSS ####################
 
     @torch.no_grad()
     def _get_td_error(self,
@@ -1265,11 +1275,13 @@ class OptionSelectorBase(SAC_Base):
             if not torch.any(mask):
                 continue
 
+            _bn_padding_masks = torch.logical_or(bn_padding_masks, bn_padding_masks != i)
+
             o_td_error = option._get_td_error(
                 next_n_v_over_options_list=[next_n_v_over_options[mask]
                                             for next_n_v_over_options in next_n_v_over_options_list],
 
-                bn_padding_masks=bn_padding_masks[mask, self.option_burn_in_from:],
+                bn_padding_masks=_bn_padding_masks[mask, self.option_burn_in_from:],
                 bn_obses_list=[obn_low_obses[mask] for obn_low_obses in obn_low_obses_list],
                 bn_states=obn_low_states[mask],
                 bn_target_states=obn_low_target_states[mask],
@@ -1339,12 +1351,14 @@ class OptionSelectorBase(SAC_Base):
 
         # Get all states of all options, then replace them according to option_indexes
         for i, option in enumerate(self.option_list):
+            _bn_padding_masks = torch.logical_or(bn_padding_masks, bn_option_indexes != i)
+
             (om_indexes,
              om_padding_masks,
              om_low_obses_list,
              om_pre_actions) = option.get_m_data(
                 bn_indexes=bn_indexes[:, self.option_burn_in_from:],
-                bn_padding_masks=bn_padding_masks[:, self.option_burn_in_from:],
+                bn_padding_masks=_bn_padding_masks[:, self.option_burn_in_from:],
                 bn_obses_list=obn_low_obses_list,
                 bn_actions=bn_actions[:, self.option_burn_in_from:],
                 next_obs_list=next_low_obs_list
@@ -1353,7 +1367,7 @@ class OptionSelectorBase(SAC_Base):
 
             (_, _, om_low_target_obses_list, _) = option.get_m_data(
                 bn_indexes=bn_indexes[:, self.option_burn_in_from:],
-                bn_padding_masks=bn_padding_masks[:, self.option_burn_in_from:],
+                bn_padding_masks=_bn_padding_masks[:, self.option_burn_in_from:],
                 bn_obses_list=obn_low_target_obses_list,
                 bn_actions=bn_actions[:, self.option_burn_in_from:],
                 next_obs_list=next_low_target_obs_list
@@ -1395,6 +1409,8 @@ class OptionSelectorBase(SAC_Base):
             if not torch.any(mask):
                 continue
 
+            _bn_padding_masks = torch.logical_or(bn_padding_masks, bn_option_indexes != i)
+
             o_m_low_obses_list = [om_low_obses[mask] for om_low_obses in om_low_obses_list_options[i]]
             o_m_low_target_obses_list = [om_low_target_obses[mask] for om_low_target_obses in om_low_target_obses_list_options[i]]
 
@@ -1405,7 +1421,7 @@ class OptionSelectorBase(SAC_Base):
                                                            for next_n_v_over_options in next_n_v_over_options_list],
 
                                bn_indexes=bn_indexes[mask, self.option_burn_in_from:],
-                               bn_padding_masks=bn_padding_masks[mask, self.option_burn_in_from:],
+                               bn_padding_masks=_bn_padding_masks[mask, self.option_burn_in_from:],
                                bn_obses_list=[o_m_low_obses[:, :-1, ...]
                                               for o_m_low_obses in o_m_low_obses_list],
                                bn_target_obses_list=[o_m_low_target_obses[:, :-1, ...]
@@ -1648,11 +1664,13 @@ class OptionSelectorBase(SAC_Base):
             if not torch.any(mask):
                 continue
 
+            _bn_padding_masks = torch.logical_or(bn_padding_masks, bn_option_indexes != i)
+
             (o_m_indexes,
              o_m_padding_masks,
              o_m_low_obses_list,
              o_m_pre_actions) = option.get_m_data(bn_indexes=bn_indexes[mask, self.option_burn_in_from:],
-                                                  bn_padding_masks=bn_padding_masks[mask, self.option_burn_in_from:],
+                                                  bn_padding_masks=_bn_padding_masks[mask, self.option_burn_in_from:],
                                                   bn_obses_list=[om_low_obses[mask, :-1, ...] for om_low_obses in om_low_obses_list],
                                                   bn_actions=bn_actions[mask, self.option_burn_in_from:],
                                                   next_obs_list=[om_obses[mask, -1, ...] for om_obses in om_low_obses_list])
@@ -1668,7 +1686,7 @@ class OptionSelectorBase(SAC_Base):
                                                     is_target=False)
             om_low_states[mask] = o_m_low_states
 
-            option.train_policy_alpha(bn_padding_masks=bn_padding_masks[mask, self.option_burn_in_from:],
+            option.train_policy_alpha(bn_padding_masks=_bn_padding_masks[mask, self.option_burn_in_from:],
                                       bn_obses_list=[o_m_obses[:, :-1, ...]
                                                      for o_m_obses in o_m_low_obses_list],
                                       m_states=o_m_low_states,
