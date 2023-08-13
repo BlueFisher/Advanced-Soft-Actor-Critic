@@ -74,7 +74,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
         return state, hn
 
-    def get_state_from_encoders(self, obs_list, encoders, pre_action, rnn_state=None):
+    def get_state_from_encoders(self, obs_list, encoders, pre_action, rnn_state=None, padding_mask=None):
         vis_cam, ray, vec = obs_list
         vis_cam_encoder, ray_encoder = encoders
 
@@ -161,7 +161,7 @@ class ModelOptionRep(m.ModelBaseRNNRep):
 
         return state, hn
 
-    def get_state_from_encoders(self, obs_list, encoders, pre_action, rnn_state=None):
+    def get_state_from_encoders(self, obs_list, encoders, pre_action, rnn_state=None, padding_mask=None):
         high_state, vis_cam, ray, vec = obs_list
         vis_cam_encoder, ray_encoder = encoders
 

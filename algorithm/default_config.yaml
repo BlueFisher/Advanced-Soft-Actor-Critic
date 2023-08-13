@@ -86,6 +86,8 @@ oc_config:
   num_options: 4
   use_dilation: false
   option_burn_in_step: -1
+  option_eplison: 0.2  # Probability of switching options
+  terminal_entropy: 0.01  # Tending not to terminate >0, tending to terminate <0
 
   nn_config:
     rep: null

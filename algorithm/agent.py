@@ -194,14 +194,14 @@ class Agent:
         # [1, episode_len, *seq_hidden_state_shape]
 
         return {
-            'l_indexes': ep_indexes,
-            'l_obses_list': ep_obses_list,
-            'l_actions': ep_actions,
-            'l_rewards': ep_rewards,
+            'ep_indexes': ep_indexes,
+            'ep_obses_list': ep_obses_list,
+            'ep_actions': ep_actions,
+            'ep_rewards': ep_rewards,
             'next_obs_list': next_obs_list,
-            'l_dones': ep_dones,
-            'l_probs': ep_probs,
-            'l_seq_hidden_states': ep_seq_hidden_states
+            'ep_dones': ep_dones,
+            'ep_probs': ep_probs,
+            'ep_seq_hidden_states': ep_seq_hidden_states
         }
 
     def is_empty(self) -> bool:
@@ -410,6 +410,14 @@ class AgentManager:
 
         return trained_steps
 
+    def log_episode(self) -> None:
+        if len(self['episode_trans_list']) != 0:
+            # ep_indexes,
+            # ep_obses_list, ep_actions, ep_rewards, next_obs_list, ep_dones, ep_probs,
+            # ep_seq_hidden_states
+            for episode_trans in self['episode_trans_list']:
+                self.rl.log_episode(**episode_trans)
+
     def post_step(self, next_obs_list, local_done, next_padding_mask) -> None:
         self['obs_list'] = next_obs_list
         self['padding_mask'] = next_padding_mask
@@ -519,6 +527,10 @@ class MultiAgentsManager:
             trained_steps = max(mgr.train(), trained_steps)
 
         return trained_steps
+
+    def log_episode(self) -> None:
+        for n, mgr in self:
+            mgr.log_episode()
 
     def post_step(self, ma_next_obs_list, ma_local_done, ma_next_padding_mask) -> None:
         for n, mgr in self:

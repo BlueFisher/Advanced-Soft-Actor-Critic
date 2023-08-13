@@ -13,8 +13,8 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         embed_size = 4 * 3 * 4
 
-        self.pos = m.AbsolutePositionalEncoding(embed_size)
-        self.attn = m.EpisodeMultiheadAttention(embed_size * 2, 1,
+        self.pos = m.AbsolutePositionalEncoding(embed_size, max_seq_len=1000)
+        self.attn = m.EpisodeMultiheadAttention(embed_size, 2,
                                                 num_layers=2,
                                                 use_residual=True,
                                                 use_gated=False,
@@ -31,17 +31,17 @@ class ModelRep(m.ModelBaseAttentionRep):
         vec_obs = obs_list[0]
         vec_obs = vec_obs.reshape(*vec_obs.shape[:-3], 4 * 3 * 4)
 
-        x = vec_obs
-
         pe = self.pos(index)
-        x = torch.concat([x, pe], dim=-1)
 
-        output, hn, attn_weights_list = self.attn(x,
-                                                  query_length,
-                                                  hidden_state,
-                                                  is_prev_hidden_state,
-                                                  query_only_attend_to_rest_key,
-                                                  padding_mask)
+        output, hn, attn_weights_list = self.attn(vec_obs,
+                                                  pe,
+                                                  query_length=query_length,
+                                                  hidden_state=hidden_state,
+                                                  is_prev_hidden_state=is_prev_hidden_state,
+
+                                                  query_only_attend_to_rest_key=query_only_attend_to_rest_key,
+                                                  key_index=index,
+                                                  key_padding_mask=padding_mask)
 
         return output, hn, attn_weights_list
 

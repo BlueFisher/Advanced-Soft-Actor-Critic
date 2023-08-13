@@ -23,7 +23,6 @@ class OC_Agent(Agent):
                  seq_hidden_state_shape=None,
                  low_seq_hidden_state_shape=None,
                  max_return_episode_trans=-1):
-        self.option_index_count = defaultdict(int)
 
         self.low_seq_hidden_state_shape = low_seq_hidden_state_shape
 
@@ -123,7 +122,6 @@ class OC_Agent(Agent):
                                                              expaned_transition[k]])
 
         if not self.done:
-            self.option_index_count[int(option_index)] += 1
             self.reward += reward
             self.steps += 1
 
@@ -214,17 +212,17 @@ class OC_Agent(Agent):
         # [1, episode_len, *seq_hidden_state_shape]
 
         return {
-            'l_indexes': ep_indexes,
-            'l_obses_list': ep_obses_list,
-            'l_option_indexes': ep_option_indexes,
-            'l_option_changed_indexes': ep_option_changed_indexes,
-            'l_actions': ep_actions,
-            'l_rewards': ep_rewards,
+            'ep_indexes': ep_indexes,
+            'ep_obses_list': ep_obses_list,
+            'ep_option_indexes': ep_option_indexes,
+            'ep_option_changed_indexes': ep_option_changed_indexes,
+            'ep_actions': ep_actions,
+            'ep_rewards': ep_rewards,
             'next_obs_list': next_obs_list,
-            'l_dones': ep_dones,
-            'l_probs': ep_probs,
-            'l_seq_hidden_states': ep_seq_hidden_states,
-            'l_low_seq_hidden_states': ep_low_seq_hidden_states
+            'ep_dones': ep_dones,
+            'ep_probs': ep_probs,
+            'ep_seq_hidden_states': ep_seq_hidden_states,
+            'ep_low_seq_hidden_states': ep_low_seq_hidden_states
         }
 
     @property
@@ -287,14 +285,7 @@ class OC_Agent(Agent):
         self._last_option_changed_index = -1
         self._last_option_index = -1
         self._tmp_option_changed_indexes = []
-        for k in self.option_index_count:
-            self.option_index_count[k] = 0
         return super().clear()
-
-    def reset(self):
-        for k in self.option_index_count:
-            self.option_index_count[k] = 0
-        return super().reset()
 
 
 class OC_AgentManager(AgentManager):

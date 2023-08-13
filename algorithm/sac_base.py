@@ -215,8 +215,8 @@ class SAC_Base:
 
         self._build_model(nn, nn_config, init_log_alpha, learning_rate)
         self._build_ckpt()
-        self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
         self._init_replay_buffer(replay_config)
+        self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
 
     def _set_logger(self):
         if self.ma_name is None:
@@ -672,6 +672,8 @@ class SAC_Base:
         for t_p, p in zip(self.running_means + self.running_variances, new_means + new_variances):
             t_p.copy_(p)
 
+    #################### ! GET ACTION ####################
+
     @torch.no_grad()
     def rnd_sample_d_action(self, state: torch.Tensor,
                             d_policy: distributions.Categorical) -> torch.Tensor:
@@ -936,6 +938,8 @@ class SAC_Base:
                 prob.detach().cpu().numpy(),
                 next_attn_state.detach().cpu().numpy())
 
+    #################### ! GET STATES ####################
+
     def get_m_data(self,
                    bn_indexes: torch.Tensor,
                    bn_padding_masks: torch.Tensor,
@@ -1104,6 +1108,8 @@ class SAC_Base:
             probs[..., -self.c_action_size:] = c_policy_prob  # [batch, l, c_action_size]
 
         return probs  # [batch, l, action_size]
+
+    #################### ! COMPUTE LOSS ####################
 
     @torch.no_grad()
     def get_dqn_like_d_y(self,
@@ -2238,9 +2244,31 @@ class SAC_Base:
                                    np.zeros(1, dtype=np.float32)])
         return td_error
 
+    def log_episode(self, **episode_trans: np.ndarray) -> None:
+        if self.summary_writer is None or not self.summary_available:
+            return
+
+        ep_indexes = episode_trans['ep_indexes']
+        ep_obses_list = episode_trans['ep_obses_list']
+        ep_actions = episode_trans['ep_actions']
+
+        if self.seq_encoder == SEQ_ENCODER.ATTN:
+            with torch.no_grad():
+                pre_l_actions = gen_pre_n_actions(ep_actions)
+                *_, attn_weights_list = self.model_rep(torch.from_numpy(ep_indexes).to(self.device),
+                                                       [torch.from_numpy(o).to(self.device) for o in ep_obses_list],
+                                                       pre_action=torch.from_numpy(pre_l_actions).to(self.device),
+                                                       query_length=ep_indexes.shape[1])
+
+                for i, attn_weight in enumerate(attn_weights_list):
+                    image = plot_attn_weight(attn_weight[0].cpu().numpy())
+                    self.summary_writer.add_figure(f'attn_weight/{i}', image, self.global_step)
+
+        self.summary_available = False
+
     def put_episode(self, **episode_trans: np.ndarray) -> None:
         # Ignore episodes which length is too short
-        if episode_trans['l_indexes'].shape[1] < self.n_step:
+        if episode_trans['ep_indexes'].shape[1] < self.n_step:
             return
 
         episodes = self._padding_next_obs_list(**episode_trans)
@@ -2251,26 +2279,26 @@ class SAC_Base:
             self.batch_buffer.put_episode(*episodes)
 
     def _padding_next_obs_list(self,
-                               l_indexes: np.ndarray,
-                               l_obses_list: List[np.ndarray],
-                               l_actions: np.ndarray,
-                               l_rewards: np.ndarray,
+                               ep_indexes: np.ndarray,
+                               ep_obses_list: List[np.ndarray],
+                               ep_actions: np.ndarray,
+                               ep_rewards: np.ndarray,
                                next_obs_list: List[np.ndarray],
-                               l_dones: np.ndarray,
-                               l_probs: List[np.ndarray],
-                               l_seq_hidden_states: Optional[np.ndarray] = None) -> Tuple[np.ndarray, ...]:
+                               ep_dones: np.ndarray,
+                               ep_probs: List[np.ndarray],
+                               ep_seq_hidden_states: Optional[np.ndarray] = None) -> Tuple[np.ndarray, ...]:
         """
         Padding next_obs_list
 
         Args:
-            l_indexes (np.int32): [1, ep_len]
-            l_obses_list (np): list([1, ep_len, *obs_shapes_i], ...)
-            l_actions (np): [1, ep_len, action_size]
-            l_rewards (np): [1, ep_len]
+            ep_indexes (np.int32): [1, ep_len]
+            ep_obses_list (np): list([1, ep_len, *obs_shapes_i], ...)
+            ep_actions (np): [1, ep_len, action_size]
+            ep_rewards (np): [1, ep_len]
             next_obs_list (np): list([1, *obs_shapes_i], ...)
-            l_dones (bool): [1, ep_len]
-            l_probs (np): [1, ep_len, action_size]
-            l_seq_hidden_states (np): [1, ep_len, *seq_hidden_state_shape]
+            ep_dones (bool): [1, ep_len]
+            ep_probs (np): [1, ep_len, action_size]
+            ep_seq_hidden_states (np): [1, ep_len, *seq_hidden_state_shape]
 
         Returns:
             ep_indexes (np.int32): [1, ep_len + 1]
@@ -2283,24 +2311,24 @@ class SAC_Base:
             ep_seq_hidden_states (np): [1, ep_len + 1, *seq_hidden_state_shape]
         """
 
-        ep_indexes = np.concatenate([l_indexes,
-                                     l_indexes[:, -1:] + 1], axis=1)
+        ep_indexes = np.concatenate([ep_indexes,
+                                     ep_indexes[:, -1:] + 1], axis=1)
         ep_padding_masks = np.zeros_like(ep_indexes, dtype=bool)
         ep_padding_masks[:, -1] = True
         ep_obses_list = [np.concatenate([obs, np.expand_dims(next_obs, 1)], axis=1)
-                         for obs, next_obs in zip(l_obses_list, next_obs_list)]
-        ep_actions = np.concatenate([l_actions,
+                         for obs, next_obs in zip(ep_obses_list, next_obs_list)]
+        ep_actions = np.concatenate([ep_actions,
                                      self._padding_action.reshape(1, 1, -1)], axis=1)
-        ep_rewards = np.concatenate([l_rewards,
+        ep_rewards = np.concatenate([ep_rewards,
                                      np.zeros([1, 1], dtype=np.float32)], axis=1)
-        ep_dones = np.concatenate([l_dones,
+        ep_dones = np.concatenate([ep_dones,
                                    np.ones([1, 1], dtype=bool)], axis=1)
-        ep_probs = np.concatenate([l_probs,
-                                  np.ones([1, 1, l_probs.shape[-1]], dtype=np.float32)], axis=1)
+        ep_probs = np.concatenate([ep_probs,
+                                  np.ones([1, 1, ep_probs.shape[-1]], dtype=np.float32)], axis=1)
 
-        if l_seq_hidden_states is not None:
-            ep_seq_hidden_states = np.concatenate([l_seq_hidden_states,
-                                                   np.zeros([1, 1, *l_seq_hidden_states.shape[2:]], dtype=np.float32)], axis=1)
+        if ep_seq_hidden_states is not None:
+            ep_seq_hidden_states = np.concatenate([ep_seq_hidden_states,
+                                                   np.zeros([1, 1, *ep_seq_hidden_states.shape[2:]], dtype=np.float32)], axis=1)
 
         return (
             ep_indexes,
@@ -2310,7 +2338,7 @@ class SAC_Base:
             ep_rewards,
             ep_dones,
             ep_probs,
-            ep_seq_hidden_states if l_seq_hidden_states is not None else None
+            ep_seq_hidden_states if ep_seq_hidden_states is not None else None
         )
 
     def _fill_replay_buffer(self,
@@ -2361,21 +2389,6 @@ class SAC_Base:
 
         # n_step transitions except the first one and the last obs
         self.replay_buffer.add(storage_data, ignore_size=1)
-
-        if self.seq_encoder == SEQ_ENCODER.ATTN \
-                and self.summary_writer is not None \
-                and self.summary_available:
-            self.summary_available = False
-            with torch.no_grad():
-                pre_l_actions = gen_pre_n_actions(ep_actions)
-                *_, attn_weights_list = self.model_rep(torch.from_numpy(ep_indexes).to(self.device),
-                                                       [torch.from_numpy(o).to(self.device) for o in ep_obses_list],
-                                                       pre_action=torch.from_numpy(pre_l_actions).to(self.device),
-                                                       query_length=ep_indexes.shape[1])
-
-                for i, attn_weight in enumerate(attn_weights_list):
-                    image = plot_attn_weight(attn_weight[0].cpu().numpy())
-                    self.summary_writer.add_figure(f'attn_weight/{i}', image, self.global_step)
 
     def _sample_from_replay_buffer(self) -> Tuple[np.ndarray,
                                                   Tuple[Union[np.ndarray, List[np.ndarray]], ...]]:

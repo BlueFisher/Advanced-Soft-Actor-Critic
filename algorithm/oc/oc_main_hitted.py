@@ -79,13 +79,6 @@ class OC_MainHitted(OC_Main):
             rewards = [a.reward for a in mgr.agents]
             rewards = ", ".join([f"{i:6.1f}" for i in rewards])
             hitted = sum([a.hitted for a in mgr.agents])
-
-            option_index_count = defaultdict(int)
-            for oic in [a.option_index_count for a in mgr.agents]:
-                for option_index, count in oic.items():
-                    option_index_count[option_index] += count
-            self._logger.info(', '.join([f'{k}: {v}' for k, v in option_index_count.items()]))
-
             max_step = max([a.steps for a in mgr.agents])
 
             if not self.train_mode:

@@ -36,6 +36,8 @@ default:
 
     v_lambda: 1
 
+    discrete_dqn_like: true # Whether using policy or only Q network if discrete is in action spaces
+
     use_rnd: true
     rnd_n_sample: 50
 
@@ -46,12 +48,6 @@ default:
         brightness: 1
         ray_random: 0
         need_speed: true
-
-nornd:
-  base_config:
-    name: nornd_{time}
-  sac_config:
-    use_rnd: false
 
 atc:
   base_config:

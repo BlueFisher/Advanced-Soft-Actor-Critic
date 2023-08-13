@@ -30,10 +30,9 @@ class ModelRep(m.ModelBaseAttentionRep):
         x = self.mlp(x)
 
         pe = self.pos(index)
-        # x = torch.concat([x, pe], dim=-1)
-        x = x + pe
 
         output, hn, attn_weights_list = self.attn(x,
+                                                  pe,
                                                   query_length,
                                                   hidden_state,
                                                   is_prev_hidden_state,

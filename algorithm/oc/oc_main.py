@@ -58,6 +58,8 @@ class OC_Main(Main):
             mgr.set_rl(OptionSelectorBase(num_options=mgr.config['oc_config']['num_options'],
                                           use_dilation=mgr.config['oc_config']['use_dilation'],
                                           option_burn_in_step=mgr.config['oc_config']['option_burn_in_step'],
+                                          option_eplison=mgr.config['oc_config']['option_eplison'],
+                                          terminal_entropy=mgr.config['oc_config']['terminal_entropy'],
                                           option_nn_config=mgr.config['oc_config']['nn_config'],
 
                                           obs_names=mgr.obs_names,
@@ -84,18 +86,3 @@ class OC_Main(Main):
             # TODO multiple agent options
             ma_option = {n: int(option[0]) for n, option in ma_option.items()}
             self.env.send_option(ma_option)
-
-    def _log_episode_info(self, iteration, iter_time):
-        for n, mgr in self.ma_manager:
-            global_step = format_global_step(mgr.rl.get_global_step())
-            rewards = [a.reward for a in mgr.agents]
-            rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-
-            option_index_count = defaultdict(int)
-            for oic in [a.option_index_count for a in mgr.agents]:
-                for option_index, count in oic.items():
-                    option_index_count[option_index] += count
-            self._logger.info(', '.join([f'{k}: {v}' for k, v in option_index_count.items()]))
-
-            max_step = max([a.steps for a in mgr.agents])
-            self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}')
