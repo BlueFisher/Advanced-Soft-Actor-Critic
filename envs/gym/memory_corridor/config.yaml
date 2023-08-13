@@ -5,16 +5,16 @@ default:
 
     name: rnn_{time}
 
-    n_envs: 20
+    n_envs: 50
 
   reset_config:
-    level_count: 2
-    block_layer_count: 3
-    block_gap: 3
+    level_count: 1
+    block_layer_count: 50
+    block_gap: 10
     success_reward: 1.
     passage_reward: 0.05
     failure_reward: -0.1
-    max_episode_steps: 50
+    max_episode_steps: 1000
 
   sac_config:
     burn_in_step: 5
@@ -26,20 +26,19 @@ default:
     # use_rnd: true
     # rnd_n_sample: 50
 
+  oc_config:
+    option_eplison: 0.2  # Probability of switching options
+    terminal_entropy: 0.0  # Tending not to terminate >0, tending to terminate <0
+
 attn:
   base_config:
     name: attn_{time}
   sac_config:
+    burn_in_step: 10
+    n_step: 3
+
     nn: nn_attn
     seq_encoder: ATTN
-    burn_in_step: 5
-    batch_size: 32
-
-oc_1:
-  base_config:
-    name: oc_1_rnn_{time}
-  oc_config:
-    num_options: 1
 
 oc_2:
   base_config:
@@ -79,13 +78,6 @@ oc_4_dilated:
     name: oc_4_dilated_rnn_{time}
   oc_config:
     use_dilation: true
-
-oc_1_attn:
-  inherited:
-    - oc_1
-    - attn
-  base_config:
-    name: oc_1_attn_{time}
 
 oc_2_attn:
   inherited:

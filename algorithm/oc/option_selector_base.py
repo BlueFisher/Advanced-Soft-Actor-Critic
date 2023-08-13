@@ -22,6 +22,8 @@ class OptionSelectorBase(SAC_Base):
                  num_options: int,
                  use_dilation: bool,
                  option_burn_in_step: int,
+                 option_eplison: float,
+                 terminal_entropy: float,
                  option_nn_config: dict,
 
                  obs_names: List[str],
@@ -87,6 +89,8 @@ class OptionSelectorBase(SAC_Base):
         self.num_options = num_options
         self.use_dilation = use_dilation
         self.option_burn_in_step = option_burn_in_step
+        self.option_eplison = option_eplison
+        self.terminal_entropy = terminal_entropy
         self.option_nn_config = option_nn_config
 
         super().__init__(obs_names,
@@ -455,7 +459,11 @@ class OptionSelectorBase(SAC_Base):
 
         pre_option_index = option_index.clone()
 
-        v_over_options = self.model_v_over_options_list[0](state)  # [batch, num_options]
+        v_over_options_list = [v(state) for v in self.model_v_over_options_list]  # list([batch, num_options], ...)
+        stacked_v_over_options = torch.stack(v_over_options_list)  # [ensemble, batch, num_options]
+        v_over_options = stacked_v_over_options.mean(dim=0)  # [batch, num_options]
+
+        # v_over_options = self.model_v_over_options_list[0](state)  # [batch, num_options]
         new_option_index = v_over_options.argmax(dim=-1)  # [batch, ]
 
         none_option_mask = option_index == -1
@@ -485,7 +493,7 @@ class OptionSelectorBase(SAC_Base):
         option_index[termination_mask] = new_option_index[termination_mask]
 
         if self.train_mode:
-            random_mask = torch.rand_like(option_index, dtype=torch.float32) < 0.2  # TODO HYPERPARAMETER
+            random_mask = torch.rand_like(option_index, dtype=torch.float32) < self.option_eplison
             dist = distributions.Categorical(logits=torch.ones((batch, self.num_options),
                                                                device=self.device))
             random_option_index = dist.sample()  # [batch, ]
@@ -827,8 +835,6 @@ class OptionSelectorBase(SAC_Base):
         pre_action = torch.from_numpy(pre_action).to(self.device)
         low_rnn_state = torch.from_numpy(low_rnn_state).to(self.device)
 
-        # self._logger.debug(f'choose {key_indexes.shape}')
-
         state, next_attn_state, _ = self.model_rep(key_indexes,
                                                    key_obses_list,
                                                    pre_action=None,
@@ -861,24 +867,6 @@ class OptionSelectorBase(SAC_Base):
                 next_low_rnn_state.detach().cpu().numpy())
 
     #################### ! GET STATES ####################
-
-    def get_m_data(self,
-                   bn_indexes: torch.Tensor,
-                   bn_padding_masks: torch.Tensor,
-                   bn_obses_list: List[torch.Tensor],
-                   bn_actions: torch.Tensor,
-                   next_obs_list: torch.Tensor) -> Tuple[torch.Tensor,
-                                                         torch.Tensor,
-                                                         List[torch.Tensor],
-                                                         torch.Tensor]:
-        m_indexes = torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1)
-        m_padding_masks = torch.concat([bn_padding_masks,
-                                        torch.zeros_like(bn_padding_masks[:, -1:], dtype=torch.bool)], dim=1)
-        m_obses_list = [torch.cat([n_obses, next_obs.unsqueeze(1)], dim=1)
-                        for n_obses, next_obs in zip(bn_obses_list, next_obs_list)]
-        m_pre_actions = gen_pre_n_actions(bn_actions, keep_last_action=True)
-
-        return m_indexes, m_padding_masks, m_obses_list, m_pre_actions
 
     def get_l_states(self,
                      l_indexes: torch.Tensor,
@@ -1045,7 +1033,6 @@ class OptionSelectorBase(SAC_Base):
                 next_l_rnn_states[:, t] = rnn_state
 
             return l_states, next_l_rnn_states
-
         elif self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilation:
             return self.get_l_states(l_indexes=l_indexes,
                                      l_padding_masks=l_padding_masks,
@@ -1519,14 +1506,19 @@ class OptionSelectorBase(SAC_Base):
             optimizer.step()
 
         with torch.no_grad():
-            next_v_over_options = self.model_target_v_over_options_list[0](next_state)  # [batch, num_options]
+            next_v_over_options_list = [v(next_state) for v in self.model_target_v_over_options_list]  # list([batch, num_options], ...)
+            stacked_next_v_over_options = torch.stack(next_v_over_options_list)  # [ensemble, batch, num_options]
+            next_v_over_options = stacked_next_v_over_options.mean(dim=0)  # [batch, num_options]
+
+            # next_v_over_options = self.model_target_v_over_options_list[0](next_state)  # [batch, num_options]
             next_v = next_v_over_options.gather(1, last_option_index.unsqueeze(-1))  # [batch, 1]
         for i, option in enumerate(self.option_list):
             mask = (option_index == i)
             if not torch.any(mask):
                 continue
 
-            option.train_termination(next_state=next_low_state[mask],
+            option.train_termination(terminal_entropy=self.terminal_entropy,
+                                     next_state=next_low_state[mask],
                                      next_v_over_options=next_v_over_options[mask],
                                      next_v=next_v[mask],
                                      done=done[mask])
@@ -1705,50 +1697,81 @@ class OptionSelectorBase(SAC_Base):
             self.summary_available = True
 
             self.summary_writer.add_scalar('loss/v', loss_v, self.global_step)
+            if key_batch is not None:
+                key_indexes = key_batch[0]
+                self.summary_writer.add_scalar('key_len', key_indexes.shape[1], self.global_step)
 
             self.summary_writer.flush()
 
         return m_target_states, om_low_target_obses_list, om_low_target_states
 
-    def put_episode(self, **episode_trans: np.ndarray) -> None:
-        # Ignore episodes which length is too short
-        if episode_trans['l_indexes'].shape[1] < self.n_step:
+    def log_episode(self, **episode_trans: np.ndarray) -> None:
+        if self.summary_writer is None or not self.summary_available:
             return
 
-        episodes = self._padding_next_obs_list(**episode_trans)
+        ep_indexes = episode_trans['ep_indexes']
+        ep_obses_list = episode_trans['ep_obses_list']
+        ep_actions = episode_trans['ep_actions']
 
-        if self.use_replay_buffer:
-            self._fill_replay_buffer(*episodes)
-        else:
-            self.batch_buffer.put_episode(*episodes)
+        ep_option_indexes = episode_trans['ep_option_indexes']
+        ep_option_changed_indexes = episode_trans['ep_option_changed_indexes']
+
+        image = plot_episode_option_indexes(ep_option_indexes, ep_option_changed_indexes, self.num_options)
+        self.summary_writer.add_figure(f'option_index', image, self.global_step)
+
+        if self.seq_encoder == SEQ_ENCODER.ATTN:
+            with torch.no_grad():
+                if self.use_dilation:
+                    summary_name = 'key_attn_weight'
+                    key_option_changed_indexes = np.unique(ep_option_changed_indexes)  # [key_len, ]
+                    key_indexes = ep_indexes[:, key_option_changed_indexes]  # [1, key_len]
+                    key_obses_list = [l_obses[:, key_option_changed_indexes] for l_obses in ep_obses_list]  # [1, key_len, state_size]
+                    *_, attn_weights_list = self.model_rep(torch.from_numpy(key_indexes).to(self.device),
+                                                           [torch.from_numpy(o).to(self.device) for o in key_obses_list],
+                                                           pre_action=None,
+                                                           query_length=key_indexes.shape[1])
+
+                else:
+                    summary_name = 'attn_weight'
+                    pre_l_actions = gen_pre_n_actions(ep_actions)
+                    *_, attn_weights_list = self.model_rep(torch.from_numpy(ep_indexes).to(self.device),
+                                                           [torch.from_numpy(o).to(self.device) for o in ep_obses_list],
+                                                           pre_action=torch.from_numpy(pre_l_actions).to(self.device),
+                                                           query_length=ep_indexes.shape[1])
+
+                for i, attn_weight in enumerate(attn_weights_list):
+                    image = plot_attn_weight(attn_weight[0].cpu().numpy())
+                    self.summary_writer.add_figure(f'{summary_name}/{i}', image, self.global_step)
+
+        self.summary_available = False
 
     def _padding_next_obs_list(self,
-                               l_indexes: np.ndarray,
-                               l_obses_list: List[np.ndarray],
-                               l_option_indexes: np.ndarray,
-                               l_option_changed_indexes: np.ndarray,
-                               l_actions: np.ndarray,
-                               l_rewards: np.ndarray,
+                               ep_indexes: np.ndarray,
+                               ep_obses_list: List[np.ndarray],
+                               ep_option_indexes: np.ndarray,
+                               ep_option_changed_indexes: np.ndarray,
+                               ep_actions: np.ndarray,
+                               ep_rewards: np.ndarray,
                                next_obs_list: List[np.ndarray],
-                               l_dones: np.ndarray,
-                               l_probs: List[np.ndarray],
-                               l_seq_hidden_states: Optional[np.ndarray] = None,
-                               l_low_seq_hidden_states: Optional[np.ndarray] = None) -> Tuple[np.ndarray, ...]:
+                               ep_dones: np.ndarray,
+                               ep_probs: List[np.ndarray],
+                               ep_seq_hidden_states: Optional[np.ndarray] = None,
+                               ep_low_seq_hidden_states: Optional[np.ndarray] = None) -> Tuple[np.ndarray, ...]:
         """
         Padding next_obs_list
 
         Args:
-            l_indexes (np.int32): [1, ep_len]
-            l_obses_list (np): list([1, ep_len, *obs_shapes_i], ...)
-            l_option_indexes (np.int8): [1, ep_len]
-            l_option_changed_indexes (np.int32): [1, ep_len]
-            l_actions (np): [1, ep_len, action_size]
-            l_rewards (np): [1, ep_len]
+            ep_indexes (np.int32): [1, ep_len]
+            ep_obses_list (np): list([1, ep_len, *obs_shapes_i], ...)
+            ep_option_indexes (np.int8): [1, ep_len]
+            ep_option_changed_indexes (np.int32): [1, ep_len]
+            ep_actions (np): [1, ep_len, action_size]
+            ep_rewards (np): [1, ep_len]
             next_obs_list (np): list([1, *obs_shapes_i], ...)
-            l_dones (bool): [1, ep_len]
-            l_probs (np): [1, ep_len, action_size]
-            l_seq_hidden_states (np): [1, ep_len, *seq_hidden_state_shape]
-            l_low_seq_hidden_states (np): [1, ep_len, *low_seq_hidden_state_shape]
+            ep_dones (bool): [1, ep_len]
+            ep_probs (np): [1, ep_len, action_size]
+            ep_seq_hidden_states (np): [1, ep_len, *seq_hidden_state_shape]
+            ep_low_seq_hidden_states (np): [1, ep_len, *low_seq_hidden_state_shape]
 
         Returns:
             ep_indexes (np.int32): [1, ep_len + 1]
@@ -1763,9 +1786,9 @@ class OptionSelectorBase(SAC_Base):
             ep_seq_hidden_states (np): [1, ep_len + 1, *seq_hidden_state_shape]
             ep_low_seq_hidden_states (np): [1, ep_len + 1, *low_seq_hidden_state_shape]
         """
-        assert l_indexes.dtype == np.int32, l_indexes.dtype
-        assert l_option_indexes.dtype == np.int8, l_option_indexes.dtype
-        assert l_option_changed_indexes.dtype == np.int32, l_option_changed_indexes.dtype
+        assert ep_indexes.dtype == np.int32, ep_indexes.dtype
+        assert ep_option_indexes.dtype == np.int8, ep_option_indexes.dtype
+        assert ep_option_changed_indexes.dtype == np.int32, ep_option_changed_indexes.dtype
 
         (ep_indexes,
          ep_padding_masks,
@@ -1774,22 +1797,22 @@ class OptionSelectorBase(SAC_Base):
          ep_rewards,
          ep_dones,
          ep_probs,
-         ep_seq_hidden_states) = super()._padding_next_obs_list(l_indexes=l_indexes,
-                                                                l_obses_list=l_obses_list,
-                                                                l_actions=l_actions,
-                                                                l_rewards=l_rewards,
+         ep_seq_hidden_states) = super()._padding_next_obs_list(ep_indexes=ep_indexes,
+                                                                ep_obses_list=ep_obses_list,
+                                                                ep_actions=ep_actions,
+                                                                ep_rewards=ep_rewards,
                                                                 next_obs_list=next_obs_list,
-                                                                l_dones=l_dones,
-                                                                l_probs=l_probs,
-                                                                l_seq_hidden_states=l_seq_hidden_states)
+                                                                ep_dones=ep_dones,
+                                                                ep_probs=ep_probs,
+                                                                ep_seq_hidden_states=ep_seq_hidden_states)
 
-        ep_option_indexes = np.concatenate([l_option_indexes,
+        ep_option_indexes = np.concatenate([ep_option_indexes,
                                             np.full([1, 1], 0, dtype=np.int8)], axis=1)
-        ep_option_changed_indexes = np.concatenate([l_option_changed_indexes,
-                                                    l_option_changed_indexes[:, -1:] + 1], axis=1)
-        if l_low_seq_hidden_states is not None:
-            ep_low_seq_hidden_states = np.concatenate([l_low_seq_hidden_states,
-                                                       np.zeros([1, 1, *l_low_seq_hidden_states.shape[2:]], dtype=np.float32)], axis=1)
+        ep_option_changed_indexes = np.concatenate([ep_option_changed_indexes,
+                                                    ep_option_changed_indexes[:, -1:] + 1], axis=1)
+        if ep_low_seq_hidden_states is not None:
+            ep_low_seq_hidden_states = np.concatenate([ep_low_seq_hidden_states,
+                                                       np.zeros([1, 1, *ep_low_seq_hidden_states.shape[2:]], dtype=np.float32)], axis=1)
 
         return (ep_indexes,
                 ep_padding_masks,
@@ -1800,8 +1823,8 @@ class OptionSelectorBase(SAC_Base):
                 ep_rewards,
                 ep_dones,
                 ep_probs,
-                ep_seq_hidden_states if l_seq_hidden_states is not None else None,
-                ep_low_seq_hidden_states if l_low_seq_hidden_states is not None else None)
+                ep_seq_hidden_states if ep_seq_hidden_states is not None else None,
+                ep_low_seq_hidden_states if ep_low_seq_hidden_states is not None else None)
 
     def _fill_replay_buffer(self,
                             ep_indexes: np.ndarray,
@@ -1865,31 +1888,6 @@ class OptionSelectorBase(SAC_Base):
 
         # n_step transitions except the first one and the last obs
         self.replay_buffer.add(storage_data, ignore_size=1)
-
-        if self.seq_encoder == SEQ_ENCODER.ATTN \
-                and self.summary_writer is not None \
-                and self.summary_available:
-            self.summary_available = False
-            with torch.no_grad():
-                if self.use_dilation:
-                    key_option_changed_indexes = np.unique(ep_option_changed_indexes)  # [key_len, ]
-                    key_indexes = ep_indexes[:, key_option_changed_indexes]  # [1, key_len]
-                    key_obses_list = [l_obses[:, key_option_changed_indexes] for l_obses in ep_obses_list]  # [1, key_len, state_size]
-                    *_, attn_weights_list = self.model_rep(torch.from_numpy(key_indexes).to(self.device),
-                                                           [torch.from_numpy(o).to(self.device) for o in key_obses_list],
-                                                           pre_action=None,
-                                                           query_length=key_indexes.shape[1])
-
-                else:
-                    pre_l_actions = gen_pre_n_actions(ep_actions)
-                    *_, attn_weights_list = self.model_rep(torch.from_numpy(ep_indexes).to(self.device),
-                                                           [torch.from_numpy(o).to(self.device) for o in ep_obses_list],
-                                                           pre_action=torch.from_numpy(pre_l_actions).to(self.device),
-                                                           query_length=ep_indexes.shape[1])
-
-                for i, attn_weight in enumerate(attn_weights_list):
-                    image = plot_attn_weight(attn_weight[0].cpu().numpy())
-                    self.summary_writer.add_figure(f'attn_weight/{i}', image, self.global_step)
 
     def _sample_from_replay_buffer(self) -> Tuple[np.ndarray,
                                                   Tuple[Union[np.ndarray, List[np.ndarray]], ...],
@@ -2018,28 +2016,35 @@ class OptionSelectorBase(SAC_Base):
             bn_low_seq_hidden_states = m_low_seq_hidden_states[:, :-1, ...]
 
         key_batch = None
+        key_max_length = 200
         if self.use_dilation:
             key_trans = {k: np.zeros((v.shape[0],
-                                      self.burn_in_step + 1,
+                                      key_max_length + 1,
                                       *v.shape[1:]), dtype=v.dtype)
                          for k, v in trans.items()}
+            # From the state that need to be trained
             for k, v in batch.items():
-                key_trans[k][:, -1] = v[:, 0]
+                key_trans[k][:, -1] = v[:, self.burn_in_step]
 
-            tmp_pointers = pointers - self.burn_in_step
+            tmp_pointers = pointers  # From the state that need to be trained
 
-            for i in range(self.burn_in_step, 0, -1):  # All keys are the first keys in episodes
+            for i in range(key_max_length, 0, -1):  # All keys are the first keys in episodes
                 tmp_tran_index = key_trans['index'][:, i]  # The current key tran index in an episode
                 tmp_tran_padding_mask = key_trans['padding_mask'][:, i]  # The current key tran padding mask in an episode
                 tmp_pre_tran = self.replay_buffer.get_storage_data(tmp_pointers - 1)  # The previous tran of the current key tran
-                tmp_option_changed_index = tmp_pre_tran['option_changed_index']
                 # The previous option changed key index in an episode
+                tmp_option_changed_index = tmp_pre_tran['option_changed_index']
                 delta = tmp_tran_index - tmp_option_changed_index
 
-                padding_mask = np.logical_or(tmp_tran_index == 0, tmp_tran_padding_mask)
                 # The current key tran is the first key in an episode OR is padding already
-                padding_mask = np.logical_or(padding_mask, tmp_tran_index - tmp_pre_tran['index'] != 1)
+                padding_mask = np.logical_or(tmp_tran_index == 0, tmp_tran_padding_mask)
                 # The previous tran is not actually the previous tran of the current key tran
+                padding_mask = np.logical_or(padding_mask, tmp_tran_index - tmp_pre_tran['index'] != 1)
+
+                if np.all(padding_mask):  # Early stop
+                    for k, v in key_trans.items():
+                        key_trans[k] = v[:, min(i, key_max_length - 1):]
+                    break
 
                 delta[padding_mask] = 0
                 tmp_pointers = (tmp_pointers - delta).astype(pointers.dtype)
@@ -2048,6 +2053,7 @@ class OptionSelectorBase(SAC_Base):
                 for k, v in tmp_tran.items():
                     key_trans[k][:, i - 1] = v
 
+            # Remove the last element, which is the state that need to be trained
             for k, v in key_trans.items():
                 key_trans[k] = v[:, :-1]
 

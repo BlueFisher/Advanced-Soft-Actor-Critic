@@ -11,8 +11,6 @@ from ..nn_models import *
 from ..sac_base import SAC_Base
 from ..utils import *
 
-TERMINAL_ENTROPY = 0.01
-
 
 class OptionBase(SAC_Base):
     def _set_logger(self):
@@ -724,12 +722,14 @@ class OptionBase(SAC_Base):
             self.summary_writer.flush()
 
     def train_termination(self,
+                          terminal_entropy: float,
                           next_state: torch.Tensor,
                           next_v_over_options: torch.Tensor,
                           next_v: torch.Tensor,
                           done: torch.Tensor):
         """
         Args:
+            terminal_entropy: float
             next_state: [batch, state_size]
             next_v_over_options: [batch, num_options]
             next_v: [batch, 1]
@@ -739,7 +739,7 @@ class OptionBase(SAC_Base):
 
         max_next_v_over_options, _ = next_v_over_options.max(-1)
 
-        loss_termination = next_termination * (next_v.squeeze(-1) - max_next_v_over_options + TERMINAL_ENTROPY) * ~done  # [batch, ]
+        loss_termination = next_termination * (next_v.squeeze(-1) - max_next_v_over_options + terminal_entropy) * ~done  # [batch, ]
         loss_termination = torch.mean(loss_termination)
 
         self.optimizer_termination.zero_grad()

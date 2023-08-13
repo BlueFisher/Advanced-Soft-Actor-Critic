@@ -211,7 +211,7 @@ class Main:
         })
         self.ma_manager.set_obs_list(ma_obs_list)
 
-        training_iteration = self.train_mode
+        training_iteration = False
 
         force_reset = False
         iteration = 0
@@ -270,6 +270,8 @@ class Main:
                             if next_trained_steps == trained_steps:
                                 profiler.ignore()
                             trained_steps = next_trained_steps
+                    elif self.train_mode and not training_iteration:
+                        self.ma_manager.log_episode()
 
                     with self._profiler('post_step', repeat=10):
                         self.ma_manager.post_step(ma_next_obs_list,
