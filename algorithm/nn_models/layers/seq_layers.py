@@ -259,7 +259,7 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
 
         if cut_query:
             query = key[:, -query_length:]
-            if len(attn_mask) == 2:
+            if len(attn_mask.shape) == 2:
                 attn_mask = attn_mask[-query_length:]
             else:
                 attn_mask = attn_mask[:, -query_length:]
