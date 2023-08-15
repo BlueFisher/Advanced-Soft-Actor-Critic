@@ -88,8 +88,9 @@ oc_config:
   option_burn_in_step: -1
   option_eplison: 0.2  # Probability of switching options
   terminal_entropy: 0.01  # Tending not to terminate >0, tending to terminate <0
+  key_max_length: 200
 
-  nn_config:
+  option_nn_config:
     rep: null
 
 ma_config: null

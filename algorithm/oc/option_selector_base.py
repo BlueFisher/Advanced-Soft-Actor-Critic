@@ -19,13 +19,6 @@ sac_base.BatchBuffer = BatchBuffer
 
 class OptionSelectorBase(SAC_Base):
     def __init__(self,
-                 num_options: int,
-                 use_dilation: bool,
-                 option_burn_in_step: int,
-                 option_eplison: float,
-                 terminal_entropy: float,
-                 option_nn_config: dict,
-
                  obs_names: List[str],
                  obs_shapes: List[Tuple],
                  d_action_sizes: List[int],
@@ -84,6 +77,14 @@ class OptionSelectorBase(SAC_Base):
                  use_normalization: bool = False,
                  action_noise: Optional[List[float]] = None,
 
+                 num_options: int = 4,
+                 use_dilation: bool = False,
+                 option_burn_in_step: int = -1,
+                 option_eplison: float = 0.2,
+                 terminal_entropy: float = 0.01,
+                 key_max_length: int = 200,
+                 option_nn_config: Optional[dict] = None,
+
                  replay_config: Optional[dict] = None):
 
         self.num_options = num_options
@@ -91,6 +92,7 @@ class OptionSelectorBase(SAC_Base):
         self.option_burn_in_step = option_burn_in_step
         self.option_eplison = option_eplison
         self.terminal_entropy = terminal_entropy
+        self.key_max_length = key_max_length
         self.option_nn_config = option_nn_config
 
         super().__init__(obs_names,
@@ -2016,10 +2018,9 @@ class OptionSelectorBase(SAC_Base):
             bn_low_seq_hidden_states = m_low_seq_hidden_states[:, :-1, ...]
 
         key_batch = None
-        key_max_length = 200
         if self.use_dilation:
             key_trans = {k: np.zeros((v.shape[0],
-                                      key_max_length + 1,
+                                      self.key_max_length + 1,
                                       *v.shape[1:]), dtype=v.dtype)
                          for k, v in trans.items()}
             # From the state that need to be trained
@@ -2028,7 +2029,7 @@ class OptionSelectorBase(SAC_Base):
 
             tmp_pointers = pointers  # From the state that need to be trained
 
-            for i in range(key_max_length, 0, -1):  # All keys are the first keys in episodes
+            for i in range(self.key_max_length, 0, -1):  # All keys are the first keys in episodes
                 tmp_tran_index = key_trans['index'][:, i]  # The current key tran index in an episode
                 tmp_tran_padding_mask = key_trans['padding_mask'][:, i]  # The current key tran padding mask in an episode
                 tmp_pre_tran = self.replay_buffer.get_storage_data(tmp_pointers - 1)  # The previous tran of the current key tran
@@ -2043,7 +2044,7 @@ class OptionSelectorBase(SAC_Base):
 
                 if np.all(padding_mask):  # Early stop
                     for k, v in key_trans.items():
-                        key_trans[k] = v[:, min(i, key_max_length - 1):]
+                        key_trans[k] = v[:, min(i, self.key_max_length - 1):]
                     break
 
                 delta[padding_mask] = 0
