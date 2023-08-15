@@ -55,14 +55,7 @@ class OC_Main(Main):
             spec.loader.exec_module(nn)
             mgr.config['sac_config']['nn'] = nn
 
-            mgr.set_rl(OptionSelectorBase(num_options=mgr.config['oc_config']['num_options'],
-                                          use_dilation=mgr.config['oc_config']['use_dilation'],
-                                          option_burn_in_step=mgr.config['oc_config']['option_burn_in_step'],
-                                          option_eplison=mgr.config['oc_config']['option_eplison'],
-                                          terminal_entropy=mgr.config['oc_config']['terminal_entropy'],
-                                          option_nn_config=mgr.config['oc_config']['nn_config'],
-
-                                          obs_names=mgr.obs_names,
+            mgr.set_rl(OptionSelectorBase(obs_names=mgr.obs_names,
                                           obs_shapes=mgr.obs_shapes,
                                           d_action_sizes=mgr.d_action_sizes,
                                           c_action_size=mgr.c_action_size,
@@ -74,6 +67,8 @@ class OC_Main(Main):
 
                                           nn_config=mgr.config['nn_config'],
                                           **mgr.config['sac_config'],
+
+                                          **mgr.config['oc_config'],
 
                                           replay_config=mgr.config['replay_config']))
 

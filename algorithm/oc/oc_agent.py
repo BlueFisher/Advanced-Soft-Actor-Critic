@@ -460,6 +460,8 @@ class OC_AgentManager(AgentManager):
             next_seq_hidden_state = None
             next_low_seq_hidden_state = None
 
+        print(option_index)
+        
         if self.use_dilation:
             key_mask = self['option_index'] != option_index
             self['key_seq_hidden_state'][key_mask] = next_seq_hidden_state[key_mask]
