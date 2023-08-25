@@ -273,11 +273,6 @@ class OptionSelectorBase(SAC_Base):
 
         self.model_v_over_options_list = [nn.ModelVOverOption(state_size, self.num_options).to(self.device)
                                           for _ in range(self.ensemble_q_num)]
-        self.model_target_v_over_options_list = [nn.ModelVOverOption(state_size, self.num_options).to(self.device)
-                                                 for _ in range(self.ensemble_q_num)]
-        for model_target_v_over_options in self.model_target_v_over_options_list:
-            for param in model_target_v_over_options.parameters():
-                param.requires_grad = False
         self.optimizer_v_list = [adam_optimizer(self.model_v_over_options_list[i].parameters()) for i in range(self.ensemble_q_num)]
 
         """
@@ -341,7 +336,6 @@ class OptionSelectorBase(SAC_Base):
 
         for i in range(self.ensemble_q_num):
             ckpt_dict[f'model_v_over_options_{i}'] = self.model_v_over_options_list[i]
-            ckpt_dict[f'model_target_v_over_options_{i}'] = self.model_target_v_over_options_list[i]
             ckpt_dict[f'optimizer_v_over_options_{i}'] = self.optimizer_v_list[i]
 
     def _init_or_restore(self, last_ckpt: int) -> None:
@@ -423,10 +417,6 @@ class OptionSelectorBase(SAC_Base):
 
         target = self.model_target_rep.parameters()
         source = self.model_rep.parameters()
-
-        for i in range(self.ensemble_q_num):
-            target = chain(target, self.model_target_v_over_options_list[i].parameters())
-            source = chain(source, self.model_v_over_options_list[i].parameters())
 
         for target_param, param in zip(target, source):
             target_param.data.copy_(
@@ -1254,7 +1244,7 @@ class OptionSelectorBase(SAC_Base):
         n_option_indexes = bn_option_indexes[:, self.burn_in_step:]  # [batch, n]
         option_index = n_option_indexes[:, 0]  # [batch, ]
 
-        next_n_v_over_options_list = [v(next_n_states) for v in self.model_target_v_over_options_list]  # [batch, n, num_options]
+        next_n_v_over_options_list = [v(next_n_states) for v in self.model_v_over_options_list]  # [batch, n, num_options]
 
         batch = bn_states.shape[0]
         td_error = torch.zeros((batch, 1), device=self.device)
@@ -1474,6 +1464,8 @@ class OptionSelectorBase(SAC_Base):
 
         next_state = next_n_states[batch_tensor, last_solid_index]  # [batch, state_size]
         last_option_index = n_option_indexes[batch_tensor, last_solid_index]
+        next_low_obs_list = [om_low_obses[batch_tensor, last_solid_index]
+                             for om_low_obses in om_low_obses_list]
         next_low_state = next_n_low_states[batch_tensor, last_solid_index]
         done = n_dones[batch_tensor, last_solid_index]
 
@@ -1508,21 +1500,19 @@ class OptionSelectorBase(SAC_Base):
             optimizer.step()
 
         with torch.no_grad():
-            next_v_over_options_list = [v(next_state) for v in self.model_target_v_over_options_list]  # list([batch, num_options], ...)
+            next_v_over_options_list = [v(next_state) for v in self.model_v_over_options_list]  # list([batch, num_options], ...)
             stacked_next_v_over_options = torch.stack(next_v_over_options_list)  # [ensemble, batch, num_options]
             next_v_over_options = stacked_next_v_over_options.mean(dim=0)  # [batch, num_options]
 
-            # next_v_over_options = self.model_target_v_over_options_list[0](next_state)  # [batch, num_options]
-            next_v = next_v_over_options.gather(1, last_option_index.unsqueeze(-1))  # [batch, 1]
         for i, option in enumerate(self.option_list):
-            mask = (option_index == i)
+            mask = (last_option_index == i)
             if not torch.any(mask):
                 continue
 
             option.train_termination(terminal_entropy=self.terminal_entropy,
+                                     next_obs_list=[o[mask] for o in next_low_obs_list],
                                      next_state=next_low_state[mask],
                                      next_v_over_options=next_v_over_options[mask],
-                                     next_v=next_v[mask],
                                      done=done[mask])
 
         return loss_v
@@ -1611,7 +1601,7 @@ class OptionSelectorBase(SAC_Base):
         n_option_indexes = bn_option_indexes[:, self.burn_in_step:]  # [batch, n]
         option_index = n_option_indexes[:, 0]  # [batch, ]
 
-        next_n_v_over_options_list = [v(next_n_states) for v in self.model_target_v_over_options_list]  # [batch, n, num_options]
+        next_n_v_over_options_list = [v(next_n_states) for v in self.model_v_over_options_list]  # [batch, n, num_options]
 
         om_low_obses_list = self.get_l_low_obses_list(l_obses_list=[m_obses[:, self.option_burn_in_from:] for m_obses in m_obses_list],
                                                       l_states=m_states[:, self.option_burn_in_from:])
@@ -1701,7 +1691,7 @@ class OptionSelectorBase(SAC_Base):
             self.summary_writer.add_scalar('loss/v', loss_v, self.global_step)
             if key_batch is not None:
                 key_indexes = key_batch[0]
-                self.summary_writer.add_scalar('key_len', key_indexes.shape[1], self.global_step)
+                self.summary_writer.add_scalar('metric/key_len', key_indexes.shape[1], self.global_step)
 
             self.summary_writer.flush()
 

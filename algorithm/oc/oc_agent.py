@@ -302,7 +302,7 @@ class OC_AgentManager(AgentManager):
         self['pre_action'] = self['initial_pre_action']
         if self.seq_encoder is not None:
             self['initial_seq_hidden_state'] = self.rl.get_initial_seq_hidden_state(num_agents)  # [n_envs, *seq_hidden_state_shape]
-            self['seq_hidden_state'] = self['initial_seq_hidden_state']
+            self['seq_hidden_state'] = self['initial_seq_hidden_state'].copy()
             if self.use_dilation:
                 self['key_seq_hidden_state'] = self['initial_seq_hidden_state'].copy()
 

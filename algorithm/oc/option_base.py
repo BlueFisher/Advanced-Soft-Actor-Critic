@@ -723,21 +723,23 @@ class OptionBase(SAC_Base):
 
     def train_termination(self,
                           terminal_entropy: float,
+                          next_obs_list: List[torch.Tensor],
                           next_state: torch.Tensor,
                           next_v_over_options: torch.Tensor,
-                          next_v: torch.Tensor,
                           done: torch.Tensor):
         """
         Args:
             terminal_entropy: float
+            next_obs_list: list([batch, *obs_shapes_i], ...)
             next_state: [batch, state_size]
             next_v_over_options: [batch, num_options]
-            next_v: [batch, 1]
             done (torch.bool): [batch, ]
         """
         next_termination = self.model_termination(next_state).squeeze(-1)  # [batch, ]
 
-        max_next_v_over_options, _ = next_v_over_options.max(-1)
+        next_v = self.get_v(next_obs_list, next_state)  # [batch, 1]
+
+        max_next_v_over_options, _ = next_v_over_options.max(-1)  # [batch, ]
 
         loss_termination = next_termination * (next_v.squeeze(-1) - max_next_v_over_options + terminal_entropy) * ~done  # [batch, ]
         loss_termination = torch.mean(loss_termination)
@@ -750,6 +752,7 @@ class OptionBase(SAC_Base):
             self.summary_available = True
 
             self.summary_writer.add_scalar('loss/termination', loss_termination, self.global_step)
+            self.summary_writer.add_scalar('metric/termination', torch.mean(next_termination), self.global_step)
 
             self.summary_writer.flush()
 
