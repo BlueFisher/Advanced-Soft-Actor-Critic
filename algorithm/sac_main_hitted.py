@@ -72,6 +72,12 @@ class MainHitted(Main):
                 {'tag': 'reward/hitted', 'simple_value': hitted}
             ])
 
+            steps = np.array([a.steps for a in mgr.agents])
+
+            mgr.rl.write_constant_summaries([
+                {'tag': 'metric/steps', 'simple_value': steps.mean()},
+            ])
+
     def _log_episode_info(self, iteration, iter_time):
         for n, mgr in self.ma_manager:
             global_step = format_global_step(mgr.rl.get_global_step())
