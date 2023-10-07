@@ -141,8 +141,13 @@ class UnityWrapperProcess:
                         conn.send(self.step(*data))
                     elif cmd == CLOSE:
                         self.close()
+            except KeyboardInterrupt:
+                self._logger.error(f'KeyboardInterrupt')
+            except Exception as e:
+                self._logger.error(f'{e}')
             finally:
-                self._logger.warning(f'Process {os.getpid()} exits with error')
+                self.close()
+                conn.close()
 
     def init(self):
         """
@@ -482,7 +487,10 @@ class UnityWrapper(EnvWrapper):
         self.additional_args = additional_args
         self.group_aggregation = group_aggregation
 
-        # If use multiple processes
+        self._logger = logging.getLogger('UnityWrapper')
+
+        # force_seq: Whether forcing use multiple processes
+        # self._seq_envs: Whether use multiple processes
         if force_seq is None:
             self._seq_envs: bool = self.n_envs <= MAX_N_ENVS_PER_PROCESS
         else:
@@ -493,6 +501,8 @@ class UnityWrapper(EnvWrapper):
         self.env_length = math.ceil(self.n_envs / MAX_N_ENVS_PER_PROCESS)
 
         if self._seq_envs:
+            self._logger.info('Using sequential environments')
+
             # All environments are executed sequentially
             self._envs: List[UnityWrapperProcess] = []
 
@@ -510,10 +520,15 @@ class UnityWrapper(EnvWrapper):
                                                       n_envs=min(MAX_N_ENVS_PER_PROCESS, self.n_envs - i * MAX_N_ENVS_PER_PROCESS),
                                                       group_aggregation=group_aggregation))
         else:
+            self._logger.info('Using multi-processing environments')
+
             # All environments are executed in parallel
             self._conns: List[multiprocessing.connection.Connection] = [None] * self.env_length
+            self._processes: List[multiprocessing.Process] = [None] * self.env_length
 
             self._generate_processes()
+
+        self._logger.info('Environments loaded')
 
     def _generate_processes(self, force_init=False):
         if self._seq_envs:
@@ -538,6 +553,7 @@ class UnityWrapper(EnvWrapper):
                                                   self.group_aggregation),
                                             daemon=True)
                 p.start()
+                self._processes[i] = p
 
                 if force_init:
                     parent_conn.send((INIT, None))
@@ -629,7 +645,7 @@ class UnityWrapper(EnvWrapper):
                 self._conns[i].send((STEP, (tmp_ma_d_actions, tmp_ma_c_actions)))
 
         if not self._seq_envs:
-            succeeded = True
+            failed_count = 0
 
             for i, conn in enumerate(self._conns):
                 try:
@@ -645,12 +661,17 @@ class UnityWrapper(EnvWrapper):
                         ma_envs_done[n].append(ma_done[n])
                         ma_envs_max_step[n].append(ma_max_step[n])
                         ma_envs_padding_mask[n].append(ma_padding_mask[n])
-                except:
+                except Exception as e:
+                    self._logger.error(e)
                     self._conns[i] = None
-                    succeeded = False
+                    self._processes[i].close()
+                    self._processes[i] = None
+                    failed_count += 1
 
-            if not succeeded:
+            for i in range(failed_count):
+                self._logger.warn(f'Restarting failed environment {i}')
                 self._generate_processes(force_init=True)
+                self._logger.warn(f'Failed environment {i} restarted')
 
                 return None, None, None, None
 
@@ -663,6 +684,7 @@ class UnityWrapper(EnvWrapper):
         return ma_obs_list, ma_reward, ma_done, ma_max_step, ma_padding_mask
 
     def close(self):
+        self._logger.warn('Closing environments')
         if self._seq_envs:
             for env in self._envs:
                 env.close()
@@ -672,6 +694,12 @@ class UnityWrapper(EnvWrapper):
                     conn.send((CLOSE, None))
                 except:
                     pass
+            for p in self._processes:
+                try:
+                    p.close()
+                except:
+                    pass
+        self._logger.warn('Environments closed')
 
 
 if __name__ == "__main__":

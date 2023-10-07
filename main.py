@@ -28,7 +28,7 @@ if __name__ == '__main__':
     parser.add_argument('--logger_in_file', action='store_true', help='logging into a file')
 
     parser.add_argument('--render', action='store_true', help='render')
-    parser.add_argument('--env_args', help='additional args for environments')
+    parser.add_argument('--env_args', help='additional args for environments, splited by space')
     parser.add_argument('--envs', type=int, help='number of env copies')
     parser.add_argument('--max_iter', type=int, help='max iteration')
 
