@@ -565,7 +565,7 @@ class OptionBase(SAC_Base):
 
         if self.c_action_size:
             if self.clip_epsilon > 0:
-                target_c_q_list = [q(state, c_action)[1] for q in self.model_target_q_list]
+                target_c_q_list = [q(state.detach(), c_action)[1] for q in self.model_target_q_list]
 
                 clipped_q_list = [target_c_q_list[i] + torch.clamp(
                     c_q_list[i] - target_c_q_list[i],
