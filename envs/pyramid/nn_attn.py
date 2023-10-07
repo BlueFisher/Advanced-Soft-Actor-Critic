@@ -26,7 +26,7 @@ class ModelRep(m.ModelBaseAttentionRep):
             self.attn = m.EpisodeMultiheadAttention(64, 2, num_layers=2)
 
     def forward(self, index, obs_list, pre_action,
-                query_length=1,
+                seq_q_len=1,
                 hidden_state=None,
                 is_prev_hidden_state=False,
                 query_only_attend_to_rest_key=False,
@@ -46,13 +46,13 @@ class ModelRep(m.ModelBaseAttentionRep):
             x = x + pe
 
         output, hn, attn_weights_list = self.attn(x,
-                                                  query_length,
+                                                  seq_q_len,
                                                   hidden_state,
                                                   is_prev_hidden_state,
                                                   query_only_attend_to_rest_key,
                                                   padding_mask)
 
-        return torch.concat([output, ray_obs[:, -query_length:]], dim=-1), hn, attn_weights_list
+        return torch.concat([output, ray_obs[:, -seq_q_len:]], dim=-1), hn, attn_weights_list
 
 
 class ModelRND(m.ModelRND):

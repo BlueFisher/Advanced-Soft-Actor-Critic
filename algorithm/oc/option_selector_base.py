@@ -753,7 +753,7 @@ class OptionSelectorBase(SAC_Base):
 
         state, next_attn_state, _ = self.model_rep(ep_indexes,
                                                    ep_obses_list, ep_pre_actions,
-                                                   query_length=1,
+                                                   seq_q_len=1,
                                                    #    hidden_state=ep_attn_states,
                                                    #    is_prev_hidden_state=False,
                                                    padding_mask=ep_padding_masks)
@@ -830,9 +830,9 @@ class OptionSelectorBase(SAC_Base):
         state, next_attn_state, _ = self.model_rep(key_indexes,
                                                    key_obses_list,
                                                    pre_action=None,
-                                                   query_length=1,
-                                                   hidden_state=key_attn_states,
-                                                   is_prev_hidden_state=False,
+                                                   seq_q_len=1,
+                                                   hidden_state=None,
+                                                   query_only_attend_to_rest_key=True,
                                                    padding_mask=key_padding_masks)
         # state: [batch, 1, state_size]
         # next_attn_state: [batch, 1, *attn_state_shape]
@@ -925,7 +925,7 @@ class OptionSelectorBase(SAC_Base):
             return l_states, next_f_rnn_states
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilation:
-            query_length = l_indexes.shape[1]
+            seq_q_len = l_indexes.shape[1]
 
             (key_indexes,
              key_padding_masks,
@@ -941,9 +941,8 @@ class OptionSelectorBase(SAC_Base):
             l_states, l_attn_states, _ = model_rep(l_indexes,
                                                    l_obses_list,
                                                    pre_action=None,
-                                                   query_length=query_length,
-                                                   hidden_state=key_seq_hidden_states,
-                                                   is_prev_hidden_state=True,
+                                                   seq_q_len=seq_q_len,
+                                                   hidden_state=None,
                                                    query_only_attend_to_rest_key=True,
                                                    padding_mask=l_padding_masks)
 
@@ -1721,7 +1720,9 @@ class OptionSelectorBase(SAC_Base):
                     *_, attn_weights_list = self.model_rep(torch.from_numpy(key_indexes).to(self.device),
                                                            [torch.from_numpy(o).to(self.device) for o in key_obses_list],
                                                            pre_action=None,
-                                                           query_length=key_indexes.shape[1])
+                                                           seq_q_len=ep_len,
+                                                           hidden_state=None,
+                                                           query_only_attend_to_rest_key=True)
 
                 else:
                     summary_name = 'attn_weight'
@@ -1729,7 +1730,7 @@ class OptionSelectorBase(SAC_Base):
                     *_, attn_weights_list = self.model_rep(torch.from_numpy(ep_indexes).to(self.device),
                                                            [torch.from_numpy(o).to(self.device) for o in ep_obses_list],
                                                            pre_action=torch.from_numpy(pre_l_actions).to(self.device),
-                                                           query_length=ep_indexes.shape[1])
+                                                           seq_q_len=ep_indexes.shape[1])
 
                 for i, attn_weight in enumerate(attn_weights_list):
                     image = plot_attn_weight(attn_weight[0].cpu().numpy())

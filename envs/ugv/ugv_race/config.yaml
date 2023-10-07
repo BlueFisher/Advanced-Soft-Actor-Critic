@@ -24,6 +24,8 @@ default:
 
     v_lambda: 1
 
+    discrete_dqn_like: true # Whether using policy or only Q network if discrete is in action spaces
+
     use_rnd: true
     rnd_n_sample: 50
 

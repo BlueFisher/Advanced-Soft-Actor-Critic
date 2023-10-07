@@ -348,7 +348,8 @@ class AgentManager:
 
         self['action'] = action
         self['d_action'] = action[..., :self.d_action_summed_size]
-        self['c_action'] = action[..., -self.c_action_size:]
+        self['c_action'] = action[..., self.d_action_summed_size:]
+
         self['prob'] = prob
         self['next_seq_hidden_state'] = next_seq_hidden_state
 
@@ -367,7 +368,7 @@ class AgentManager:
         if self.c_action_size:
             c_action = np.random.randn(len(self.agents), self.c_action_size)
             # c_action = np.ones((len(self.agents), self.c_action_size), dtype=np.float32)
-            action[:, -self.c_action_size:] = c_action
+            action[:, self.d_action_summed_size:] = c_action
 
         self['action'] = action
         self['d_action'] = d_action

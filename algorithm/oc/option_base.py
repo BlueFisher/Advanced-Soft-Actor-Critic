@@ -406,8 +406,8 @@ class OptionBase(SAC_Base):
                 next_n_terminations * min_next_n_max_vs  # [batch, n]
 
             if self.use_n_step_is:
-                n_c_actions = n_actions[..., -self.c_action_size:]
-                n_c_mu_probs = n_mu_probs[..., -self.c_action_size:]  # [batch, n, c_action_size]
+                n_c_actions = n_actions[..., self.d_action_summed_size:]
+                n_c_mu_probs = n_mu_probs[..., self.d_action_summed_size:]  # [batch, n, c_action_size]
                 n_c_pi_probs = squash_correction_prob(c_policy, torch.atanh(n_c_actions))
                 # [batch, n, c_action_size]
 
@@ -533,7 +533,7 @@ class OptionBase(SAC_Base):
 
         action = bn_actions[:, self.burn_in_step, ...]
         d_action = action[..., :self.d_action_summed_size]
-        c_action = action[..., -self.c_action_size:]
+        c_action = action[..., self.d_action_summed_size:]
 
         q_list = [q(state, c_action) for q in self.model_q_list]
         # ([batch, d_action_summed_size], [batch, 1])
@@ -797,7 +797,7 @@ class OptionBase(SAC_Base):
         state = bn_states[:, self.burn_in_step, ...]
         action = bn_actions[:, self.burn_in_step, ...]
         d_action = action[..., :self.d_action_summed_size]
-        c_action = action[..., -self.c_action_size:]
+        c_action = action[..., self.d_action_summed_size:]
 
         batch = state.shape[0]
 

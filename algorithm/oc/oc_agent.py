@@ -1,4 +1,3 @@
-from collections import defaultdict
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -467,7 +466,7 @@ class OC_AgentManager(AgentManager):
         self['option_index'] = option_index
         self['action'] = action
         self['d_action'] = action[..., :self.d_action_summed_size]
-        self['c_action'] = action[..., -self.c_action_size:]
+        self['c_action'] = action[..., self.d_action_summed_size:]
         self['prob'] = prob
         self['next_seq_hidden_state'] = next_seq_hidden_state
         self['next_low_seq_hidden_state'] = next_low_seq_hidden_state

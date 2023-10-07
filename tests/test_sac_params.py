@@ -1,6 +1,9 @@
 import importlib
 import sys
 import unittest
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent.parent))
 
 from algorithm.sac_base import SAC_Base
 from algorithm.utils.enums import *
@@ -91,7 +94,7 @@ class TestSeqEncoderModel(unittest.TestCase):
 
 def __gen_vanilla(test_from: int):
     param_dict_candidates = {
-        'd_action_sizes': [[2, 3, 4]],
+        'd_action_sizes': [[3, 3, 4]],
         'c_action_size': [4],
         'use_replay_buffer': [True, False],
         'use_priority': [True, False],
@@ -132,7 +135,7 @@ def __gen_vanilla(test_from: int):
 
 def __gen_seq_encoder(test_from: int):
     param_dict_candidates = {
-        'd_action_sizes': [[2, 3, 4]],
+        'd_action_sizes': [[3, 3, 4]],
         'c_action_size': [4],
         'use_replay_buffer': [True, False],
         'burn_in_step': [5],

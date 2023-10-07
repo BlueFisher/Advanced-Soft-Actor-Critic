@@ -21,7 +21,7 @@ class RayVisual:
                 ray[..., -1] = hit_fraction if has_hit else 1
         """
         if len(rays[0].shape) > 3:
-            rays = [ray[:, 0, ...] for ray in rays]
+            rays = [ray[:, -1, ...] for ray in rays]
         rays = [i.detach().cpu().numpy() if isinstance(i, torch.Tensor) else i for i in rays]
 
         batch_size = rays[0].shape[0]
