@@ -31,31 +31,28 @@ class LSTM(nn.LSTM):
 
 class MultiheadAttention(nn.Module):
     def __init__(self,
-                 hidden_dim: int,
-                 num_head: int,
-                 q_dim: Optional[int] = None,
-                 k_dim: Optional[int] = None,
-                 v_dim: Optional[int] = None,
+                 embed_dim: int,
+                 num_heads: int = 1,
                  use_rope: bool = False) -> None:
 
         super().__init__()
 
-        if hidden_dim % 2 != 0:
-            hidden_dim = 2 * (hidden_dim // 2)
+        self.embed_dim = embed_dim
 
-        self.hidden_dim = hidden_dim
-        self.q_dim = q_dim if q_dim is not None else hidden_dim
-        self.k_dim = k_dim if k_dim is not None else hidden_dim
-        self.v_dim = v_dim if v_dim is not None else hidden_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
+
         self.use_rope = use_rope
 
-        self.rope = RotaryPositionalEncoding(hidden_dim)
+        if use_rope:
+            self.rope = RotaryPositionalEncoding(embed_dim)
 
-        self.q_proj = nn.Linear(self.q_dim, hidden_dim)
-        self.k_proj = nn.Linear(self.k_dim, hidden_dim)
-        self.v_proj = nn.Linear(self.v_dim, hidden_dim)
+        self.q_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim), nn.ReLU())
+        self.k_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim), nn.ReLU())
+        self.v_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim), nn.ReLU())
 
-        self.out_proj = nn.Linear(hidden_dim, self.q_dim)
+        self.out_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim), nn.ReLU())
 
     def forward(self,
                 query: torch.Tensor,
@@ -63,18 +60,22 @@ class MultiheadAttention(nn.Module):
                 value: torch.Tensor,
                 query_index: Optional[torch.Tensor] = None,
                 key_index: Optional[torch.Tensor] = None,
+                key_padding_mask: Optional[torch.Tensor] = None,
                 attn_mask: Optional[torch.Tensor] = None):
         """
         Args:
-            query: [batch, seq_q_len, q_dim]
-            key: [batch, seq_k_len, k_dim]
-            value: [batch, seq_k_len, v_dim]
+            query: [batch, seq_q_len, embed_dim]
+            key: [batch, seq_k_len, embed_dim]
+            value: [batch, seq_k_len, embed_dim]
             query_index: [batch, seq_q_len]
             key_index: [batch, seq_k_len]
-            attn_mask: [batch, seq_q_len, seq_v_len] OR [seq_q_len, seq_v_len]
+            key_padding_mask: [batch, seq_k_len]
+                A `True` value indicates that the corresponding key value will be ignored 
+                for the purpose of attention.
+            attn_mask: [batch, seq_q_len, seq_k_len] OR [seq_q_len, seq_k_len]
 
         Returns:
-            attn_output: [batch, seq_q_len, q_dim]
+            attn_output: [batch, seq_q_len, embed_dim]
             attn_output_weights: [batch, seq_q_len, seq_k_len]
         """
 
@@ -82,32 +83,59 @@ class MultiheadAttention(nn.Module):
         query = query.reshape(-1, *query.shape[-2:])
         key = key.reshape(-1, *key.shape[-2:])
         value = value.reshape(-1, *value.shape[-2:])
+        if key_padding_mask is not None:
+            key_padding_mask = key_padding_mask.reshape(-1, key_padding_mask.shape[-1])
+        if attn_mask is not None and len(attn_mask.shape) >= 3:
+            attn_mask = attn_mask.reshape(-1, *attn_mask.shape[-2:])
 
-        q = self.q_proj(query)  # [batch, seq_q_len, hidden_dim]
-        k = self.k_proj(key)  # [batch, seq_k_len, hidden_dim]
-        v = self.v_proj(value)  # [batch, seq_k_len, hidden_dim]
+        # bsz = query.shape[0]
+
+        q = self.q_proj(query)  # [bsz, seq_q_len, embed_dim]
+        k = self.k_proj(key)  # [bsz, seq_k_len, embed_dim]
+        v = self.v_proj(value)  # [bsz, seq_k_len, embed_dim]
 
         if self.use_rope:
             q, k = self.rope(query_index, key_index, q, k)
 
-        q_scaled = q / math.sqrt(self.hidden_dim)  # [batch, seq_q_len, hidden_dim]
+        if self.num_heads > 1:
+            q = torch.cat(q.chunk(self.num_heads, dim=-1), dim=0)  # [bsz * num_heads, seq_q_len, head_dim]
+            k = torch.cat(k.chunk(self.num_heads, dim=-1), dim=0)  # [bsz * num_heads, seq_k_len, head_dim]
+            v = torch.cat(v.chunk(self.num_heads, dim=-1), dim=0)  # [bsz * num_heads, seq_k_len, head_dim]
+
+        q_scaled = q / math.sqrt(self.head_dim)  # [bsz * num_heads, seq_q_len, head_dim]
+
+        if key_padding_mask is not None:
+            key_padding_mask = key_padding_mask.unsqueeze(1)  # [bsz, 1, seq_k_len]
+            if attn_mask is None:
+                attn_mask = key_padding_mask.repeat_interleave(q.shape[1], dim=1)  # [bsz, seq_q_len, seq_k_len]
+            else:
+                attn_mask = torch.logical_or(attn_mask, key_padding_mask)  # [bsz, seq_q_len, seq_k_len]
 
         if attn_mask is not None:
-            # [batch, seq_q_len, seq_v_len] OR [seq_q_len, seq_v_len]
+            # [bsz, seq_q_len, seq_k_len] OR [seq_q_len, seq_k_len]
             attn_mask = torch.zeros_like(attn_mask, dtype=query.dtype,
                                          device=query.device).masked_fill_(attn_mask, float("-inf"))
 
-            # [batch, seq_q_len, seq_v_len]
+            if len(attn_mask.shape) == 3:
+                attn_mask = attn_mask.repeat_interleave(self.num_heads, dim=0)
+
+            # [bsz * num_heads, seq_q_len, seq_k_len]
             attn_output_weights = torch.baddbmm(attn_mask, q_scaled, k.transpose(-2, -1))
         else:
-            # [batch, seq_q_len, seq_v_len]
+            # [bsz * num_heads, seq_q_len, seq_k_len]
             attn_output_weights = torch.bmm(q_scaled, k.transpose(-2, -1))
 
-        attn_output_weights = torch.softmax(attn_output_weights, dim=-1)  # [batch, seq_q_len, seq_v_len]
+        attn_output_weights = torch.softmax(attn_output_weights, dim=-1)  # [bsz * num_heads, seq_q_len, seq_k_len]
 
-        attn_output = torch.bmm(attn_output_weights, v)  # [batch, seq_q_len, hidden_dim]
+        attn_output = torch.bmm(attn_output_weights, v)  # [bsz * num_heads, seq_q_len, head_dim]
 
-        attn_output = self.out_proj(attn_output)  # [batch, seq_q_len, q_dim]
+        if self.num_heads > 1:
+            attn_output_weights = torch.stack(attn_output_weights.chunk(self.num_heads, dim=0), dim=1)  # [bsz, num_heads, seq_q_len, seq_k_len]
+            attn_output_weights = attn_output_weights.mean(1)  # [bsz, seq_q_len, seq_k_len]
+
+            attn_output = torch.cat(attn_output.chunk(self.num_heads, dim=0), dim=-1)  # [bsz, seq_q_len, embed_dim]
+
+        attn_output = self.out_proj(attn_output)  # [bsz, seq_q_len, embed_dim]
 
         attn_output = attn_output.reshape(*batch, *attn_output.shape[1:])
         attn_output_weights = attn_output_weights.reshape(*batch, *attn_output_weights.shape[1:])
@@ -144,117 +172,111 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
         if self.use_layer_norm:
             self.layer_norm = nn.LayerNorm(self.embed_dim)
 
-        self.attn = MultiheadAttention(hidden_dim=embed_dim,
-                                       num_head=num_heads,
-                                       q_dim=embed_dim,
-                                       k_dim=embed_dim,
-                                       v_dim=embed_dim,
+        self.attn = MultiheadAttention(embed_dim=embed_dim,
+                                       num_heads=num_heads,
                                        use_rope=use_pe)
 
     def get_attn_mask(self,
-                      key_length: int,
-                      query_length_only_attend_to_rest_key: Optional[int] = None,
+                      seq_k_len: int,
+                      seq_q_len_only_attend_to_rest_key: Optional[int] = None,
                       key_index: Optional[torch.Tensor] = None,
                       key_padding_mask: Optional[torch.Tensor] = None,
                       device='cpu') -> torch.Tensor:
         """
         Args:
-            key_length: int
-            query_length_only_attend_to_rest_key: None | int
+            seq_k_len: int
+            seq_q_len_only_attend_to_rest_key: None | int
                 Whether the query only need to attend to the key-query and itself (useful in OC)
-            key_index (torch.int32): None | [batch, key_length]
-                Needed only when query_length_only_attend_to_rest_key is not None
-            key_padding_mask: [batch, key_length]
+            key_index (torch.int32): None | [batch, seq_k_len]
+                Needed only when seq_q_len_only_attend_to_rest_key is not None
+            key_padding_mask: [batch, seq_k_len]
                 A `True` value indicates that the corresponding key value will be ignored 
                 for the purpose of attention.
 
         Returns:                     
-            [key_length, key_length] OR [batch * num_heads, key_length, key_length]
+            [seq_k_len, seq_k_len] OR [batch, seq_k_len, seq_k_len]
         """
 
-        attn_mask = torch.triu(torch.ones(key_length, key_length, dtype=bool, device=device),
+        attn_mask = torch.triu(torch.ones(seq_k_len, seq_k_len, dtype=bool, device=device),
                                diagonal=1)
-        # [key_length, key_length]
+        # [seq_k_len, seq_k_len]
         # Each element only attends to previous element and itself
 
-        if query_length_only_attend_to_rest_key is not None:
-            query_length = query_length_only_attend_to_rest_key
+        if seq_q_len_only_attend_to_rest_key is not None:
+            seq_q_len = seq_q_len_only_attend_to_rest_key
 
-            _attn_mask = ~torch.eye(query_length, dtype=bool, device=device)  # [query_length, query_length]
-            attn_mask[-query_length:, -query_length:] = torch.logical_or(
-                attn_mask[-query_length:, -query_length:],
+            _attn_mask = ~torch.eye(seq_q_len, dtype=bool, device=device)  # [seq_q_len, seq_q_len]
+            attn_mask[-seq_q_len:, -seq_q_len:] = torch.logical_or(
+                attn_mask[-seq_q_len:, -seq_q_len:],
                 _attn_mask
-            )  # [key_length, key_length]
+            )  # [seq_k_len, seq_k_len]
 
             if key_index is not None:
                 batch = key_index.shape[0]
 
-                attn_mask = attn_mask.repeat(batch, 1, 1)  # [batch, key_length, key_length]
+                attn_mask = attn_mask.repeat(batch, 1, 1)  # [batch, seq_k_len, seq_k_len]
 
-                _query_index = key_index[:, -query_length:]  # [batch, query_length]
-                _rest_key_index = key_index[:, :key_length - query_length]  # [batch, key_length - query_length]
+                _query_index = key_index[:, -seq_q_len:]  # [batch, seq_q_len]
+                _rest_key_index = key_index[:, :seq_k_len - seq_q_len]  # [batch, seq_k_len - seq_q_len]
 
-                _query_index = _query_index.unsqueeze(-1).repeat_interleave(key_length - query_length, dim=-1)  # [batch, query_length, key_length - query_length]
-                _rest_key_index = _rest_key_index.unsqueeze(1).repeat_interleave(query_length, dim=-2)  # [batch, query_length, key_length - query_length]
+                _query_index = _query_index.unsqueeze(-1).repeat_interleave(seq_k_len - seq_q_len, dim=-1)  # [batch, seq_q_len, seq_k_len - seq_q_len]
+                _rest_key_index = _rest_key_index.unsqueeze(1).repeat_interleave(seq_q_len, dim=-2)  # [batch, seq_q_len, seq_k_len - seq_q_len]
 
-                _attn_mask = ~(_query_index > _rest_key_index)  # [batch, query_length, key_length - query_length]
+                _attn_mask = ~(_query_index > _rest_key_index)  # [batch, seq_q_len, seq_k_len - seq_q_len]
 
-                attn_mask[:, -query_length:, :key_length - query_length] = torch.logical_or(
-                    attn_mask[:, -query_length:, :key_length - query_length],
+                attn_mask[:, -seq_q_len:, :seq_k_len - seq_q_len] = torch.logical_or(
+                    attn_mask[:, -seq_q_len:, :seq_k_len - seq_q_len],
                     _attn_mask
-                )  # [batch, key_length, key_length]
+                )  # [batch, seq_k_len, seq_k_len]
 
         if key_padding_mask is not None:
             batch = key_padding_mask.shape[0]
 
             if len(attn_mask.shape) < 3:
-                attn_mask = attn_mask.repeat(batch, 1, 1)  # [batch, key_length, key_length]
+                attn_mask = attn_mask.repeat(batch, 1, 1)  # [batch, seq_k_len, seq_k_len]
 
-            key_padding_mask = key_padding_mask.unsqueeze(1)  # [batch, 1, key_length]
-            attn_mask = torch.logical_or(attn_mask, key_padding_mask)  # [batch, key_length, key_length]
+            key_padding_mask = key_padding_mask.unsqueeze(1)  # [batch, 1, seq_k_len]
+            attn_mask = torch.logical_or(attn_mask, key_padding_mask)  # [batch, seq_k_len, seq_k_len]
 
             # Preventing NAN, each element should attend to it self.
-            eye = ~torch.eye(key_length, dtype=bool, device=device)  # [key_length, key_length]
-            eye = eye.repeat(batch, 1, 1)  # [batch, key_length, key_length]
+            eye = ~torch.eye(seq_k_len, dtype=bool, device=device)  # [seq_k_len, seq_k_len]
+            eye = eye.repeat(batch, 1, 1)  # [batch, seq_k_len, seq_k_len]
             attn_mask = torch.logical_and(attn_mask, eye)
-
-        if len(attn_mask.shape) == 3:
-            attn_mask = attn_mask.repeat_interleave(self.num_heads, dim=0)  # [batch * num_heads, key_length, key_length]
 
         return attn_mask
 
     def forward(self,
                 key: torch.Tensor,
-                query_length: int,
+                seq_q_len: int,
                 cut_query: bool = True,
                 query_only_attend_to_rest_key: bool = False,
                 key_index: Optional[torch.Tensor] = None,
                 key_padding_mask: Optional[torch.Tensor] = None):
         """
         Args:
-            key: [batch, key_length, embed_dim]
-            query_length: int
+            key: [batch, seq_k_len, embed_dim]
+            seq_q_len: int
             cut_query: Whether to cut the key into query, or only act on `attn_mask`
             query_only_attend_to_rest_key: bool, Whether the query only need to attend to the key-query and itself
             key_index (torch.int32): None | [batch, key_index_length]
-                Needed only when query_length_only_attend_to_rest_key is not None
-                `key_index_length` could be shorter than key_length
+                Needed only when seq_q_len_only_attend_to_rest_key is not None
+                `key_index_length` could be shorter than seq_k_len
             key_padding_mask: [batch, key_padding_mask_length]
                 A `True` value indicates that the corresponding key value will be ignored 
                 for the purpose of attention.
-                `key_padding_mask_length` could be shorter than key_length.
+                `key_padding_mask_length` could be shorter than seq_k_len.
 
         Returns:
-            output: [batch, query_length, embed_dim]  if cut_query
-                    [batch, key_length, embed_dim]    if not cut_query
-            attn_weights: [batch, query_length, key_length]  if cut_query
-                          [batch, key_length, key_length]    if not cut_query
+            output: [batch, seq_q_len, embed_dim]  if cut_query
+                    [batch, seq_k_len, embed_dim]    if not cut_query
+            attn_weights: [batch, seq_q_len, seq_k_len]  if cut_query
+                          [batch, seq_k_len, seq_k_len]    if not cut_query
         """
-        key_length = key.shape[1]
+        seq_k_len = key.shape[1]
 
         ori_key = key
         if cut_query:
-            ori_query = ori_key[:, -query_length:]
+            ori_query = ori_key[:, -seq_q_len:]
         else:
             ori_query = ori_key
 
@@ -263,10 +285,10 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
 
         if key_index is not None:
             key_index_length = key_index.shape[1]
-            assert key_index_length <= key_length
+            assert key_index_length <= seq_k_len
 
             key_index = torch.concat([
-                -torch.ones((key_index.shape[0], key_length - key_index_length),
+                -torch.ones((key_index.shape[0], seq_k_len - key_index_length),
                             dtype=key_index.dtype,
                             device=key_index.device),
                 key_index
@@ -275,27 +297,27 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
 
         if key_padding_mask is not None:
             key_padding_mask_length = key_padding_mask.shape[1]
-            assert key_padding_mask_length <= key_length
+            assert key_padding_mask_length <= seq_k_len
 
             key_padding_mask = torch.concat([
-                key_padding_mask[:, :1].repeat(1, key_length - key_padding_mask_length),
+                key_padding_mask[:, :1].repeat(1, seq_k_len - key_padding_mask_length),
                 key_padding_mask
             ], dim=1)
 
-        attn_mask = self.get_attn_mask(key_length,
-                                       query_length_only_attend_to_rest_key=query_length if query_only_attend_to_rest_key else None,
+        attn_mask = self.get_attn_mask(seq_k_len,
+                                       seq_q_len_only_attend_to_rest_key=seq_q_len if query_only_attend_to_rest_key else None,
                                        key_index=key_index,
                                        key_padding_mask=key_padding_mask,
                                        device=key.device)
 
         if cut_query:
-            query = key[:, -query_length:]
+            query = key[:, -seq_q_len:]
             if query_index is not None:
-                query_index = query_index[:, -query_length:]
+                query_index = query_index[:, -seq_q_len:]
             if len(attn_mask.shape) == 2:
-                attn_mask = attn_mask[-query_length:]
+                attn_mask = attn_mask[-seq_q_len:]
             else:
-                attn_mask = attn_mask[:, -query_length:]
+                attn_mask = attn_mask[:, -seq_q_len:]
         else:
             query = key
 
@@ -306,8 +328,6 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
 
         if key_padding_mask is not None:
             output = output * (~key_padding_mask[:, -output.shape[1]:]).to(output.dtype).unsqueeze(-1)
-
-        output = torch.relu(output)
 
         if self.use_residual:
             output = output + ori_query
@@ -343,7 +363,7 @@ class EpisodeMultiheadAttention(nn.Module):
 
     def forward(self,
                 key: torch.Tensor,
-                query_length: int = 1,
+                seq_q_len: int = 1,
                 hidden_state: Optional[torch.Tensor] = None,
                 is_prev_hidden_state: bool = False,
 
@@ -352,22 +372,22 @@ class EpisodeMultiheadAttention(nn.Module):
                 key_padding_mask: Optional[torch.Tensor] = None):
         """
         Args:
-            key: [batch, key_length, embed_dim]
-            query_length: int
+            key: [batch, seq_k_len, embed_dim]
+            seq_q_len: int
             hidden_state: [batch, hidden_state_length, embed_dim]
             is_prev_hidden_state: bool
 
             query_only_attend_to_rest_key: bool
-            key_index: [batch, key_length]
-            key_padding_mask: [batch, key_length]
+            key_index: [batch, seq_k_len]
+            key_padding_mask: [batch, seq_k_len]
 
         Returns:
-            encoded_query: [batch, query_length, embed_dim]
-            next_hidden_state: [batch, query_length, embed_dim * num_layers]
-            attn_weights_list: List[[batch, query_length, key_length_i], ...]
+            encoded_query: [batch, seq_q_len, embed_dim]
+            next_hidden_state: [batch, seq_q_len, embed_dim * num_layers]
+            attn_weights_list: List[[batch, seq_q_len, seq_k_len_i], ...]
         """
-        key_length = key.shape[1]
-        assert query_length <= key_length
+        seq_k_len = key.shape[1]
+        assert seq_q_len <= seq_k_len
 
         next_hidden_state_list = []
         attn_weights_list = []
@@ -375,17 +395,17 @@ class EpisodeMultiheadAttention(nn.Module):
         if hidden_state is None:
             _k = key
             for i, attn in enumerate(self._attn_list[:-1]):
-                output, attn_weight = attn(_k, query_length,
+                output, attn_weight = attn(_k, seq_q_len,
                                            cut_query=False,
                                            query_only_attend_to_rest_key=query_only_attend_to_rest_key,
                                            key_index=key_index,
                                            key_padding_mask=key_padding_mask)
                 _k = output
-                _q = _k[:, -query_length:]
+                _q = _k[:, -seq_q_len:]
                 next_hidden_state_list.append(_q)
-                attn_weights_list.append(attn_weight[:, -query_length:])
+                attn_weights_list.append(attn_weight[:, -seq_q_len:])
 
-            output, attn_weight = self._attn_list[-1](_k, query_length,
+            output, attn_weight = self._attn_list[-1](_k, seq_q_len,
                                                       cut_query=True,
                                                       query_only_attend_to_rest_key=query_only_attend_to_rest_key,
                                                       key_index=key_index,
@@ -394,7 +414,7 @@ class EpisodeMultiheadAttention(nn.Module):
             _q = output
 
         elif not is_prev_hidden_state:
-            output, attn_weight = self._attn_list[0](key, query_length,
+            output, attn_weight = self._attn_list[0](key, seq_q_len,
                                                      query_only_attend_to_rest_key=query_only_attend_to_rest_key,
                                                      key_index=key_index,
                                                      key_padding_mask=key_padding_mask)
@@ -408,7 +428,7 @@ class EpisodeMultiheadAttention(nn.Module):
 
                 _k = torch.concat([hidden_state_list[i], output], dim=1)
 
-                output, attn_weight = attn(_k, query_length,
+                output, attn_weight = attn(_k, seq_q_len,
                                            query_only_attend_to_rest_key=query_only_attend_to_rest_key,
                                            key_index=key_index,
                                            key_padding_mask=key_padding_mask)
@@ -417,36 +437,36 @@ class EpisodeMultiheadAttention(nn.Module):
             _q = output
 
         elif is_prev_hidden_state:
-            output, attn_weight = self._attn_list[0](key, query_length,
+            output, attn_weight = self._attn_list[0](key, seq_q_len,
                                                      cut_query=False,
                                                      query_only_attend_to_rest_key=query_only_attend_to_rest_key,
                                                      key_index=key_index,
                                                      key_padding_mask=key_padding_mask)
-            next_hidden_state_list.append(output[:, -query_length:])
-            attn_weights_list.append(attn_weight[:, -query_length:])
+            next_hidden_state_list.append(output[:, -seq_q_len:])
+            attn_weights_list.append(attn_weight[:, -seq_q_len:])
 
             if self.num_layers > 1:
                 hidden_state_list = hidden_state.chunk(self.num_layers - 1, dim=-1)
             else:
-                output = output[:, -query_length:]
+                output = output[:, -seq_q_len:]
 
             for i, attn in enumerate(self._attn_list[1:-1]):
-                _k = output[:, -key_length:]
+                _k = output[:, -seq_k_len:]
                 _k = torch.concat([hidden_state_list[i], _k], dim=1)
 
-                output, attn_weight = attn(_k, query_length,
+                output, attn_weight = attn(_k, seq_q_len,
                                            cut_query=False,
                                            query_only_attend_to_rest_key=query_only_attend_to_rest_key,
                                            key_index=key_index,
                                            key_padding_mask=key_padding_mask)
-                next_hidden_state_list.append(output[:, -query_length:])
-                attn_weights_list.append(attn_weight[:, -query_length:])
+                next_hidden_state_list.append(output[:, -seq_q_len:])
+                attn_weights_list.append(attn_weight[:, -seq_q_len:])
 
             if self.num_layers > 1:
-                _k = output[:, -key_length:]
+                _k = output[:, -seq_k_len:]
                 _k = torch.concat([hidden_state_list[-1], _k], dim=1)
 
-                output, attn_weight = self._attn_list[-1](_k, query_length,
+                output, attn_weight = self._attn_list[-1](_k, seq_q_len,
                                                           cut_query=True,
                                                           query_only_attend_to_rest_key=query_only_attend_to_rest_key,
                                                           key_index=key_index,
@@ -458,7 +478,7 @@ class EpisodeMultiheadAttention(nn.Module):
         if self.num_layers > 1:
             return _q, torch.concat(next_hidden_state_list, dim=-1), attn_weights_list
         else:
-            return _q, torch.zeros(key.shape[0], query_length, 1), attn_weights_list
+            return _q, torch.zeros(key.shape[0], seq_q_len, 1), attn_weights_list
 
 
 class AbsolutePositionalEncoding(nn.Module):

@@ -17,8 +17,8 @@ class ModelRep(m.ModelBaseSimpleRep):
         assert self.obs_shapes[2] == (2,)  # vector
 
         self.ray_random = ray_random
-        if self.train_mode:
-            self.ray_random = 150
+        # if self.train_mode:
+        #     self.ray_random = 150
         if blur != 0:
             self.blurrer = m.Transform(T.GaussianBlur(blur, sigma=blur))
         else:

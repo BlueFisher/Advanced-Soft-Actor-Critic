@@ -5,7 +5,7 @@ import numpy as np
 def plot_attn_weight(attn_weight):
     """
     Args:
-        attn_weight: [query_length, key_length]
+        attn_weight: [seq_q_len, seq_k_len]
     """
     fig, ax = plt.subplots(figsize=(1, 1))
     attn_weight = attn_weight / attn_weight.max(axis=1, keepdims=True)
@@ -25,7 +25,7 @@ def plot_episode_option_indexes(option_indexes, option_changed_indexes, num_opti
     # option_changed_indexes = np.unique(option_changed_indexes)
     # option_indexes = option_indexes[:, option_changed_indexes]
 
-    fig, ax = plt.subplots(figsize=(10, 1))
+    fig, ax = plt.subplots(figsize=(6, 3))
 
     im = ax.imshow(option_indexes / num_options)
     # ax.set_xticks(np.arange(option_indexes.shape[-1]), option_changed_indexes)

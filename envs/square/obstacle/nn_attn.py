@@ -17,7 +17,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         self.pos = m.AbsolutePositionalEncoding(64)
 
     def forward(self, index, obs_list, pre_action=None,
-                query_length=1,
+                seq_q_len=1,
                 hidden_state=None,
                 is_prev_hidden_state=False,
                 query_only_attend_to_rest_key=False,
@@ -32,7 +32,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         x = x + pe
 
         output, hn, attn_weights_list = self.attn(x,
-                                                  query_length,
+                                                  seq_q_len,
                                                   hidden_state,
                                                   is_prev_hidden_state,
                                                   query_only_attend_to_rest_key,

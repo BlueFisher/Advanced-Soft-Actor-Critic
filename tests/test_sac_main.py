@@ -1,6 +1,9 @@
 import argparse
+import sys
 import unittest
 from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent.parent))
 
 from algorithm.sac_main import Main
 

@@ -17,8 +17,8 @@ class ModelRep(m.ModelBaseRNNRep):
         assert self.obs_shapes[2] == (6,)  # vector
 
         self.ray_random = ray_random
-        if self.train_mode:
-            self.ray_random = 150
+        # if self.train_mode:
+        #     self.ray_random = 150
         self.need_speed = need_speed
         if blur != 0:
             self.blurrer = m.Transform(T.GaussianBlur(blur, sigma=blur))
@@ -38,7 +38,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
         self.vis_ray_dense = m.LinearLayers(64, dense_n=64, dense_depth=1)
 
-        self.rnn = m.GRU(64 + self.obs_shapes[2][0] + sum(self.d_action_sizes), 64, 1)
+        self.rnn = m.GRU(64 + self.obs_shapes[2][0] + sum(self.d_action_sizes) + self.c_action_size, 64, 2)
 
         cropper = torch.nn.Sequential(
             T.RandomCrop(size=(50, 50)),

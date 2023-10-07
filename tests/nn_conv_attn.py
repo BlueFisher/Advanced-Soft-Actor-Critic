@@ -17,15 +17,19 @@ class ModelRep(m.ModelBaseAttentionRep):
         else:
             embed_dim = self.conv.output_size + sum(self.d_action_sizes) + self.c_action_size
 
-        self.attn = m.EpisodeMultiheadAttention(embed_dim, 1, num_layers=1)
+        self.attn = m.EpisodeMultiheadAttention(embed_dim, 1,
+                                                num_layers=1,
+                                                use_residual=True,
+                                                use_gated=False,
+                                                use_layer_norm=False)
 
         self.dense = nn.Sequential(
             nn.Linear(self.obs_shapes[0][0] - EXTRA_SIZE + embed_dim, 8),
             nn.Tanh()
         )
 
-    def forward(self, index, obs_list, pre_action,
-                query_length=1,
+    def forward(self, index, obs_list, pre_action=None,
+                seq_q_len=1,
                 hidden_state=None,
                 is_prev_hidden_state=False,
                 query_only_attend_to_rest_key=False,
@@ -37,20 +41,24 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         if self.use_dilation:
             state, hn, attn_weights_list = self.attn(vis,
-                                                     query_length,
-                                                     hidden_state,
-                                                     is_prev_hidden_state,
-                                                     query_only_attend_to_rest_key,
-                                                     padding_mask)
+                                                     seq_q_len=seq_q_len,
+                                                     hidden_state=hidden_state,
+                                                     is_prev_hidden_state=is_prev_hidden_state,
+
+                                                     query_only_attend_to_rest_key=query_only_attend_to_rest_key,
+                                                     key_index=index,
+                                                     key_padding_mask=padding_mask)
         else:
             state, hn, attn_weights_list = self.attn(torch.cat([vis, pre_action], dim=-1),
-                                                     query_length,
-                                                     hidden_state,
-                                                     is_prev_hidden_state,
-                                                     query_only_attend_to_rest_key,
-                                                     padding_mask)
+                                                     seq_q_len=seq_q_len,
+                                                     hidden_state=hidden_state,
+                                                     is_prev_hidden_state=is_prev_hidden_state,
 
-        state = self.dense(torch.cat([obs_vec[:, -query_length:], state], dim=-1))
+                                                     query_only_attend_to_rest_key=query_only_attend_to_rest_key,
+                                                     key_index=index,
+                                                     key_padding_mask=padding_mask)
+
+        state = self.dense(torch.cat([obs_vec[:, -seq_q_len:], state], dim=-1))
 
         return state, hn, attn_weights_list
 
@@ -62,7 +70,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         return vis_encoder
 
     def get_state_from_encoders(self, index, obs_list, encoders, pre_action,
-                                query_length=1,
+                                seq_q_len=1,
                                 hidden_state=None,
                                 is_prev_hidden_state=False,
                                 query_only_attend_to_rest_key=False,
@@ -74,14 +82,14 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         if self.use_dilation:
             state, *_ = self.attn(vis_encoder,
-                                  query_length,
+                                  seq_q_len,
                                   hidden_state,
                                   is_prev_hidden_state,
                                   query_only_attend_to_rest_key,
                                   padding_mask)
         else:
             state, *_ = self.attn(torch.cat([vis_encoder, pre_action], dim=-1),
-                                  query_length,
+                                  seq_q_len,
                                   hidden_state,
                                   is_prev_hidden_state,
                                   query_only_attend_to_rest_key,

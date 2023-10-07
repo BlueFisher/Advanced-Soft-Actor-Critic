@@ -26,6 +26,8 @@ class ImageVisual:
         images = [i.detach().cpu().numpy() if isinstance(i, torch.Tensor) else i for i in images]
 
         batch_size = images[0].shape[0]
+        if batch_size >= 5:
+            return
 
         fig_size = len(images)
 

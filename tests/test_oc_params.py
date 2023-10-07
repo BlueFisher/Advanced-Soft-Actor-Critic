@@ -1,6 +1,9 @@
 import importlib
 import sys
 import unittest
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent.parent))
 
 from algorithm.oc.option_selector_base import OptionSelectorBase
 from algorithm.utils.enums import *
@@ -104,12 +107,15 @@ class TestOCSeqEncoderModel(unittest.TestCase):
 
 def __gen_vanilla(test_from: int):
     param_dict_candidates = {
-        'd_action_sizes': [[2, 3, 4]],
+        'd_action_sizes': [[3, 3, 4]],
         'c_action_size': [4],
         'use_replay_buffer': [True, False],
         'use_priority': [True, False],
         'n_step': [3],
         'discrete_dqn_like': [True, False],
+        'siamese': [None, 'ATC', 'BYOL'],
+        'siamese_use_q': [False, True],
+        'siamese_use_adaptive': [False, True],
         'use_rnd': [True, False],
         'action_noise': [None, [0.1, 0.1]]
     }
@@ -119,6 +125,10 @@ def __gen_vanilla(test_from: int):
     for param_dict in possible_param_dicts:
         if not param_dict['d_action_sizes'] and not param_dict['c_action_size']:
             continue
+
+        if not param_dict['siamese']:
+            if param_dict['siamese_use_q'] or param_dict['siamese_use_adaptive']:
+                continue
 
         if i < test_from:
             i += 1
@@ -141,7 +151,7 @@ def __gen_seq_encoder(test_from: int):
         'use_dilation': [True, False],
         'option_burn_in_step': [-1, 2],
 
-        'd_action_sizes': [[2, 3, 4]],
+        'd_action_sizes': [[3, 3, 4]],
         'c_action_size': [4],
         'use_replay_buffer': [True, False],
         'burn_in_step': [5],

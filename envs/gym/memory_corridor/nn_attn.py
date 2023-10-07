@@ -22,7 +22,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         self.mlp = m.LinearLayers(embed_size, output_size=embed_size)
 
     def forward(self, index, obs_list, pre_action=None,
-                query_length=1,
+                seq_q_len=1,
                 hidden_state=None,
                 is_prev_hidden_state=False,
                 query_only_attend_to_rest_key=False,
@@ -31,7 +31,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         vec_obs = vec_obs.reshape(*vec_obs.shape[:-3], 4 * 3 * 4)
 
         output, hn, attn_weights_list = self.attn(vec_obs,
-                                                  query_length=query_length,
+                                                  seq_q_len=seq_q_len,
                                                   hidden_state=hidden_state,
                                                   is_prev_hidden_state=is_prev_hidden_state,
 

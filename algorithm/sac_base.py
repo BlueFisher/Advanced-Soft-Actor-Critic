@@ -418,7 +418,7 @@ class SAC_Base:
             self.target_d_alpha = self.target_d_alpha * (-torch.log(1 / d_action_sizes))
 
         if self.c_action_size:
-            self.target_c_alpha = self.target_c_alpha * torch.tensor(-self.c_action_size,
+            self.target_c_alpha = self.target_c_alpha * torch.tensor(self.d_action_summed_size,
                                                                      dtype=torch.float32,
                                                                      device=self.device)
 
@@ -827,7 +827,7 @@ class SAC_Base:
             prob[:, :self.d_action_summed_size] = d_policy.probs  # [batch, d_action_summed_size]
         if self.c_action_size:
             c_prob = squash_correction_prob(c_policy, torch.atanh(c_action))  # [batch, c_action_size]
-            prob[:, -self.c_action_size:] = c_prob  # [batch, c_action_size]
+            prob[:, self.d_action_summed_size:] = c_prob  # [batch, c_action_size]
 
         return torch.cat([d_action, c_action], dim=-1), prob
 
@@ -919,7 +919,7 @@ class SAC_Base:
 
         state, next_attn_state, _ = self.model_rep(ep_indexes,
                                                    ep_obses_list, ep_pre_actions,
-                                                   query_length=1,
+                                                   seq_q_len=1,
                                                    hidden_state=ep_attn_states,
                                                    is_prev_hidden_state=False,
                                                    padding_mask=ep_padding_masks)
@@ -1014,7 +1014,7 @@ class SAC_Base:
             l_states, l_attn_states, _ = model_rep(l_indexes,
                                                    l_obses_list,
                                                    l_pre_actions,
-                                                   query_length=l_indexes.shape[1],
+                                                   seq_q_len=l_indexes.shape[1],
                                                    hidden_state=f_seq_hidden_states,
                                                    is_prev_hidden_state=True,
                                                    padding_mask=l_padding_masks)
@@ -1102,10 +1102,10 @@ class SAC_Base:
             probs[..., :self.d_action_summed_size] = d_policy.probs  # [batch, l, d_action_summed_size]
 
         if self.c_action_size:
-            l_selected_c_actions = l_actions[..., -self.c_action_size:]
+            l_selected_c_actions = l_actions[..., self.d_action_summed_size:]
             c_policy_prob = squash_correction_prob(c_policy, torch.atanh(l_selected_c_actions))
             # [batch, l, c_action_size]
-            probs[..., -self.c_action_size:] = c_policy_prob  # [batch, l, c_action_size]
+            probs[..., self.d_action_summed_size:] = c_policy_prob  # [batch, l, c_action_size]
 
         return probs  # [batch, l, action_size]
 
@@ -1196,8 +1196,8 @@ class SAC_Base:
 
             # \prod{c_i}, i \in [s, t-1]
             c = torch.minimum(n_step_is, self.v_c)
-            c = torch.cat([torch.ones((n_step_is.shape[0], 1), device=self.device), c[..., :-1]], dim=-1)
-            c = torch.cumprod(c, dim=1)
+            c = torch.cat([torch.ones((n_step_is.shape[0], 1), device=self.device), c[..., :-1]], dim=-1)  # [batch, n]
+            c = torch.cumprod(c, dim=1)  # [batch, n]
 
             # \prod{c_i} * \rho_t * td_error
             td_error = c * rho * td_error
@@ -1349,8 +1349,8 @@ class SAC_Base:
             # next_v = scale_inverse_h(next_v)
 
             if self.use_n_step_is:
-                n_c_actions = n_actions[..., -self.c_action_size:]
-                n_c_mu_probs = n_mu_probs[..., -self.c_action_size:]  # [batch, n, c_action_size]
+                n_c_actions = n_actions[..., self.d_action_summed_size:]
+                n_c_mu_probs = n_mu_probs[..., self.d_action_summed_size:]  # [batch, n, c_action_size]
                 n_c_pi_probs = squash_correction_prob(c_policy, torch.atanh(n_c_actions))
                 # [batch, n, c_action_size]
 
@@ -1407,7 +1407,7 @@ class SAC_Base:
         state = bn_states[:, self.burn_in_step, ...]
         action = bn_actions[:, self.burn_in_step, ...]
         d_action = action[..., :self.d_action_summed_size]
-        c_action = action[..., -self.c_action_size:]
+        c_action = action[..., self.d_action_summed_size:]
 
         batch = state.shape[0]
 
@@ -1633,13 +1633,13 @@ class SAC_Base:
                                                                    obses_list_at_n,
                                                                    _encoder if len(_encoder) > 1 else _encoder[0],
                                                                    pre_actions_at_n,
-                                                                   query_length=1,
+                                                                   seq_q_len=1,
                                                                    padding_mask=padding_masks_at_n)
                     target_state = self.model_target_rep.get_state_from_encoders(indexes_at_n,
                                                                                  obses_list_at_n,
                                                                                  _encoder if len(_encoder) > 1 else _encoder[0],
                                                                                  pre_actions_at_n,
-                                                                                 query_length=1,
+                                                                                 seq_q_len=1,
                                                                                  padding_mask=padding_masks_at_n)
                     state = state[:, 0, ...]
                     target_state = target_state[:, 0, ...]
@@ -1647,7 +1647,7 @@ class SAC_Base:
             q_loss_list = []
 
             d_action = bn_actions[:, self.burn_in_step, :self.d_action_summed_size]
-            c_action = bn_actions[:, self.burn_in_step, -self.c_action_size:]
+            c_action = bn_actions[:, self.burn_in_step, self.d_action_summed_size:]
 
             q_list = [q(state, c_action)
                       for q in self.model_q_list]  # ([batch, d_action_summed_size], [batch, 1]), ...
@@ -1764,7 +1764,7 @@ class SAC_Base:
             probs = d_policy.probs   # [batch, d_action_summed_size]
             clipped_probs = probs.clamp(min=1e-8)
 
-            c_action = action[..., -self.c_action_size:]
+            c_action = action[..., self.d_action_summed_size:]
 
             q_list = [q(state, c_action) for q in self.model_q_list]
             # ([batch, d_action_summed_size], [batch, 1])
@@ -1884,7 +1884,7 @@ class SAC_Base:
         n_states = bn_states[:, self.burn_in_step:]
         n_actions = bn_actions[:, self.burn_in_step:]
         d_n_actions = n_actions[..., :self.d_action_summed_size]  # [batch, n, d_action_summed_size]
-        c_n_actions = n_actions[..., -self.c_action_size:]  # [batch, n, c_action_size]
+        c_n_actions = n_actions[..., self.d_action_summed_size:]  # [batch, n, c_action_size]
 
         loss = torch.zeros((1, ), device=self.device)
 
@@ -2096,7 +2096,7 @@ class SAC_Base:
         state = bn_states[:, self.burn_in_step, ...]
         action = bn_actions[:, self.burn_in_step, ...]
         d_action = action[..., :self.d_action_summed_size]
-        c_action = action[..., -self.c_action_size:]
+        c_action = action[..., self.d_action_summed_size:]
 
         q_list = [q(state, c_action) for q in self.model_q_list]
         # ([batch, d_action_summed_size], [batch, 1])
@@ -2258,7 +2258,7 @@ class SAC_Base:
                 *_, attn_weights_list = self.model_rep(torch.from_numpy(ep_indexes).to(self.device),
                                                        [torch.from_numpy(o).to(self.device) for o in ep_obses_list],
                                                        pre_action=torch.from_numpy(pre_l_actions).to(self.device),
-                                                       query_length=ep_indexes.shape[1])
+                                                       seq_q_len=ep_indexes.shape[1])
 
                 for i, attn_weight in enumerate(attn_weights_list):
                     image = plot_attn_weight(attn_weight[0].cpu().numpy())

@@ -8,14 +8,15 @@ default:
     n_envs: 50
 
   reset_config:
-    stack_len: 20
+    stack_len: 15
+    stack_nesting: 0.5
     block_gap: 5
-    success_reward: 1.
-    failure_reward: -1
+    success_reward: 2.
+    failure_reward: -1.
     max_episode_steps: 200
 
   sac_config:
-    burn_in_step: 10
+    burn_in_step: 5
     n_step: 3
     seq_encoder: RNN
 
@@ -26,7 +27,8 @@ default:
 
   oc_config:
     option_eplison: 0.2 # Probability of switching options
-    terminal_entropy: 0.005 # Tending not to terminate >0, tending to terminate <0
+    terminal_entropy: 0.001 # Tending not to terminate >0, tending to terminate <0
+    key_max_length: 300
 
 attn:
   base_config:
