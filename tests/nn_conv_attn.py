@@ -62,43 +62,6 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         return state, hn, attn_weights_list
 
-    def get_augmented_encoders(self, obs_list):
-        obs_vec, obs_vis = obs_list
-
-        vis_encoder = self.conv(obs_vis)
-
-        return vis_encoder
-
-    def get_state_from_encoders(self, index, obs_list, encoders, pre_action,
-                                seq_q_len=1,
-                                hidden_state=None,
-                                is_prev_hidden_state=False,
-                                query_only_attend_to_rest_key=False,
-                                padding_mask=None):
-        obs_vec, obs_vis = obs_list
-        obs_vec = obs_vec[..., EXTRA_SIZE:]
-
-        vis_encoder = encoders
-
-        if self.use_dilation:
-            state, *_ = self.attn(vis_encoder,
-                                  seq_q_len,
-                                  hidden_state,
-                                  is_prev_hidden_state,
-                                  query_only_attend_to_rest_key,
-                                  padding_mask)
-        else:
-            state, *_ = self.attn(torch.cat([vis_encoder, pre_action], dim=-1),
-                                  seq_q_len,
-                                  hidden_state,
-                                  is_prev_hidden_state,
-                                  query_only_attend_to_rest_key,
-                                  padding_mask)
-
-        state = self.dense(torch.cat([obs_vec, state], dim=-1))
-
-        return state
-
 
 class ModelTransition(m.ModelTransition):
     def _build_model(self):
