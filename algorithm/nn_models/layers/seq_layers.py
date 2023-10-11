@@ -48,11 +48,11 @@ class MultiheadAttention(nn.Module):
         if use_rope:
             self.rope = RotaryPositionalEncoding(embed_dim)
 
-        self.q_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim), nn.ReLU())
-        self.k_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim), nn.ReLU())
-        self.v_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim), nn.ReLU())
+        self.q_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim))
+        self.k_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim))
+        self.v_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim))
 
-        self.out_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim), nn.ReLU())
+        self.out_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim))
 
     def forward(self,
                 query: torch.Tensor,

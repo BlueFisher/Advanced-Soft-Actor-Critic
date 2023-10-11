@@ -13,20 +13,20 @@ class RayVisual:
         self.fig = None
         self.idx = 0
 
-    def __call__(self, *rays: Union[np.ndarray, torch.Tensor], save_name=None):
+    def __call__(self, *rays: Union[np.ndarray, torch.Tensor], max_batch=5, save_name=None):
         """
         Args:
             *rays: [batch, ray_size, C]
                 ray[..., -2] = 0 if has_hit else 1
                 ray[..., -1] = hit_fraction if has_hit else 1
+            max_batch: The max batch size of each ray
         """
         if len(rays[0].shape) > 3:
             rays = [ray[:, -1, ...] for ray in rays]
+        rays = [ray[:max_batch] for ray in rays]
         rays = [i.detach().cpu().numpy() if isinstance(i, torch.Tensor) else i for i in rays]
 
         batch_size = rays[0].shape[0]
-        if batch_size >= 5:
-            return
 
         fig_size = len(rays)
 

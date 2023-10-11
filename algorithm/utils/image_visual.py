@@ -13,21 +13,20 @@ class ImageVisual:
         self.fig = None
         self.idx = 0
 
-    def __call__(self, *images: Union[np.ndarray, torch.Tensor], save_name=None):
+    def __call__(self, *images: Union[np.ndarray, torch.Tensor], max_batch=5, save_name=None):
         """
         Supporting RGB and gray images
         Only supporting images with batch size less than 5
         Args:
-            *images: [batch, H, W, C]
+            *images: list([batch, H, W, C], [batch, H, W, C], ...)
+            max_batch: The max batch size of each image
         """
         if len(images[0].shape) > 4:
             images = [image[:, -1, ...] for image in images]
-        images = [image[:5] for image in images]
+        images = [image[:max_batch] for image in images]
         images = [i.detach().cpu().numpy() if isinstance(i, torch.Tensor) else i for i in images]
 
         batch_size = images[0].shape[0]
-        if batch_size >= 5:
-            return
 
         fig_size = len(images)
 
@@ -61,7 +60,9 @@ class ImageVisual:
 
         if self.model_abs_dir:
             save_name = '' if save_name is None else save_name + '-'
-            self.fig.savefig(self.model_abs_dir.joinpath(f'{save_name}{self.idx}.jpg'), bbox_inches='tight')
+            self.fig.savefig(self.model_abs_dir.joinpath(f'{save_name}{self.idx}.jpg'),
+                             bbox_inches='tight',
+                             pad_inches=0)
         self.idx += 1
 
 
