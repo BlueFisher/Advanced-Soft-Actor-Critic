@@ -4,6 +4,7 @@ from collections import defaultdict
 from itertools import chain
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
+import random
 
 import numpy as np
 import torch
@@ -194,10 +195,13 @@ class SAC_Base:
         self.use_normalization = use_normalization
         self.action_noise = action_noise
 
+        self._set_logger()
+
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
             self.device = torch.device(device)
+        self._logger.info(f'Device: {device}')
 
         if seed is not None:
             torch.manual_seed(seed)
@@ -208,8 +212,6 @@ class SAC_Base:
             summary_path = Path(self.model_abs_dir).joinpath(summary_path)
             self.summary_writer = SummaryWriter(str(summary_path))
             self.summary_available = True
-
-        self._set_logger()
 
         self._profiler = UnifiedElapsedTimer(self._logger)
 

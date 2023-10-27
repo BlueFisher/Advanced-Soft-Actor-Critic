@@ -148,7 +148,7 @@ def set_logger(debug=False):
     sh.setLevel(logging.DEBUG if debug else logging.INFO)
 
     # Add handler and formatter to logger
-    sh.setFormatter(ColoredFormatter('[%(levelname)s] - [%(name)s] - %(message)s'))
+    sh.setFormatter(ColoredFormatter('[%(levelname)s] [%(name)s] %(message)s'))
     logger.addHandler(sh)
 
     logging.getLogger('PIL').setLevel(logging.WARNING)
@@ -163,6 +163,6 @@ def add_file_logger(logger_file: Path):
     fh.setLevel(logger.level)
 
     # Add handler and formatter to logger
-    fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] - [%(name)s] - %(message)s'))
+    fh.setFormatter(logging.Formatter('%(asctime)-15s [%(levelname)s] [%(name)s] %(message)s'))
 
     logger.addHandler(fh)

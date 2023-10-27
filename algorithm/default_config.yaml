@@ -7,7 +7,7 @@ base_config:
     build_path: # Unity executable path
       win32: path_win32
       linux: path_linux
-    group_aggregation: false 
+    group_aggregation: false
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
 
@@ -86,8 +86,9 @@ oc_config:
   num_options: 4
   use_dilation: false
   option_burn_in_step: -1
-  option_eplison: 0.2  # Probability of switching options
-  terminal_entropy: 0.01  # Tending not to terminate >0, tending to terminate <0
+  option_seq_encoder: null # RNN
+  option_eplison: 0.2 # Probability of switching options
+  terminal_entropy: 0.01 # Tending not to terminate >0, tending to terminate <0
   key_max_length: 200
 
   option_nn_config:

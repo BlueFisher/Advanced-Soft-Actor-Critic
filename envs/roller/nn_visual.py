@@ -1,12 +1,13 @@
 import torch
 
 import algorithm.nn_models as m
+from algorithm.utils.image_visual import ImageVisual
 
 
 class ModelRep(m.ModelBaseSimpleRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (30, 30, 3)
-        assert self.obs_shapes[1] == (2,)
+        assert self.obs_shapes[1] == (6,)
 
         self.conv = m.ConvLayers(30, 30, 3, 'simple',
                                  out_dense_n=64, out_dense_depth=2)
@@ -16,6 +17,7 @@ class ModelRep(m.ModelBaseSimpleRep):
 
     def forward(self, obs_list):
         vis_obs, vec_obs = obs_list
+        vec_obs = vec_obs[..., -2:]
 
         vis_obs = self.conv(vis_obs)
 

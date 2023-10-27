@@ -62,6 +62,9 @@ class TestOCSeqEncoderModel(unittest.TestCase):
 
         importlib.reload(nn_conv)
 
+        if param_dict['option_seq_encoder'] is None:
+            nn_conv.ModelOptionRep = nn_conv.ModelOptionVanillaRep
+
         sac = OptionSelectorBase(
             num_options=NUM_OPTIONS,
             option_nn_config=None,
@@ -74,7 +77,11 @@ class TestOCSeqEncoderModel(unittest.TestCase):
         )
 
         seq_hidden_state_shape = sac.seq_hidden_state_shape
-        low_seq_hidden_state_shape = sac.low_seq_hidden_state_shape
+
+        if param_dict['option_seq_encoder'] is None:
+            low_seq_hidden_state_shape = None
+        else:
+            low_seq_hidden_state_shape = sac.low_seq_hidden_state_shape
 
         step = 0
         while step < 10:
@@ -150,6 +157,7 @@ def __gen_seq_encoder(test_from: int):
     param_dict_candidates = {
         'use_dilation': [True, False],
         'option_burn_in_step': [-1, 2],
+        'option_seq_encoder': [None, 'RNN'],
 
         'd_action_sizes': [[3, 3, 4]],
         'c_action_size': [4],
@@ -158,8 +166,8 @@ def __gen_seq_encoder(test_from: int):
         'n_step': [3],
         'discrete_dqn_like': [True, False],
         'seq_encoder': ['RNN', 'ATTN'],
-        'use_prediction': [True, False],
-        'use_extra_data': [True, False],
+        # 'use_prediction': [True, False],
+        # 'use_extra_data': [True, False],
     }
 
     possible_param_dicts = get_product(param_dict_candidates)
@@ -170,12 +178,18 @@ def __gen_seq_encoder(test_from: int):
             if not param_dict['use_replay_buffer']:
                 continue
 
+        if param_dict['option_seq_encoder'] is None:
+            if param_dict['option_burn_in_step'] == -1:
+                param_dict['option_burn_in_step'] = 0
+            else:
+                continue
+
         if not param_dict['d_action_sizes'] and not param_dict['c_action_size']:
             continue
 
-        if not param_dict['use_prediction']:
-            if param_dict['use_extra_data']:
-                continue
+        # if not param_dict['use_prediction']:
+        #     if param_dict['use_extra_data']:
+        #         continue
 
         if i < test_from:
             i += 1

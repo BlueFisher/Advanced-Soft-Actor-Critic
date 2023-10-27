@@ -13,6 +13,11 @@ from ..utils import *
 
 
 class OptionBase(SAC_Base):
+    def __init__(self, option: int,
+                 *args, **kwargs):
+        self.option = option
+        super().__init__(*args, **kwargs)
+
     def _set_logger(self):
         if self.ma_name is None:
             self._logger = logging.getLogger('option')
@@ -238,8 +243,8 @@ class OptionBase(SAC_Base):
         next_q, _ = torch.min(stacked_max_next_target_q, dim=0)
         # [batch, 1]
 
-        next_termination = next_n_terminations[:, -1:]
-        min_next_max_v = min_next_n_max_vs[:, -1:]
+        next_termination = next_n_terminations[batch_tensor, last_solid_index].unsqueeze(-1)  # [batch, 1]
+        min_next_max_v = min_next_n_max_vs[batch_tensor, last_solid_index].unsqueeze(-1)  # [batch, 1]
 
         next_q = (1 - next_termination) * next_q + \
             next_termination * min_next_max_v  # [batch, 1]
@@ -292,12 +297,12 @@ class OptionBase(SAC_Base):
                              for n_obses, next_obs in zip(n_obses_list, next_obs_list)]  # list([batch, n, *obs_shapes_i], ...)
         next_n_states = torch.cat([n_states[:, 1:, ...], next_state.unsqueeze(1)], dim=1)  # [batch, n, state_size]
 
-        next_n_max_vs_list = [next_n_v_over_options.max(-1)[0] for next_n_v_over_options in next_n_v_over_options_list]  # [batch, n]
+        stacked_next_n_v_over_options = torch.stack(next_n_v_over_options_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
+        # [ensemble_q_num, batch, n, num_options] -> [ensemble_q_sample, batch, n, num_options]
 
-        stacked_next_n_max_vs = torch.stack(next_n_max_vs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
-        # [ensemble_q_num, batch, n] -> [ensemble_q_sample, batch, n]
-
-        min_next_n_max_vs, _ = stacked_next_n_max_vs.min(dim=0)  # [batch, n]
+        min_next_n_v_over_options = stacked_next_n_v_over_options.mean(dim=0)  # [batch, n, num_options]
+        min_next_n_v_over_options[..., self.option] = -1000.
+        min_next_n_max_vs, _ = min_next_n_v_over_options.max(-1)  # [batch, n]
 
         d_policy, c_policy = self.model_policy(n_states, n_obses_list)
         next_d_policy, next_c_policy = self.model_policy(next_n_states, next_n_obses_list)
@@ -486,24 +491,24 @@ class OptionBase(SAC_Base):
 
         return v
 
-    def train_rep_q(self,
-                    next_n_v_over_options_list: List[torch.Tensor],
+    def compute_rep_q_grads(self,
+                            next_n_v_over_options_list: List[torch.Tensor],
 
-                    bn_indexes: torch.Tensor,
-                    bn_padding_masks: torch.Tensor,
-                    bn_obses_list: List[torch.Tensor],
-                    bn_target_obses_list: List[torch.Tensor],
-                    bn_states: torch.Tensor,
-                    bn_target_states: torch.Tensor,
-                    bn_actions: torch.Tensor,
-                    bn_rewards: torch.Tensor,
-                    next_obs_list: List[torch.Tensor],
-                    next_target_obs_list: List[torch.Tensor],
-                    next_state: torch.Tensor,
-                    next_target_state: torch.Tensor,
-                    bn_dones: torch.Tensor,
-                    bn_mu_probs: torch.Tensor,
-                    priority_is: Optional[torch.Tensor] = None) -> None:
+                            bn_indexes: torch.Tensor,
+                            bn_padding_masks: torch.Tensor,
+                            bn_obses_list: List[torch.Tensor],
+                            bn_target_obses_list: List[torch.Tensor],
+                            bn_states: torch.Tensor,
+                            bn_target_states: torch.Tensor,
+                            bn_actions: torch.Tensor,
+                            bn_rewards: torch.Tensor,
+                            next_obs_list: List[torch.Tensor],
+                            next_target_obs_list: List[torch.Tensor],
+                            next_state: torch.Tensor,
+                            next_target_state: torch.Tensor,
+                            bn_dones: torch.Tensor,
+                            bn_mu_probs: torch.Tensor,
+                            priority_is: Optional[torch.Tensor] = None) -> None:
         """
         Args:
             next_n_v_over_options_list: list([batch, n, num_options], ...),
@@ -610,9 +615,6 @@ class OptionBase(SAC_Base):
                 bn_obses_list=bn_obses_list,
                 bn_actions=bn_actions)
 
-        for opt_q in self.optimizer_q_list:
-            opt_q.step()
-
         """ Recurrent Prediction Model """
         loss_predictions = None
         if self.use_prediction:
@@ -627,9 +629,6 @@ class OptionBase(SAC_Base):
                                                m_target_states=m_target_states,
                                                bn_actions=bn_actions,
                                                bn_rewards=bn_rewards)
-
-        if self.optimizer_rep:
-            self.optimizer_rep.step()
 
         loss_q = loss_q_list[0]
 
@@ -663,6 +662,13 @@ class OptionBase(SAC_Base):
                                                        approx_obs.permute([0, 3, 1, 2]),
                                                        self.global_step)
             self.summary_writer.flush()
+
+    def train_rep_q(self):
+        for opt_q in self.optimizer_q_list:
+            opt_q.step()
+
+        if self.optimizer_rep:
+            self.optimizer_rep.step()
 
     def train_policy_alpha(self,
                            bn_padding_masks: torch.Tensor,
@@ -721,12 +727,12 @@ class OptionBase(SAC_Base):
 
             self.summary_writer.flush()
 
-    def train_termination(self,
-                          terminal_entropy: float,
-                          next_obs_list: List[torch.Tensor],
-                          next_state: torch.Tensor,
-                          next_v_over_options: torch.Tensor,
-                          done: torch.Tensor):
+    def compute_termination_grads(self,
+                                  terminal_entropy: float,
+                                  next_obs_list: List[torch.Tensor],
+                                  next_state: torch.Tensor,
+                                  next_v_over_options: torch.Tensor,
+                                  done: torch.Tensor):
         """
         Args:
             terminal_entropy: float
@@ -738,6 +744,7 @@ class OptionBase(SAC_Base):
         next_termination = self.model_termination(next_state).squeeze(-1)  # [batch, ]
 
         next_v = self.get_v(next_obs_list, next_state)  # [batch, 1]
+        # next_v = next_v_over_options[:, self.option].unsqueeze(-1)  # [batch, 1]
 
         max_next_v_over_options, _ = next_v_over_options.max(-1)  # [batch, ]
 
@@ -746,7 +753,6 @@ class OptionBase(SAC_Base):
 
         self.optimizer_termination.zero_grad()
         loss_termination.backward(retain_graph=True)
-        self.optimizer_termination.step()
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             self.summary_available = True
@@ -755,6 +761,9 @@ class OptionBase(SAC_Base):
             self.summary_writer.add_scalar('metric/termination', torch.mean(next_termination), self.global_step)
 
             self.summary_writer.flush()
+
+    def train_termination(self):
+        self.optimizer_termination.step()
 
     @torch.no_grad()
     def _get_td_error(self,
