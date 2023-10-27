@@ -1,5 +1,5 @@
 import math
-from typing import Optional, Tuple
+from typing import List, Optional, Union
 
 import torch
 from torch import nn
@@ -48,11 +48,12 @@ class MultiheadAttention(nn.Module):
         if use_rope:
             self.rope = RotaryPositionalEncoding(embed_dim)
 
-        self.q_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim))
-        self.k_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim))
-        self.v_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim))
+        self.q_proj = nn.Linear(embed_dim, embed_dim)
+        self.k_proj = nn.Linear(embed_dim, embed_dim)
+        self.v_proj = nn.Linear(embed_dim, embed_dim)
 
-        self.out_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim))
+        self.out_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim),
+                                      nn.LeakyReLU())
 
     def forward(self,
                 query: torch.Tensor,
@@ -342,23 +343,39 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
 
 
 class EpisodeMultiheadAttention(nn.Module):
-    def __init__(self, embed_dim: int, num_heads: int,
+    def __init__(self, embed_dim: int,
                  num_layers: int = 2,
-                 use_residual: bool = True,
-                 use_gated: bool = True,
-                 use_layer_norm: bool = False):
+                 num_heads: Union[int, List[int]] = 1,
+                 use_residual: Union[bool, List[bool]] = True,
+                 use_gated: Union[bool, List[bool]] = True,
+                 use_layer_norm: Union[bool, List[bool]] = False):
         super().__init__()
 
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
         self.num_layers = num_layers
 
+        if isinstance(num_heads, int):
+            num_heads = [num_heads] * num_layers
+        assert len(num_heads) == num_layers
+
+        if isinstance(use_residual, int):
+            use_residual = [use_residual] * num_layers
+        assert len(use_residual) == num_layers
+
+        if isinstance(use_gated, int):
+            use_gated = [use_gated] * num_layers
+        assert len(use_gated) == num_layers
+
+        if isinstance(use_layer_norm, int):
+            use_layer_norm = [use_layer_norm] * num_layers
+        assert len(use_layer_norm) == num_layers
+
         self._attn_list = nn.ModuleList(
-            [EpisodeMultiheadAttentionBlock(embed_dim, num_heads,
-                                            use_pe=True,
-                                            use_residual=use_residual,
-                                            use_gated=use_gated,
-                                            use_layer_norm=use_layer_norm) for i in range(num_layers)]
+            [EpisodeMultiheadAttentionBlock(embed_dim, num_heads[i],
+                                            use_pe=i == 0,
+                                            use_residual=use_residual[i],
+                                            use_gated=use_gated[i],
+                                            use_layer_norm=use_layer_norm[i])
+             for i in range(num_layers)]
         )
 
     def forward(self,
@@ -499,6 +516,7 @@ class AbsolutePositionalEncoding(nn.Module):
         return self.pe[indexes.type(torch.int64)]
 
 
+# https://zhuanlan.zhihu.com/p/647109286
 class RotaryPositionalEncoding(nn.Module):
     def __init__(self,
                  d_model: int,

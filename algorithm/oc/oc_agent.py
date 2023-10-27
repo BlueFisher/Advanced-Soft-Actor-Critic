@@ -291,6 +291,7 @@ class OC_AgentManager(AgentManager):
     def set_rl(self, rl: OptionSelectorBase):
         self.rl = rl
         self.seq_encoder = rl.seq_encoder
+        self.option_seq_encoder = rl.option_seq_encoder
         self.use_dilation = rl.use_dilation
 
     def pre_run(self, num_agents: int):
@@ -305,8 +306,9 @@ class OC_AgentManager(AgentManager):
             if self.use_dilation:
                 self['key_seq_hidden_state'] = self['initial_seq_hidden_state'].copy()
 
-            self['initial_low_seq_hidden_state'] = self.rl.get_initial_low_seq_hidden_state(num_agents)  # [n_envs, *los_seq_hidden_state_shape]
-            self['low_seq_hidden_state'] = self['initial_low_seq_hidden_state']
+            if self.option_seq_encoder is not None:
+                self['initial_low_seq_hidden_state'] = self.rl.get_initial_low_seq_hidden_state(num_agents)  # [n_envs, *los_seq_hidden_state_shape]
+                self['low_seq_hidden_state'] = self['initial_low_seq_hidden_state']
 
         self.agents: List[OC_Agent] = [
             OC_Agent(i,
@@ -316,7 +318,7 @@ class OC_AgentManager(AgentManager):
                      seq_hidden_state_shape=self.rl.seq_hidden_state_shape
                      if self.seq_encoder is not None else None,
                      low_seq_hidden_state_shape=self.rl.low_seq_hidden_state_shape
-                     if self.seq_encoder is not None else None)
+                     if self.option_seq_encoder is not None else None)
             for i in range(num_agents)
         ]
 
@@ -333,7 +335,7 @@ class OC_AgentManager(AgentManager):
                 pre_option_index=self['pre_option_index'],
                 pre_action=self['pre_action'],
                 rnn_state=self['seq_hidden_state'],
-                low_rnn_state=self['low_seq_hidden_state'],
+                low_rnn_state=self['low_seq_hidden_state'] if self.option_seq_encoder is not None else None,
 
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
@@ -349,7 +351,7 @@ class OC_AgentManager(AgentManager):
                 pre_option_index=self['pre_option_index'],
                 pre_action=self['pre_action'],
                 rnn_state=self['key_seq_hidden_state'],  # The previous key rnn_state
-                low_rnn_state=self['low_seq_hidden_state'],
+                low_rnn_state=self['low_seq_hidden_state'] if self.option_seq_encoder is not None else None,
 
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
@@ -399,7 +401,7 @@ class OC_AgentManager(AgentManager):
                 ep_attn_states=ep_attn_states,
 
                 pre_option_index=self['pre_option_index'],
-                low_rnn_state=self['low_seq_hidden_state'],
+                low_rnn_state=self['low_seq_hidden_state'] if self.option_seq_encoder is not None else None,
 
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
@@ -445,7 +447,7 @@ class OC_AgentManager(AgentManager):
 
                 pre_option_index=self['pre_option_index'],
                 pre_action=self['pre_action'],
-                low_rnn_state=self['low_seq_hidden_state'],
+                low_rnn_state=self['low_seq_hidden_state'] if self.option_seq_encoder is not None else None,
 
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
@@ -490,7 +492,7 @@ class OC_AgentManager(AgentManager):
                     next_obs_list=[o[i] for o in next_obs_list],
                     prob=self['prob'][i],
                     seq_hidden_state=self['seq_hidden_state'][i] if self.seq_encoder is not None else None,
-                    low_seq_hidden_state=self['low_seq_hidden_state'][i] if self.seq_encoder is not None else None,
+                    low_seq_hidden_state=self['low_seq_hidden_state'][i] if self.option_seq_encoder is not None else None,
                 )
                 if episode_trans is not None:
                     episode_trans_list.append(episode_trans)
@@ -501,8 +503,9 @@ class OC_AgentManager(AgentManager):
         super().post_step(next_obs_list, local_done, next_padding_mask)
 
         self['pre_option_index'] = self['option_index']
-        if self.seq_encoder is not None:
+        if self.option_seq_encoder is not None:
             self['low_seq_hidden_state'] = self['next_low_seq_hidden_state']
+            self['low_seq_hidden_state'][local_done] = self['initial_low_seq_hidden_state'][local_done]
 
 
 class OC_MultiAgentsManager(MultiAgentsManager):

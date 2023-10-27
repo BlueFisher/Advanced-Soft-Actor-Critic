@@ -16,13 +16,11 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         # self.pe = AbsolutePositionalEncoding(embed_size, 1000)
 
-        self.attn = m.EpisodeMultiheadAttention(embed_size, 2,
-                                                num_layers=2,
-                                                use_residual=True,
+        self.attn = m.EpisodeMultiheadAttention(embed_size, num_layers=3,
+                                                num_heads=[1, 4, 8],
+                                                use_residual=False,
                                                 use_gated=False,
                                                 use_layer_norm=False)
-
-        self.mlp = m.LinearLayers(embed_size, output_size=embed_size)
 
     def forward(self, index, obs_list, pre_action=None,
                 seq_q_len=1,
@@ -32,9 +30,6 @@ class ModelRep(m.ModelBaseAttentionRep):
                 padding_mask=None):
         vec_obs = obs_list[0]
         vec_obs = vec_obs.reshape(*vec_obs.shape[:-3], 2 * 3 * 4)
-
-        # pe = self.pe(index)
-        # vec_obs = torch.concat([vec_obs, pe], dim=-1)
 
         output, hn, attn_weights_list = self.attn(vec_obs,
                                                   seq_q_len=seq_q_len,
@@ -48,58 +43,21 @@ class ModelRep(m.ModelBaseAttentionRep):
         return output, hn, attn_weights_list
 
 
-class ModelOptionRep(m.ModelBaseRNNRep):
+class ModelOptionRep(m.ModelBaseSimpleRep):
     def _build_model(self):
         assert self.obs_shapes[1] == (2, 3, 4)
 
         embed_size = 2 * 3 * 4
 
-        self.rnn = m.GRU(embed_size * 2, 64, 1)
+        self.mlp = m.LinearLayers(embed_size, dense_depth=2, output_size=embed_size * 2)
 
-    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
+    def forward(self, obs_list):
         high_state, vec_obs = obs_list
         vec_obs = vec_obs.reshape(*vec_obs.shape[:-3], 2 * 3 * 4)
 
-        if padding_mask is not None:
-            high_state = high_state * (~padding_mask).to(vec_obs.dtype).unsqueeze(-1)
-            vec_obs = vec_obs * (~padding_mask).to(vec_obs.dtype).unsqueeze(-1)
+        output = torch.concat([high_state, self.mlp(vec_obs)], dim=-1)
 
-        output, hn = self.rnn(torch.concat([high_state, vec_obs], dim=-1),
-                              rnn_state)
-
-        return output, hn
-
-
-# class ModelOptionRep(m.ModelBaseRNNRep):
-#     def _build_model(self):
-#         assert self.obs_shapes[1] == (2, 3, 4)
-
-#         self.rnn = nn.GRUCell(2 * 3 * 4, 64)
-
-#     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
-#         high_state, vec_obs = obs_list
-#         vec_obs = vec_obs.reshape(*vec_obs.shape[:-3], 2 * 3 * 4)
-
-#         if padding_mask is not None:
-#             vec_obs = vec_obs * (~padding_mask).to(vec_obs.dtype).unsqueeze(-1)
-
-#         output = []
-
-#         for t in range(vec_obs.shape[1]):
-#             if padding_mask is not None:
-#                 mask = padding_mask[:, t]
-#                 rnn_state = rnn_state.clone()
-#                 rnn_state[mask] = 0.
-
-#             rnn_state = self.rnn(vec_obs[:, t], rnn_state)
-
-#             output.append(rnn_state)
-
-#         output = torch.stack(output, dim=1)
-
-#         state = torch.cat([high_state, output], dim=-1)
-
-#         return state, rnn_state
+        return output
 
 
 class ModelQ(m.ModelQ):

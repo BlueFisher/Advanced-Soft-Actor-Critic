@@ -70,34 +70,42 @@ def gen_batch_oc_obs(obs_shapes, num_options=2, batch=10):
 
 
 def gen_batch_oc_obs_for_rnn(obs_shapes, d_action_sizes, c_action_size,
-                             seq_hidden_state_shape, low_seq_hidden_state_shape,
+                             seq_hidden_state_shape, low_seq_hidden_state_shape=None,
                              num_options=2,
                              batch=10):
-    return {
+    gen_batch = {
         'obs_list': [np.random.randn(batch, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
         'pre_option_index': np.random.randint(0, num_options, size=(batch, ), dtype=np.int8),
         'pre_action': get_action(batch, None, d_action_sizes, c_action_size),
-        'rnn_state': np.random.randn(batch, *seq_hidden_state_shape).astype(np.float32),
-        'low_rnn_state': np.random.randn(batch, *low_seq_hidden_state_shape).astype(np.float32)
+        'rnn_state': np.random.randn(batch, *seq_hidden_state_shape).astype(np.float32)
     }
+
+    if low_seq_hidden_state_shape is not None:
+        gen_batch['low_rnn_state'] = np.random.randn(batch, *low_seq_hidden_state_shape).astype(np.float32)
+
+    return gen_batch
 
 
 def gen_batch_oc_obs_for_attn(obs_shapes, d_action_sizes, c_action_size,
-                              seq_hidden_state_shape, low_seq_hidden_state_shape,
+                              seq_hidden_state_shape, low_seq_hidden_state_shape=None,
                               num_options=2,
                               batch=10):
     episode_len = random.randint(1, 100)
 
-    return {
+    gen_batch = {
         'ep_indexes': np.expand_dims(np.arange(episode_len, dtype=np.int32), 0).repeat(batch, 0),
         'ep_padding_masks': np.zeros((batch, episode_len), dtype=bool),
         'ep_obses_list': [np.random.randn(batch, episode_len, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
         'ep_pre_actions': get_action(batch, episode_len, d_action_sizes, c_action_size),
         'ep_attn_states': np.random.randn(batch, episode_len, *seq_hidden_state_shape).astype(np.float32),
 
-        'pre_option_index': np.random.randint(0, num_options, size=(batch, ), dtype=np.int8),
-        'low_rnn_state': np.random.randn(batch, *low_seq_hidden_state_shape).astype(np.float32)
+        'pre_option_index': np.random.randint(0, num_options, size=(batch, ), dtype=np.int8)
     }
+
+    if low_seq_hidden_state_shape is not None:
+        gen_batch['low_rnn_state'] = np.random.randn(batch, *low_seq_hidden_state_shape).astype(np.float32)
+
+    return gen_batch
 
 
 def gen_episode_trans(obs_shapes, d_action_sizes, c_action_size, seq_hidden_state_shape=None, episode_len=None):

@@ -103,7 +103,7 @@ def episode_to_batch(burn_in_step: int,
             bn_dones,
             bn_probs,
             bn_seq_hidden_states if l_seq_hidden_states is not None else None,
-            bn_low_seq_hidden_states if l_seq_hidden_states is not None else None]
+            bn_low_seq_hidden_states if l_low_seq_hidden_states is not None else None]
 
 
 class BatchBuffer(BatchBuffer):

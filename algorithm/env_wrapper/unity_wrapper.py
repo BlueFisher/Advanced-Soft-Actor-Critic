@@ -5,6 +5,7 @@ import multiprocessing
 import multiprocessing.connection
 import os
 import random
+import time
 import uuid
 from collections import defaultdict
 from typing import Dict, List, Tuple
@@ -86,16 +87,16 @@ class UnityWrapperProcess:
 
         self.option_channel = OptionChannel()
 
-        if conn:
+        if conn:  # If run in multiprocessing mode
             try:
                 from algorithm import config_helper
                 config_helper.set_logger()
             except:
                 pass
 
-            self._logger = logging.getLogger(f'UnityWrapper.Process_{os.getpid()}')
+            self._logger = logging.getLogger(f'UnityWrapper.Process_{worker_id}_p{os.getpid()}')
         else:
-            self._logger = logging.getLogger('UnityWrapper.Process')
+            self._logger = logging.getLogger(f'UnityWrapper.Process_{worker_id}')
 
         self._env = UnityEnvironment(file_name=file_name,
                                      worker_id=worker_id,
@@ -140,11 +141,10 @@ class UnityWrapperProcess:
                     elif cmd == STEP:
                         conn.send(self.step(*data))
                     elif cmd == CLOSE:
-                        self.close()
-            except KeyboardInterrupt:
-                self._logger.error(f'KeyboardInterrupt')
+                        self._logger.warning('Receive CLOSE')
+                        break
             except Exception as e:
-                self._logger.error(f'{e}')
+                self._logger.error(e)
             finally:
                 self.close()
                 conn.close()
@@ -320,18 +320,18 @@ class UnityWrapperProcess:
         ma_max_step: Dict[str, List[np.ndarray]] = {}
         ma_padding_mask: Dict[str, List[np.ndarray]] = {}
 
-        for n in self.behavior_names:
+        for n in self.behavior_names:  # padding all data
             agents_len = len(self._ma_agents_ids[n])
             ma_obs_list[n] = [np.zeros((agents_len, *obs_shape), dtype=np.float32) for obs_shape in self.ma_unity_obs_shapes[n]]
             ma_reward[n] = np.zeros(agents_len, dtype=np.float32)
-            ma_done[n] = np.zeros(len(self._ma_agents_ids[n]), dtype=bool)
-            ma_max_step[n] = np.zeros(len(self._ma_agents_ids[n]), dtype=bool)
-            ma_padding_mask[n] = np.zeros(len(self._ma_agents_ids[n]), dtype=bool)
+            ma_done[n] = np.zeros(agents_len, dtype=bool)
+            ma_max_step[n] = np.zeros(agents_len, dtype=bool)
+            ma_padding_mask[n] = np.zeros(agents_len, dtype=bool)
 
         visited_ma_agent_ids = {n: set() for n in self.behavior_names}
         ma_decision_steps_len = {n: 0 for n in self.behavior_names}
 
-        for n in self.behavior_names:
+        for n in self.behavior_names:  # sending actions to the environment
             d_action = c_action = None
 
             if self.ma_unity_d_action_sizes[n]:
@@ -347,7 +347,7 @@ class UnityWrapperProcess:
 
         self._env.step()
 
-        for n in self.behavior_names:
+        for n in self.behavior_names:  # receving data from the environment
             decision_steps, terminal_steps = self._env.get_steps(n)
 
             agent_id_to_index = self._ma_agent_id_to_index[n]
@@ -448,7 +448,7 @@ class UnityWrapperProcess:
 
     def close(self):
         self._env.close()
-        self._logger.warning(f'Process {os.getpid()} exits')
+        self._logger.warning(f'Environment closed')
 
 
 class UnityWrapper(EnvWrapper):
@@ -530,36 +530,46 @@ class UnityWrapper(EnvWrapper):
 
         self._logger.info('Environments loaded')
 
+    def _process_conn_receiving(self, conn: multiprocessing.connection.Connection, i: int):
+        if not conn.poll(60):
+            self._logger.error(f'Environment {i} timeout')
+            raise TimeoutError()
+
+        return conn.recv()
+
     def _generate_processes(self, force_init=False):
         if self._seq_envs:
             return
 
-        for i, conn in enumerate(self._conns):
-            if conn is None:
-                parent_conn, child_conn = multiprocessing.Pipe()
-                self._conns[i] = parent_conn
-                p = multiprocessing.Process(target=UnityWrapperProcess,
-                                            args=(child_conn,
-                                                  self.train_mode,
-                                                  self.env_name,
-                                                  self._process_id,
-                                                  self.base_port,
-                                                  self.no_graphics,
-                                                  self.time_scale,
-                                                  self.seed,
-                                                  self.scene,
-                                                  self.additional_args,
-                                                  min(MAX_N_ENVS_PER_PROCESS, self.n_envs - i * MAX_N_ENVS_PER_PROCESS),
-                                                  self.group_aggregation),
-                                            daemon=True)
-                p.start()
-                self._processes[i] = p
+        while None in self._conns:
+            i = self._conns.index(None)
 
-                if force_init:
-                    parent_conn.send((INIT, None))
-                    parent_conn.recv()
+            self._logger.info(f'Starting environment {i} ...')
+            parent_conn, child_conn = multiprocessing.Pipe()
+            self._conns[i] = parent_conn
+            p = multiprocessing.Process(target=UnityWrapperProcess,
+                                        args=(child_conn,
+                                              self.train_mode,
+                                              self.env_name,
+                                              self._process_id,
+                                              self.base_port,
+                                              self.no_graphics,
+                                              self.time_scale,
+                                              self.seed,
+                                              self.scene,
+                                              self.additional_args,
+                                              min(MAX_N_ENVS_PER_PROCESS, self.n_envs - i * MAX_N_ENVS_PER_PROCESS),
+                                              self.group_aggregation),
+                                        daemon=True)
+            p.start()
+            self._processes[i] = p
 
-                self._process_id += 1
+            if force_init:
+                parent_conn.send((INIT, None))
+                self._process_conn_receiving(parent_conn, i)
+
+            self._logger.info(f'Environment {i} started with process {self._process_id}')
+            self._process_id += 1
 
     def send_option(self, option: Dict[str, int]):
         # TODO multiple envs
@@ -575,9 +585,9 @@ class UnityWrapper(EnvWrapper):
                 for n, n_agents in ma_n_agents.items():
                     self.ma_n_agents_list[n].append(n_agents)
         else:
-            for conn in self._conns:
+            for i, conn in enumerate(self._conns):
                 conn.send((INIT, None))
-                results = conn.recv()
+                results = self._process_conn_receiving(conn, i)
                 ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size, ma_n_agents = results
                 for n, n_agents in ma_n_agents.items():
                     self.ma_n_agents_list[n].append(n_agents)
@@ -597,7 +607,7 @@ class UnityWrapper(EnvWrapper):
             for conn in self._conns:
                 conn.send((RESET, reset_config))
 
-            envs_ma_obs_list = [conn.recv() for conn in self._conns]
+            envs_ma_obs_list = [self._process_conn_receiving(conn, i) for i, conn in enumerate(self._conns)]
 
         ma_obs_list = {n: [np.concatenate(env_obs_list)
                            for env_obs_list in zip(*[ma_obs_list[n] for ma_obs_list in envs_ma_obs_list])]
@@ -653,7 +663,7 @@ class UnityWrapper(EnvWrapper):
                      ma_reward,
                      ma_done,
                      ma_max_step,
-                     ma_padding_mask) = conn.recv()
+                     ma_padding_mask) = self._process_conn_receiving(conn, i)
 
                     for n in self.behavior_names:
                         ma_envs_obs_list[n].append(ma_obs_list[n])
@@ -662,18 +672,25 @@ class UnityWrapper(EnvWrapper):
                         ma_envs_max_step[n].append(ma_max_step[n])
                         ma_envs_padding_mask[n].append(ma_padding_mask[n])
                 except Exception as e:
-                    self._logger.error(e)
-                    self._conns[i] = None
-                    self._processes[i].close()
+                    self._logger.error(f'Environment {i} error, {e.__class__.__name__} {e}')
+
+                    self._processes[i].terminate()
+                    while self._processes[i].is_alive():
+                        self._logger.warning(f'Environment {i} still running...')
+                        time.sleep(1)
+                    self._logger.warning(f'Environment {i} terminated by error')
+
                     self._processes[i] = None
+                    self._conns[i].close()
+                    self._conns[i] = None
                     failed_count += 1
 
-            for i in range(failed_count):
-                self._logger.warn(f'Restarting failed environment {i}')
+            if failed_count != 0:
+                self._logger.warning(f'{failed_count} environments failed. Restarting...')
                 self._generate_processes(force_init=True)
-                self._logger.warn(f'Failed environment {i} restarted')
+                self._logger.warning(f'{failed_count} environments restarted')
 
-                return None, None, None, None
+                return None, None, None, None, None
 
         ma_obs_list = {n: [np.concatenate(obs) for obs in zip(*ma_envs_obs_list[n])] for n in self.behavior_names}
         ma_reward = {n: np.concatenate(ma_envs_reward[n]) for n in self.behavior_names}
@@ -684,7 +701,7 @@ class UnityWrapper(EnvWrapper):
         return ma_obs_list, ma_reward, ma_done, ma_max_step, ma_padding_mask
 
     def close(self):
-        self._logger.warn('Closing environments')
+        self._logger.warning('Closing environments')
         if self._seq_envs:
             for env in self._envs:
                 env.close()
@@ -696,10 +713,10 @@ class UnityWrapper(EnvWrapper):
                     pass
             for p in self._processes:
                 try:
-                    p.close()
+                    p.terminate()
                 except:
                     pass
-        self._logger.warn('Environments closed')
+        self._logger.warning('Environments closed')
 
 
 if __name__ == "__main__":

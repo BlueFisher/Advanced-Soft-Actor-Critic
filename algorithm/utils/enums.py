@@ -20,6 +20,9 @@ def convert_config_to_enum(config):
     if 'seq_encoder' in config and config['seq_encoder'] is not None:
         config['seq_encoder'] = SEQ_ENCODER[config['seq_encoder']]
 
+    if 'option_seq_encoder' in config and config['option_seq_encoder'] is not None:
+        config['option_seq_encoder'] = SEQ_ENCODER[config['option_seq_encoder']]
+
     if 'siamese' in config and config['siamese'] is not None:
         config['siamese'] = SIAMESE[config['siamese']]
 
@@ -30,6 +33,9 @@ def convert_config_to_enum(config):
 def convert_config_to_string(config):
     if 'seq_encoder' in config and config['seq_encoder'] is not None:
         config['seq_encoder'] = config['seq_encoder'].name
+
+    if 'option_seq_encoder' in config and config['option_seq_encoder'] is not None:
+        config['option_seq_encoder'] = config['option_seq_encoder'].name
 
     if 'siamese' in config and config['siamese'] is not None:
         config['siamese'] = config['siamese'].name

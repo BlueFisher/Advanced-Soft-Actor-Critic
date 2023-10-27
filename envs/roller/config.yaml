@@ -63,19 +63,13 @@ hard_attn:
 
 visual:
   base_config:
-    scene: VisualRoller
-
-    no_graphics: false
-
-    name: "{time}"
-
-  replay_config:
-    beta: 0.4
-    beta_increment_per_sampling: 0.001
+    env_name: RollerVisual
+    unity_args:
+      no_graphics: false
 
   sac_config:
     nn: nn_visual
-    n_step: 3
+    n_step: 5
 
     tau: 0.005
 

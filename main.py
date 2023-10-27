@@ -13,7 +13,7 @@ except:
 HITTED_ENVS = {'roller',
                'square', 'square/obstacle', 'pyramid',
                'uav',
-               'ugv', 'ugv/ugv_street_search',
+               'ugv', 'ugv/ugv_street_search', 'ugv/ugv_parking',
                'usv',
                'gym/memory_corridor',
                'gym/stack_corridor'}
