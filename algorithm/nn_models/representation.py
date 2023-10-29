@@ -8,10 +8,13 @@ from algorithm.nn_models.layers import LinearLayers
 
 
 class ModelBaseSimpleRep(nn.Module):
-    def __init__(self, obs_shapes,
+    def __init__(self, 
+                 obs_names: List[str],
+                 obs_shapes: List[Tuple],
                  is_target: bool, train_mode: bool,
                  model_abs_dir: Optional[Path] = None, **kwargs):
         super().__init__()
+        self.obs_names = obs_names
         self.obs_shapes = obs_shapes
         self.is_target = is_target
         self.train_mode = train_mode
@@ -42,6 +45,7 @@ class ModelSimpleRep(ModelBaseSimpleRep):
 
 class ModelBaseRNNRep(nn.Module):
     def __init__(self,
+                 obs_names: List[str],
                  obs_shapes: List[Tuple],
                  d_action_sizes: List[int], c_action_size: int,
                  is_target: bool, train_mode: bool,
@@ -49,6 +53,7 @@ class ModelBaseRNNRep(nn.Module):
                  use_dilation=False,  # For option critic
                  **kwargs):
         super().__init__()
+        self.obs_names = obs_names
         self.obs_shapes = obs_shapes
         self.d_action_sizes = d_action_sizes
         self.c_action_size = c_action_size
@@ -90,6 +95,7 @@ class ModelBaseRNNRep(nn.Module):
 
 class ModelBaseAttentionRep(nn.Module):
     def __init__(self,
+                 obs_names: List[str],
                  obs_shapes: List[Tuple],
                  d_action_sizes: List[int], c_action_size: int,
                  is_target: bool, train_mode: bool,
@@ -97,6 +103,7 @@ class ModelBaseAttentionRep(nn.Module):
                  use_dilation=False,  # For option critic
                  **kwargs):
         super().__init__()
+        self.obs_names = obs_names
         self.obs_shapes = obs_shapes
         self.d_action_sizes = d_action_sizes
         self.c_action_size = c_action_size
