@@ -15,8 +15,9 @@ def get_ma_obs_list(n_envs, ma_obs_shapes):
 
 class TestWrapper(EnvWrapper):
     def __init__(self, env_args, n_envs=1):
-        self.env_args = [] if env_args is None else env_args
-        self.n_envs = n_envs
+        self.env_args = {} if env_args is None else env_args
+
+        super().__init__(True, 'TEST', n_envs)
 
     def init(self):
         if 'ma_obs_shapes' in self.env_args:

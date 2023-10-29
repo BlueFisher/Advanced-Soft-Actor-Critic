@@ -281,12 +281,14 @@ class SAC_Base:
 
         """ REPRESENTATION """
         if self.seq_encoder == SEQ_ENCODER.RNN:
-            self.model_rep: ModelBaseRNNRep = ModelRep(self.obs_shapes,
+            self.model_rep: ModelBaseRNNRep = ModelRep(self.obs_names,
+                                                       self.obs_shapes,
                                                        self.d_action_sizes, self.c_action_size,
                                                        False, self.train_mode,
                                                        self.model_abs_dir,
                                                        **nn_config['rep']).to(self.device)
-            self.model_target_rep: ModelBaseRNNRep = ModelRep(self.obs_shapes,
+            self.model_target_rep: ModelBaseRNNRep = ModelRep(self.obs_names,
+                                                              self.obs_shapes,
                                                               self.d_action_sizes, self.c_action_size,
                                                               True, self.train_mode,
                                                               self.model_abs_dir,
@@ -299,12 +301,14 @@ class SAC_Base:
             state_size, self.seq_hidden_state_shape = test_state.shape[-1], test_rnn_state.shape[1:]
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN:
-            self.model_rep: ModelBaseAttentionRep = ModelRep(self.obs_shapes,
+            self.model_rep: ModelBaseAttentionRep = ModelRep(self.obs_names,
+                                                             self.obs_shapes,
                                                              self.d_action_sizes, self.c_action_size,
                                                              False, self.train_mode,
                                                              self.model_abs_dir,
                                                              **nn_config['rep']).to(self.device)
-            self.model_target_rep: ModelBaseAttentionRep = ModelRep(self.obs_shapes,
+            self.model_target_rep: ModelBaseAttentionRep = ModelRep(self.obs_names,
+                                                                    self.obs_shapes,
                                                                     self.d_action_sizes, self.c_action_size,
                                                                     True, self.train_mode,
                                                                     self.model_abs_dir,
@@ -319,11 +323,13 @@ class SAC_Base:
             state_size, self.seq_hidden_state_shape = test_state.shape[-1], test_attn_state.shape[2:]
 
         else:
-            self.model_rep: ModelBaseSimpleRep = ModelRep(self.obs_shapes,
+            self.model_rep: ModelBaseSimpleRep = ModelRep(self.obs_names,
+                                                          self.obs_shapes,
                                                           False, self.train_mode,
                                                           self.model_abs_dir,
                                                           **nn_config['rep']).to(self.device)
-            self.model_target_rep: ModelBaseSimpleRep = ModelRep(self.obs_shapes,
+            self.model_target_rep: ModelBaseSimpleRep = ModelRep(self.obs_names,
+                                                                 self.obs_shapes,
                                                                  True, self.train_mode,
                                                                  self.model_abs_dir,
                                                                  **nn_config['rep']).to(self.device)
