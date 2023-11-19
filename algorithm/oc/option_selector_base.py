@@ -63,6 +63,7 @@ class OptionSelectorBase(SAC_Base):
                  clip_epsilon: float = 0.2,
 
                  discrete_dqn_like: bool = False,
+                 discrete_dqn_epsilon: float = 0.2,
                  use_n_step_is: bool = True,
                  siamese: Optional[SIAMESE] = None,
                  siamese_use_q: bool = False,
@@ -133,6 +134,7 @@ class OptionSelectorBase(SAC_Base):
                          v_c,
                          clip_epsilon,
                          discrete_dqn_like,
+                         discrete_dqn_epsilon,
                          use_n_step_is,
                          siamese,
                          siamese_use_q,
