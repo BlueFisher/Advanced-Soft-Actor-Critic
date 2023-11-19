@@ -66,6 +66,7 @@ class SAC_Base:
                  clip_epsilon: float = 0.2,
 
                  discrete_dqn_like: bool = False,
+                 discrete_dqn_epsilon: float = 0.2,
                  use_n_step_is: bool = True,
                  siamese: Optional[SIAMESE] = None,
                  siamese_use_q: bool = False,
@@ -129,6 +130,7 @@ class SAC_Base:
         clip_epsilon: 0.2 # Epsilon for q clip
 
         discrete_dqn_like: false # Whether using policy or only Q network if discrete is in action spaces
+        discrete_dqn_epsilon: 0.2 # The exploration epsilon
         use_n_step_is: true # Whether using importance sampling
         siamese: null # ATC | BYOL
         siamese_use_q: false # Whether using contrastive q
@@ -181,6 +183,7 @@ class SAC_Base:
         self.clip_epsilon = clip_epsilon
 
         self.discrete_dqn_like = discrete_dqn_like
+        self.discrete_dqn_epsilon = discrete_dqn_epsilon
         self.use_n_step_is = use_n_step_is
         self.siamese = siamese
         self.siamese_use_q = siamese_use_q
