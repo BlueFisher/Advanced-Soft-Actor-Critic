@@ -7,10 +7,10 @@ from .layers import LinearLayers
 
 
 class ModelBaseRND(nn.Module):
-    def __init__(self, state_size, d_action_size, c_action_size):
+    def __init__(self, state_size, d_action_summed_size, c_action_size):
         super().__init__()
         self.state_size = state_size
-        self.d_action_size = d_action_size
+        self.d_action_summed_size = d_action_summed_size
         self.c_action_size = c_action_size
 
         self._build_model()
@@ -27,11 +27,11 @@ class ModelBaseRND(nn.Module):
 
 class ModelRND(ModelBaseRND):
     def _build_model(self, dense_n=64, dense_depth=2, output_size=None):
-        if self.d_action_size:
+        if self.d_action_summed_size:
             self.d_dense_list = nn.ModuleList([
                 LinearLayers(self.state_size,
                              dense_n, dense_depth, output_size)
-                for _ in range(self.d_action_size)
+                for _ in range(self.d_action_summed_size)
             ])
 
         if self.c_action_size:
@@ -41,7 +41,7 @@ class ModelRND(ModelBaseRND):
     def cal_d_rnd(self, state) -> torch.Tensor:
         """
         Returns:
-            d_rnd: [*batch, d_action_size, f]
+            d_rnd: [*batch, d_action_summed_size, f]
         """
         d_rnd_list = [d(state).unsqueeze(-2) for d in self.d_dense_list]
 
