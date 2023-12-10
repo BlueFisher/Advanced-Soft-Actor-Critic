@@ -78,7 +78,10 @@ class UnityWrapperProcess:
         self.group_aggregation = group_aggregation
 
         seed = seed if seed is not None else random.randint(0, 65536)
-        additional_args = [] if additional_args is None else additional_args.split(' ')
+        if additional_args is None:
+            additional_args = []
+        elif isinstance(additional_args, str):
+            additional_args = additional_args.split(' ')
 
         self.engine_configuration_channel = EngineConfigurationChannel()
         self.environment_parameters_channel = EnvironmentParametersChannel()
