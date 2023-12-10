@@ -327,6 +327,9 @@ class Main:
                 {'tag': 'reward/max', 'simple_value': rewards.max()},
                 {'tag': 'reward/min', 'simple_value': rewards.min()}
             ])
+            mgr.rl.write_histogram_summaries([
+                {'tag': 'reward', 'histogram': rewards}
+            ])
 
             steps = np.array([a.steps for a in mgr.agents])
 

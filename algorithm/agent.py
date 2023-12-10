@@ -282,9 +282,25 @@ class AgentManager:
         ]
 
     # Reset
-    def set_obs_list(self, obs_list):
+    def set_obs_list(self, obs_list) -> None:
         self['obs_list'] = obs_list
         self['padding_mask'] = np.zeros(len(self.agents), dtype=bool)
+
+    def clear(self) -> None:
+        self['pre_action'] = self['initial_pre_action']
+        if self.seq_encoder is not None:
+            self['seq_hidden_state'] = self['initial_seq_hidden_state']
+
+        for a in self.agents:
+            a.clear()
+
+    def reset(self) -> None:
+        """
+        Agents may continue in a new iteration but save its last status
+        """
+
+        for a in self.agents:
+            a.reset()
 
     def get_action(self,
                    disable_sample: bool = False,
@@ -474,13 +490,15 @@ class MultiAgentsManager:
 
     def clear(self) -> None:
         for n, mgr in self:
-            for a in mgr.agents:
-                a.clear()
+            mgr.clear()
 
     def reset(self) -> None:
+        """
+        Agents may continue in a new iteration but save its last status
+        """
+
         for n, mgr in self:
-            for a in mgr.agents:
-                a.reset()
+            mgr.reset()
 
     def set_train_mode(self, train_mode: bool = True):
         for n, mgr in self:
