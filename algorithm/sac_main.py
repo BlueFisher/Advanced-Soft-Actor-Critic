@@ -141,6 +141,13 @@ class Main:
                                         n_envs=self.base_config['n_envs'],
                                         render=self.render)
 
+        elif self.base_config['env_type'] == 'OFFLINE':
+            from algorithm.env_wrapper.offline_wrapper import OfflineWrapper
+
+            self.env = OfflineWrapper(env_name=self.base_config['env_name'],
+                                      env_args=self.base_config['env_args'],
+                                      n_envs=self.base_config['n_envs'])
+
         elif self.base_config['env_type'] == 'TEST':
             from algorithm.env_wrapper.test_wrapper import TestWrapper
 
