@@ -1,10 +1,10 @@
 import logging
 import math
+import random
 from collections import defaultdict
 from itertools import chain
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
-import random
 
 import numpy as np
 import torch
@@ -130,7 +130,7 @@ class SAC_Base:
         clip_epsilon: 0.2 # Epsilon for q clip
 
         discrete_dqn_like: false # Whether using policy or only Q network if discrete is in action spaces
-        discrete_dqn_epsilon: 0.2 # The exploration epsilon
+        discrete_dqn_epsilon: 0.2 # Probability of using random action
         use_n_step_is: true # Whether using importance sampling
         siamese: null # ATC | BYOL
         siamese_use_q: false # Whether using contrastive q
@@ -201,10 +201,13 @@ class SAC_Base:
         self._set_logger()
 
         if device is None:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            if torch.cuda.is_available():
+                self.device = torch.device(f'cuda:{random.randint(0, torch.cuda.device_count() - 1)}')
+            else:
+                self.device = torch.device('cpu')
         else:
             self.device = torch.device(device)
-        self._logger.info(f'Device: {device}')
+        self._logger.info(f'Device: {self.device.type}:{self.device.index}')
 
         if seed is not None:
             torch.manual_seed(seed)
@@ -608,10 +611,22 @@ class SAC_Base:
         """
         Write constant information from sac_main.py, such as reward, iteration, etc.
         """
-        if self.summary_writer is not None:
-            for s in constant_summaries:
-                self.summary_writer.add_scalar(s['tag'], s['simple_value'],
-                                               self.get_global_step() if iteration is None else iteration)
+        if self.summary_writer is None:
+            return
+
+        for s in constant_summaries:
+            self.summary_writer.add_scalar(s['tag'], s['simple_value'],
+                                           self.get_global_step() if iteration is None else iteration)
+
+        self.summary_writer.flush()
+
+    def write_histogram_summaries(self, histograms, iteration=None) -> None:
+        if self.summary_writer is None:
+            return
+
+        for s in histograms:
+            self.summary_writer.add_histogram(s['tag'], s['histogram'],
+                                              self.get_global_step() if iteration is None else iteration)
 
         self.summary_writer.flush()
 
@@ -792,44 +807,61 @@ class SAC_Base:
         batch = state.shape[0]
         d_policy, c_policy = self.model_policy(state, obs_list)
 
-        if self.d_action_sizes:
-            if self.discrete_dqn_like:
-                d_qs, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None)
-                d_action_list = [torch.argmax(d_q, dim=-1) for d_q in d_qs.split(self.d_action_sizes, dim=-1)]
-                d_action_list = [functional.one_hot(d_action, d_action_size).type(torch.float32)
-                                 for d_action, d_action_size in zip(d_action_list, self.d_action_sizes)]
-                d_action = torch.concat(d_action_list, dim=-1)
+        offline_action = self.model_rep.get_offline_action(obs_list)
+        if offline_action is None:
+            if self.d_action_sizes:
+                if self.discrete_dqn_like:
+                    d_qs, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None)
+                    d_action_list = [torch.argmax(d_q, dim=-1) for d_q in d_qs.split(self.d_action_sizes, dim=-1)]
+                    d_action_list = [functional.one_hot(d_action, d_action_size).type(torch.float32)
+                                     for d_action, d_action_size in zip(d_action_list, self.d_action_sizes)]
+                    d_action = torch.concat(d_action_list, dim=-1)  # [batch, d_action_summed_size]
 
-                if self.train_mode:
-                    mask = torch.rand(batch) < 0.2
+                    if self.train_mode:
+                        mask = torch.rand(batch) < self.discrete_dqn_epsilon
 
-                    d_dist_list = [distributions.OneHotCategorical(logits=torch.ones((batch, d_action_size),
-                                                                                     device=self.device))
-                                   for d_action_size in self.d_action_sizes]
-                    random_d_action = torch.concat([dist.sample() for dist in d_dist_list], dim=-1)
+                        if self.use_rnd and (self.train_mode or force_rnd_if_available):
+                            d_rnd = self.model_rnd.cal_d_rnd(state)  # [batch, d_action_summed_size, f]
+                            t_d_rnd = self.model_target_rnd.cal_d_rnd(state)  # [batch, d_action_summed_size, f]
 
-                    d_action[mask] = random_d_action[mask]
-            else:
-                if disable_sample:
-                    d_action = d_policy.sample_deter()
-                elif self.use_rnd and (self.train_mode or force_rnd_if_available):
-                    d_action = self.rnd_sample_d_action(state, d_policy)
+                            d_loss = torch.sum(torch.pow(d_rnd - t_d_rnd, 2), dim=-1)  # [batch, d_action_summed_size]
+                            d_action_list = [torch.argmax(l, dim=-1) for l in d_loss.split(self.d_action_sizes, dim=-1)]  # [[batch, ], ...]
+                            d_action_list = [functional.one_hot(d_action, d_action_size).type(torch.float32)
+                                             for d_action, d_action_size in zip(d_action_list, self.d_action_sizes)]
+                            random_d_action = torch.concat(d_action_list, dim=-1)  # [batch, d_action_summed_size]
+                        else:
+                            # Generate random action
+                            d_dist_list = [distributions.OneHotCategorical(logits=torch.ones((batch, d_action_size),
+                                                                                             device=self.device))
+                                           for d_action_size in self.d_action_sizes]
+                            random_d_action = torch.concat([dist.sample() for dist in d_dist_list], dim=-1)
+
+                        d_action[mask] = random_d_action[mask]
                 else:
-                    d_action = d_policy.sample()
-        else:
-            d_action = torch.zeros(0, device=self.device)
-
-        if self.c_action_size:
-            if disable_sample:
-                c_action = torch.tanh(c_policy.mean)
-            elif self.use_rnd and (self.train_mode or force_rnd_if_available):
-                c_action = self.rnd_sample_c_action(state, c_policy)
+                    if disable_sample:
+                        d_action = d_policy.sample_deter()
+                    elif self.use_rnd and (self.train_mode or force_rnd_if_available):
+                        d_action = self.rnd_sample_d_action(state, d_policy)
+                    else:
+                        d_action = d_policy.sample()
             else:
-                c_action = torch.tanh(c_policy.sample())
-        else:
-            c_action = torch.zeros(0, device=self.device)
+                d_action = torch.zeros(0, device=self.device)
 
-        d_action, c_action = self._random_action(d_action, c_action)
+            if self.c_action_size:
+                if disable_sample:
+                    c_action = torch.tanh(c_policy.mean)
+                elif self.use_rnd and (self.train_mode or force_rnd_if_available):
+                    c_action = self.rnd_sample_c_action(state, c_policy)
+                else:
+                    c_action = torch.tanh(c_policy.sample())
+            else:
+                c_action = torch.zeros(0, device=self.device)
+
+            d_action, c_action = self._random_action(d_action, c_action)
+
+        else:
+            d_action = offline_action[..., :self.d_action_summed_size]
+            c_action = offline_action[..., self.d_action_summed_size:]
 
         prob = torch.ones((batch,
                            self.d_action_summed_size + self.c_action_size),
@@ -1444,7 +1476,7 @@ class SAC_Base:
         if self.d_action_sizes:
             for i in range(self.ensemble_q_num):
                 q_single = torch.sum(d_action * d_q_list[i], dim=-1, keepdim=True) / self.d_action_branch_size  # [batch, 1]
-                loss_q_list[i] += loss_none_mse(q_single, d_y)
+                loss_q_list[i] = loss_q_list[i] + loss_none_mse(q_single, d_y)
 
         if self.c_action_size:
             if self.clip_epsilon > 0:
@@ -1460,10 +1492,10 @@ class SAC_Base:
                 loss_q_b_list = [loss_none_mse(q, c_y) for q in c_q_list]  # [batch, 1]
 
                 for i in range(self.ensemble_q_num):
-                    loss_q_list[i] += torch.maximum(loss_q_a_list[i], loss_q_b_list[i])  # [batch, 1]
+                    loss_q_list[i] = loss_q_list[i] + torch.maximum(loss_q_a_list[i], loss_q_b_list[i])  # [batch, 1]
             else:
                 for i in range(self.ensemble_q_num):
-                    loss_q_list[i] += loss_none_mse(c_q_list[i], c_y)  # [batch, 1]
+                    loss_q_list[i] = loss_q_list[i] + loss_none_mse(c_q_list[i], c_y)  # [batch, 1]
 
         if priority_is is not None:
             loss_q_list = [loss_q * priority_is for loss_q in loss_q_list]
@@ -1733,15 +1765,15 @@ class SAC_Base:
         std_normal = distributions.Normal(torch.zeros_like(approx_next_state_dist.loc),
                                           torch.ones_like(approx_next_state_dist.scale))
         kl = distributions.kl.kl_divergence(approx_next_state_dist, std_normal)
-        loss_transition += self.transition_kl * torch.mean(kl)
+        loss_transition = loss_transition + self.transition_kl * torch.mean(kl)
 
         approx_n_rewards = self.model_reward(m_states[:, self.burn_in_step + 1:, ...])  # [batch, n, 1]
         loss_reward = functional.mse_loss(approx_n_rewards, torch.unsqueeze(bn_rewards[:, self.burn_in_step:], 2))
-        loss_reward /= self.n_step
+        loss_reward = loss_reward / self.n_step
 
         loss_obs = self.model_observation.get_loss(m_states[:, self.burn_in_step:, ...],
                                                    [m_obses[:, self.burn_in_step:, ...] for m_obses in m_obses_list])
-        loss_obs /= self.n_step
+        loss_obs = loss_obs / self.n_step
 
         self.calculate_adaptive_weights(grads_rep_main, [loss_transition, loss_reward, loss_obs], self.model_rep)
 
@@ -1793,7 +1825,7 @@ class SAC_Base:
             mu_d_policy_entropy = -torch.sum(mu_d_policy_probs * torch.log(clipped_mu_d_policy_probs), dim=-1) / self.d_action_branch_size  # [batch, ]
             pi_d_policy_entropy = d_policy.entropy().sum(-1) / self.d_action_branch_size  # [batch, ]
             entropy_penalty = torch.pow(mu_d_policy_entropy - pi_d_policy_entropy, 2.) / 2.   # [batch, ]
-            loss_d_policy += self.d_policy_entropy_penalty * entropy_penalty.unsqueeze(-1)  # [batch, 1]
+            loss_d_policy = loss_d_policy + self.d_policy_entropy_penalty * entropy_penalty.unsqueeze(-1)  # [batch, 1]
 
         if self.c_action_size:
             action_sampled = c_policy.rsample()
@@ -1872,14 +1904,14 @@ class SAC_Base:
         if self.curiosity == CURIOSITY.FORWARD:
             approx_next_n_states = self.model_forward_dynamic(n_states, n_actions)
             loss_curiosity = functional.mse_loss(approx_next_n_states, next_n_states, reduction='none')
-            loss_curiosity *= ~bn_padding_masks.unsqueeze(-1)
+            loss_curiosity = loss_curiosity * ~bn_padding_masks.unsqueeze(-1)
             loss_curiosity = torch.mean(loss_curiosity)
             loss_curiosity.backward(inputs=list(self.model_forward_dynamic.parameters()))
 
         elif self.curiosity == CURIOSITY.INVERSE:
             approx_n_actions = self.model_inverse_dynamic(n_states, next_n_states)
             loss_curiosity = functional.mse_loss(approx_n_actions, n_actions, reduction='none')
-            loss_curiosity *= ~bn_padding_masks.unsqueeze(-1)
+            loss_curiosity = loss_curiosity * ~bn_padding_masks.unsqueeze(-1)
             loss_curiosity = torch.mean(loss_curiosity)
             loss_curiosity.backward(inputs=list(self.model_inverse_dynamic.parameters()))
 
@@ -1911,8 +1943,8 @@ class SAC_Base:
             # [batch, n, d_action_summed_size, f] -> [batch, n, f]
 
             _loss = functional.mse_loss(d_rnd, t_d_rnd, reduction='none')
-            _loss *= ~n_padding_masks.unsqueeze(-1)
-            loss += torch.mean(_loss)
+            _loss = _loss * ~n_padding_masks.unsqueeze(-1)
+            loss = loss + torch.mean(_loss)
 
         if self.c_action_size:
             c_rnd = self.model_rnd.cal_c_rnd(n_states, c_n_actions)  # [batch, n, f]
@@ -1920,8 +1952,8 @@ class SAC_Base:
                 t_c_rnd = self.model_target_rnd.cal_c_rnd(n_states, c_n_actions)  # [batch, n, f]
 
             _loss = functional.mse_loss(c_rnd, t_c_rnd, reduction='none')
-            _loss *= ~n_padding_masks.unsqueeze(-1)
-            loss += torch.mean(_loss)
+            _loss = _loss * ~n_padding_masks.unsqueeze(-1)
+            loss = loss + torch.mean(_loss)
 
         self.optimizer_rnd.zero_grad()
         loss.backward(inputs=list(self.model_rnd.parameters()))
