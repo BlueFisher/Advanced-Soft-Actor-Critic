@@ -15,7 +15,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         else:
             embed_dim = self.obs_shapes[0][0] + self.c_action_size + sum(self.d_action_sizes)
 
-        self.attn = m.EpisodeMultiheadAttention(embed_dim, 1,
+        self.attn = m.EpisodeMultiheadAttention(embed_dim,
                                                 num_layers=1,
                                                 use_residual=True,
                                                 use_gated=False,
@@ -46,16 +46,24 @@ class ModelRep(m.ModelBaseAttentionRep):
         return output, hn, attn_weights_list
 
 
-class ModelOptionRep(m.ModelBaseRNNRep):
-    def _build_model(self):
-        self.rnn = m.GRU(self.obs_shapes[0][0] + self.obs_shapes[1][0] + sum(self.d_action_sizes) + self.c_action_size, 8, 2)
+# class ModelOptionRep(m.ModelBaseRNNRep):
+#     def _build_model(self):
+#         self.rnn = m.GRU(self.obs_shapes[0][0] + self.obs_shapes[1][0] + sum(self.d_action_sizes) + self.c_action_size, 8, 2)
 
-    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
-        high_state, obs = obs_list
+#     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
+#         high_state, obs = obs_list
 
-        state, hn = self.rnn(torch.cat([high_state, obs, pre_action], dim=-1), rnn_state)
+#         state, hn = self.rnn(torch.cat([high_state, obs, pre_action], dim=-1), rnn_state)
 
-        return state, hn
+#         return state, hn
+
+class ModelOptionRep(m.ModelBaseSimpleRep):
+    def forward(self, obs_list):
+        high_state, vec_obs = obs_list
+
+        output = torch.concat([high_state, vec_obs], dim=-1)
+
+        return output
 
 
 ModelQ = m.ModelQ

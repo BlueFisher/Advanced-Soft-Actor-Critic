@@ -290,13 +290,13 @@ class SAC_Base:
             self.model_rep: ModelBaseRNNRep = ModelRep(self.obs_names,
                                                        self.obs_shapes,
                                                        self.d_action_sizes, self.c_action_size,
-                                                       False, self.train_mode,
+                                                       False,
                                                        self.model_abs_dir,
                                                        **nn_config['rep']).to(self.device)
             self.model_target_rep: ModelBaseRNNRep = ModelRep(self.obs_names,
                                                               self.obs_shapes,
                                                               self.d_action_sizes, self.c_action_size,
-                                                              True, self.train_mode,
+                                                              True,
                                                               self.model_abs_dir,
                                                               **nn_config['rep']).to(self.device)
             # Get represented state and seq_hidden_state_shape
@@ -310,13 +310,13 @@ class SAC_Base:
             self.model_rep: ModelBaseAttentionRep = ModelRep(self.obs_names,
                                                              self.obs_shapes,
                                                              self.d_action_sizes, self.c_action_size,
-                                                             False, self.train_mode,
+                                                             False,
                                                              self.model_abs_dir,
                                                              **nn_config['rep']).to(self.device)
             self.model_target_rep: ModelBaseAttentionRep = ModelRep(self.obs_names,
                                                                     self.obs_shapes,
                                                                     self.d_action_sizes, self.c_action_size,
-                                                                    True, self.train_mode,
+                                                                    True,
                                                                     self.model_abs_dir,
                                                                     **nn_config['rep']).to(self.device)
             # Get represented state and seq_hidden_state_shape
@@ -331,12 +331,12 @@ class SAC_Base:
         else:
             self.model_rep: ModelBaseSimpleRep = ModelRep(self.obs_names,
                                                           self.obs_shapes,
-                                                          False, self.train_mode,
+                                                          False,
                                                           self.model_abs_dir,
                                                           **nn_config['rep']).to(self.device)
             self.model_target_rep: ModelBaseSimpleRep = ModelRep(self.obs_names,
                                                                  self.obs_shapes,
-                                                                 True, self.train_mode,
+                                                                 True,
                                                                  self.model_abs_dir,
                                                                  **nn_config['rep']).to(self.device)
             # Get represented state dimension
@@ -360,7 +360,6 @@ class SAC_Base:
                                                          self.d_action_sizes,
                                                          self.c_action_size,
                                                          False,
-                                                         self.train_mode,
                                                          self.model_abs_dir).to(self.device)
                                                for _ in range(self.ensemble_q_num)]
 
@@ -368,7 +367,6 @@ class SAC_Base:
                                                                 self.d_action_sizes,
                                                                 self.c_action_size,
                                                                 True,
-                                                                self.train_mode,
                                                                 self.model_abs_dir).to(self.device)
                                                       for _ in range(self.ensemble_q_num)]
         for model_target_q in self.model_target_q_list:
@@ -379,7 +377,6 @@ class SAC_Base:
 
         """ POLICY """
         self.model_policy: ModelBasePolicy = nn.ModelPolicy(state_size, self.d_action_sizes, self.c_action_size,
-                                                            self.train_mode,
                                                             self.model_abs_dir,
                                                             **nn_config['policy']).to(self.device)
         self.optimizer_policy = adam_optimizer(self.model_policy.parameters())
@@ -592,6 +589,9 @@ class SAC_Base:
 
     def set_train_mode(self, train_mode=True):
         self.train_mode = train_mode
+        for m in self.ckpt_dict.values():
+            if isinstance(m, nn.Module):
+                m.train(mode=self.train_mode)
 
     def save_model(self, save_replay_buffer=False) -> None:
         if self.ckpt_dir:
@@ -624,11 +624,11 @@ class SAC_Base:
         if self.summary_writer is None:
             return
 
-        for s in histograms:
-            self.summary_writer.add_histogram(s['tag'], s['histogram'],
-                                              self.get_global_step() if iteration is None else iteration)
+        # for s in histograms:
+        #     self.summary_writer.add_histogram(s['tag'], s['histogram'],
+        #                                       self.get_global_step() if iteration is None else iteration)
 
-        self.summary_writer.flush()
+        # self.summary_writer.flush()
 
     def _increase_global_step(self) -> int:
         self.global_step.add_(1)
@@ -818,23 +818,21 @@ class SAC_Base:
                     d_action = torch.concat(d_action_list, dim=-1)  # [batch, d_action_summed_size]
 
                     if self.train_mode:
-                        mask = torch.rand(batch) < self.discrete_dqn_epsilon
-
                         if self.use_rnd and (self.train_mode or force_rnd_if_available):
-                            d_rnd = self.model_rnd.cal_d_rnd(state)  # [batch, d_action_summed_size, f]
-                            t_d_rnd = self.model_target_rnd.cal_d_rnd(state)  # [batch, d_action_summed_size, f]
+                            s_rnd = self.model_rnd.cal_s_rnd(state)  # [batch, f]
+                            t_s_rnd = self.model_target_rnd.cal_s_rnd(state)  # [batch, f]
 
-                            d_loss = torch.sum(torch.pow(d_rnd - t_d_rnd, 2), dim=-1)  # [batch, d_action_summed_size]
-                            d_action_list = [torch.argmax(l, dim=-1) for l in d_loss.split(self.d_action_sizes, dim=-1)]  # [[batch, ], ...]
-                            d_action_list = [functional.one_hot(d_action, d_action_size).type(torch.float32)
-                                             for d_action, d_action_size in zip(d_action_list, self.d_action_sizes)]
-                            random_d_action = torch.concat(d_action_list, dim=-1)  # [batch, d_action_summed_size]
+                            s_loss = torch.mean(torch.abs(s_rnd - t_s_rnd), dim=-1)  # [batch, ]
+                            s_loss = torch.clip(s_loss - 0.1, 0., 0.2)
+                            mask = torch.rand(batch).to(self.device) < s_loss
                         else:
-                            # Generate random action
-                            d_dist_list = [distributions.OneHotCategorical(logits=torch.ones((batch, d_action_size),
-                                                                                             device=self.device))
-                                           for d_action_size in self.d_action_sizes]
-                            random_d_action = torch.concat([dist.sample() for dist in d_dist_list], dim=-1)
+                            mask = torch.rand(batch) < self.discrete_dqn_epsilon
+
+                        # Generate random action
+                        d_dist_list = [distributions.OneHotCategorical(logits=torch.ones((batch, d_action_size),
+                                                                                         device=self.device))
+                                       for d_action_size in self.d_action_sizes]
+                        random_d_action = torch.concat([dist.sample() for dist in d_dist_list], dim=-1)
 
                         d_action[mask] = random_d_action[mask]
                 else:
@@ -1929,7 +1927,12 @@ class SAC_Base:
         d_n_actions = n_actions[..., :self.d_action_summed_size]  # [batch, n, d_action_summed_size]
         c_n_actions = n_actions[..., self.d_action_summed_size:]  # [batch, n, c_action_size]
 
-        loss = torch.zeros((1, ), device=self.device)
+        s_rnd = self.model_rnd.cal_s_rnd(n_states)  # [batch, n, f]
+        with torch.no_grad():
+            t_s_rnd = self.model_target_rnd.cal_s_rnd(n_states)  # [batch, n, f]
+        _loss = functional.mse_loss(s_rnd, t_s_rnd, reduction='none')
+        _loss = _loss * ~n_padding_masks.unsqueeze(-1)
+        loss = torch.mean(_loss)
 
         if self.d_action_sizes:
             d_rnd = self.model_rnd.cal_d_rnd(n_states)  # [batch, n, d_action_summed_size, f]

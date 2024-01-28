@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 import gymnasium as gym
 import numpy as np
@@ -20,10 +20,11 @@ class GymWrapper(EnvWrapper):
     def __init__(self,
                  train_mode: bool = True,
                  env_name: str = None,
+                 env_args: Optional[Union[str, Dict]] = None,
                  n_envs: int = 1,
 
                  render=False):
-        super().__init__(train_mode, env_name, n_envs)
+        super().__init__(train_mode, env_name, env_args, n_envs)
 
         self.render = render
 
@@ -34,7 +35,8 @@ class GymWrapper(EnvWrapper):
     def init(self):
         self.env = env = gym.vector.make(self.env_name,
                                          render_mode='human' if self.render else None,
-                                         num_envs=self.n_envs)
+                                         num_envs=self.n_envs,
+                                         **self.env_args)
 
         self._logger.info(f'Observation shapes: {env.observation_space}')
         self._logger.info(f'Action size: {env.action_space}')

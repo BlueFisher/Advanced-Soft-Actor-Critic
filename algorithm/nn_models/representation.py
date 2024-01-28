@@ -11,14 +11,13 @@ class ModelBaseRep(nn.Module):
     def __init__(self,
                  obs_names: List[str],
                  obs_shapes: List[Tuple],
-                 is_target: bool, train_mode: bool,
+                 is_target: bool,
                  model_abs_dir: Optional[Path] = None, **kwargs):
         super().__init__()
 
         self.obs_names = obs_names
         self.obs_shapes = obs_shapes
         self.is_target = is_target
-        self.train_mode = train_mode
         self.model_abs_dir = model_abs_dir
 
         self._offline_action_index = -1
@@ -53,9 +52,9 @@ class ModelBaseSimpleRep(ModelBaseRep):
     def __init__(self,
                  obs_names: List[str],
                  obs_shapes: List[Tuple],
-                 is_target: bool, train_mode: bool,
+                 is_target: bool,
                  model_abs_dir: Optional[Path] = None, **kwargs):
-        super().__init__(obs_names, obs_shapes, is_target, train_mode, model_abs_dir)
+        super().__init__(obs_names, obs_shapes, is_target, model_abs_dir)
 
         self._build_model(**kwargs)
 
@@ -70,11 +69,11 @@ class ModelBaseRNNRep(ModelBaseRep):
                  obs_names: List[str],
                  obs_shapes: List[Tuple],
                  d_action_sizes: List[int], c_action_size: int,
-                 is_target: bool, train_mode: bool,
+                 is_target: bool,
                  model_abs_dir: Optional[Path] = None,
                  use_dilation=False,  # For option critic
                  **kwargs):
-        super().__init__(obs_names, obs_shapes, is_target, train_mode, model_abs_dir)
+        super().__init__(obs_names, obs_shapes, is_target, model_abs_dir)
         self.d_action_sizes = d_action_sizes
         self.c_action_size = c_action_size
         self.use_dilation = use_dilation
@@ -109,11 +108,11 @@ class ModelBaseAttentionRep(ModelBaseRep):
                  obs_names: List[str],
                  obs_shapes: List[Tuple],
                  d_action_sizes: List[int], c_action_size: int,
-                 is_target: bool, train_mode: bool,
+                 is_target: bool,
                  model_abs_dir: Optional[Path] = None,
                  use_dilation=False,  # For option critic
                  **kwargs):
-        super().__init__(obs_names, obs_shapes, is_target, train_mode, model_abs_dir)
+        super().__init__(obs_names, obs_shapes, is_target, model_abs_dir)
         self.d_action_sizes = d_action_sizes
         self.c_action_size = c_action_size
         self.use_dilation = use_dilation

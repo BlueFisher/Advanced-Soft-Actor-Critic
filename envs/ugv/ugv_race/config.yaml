@@ -3,7 +3,7 @@ default:
     env_name: UGVRace
     unity_args:
       build_path:
-        win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
+        win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
       no_graphics: false
 

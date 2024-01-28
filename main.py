@@ -16,7 +16,7 @@ HITTED_ENVS = {'roller',
                'ugv', 'ugv/ugv_street_search', 'ugv/ugv_parking',
                'usv',
                'gym/memory_corridor',
-               'gym/stack_corridor'}
+               'gym/stack_corridor', 'gym/stack_unique_corridor'}
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

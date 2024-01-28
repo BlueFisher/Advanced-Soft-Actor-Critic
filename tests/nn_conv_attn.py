@@ -18,7 +18,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         else:
             embed_dim = self.conv.output_size + sum(self.d_action_sizes) + self.c_action_size
 
-        self.attn = m.EpisodeMultiheadAttention(embed_dim, 1,
+        self.attn = m.EpisodeMultiheadAttention(embed_dim,
                                                 num_layers=1,
                                                 use_residual=True,
                                                 use_gated=False,

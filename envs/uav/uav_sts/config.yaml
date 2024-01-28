@@ -1,20 +1,17 @@
 default:
   base_config:
-    env_name: UAV
+    env_name: UAVSTS
     unity_args:
       build_path:
-        win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
+        win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
       no_graphics: false
 
     n_envs: 50
-    max_step: 300000
     reset_on_iteration: false
 
   reset_config:
     force_reset: true
-    success_reward: 10
-    failure_reward: -1
 
   sac_config:
     write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
@@ -23,3 +20,11 @@ default:
     n_step: 3
     burn_in_step: 20
     seq_encoder: RNN
+
+aggr:
+  base_config:
+    unity_args:
+      group_aggregation: true
+
+  sac_config:
+    nn: nn_aggr

@@ -234,6 +234,7 @@ class OC_Agent(Agent):
             key_indexes (np.int32): [1, key_len]
             key_padding_masks (np.bool): [1, key_len]
             key_obses_list: List([1, key_len, *obs_shapes_i], ...)
+            key_option_indexes (np.int64): [1, key_len]
             key_seq_hidden_states: [1, key_len, *seq_hidden_state_shape]
         """
         tmp = self._tmp_episode_trans
@@ -243,12 +244,15 @@ class OC_Agent(Agent):
         # [1, episode_len]
         ep_obses_list = [np.expand_dims(o, 0) for o in tmp['obs_list']]
         # List([1, episode_len, *obs_shape_si], ...)
+        ep_option_indexes = np.expand_dims(tmp['option_index'], 0)
+        # [1, episode_len]
         ep_seq_hidden_states = np.expand_dims(tmp['seq_hidden_state'], 0)
         # [1, episode_len, *seq_hidden_state_shape]
 
         key_indexes = ep_indexes[:, option_changed_indexes]
         key_padding_masks = np.zeros_like(key_indexes, dtype=bool)
         key_obses_list = [o[:, option_changed_indexes] for o in ep_obses_list]
+        key_option_indexes = ep_option_indexes[:, option_changed_indexes]
         key_seq_hidden_states = ep_seq_hidden_states[:, option_changed_indexes]
 
         assert force_length >= self.key_trans_length
@@ -258,17 +262,20 @@ class OC_Agent(Agent):
             delta_key_indexes = -np.ones((1, delta), dtype=np.int32)
             delta_padding_masks = np.ones((1, delta), dtype=bool)  # `True` indicates ignored
             delta_obses_list = [np.zeros((1, delta, *s), dtype=np.float32) for s in self.obs_shapes]
+            delta_option_indexes = -np.ones((1, delta), dtype=np.int64)
             delta_seq_hidden_states = np.zeros((1, delta, *self.seq_hidden_state_shape), dtype=np.float32)
 
             key_indexes = np.concatenate([delta_key_indexes, key_indexes], axis=1)
             key_padding_masks = np.concatenate([delta_padding_masks, key_padding_masks], axis=1)
             key_obses_list = [np.concatenate([d_o, o], axis=1) for d_o, o in zip(delta_obses_list, key_obses_list)]
+            key_option_indexes = np.concatenate([delta_option_indexes, key_option_indexes], axis=1)
             key_seq_hidden_states = np.concatenate([delta_seq_hidden_states, key_seq_hidden_states], axis=1)
 
         return (
             key_indexes,
             key_padding_masks,
             key_obses_list,
+            key_option_indexes,
             key_seq_hidden_states,
         )
 
@@ -322,9 +329,16 @@ class OC_AgentManager(AgentManager):
             for i in range(num_agents)
         ]
 
+    def clear(self) -> None:
+        self['pre_option_index'] = self['initial_option_index']
+        if self.seq_encoder is not None and self.option_seq_encoder is not None:
+            self['low_seq_hidden_state'] = self['initial_low_seq_hidden_state']
+
+        return super().clear()
+
     def get_action(self,
                    disable_sample: bool = False,
-                   force_rnd_if_available: bool = False):
+                   force_rnd_if_available: bool = False) -> None:
         if self.seq_encoder == SEQ_ENCODER.RNN and not self.use_dilation:
             (option_index,
              action,
@@ -414,11 +428,13 @@ class OC_AgentManager(AgentManager):
             (all_key_indexes,
              all_key_padding_masks,
              all_key_obses_list,
+             all_key_option_indexes,
              all_key_attn_states) = zip(*all_key_trans)
 
             key_indexes = np.concatenate(all_key_indexes)
             key_padding_masks = np.concatenate(all_key_padding_masks)
             key_obses_list = [np.concatenate(o) for o in zip(*all_key_obses_list)]
+            key_option_indexes = np.concatenate(all_key_option_indexes)
             key_attn_states = np.concatenate(all_key_attn_states)
 
             all_last_indexes = [a.get_last_index() for a in self.agents]
@@ -432,6 +448,8 @@ class OC_AgentManager(AgentManager):
                                                 np.zeros((key_padding_masks.shape[0], 1), dtype=bool)], axis=1)
             key_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
                               for o, t_o in zip(key_obses_list, self['obs_list'])]
+            key_option_indexes = np.concatenate([key_option_indexes,
+                                                 -np.ones((key_padding_masks.shape[0], 1), dtype=np.int64)], axis=1)
             key_attn_states = np.concatenate([key_attn_states,
                                               np.expand_dims(self['key_seq_hidden_state'], 1)], axis=1)
 
@@ -443,6 +461,7 @@ class OC_AgentManager(AgentManager):
                 key_indexes=key_indexes,
                 key_padding_masks=key_padding_masks,
                 key_obses_list=key_obses_list,
+                key_option_indexes=key_option_indexes,
                 key_attn_states=key_attn_states,
 
                 pre_option_index=self['pre_option_index'],

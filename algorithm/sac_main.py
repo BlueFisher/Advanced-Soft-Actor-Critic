@@ -14,6 +14,7 @@ from .agent import MultiAgentsManager
 from .sac_base import SAC_Base
 from .utils import UnifiedElapsedTimer, format_global_step
 from .utils.enums import *
+import time
 
 
 class Main:
@@ -129,6 +130,7 @@ class Main:
 
             self.env = GymWrapper(train_mode=self.train_mode,
                                   env_name=self.base_config['env_name'],
+                                  env_args=self.base_config['env_args'],
                                   n_envs=self.base_config['n_envs'],
                                   render=self.render)
 

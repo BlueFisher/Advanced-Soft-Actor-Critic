@@ -12,19 +12,11 @@ else:
 
 
 class OfflineWrapper(EnvWrapper):
-    def __init__(self, env_name: str, n_envs: int,
-                 env_args: Optional[Union[str, Dict]] = None):
-        super().__init__(True, env_name, n_envs)
-
-        self.env_args = {}
-        if env_args is not None:
-            if isinstance(env_args, dict):
-                self.env_args = env_args
-            else:
-                kv_pairs = env_args.split(' ')
-                for kv in kv_pairs:
-                    k, v = kv.split(',')
-                    self.env_args[k] = v
+    def __init__(self,
+                 env_name: str,
+                 env_args: Optional[Union[str, Dict]] = None,
+                 n_envs: int = 1):
+        super().__init__(True, env_name, env_args, n_envs)
 
         self._logger = logging.getLogger('OfflineWrapper')
 
