@@ -1,23 +1,24 @@
 default:
   base_config:
     env_type: GYM
-    env_name: StackCorridor-v0
+    env_name: StackUniqueCorridor-v0
     env_args:
       map_width: 3
-      target_type_num: 3
+      target_type_num: 16
+      target_type_dups: 1
 
     name: rnn_{time}
 
     n_envs: 100
 
   reset_config:
-    stack_len: 100
     stack_nesting: 0.5
     max_nesting_depth: 10
-    block_gap: [3, 6]
+    key_target_num: 10
+    block_gap: 5
     success_reward: 2.
     failure_reward: -1.
-    max_episode_steps: 2000
+    max_episode_steps: 200
 
   sac_config:
     burn_in_step: 0
@@ -25,14 +26,15 @@ default:
     seq_encoder: RNN
 
     discrete_dqn_like: true
-    discrete_dqn_epsilon: 0.17
+    discrete_dqn_epsilon: 0.2
     use_priority: true # Whether using PER importance ratio
 
     batch_size: 1024
 
-    learning_rate: 0.002
+    learning_rate: 0.001
 
-    # use_rnd: true
+    ensemble_q_num: 5 # Number of Qs
+    ensemble_q_sample: 3 # Number of min Qs
 
   oc_config:
     option_eplison: 0.1 # Probability of switching options
@@ -148,14 +150,6 @@ oc_4_attn_dilated:
   oc_config:
     use_dilation: true
 
-oc_4_attn_dilated_te04:
-  inherited: oc_4_attn
-  base_config:
-    name: oc_4_attn_dilated_te04_{time}
-  oc_config:
-    terminal_entropy: 0.04
-    use_dilation: true
-
 oc_3_attn_dilated_te04:
   inherited: oc_3_attn
   base_config:
@@ -194,6 +188,14 @@ oc_3_attn_dilated_te00:
     name: oc_3_attn_dilated_te00_{time}
   oc_config:
     terminal_entropy: 0.0
+    use_dilation: true
+
+oc_3_attn_dilated_te-01:
+  inherited: oc_3_attn
+  base_config:
+    name: oc_3_attn_dilated_te-01_{time}
+  oc_config:
+    terminal_entropy: -0.01
     use_dilation: true
 
 oc_3_attn_dilated_te01_offline:

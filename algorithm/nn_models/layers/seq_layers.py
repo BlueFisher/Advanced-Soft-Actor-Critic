@@ -1,8 +1,11 @@
 import math
+from enum import Enum
 from typing import List, Optional, Union
 
 import torch
 from torch import nn
+
+from .linear_layers import LinearLayers
 
 
 class GRU(nn.GRU):
@@ -29,11 +32,25 @@ class LSTM(nn.LSTM):
         return output.transpose(0, 1), torch.cat([hn, cn], dim=-1).transpose(0, 1)
 
 
+class POSITIONAL_ENCODING(Enum):
+    ABSOLUATE = 1
+    ABSOLUATE_CAT = 2
+    ROPE = 3
+
+
+class GATE(Enum):
+    RESIDUAL = 1
+    OUTPUT = 2
+    RECURRENT = 3
+    CAT = 4
+
+
 class MultiheadAttention(nn.Module):
     def __init__(self,
                  embed_dim: int,
                  num_heads: int = 1,
-                 use_rope: bool = False) -> None:
+                 pe: Optional[POSITIONAL_ENCODING] = None,
+                 dropout: float = 0.) -> None:
 
         super().__init__()
 
@@ -43,17 +60,25 @@ class MultiheadAttention(nn.Module):
         self.head_dim = embed_dim // num_heads
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
 
-        self.use_rope = use_rope
+        self.pe = pe
 
-        if use_rope:
+        _ori_embed_dim = embed_dim
+        if pe == POSITIONAL_ENCODING.ABSOLUATE:
+            self.abpe = AbsolutePositionalEncoding(embed_dim)
+        elif pe == POSITIONAL_ENCODING.ABSOLUATE_CAT:
+            self.abpe = AbsolutePositionalEncoding(embed_dim)
+            _ori_embed_dim = embed_dim * 2
+        elif pe == POSITIONAL_ENCODING.ROPE:
             self.rope = RotaryPositionalEncoding(embed_dim)
 
-        self.q_proj = nn.Linear(embed_dim, embed_dim)
-        self.k_proj = nn.Linear(embed_dim, embed_dim)
-        self.v_proj = nn.Linear(embed_dim, embed_dim)
+        self.dropout = dropout
 
-        self.out_proj = nn.Sequential(nn.Linear(embed_dim, embed_dim),
-                                      nn.LeakyReLU())
+        self.q_proj = LinearLayers(_ori_embed_dim, output_size=embed_dim)
+        self.k_proj = LinearLayers(_ori_embed_dim, output_size=embed_dim)
+        self.v_proj = LinearLayers(_ori_embed_dim, output_size=embed_dim)
+
+        self.out_proj = LinearLayers(_ori_embed_dim, dense_n=embed_dim, dense_depth=1,
+                                     activation=nn.ReLU)
 
     def forward(self,
                 query: torch.Tensor,
@@ -89,13 +114,33 @@ class MultiheadAttention(nn.Module):
         if attn_mask is not None and len(attn_mask.shape) >= 3:
             attn_mask = attn_mask.reshape(-1, *attn_mask.shape[-2:])
 
-        # bsz = query.shape[0]
+        # bsz, seq_q_len = query_index.shape
+        # bsz, seq_k_len = key_index.shape
+
+        # query_index = torch.arange(seq_q_len, dtype=query_index.dtype, device=query_index.device)
+        # query_index = query_index[None, :].repeat_interleave(bsz, dim=0)
+
+        # key_index = torch.arange(seq_k_len, dtype=key_index.dtype, device=key_index.device)
+        # key_index = key_index[None, :].repeat_interleave(bsz, dim=0)
+
+        if self.pe == POSITIONAL_ENCODING.ABSOLUATE:
+            pe = self.abpe(query_index)
+            query = pe + query
+            pe = self.abpe(key_index)
+            key = pe + key
+            value = pe + value
+        elif self.pe == POSITIONAL_ENCODING.ABSOLUATE_CAT:
+            pe = self.abpe(query_index)
+            query = torch.concat([query, pe], dim=-1)
+            pe = self.abpe(key_index)
+            key = torch.concat([key, pe], dim=-1)
+            value = torch.concat([value, pe], dim=-1)
 
         q = self.q_proj(query)  # [bsz, seq_q_len, embed_dim]
         k = self.k_proj(key)  # [bsz, seq_k_len, embed_dim]
         v = self.v_proj(value)  # [bsz, seq_k_len, embed_dim]
 
-        if self.use_rope:
+        if self.pe == POSITIONAL_ENCODING.ROPE:
             q, k = self.rope(query_index, key_index, q, k)
 
         if self.num_heads > 1:
@@ -128,6 +173,13 @@ class MultiheadAttention(nn.Module):
 
         attn_output_weights = torch.softmax(attn_output_weights, dim=-1)  # [bsz * num_heads, seq_q_len, seq_k_len]
 
+        dropout = self.dropout
+        if not self.training:
+            dropout = 0.
+
+        if dropout > 0.:
+            attn_output_weights = nn.functional.dropout(attn_output_weights, p=dropout)
+
         attn_output = torch.bmm(attn_output_weights, v)  # [bsz * num_heads, seq_q_len, head_dim]
 
         if self.num_heads > 1:
@@ -144,38 +196,91 @@ class MultiheadAttention(nn.Module):
         return attn_output, attn_output_weights
 
 
+class GatedResidualLayer(nn.Module):
+    def forward(self, x, y):
+        return x + y
+
+
+class GatedOutputLayer(nn.Module):
+    def __init__(self, embed_dim: int):
+        super().__init__()
+
+        self.embed_dim = embed_dim
+        self.dense = nn.Linear(embed_dim, embed_dim, bias=False)
+        nn.init.kaiming_uniform_(self.dense.weight.data)
+
+    def forward(self, x, y):
+        return x + torch.sigmoid(self.dense(x) * y)
+
+
+class GatedRecurrentLayer(nn.Module):
+    def __init__(self, embed_dim: int):
+        super().__init__()
+
+        self.embed_dim = embed_dim
+
+        self.dense_x_r = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.dense_y_r = nn.Linear(embed_dim, embed_dim, bias=False)
+
+        self.dense_x_z = nn.Linear(embed_dim, embed_dim, bias=True)
+        self.dense_y_z = nn.Linear(embed_dim, embed_dim, bias=False)
+
+        self.dense_x_g = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.dense_y_g = nn.Linear(embed_dim, embed_dim, bias=False)
+
+        nn.init.kaiming_uniform_(self.dense_x_r.weight.data)
+        nn.init.kaiming_uniform_(self.dense_y_r.weight.data)
+        nn.init.kaiming_uniform_(self.dense_x_z.weight.data)
+        nn.init.kaiming_uniform_(self.dense_y_z.weight.data)
+        nn.init.kaiming_uniform_(self.dense_x_g.weight.data)
+        nn.init.kaiming_uniform_(self.dense_y_g.weight.data)
+
+    def forward(self, x, y):
+        _r = torch.sigmoid(self.dense_x_r(x) + self.dense_y_r(y))
+        _z = torch.sigmoid(self.dense_x_z(x) + self.dense_y_z(y))
+        _h = torch.tanh(self.dense_x_g(_r * x) + self.dense_y_g(y))
+        return (1 - _z) * x + _z * _h
+
+
+class GatedCatLayer(nn.Module):
+    def forward(self, x, y):
+        return torch.concat([x, y], dim=-1)
+
+
 class EpisodeMultiheadAttentionBlock(nn.Module):
     def __init__(self, embed_dim: int, num_heads: int,
 
-                 use_pe: bool = True,
-                 use_residual: bool = True,
-                 use_gated: bool = True,
+                 pe: Optional[POSITIONAL_ENCODING] = None,
+                 dropout: float = 0.,
+                 gate: Optional[GATE] = None,
                  use_layer_norm: bool = False):
         super().__init__()
 
         self.embed_dim = embed_dim
         self.num_heads = num_heads
 
-        self.use_residual = use_residual
-        self.use_gated = use_gated
+        self.gate = gate
         self.use_layer_norm = use_layer_norm
 
-        if self.use_gated:
-            self.dense_x_r = nn.Linear(embed_dim, embed_dim)
-            self.dense_y_r = nn.Linear(embed_dim, embed_dim)
-
-            self.dense_x_z = nn.Linear(embed_dim, embed_dim)
-            self.dense_y_z = nn.Linear(embed_dim, embed_dim)
-
-            self.dense_x_g = nn.Linear(embed_dim, embed_dim)
-            self.dense_y_g = nn.Linear(embed_dim, embed_dim)
+        self.output_dim = embed_dim
 
         if self.use_layer_norm:
             self.layer_norm = nn.LayerNorm(self.embed_dim)
 
         self.attn = MultiheadAttention(embed_dim=embed_dim,
                                        num_heads=num_heads,
-                                       use_rope=use_pe)
+                                       pe=pe,
+                                       dropout=dropout)
+
+        if gate == GATE.RESIDUAL:
+            self.gatedlayer = GatedResidualLayer()
+        elif gate == GATE.OUTPUT:
+            self.gatedlayer = GatedOutputLayer(embed_dim)
+        elif gate == GATE.RECURRENT:
+            self.gatedlayer = GatedRecurrentLayer(embed_dim)
+        elif gate == GATE.CAT:
+            self.gatedlayer = GatedCatLayer()
+            self.output_dim = self.output_dim * 2
 
     def get_attn_mask(self,
                       seq_k_len: int,
@@ -206,6 +311,12 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
         if seq_q_len_only_attend_to_rest_key is not None:
             seq_q_len = seq_q_len_only_attend_to_rest_key
 
+            attn_mask = torch.ones(seq_k_len, seq_k_len, dtype=bool, device=device)
+
+            attn_mask[:seq_k_len - seq_q_len, :seq_k_len - seq_q_len] = torch.eye(seq_k_len - seq_q_len, seq_k_len - seq_q_len, dtype=bool, device=device)
+            # [seq_k_len, seq_k_len - seq_q_len]
+
+            # Query only attends on itself
             _attn_mask = ~torch.eye(seq_q_len, dtype=bool, device=device)  # [seq_q_len, seq_q_len]
             attn_mask[-seq_q_len:, -seq_q_len:] = torch.logical_or(
                 attn_mask[-seq_q_len:, -seq_q_len:],
@@ -223,12 +334,12 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
                 _query_index = _query_index.unsqueeze(-1).repeat_interleave(seq_k_len - seq_q_len, dim=-1)  # [batch, seq_q_len, seq_k_len - seq_q_len]
                 _rest_key_index = _rest_key_index.unsqueeze(1).repeat_interleave(seq_q_len, dim=-2)  # [batch, seq_q_len, seq_k_len - seq_q_len]
 
-                _attn_mask = ~(_query_index > _rest_key_index)  # [batch, seq_q_len, seq_k_len - seq_q_len]
+                _attn_mask = ~(_query_index >= _rest_key_index)  # [batch, seq_q_len, seq_k_len - seq_q_len]
 
-                attn_mask[:, -seq_q_len:, :seq_k_len - seq_q_len] = torch.logical_or(
-                    attn_mask[:, -seq_q_len:, :seq_k_len - seq_q_len],
-                    _attn_mask
-                )  # [batch, seq_k_len, seq_k_len]
+                attn_mask[:, -seq_q_len:, :seq_k_len - seq_q_len] = _attn_mask  # [batch, seq_k_len, seq_k_len]
+
+                # Preventing NAN, each element should attend to the first element.
+                attn_mask[:, -seq_q_len:, 0] = False
 
         if key_padding_mask is not None:
             batch = key_padding_mask.shape[0]
@@ -239,10 +350,8 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
             key_padding_mask = key_padding_mask.unsqueeze(1)  # [batch, 1, seq_k_len]
             attn_mask = torch.logical_or(attn_mask, key_padding_mask)  # [batch, seq_k_len, seq_k_len]
 
-            # Preventing NAN, each element should attend to it self.
-            eye = ~torch.eye(seq_k_len, dtype=bool, device=device)  # [seq_k_len, seq_k_len]
-            eye = eye.repeat(batch, 1, 1)  # [batch, seq_k_len, seq_k_len]
-            attn_mask = torch.logical_and(attn_mask, eye)
+            # Preventing NAN, each element should attend to the first element.
+            attn_mask[:, :, 0] = False
 
         return attn_mask
 
@@ -327,17 +436,11 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
                                          key_index=key_index,
                                          attn_mask=attn_mask)
 
+        if self.gate is not None:
+            output = self.gatedlayer(ori_query, output)
+
         if key_padding_mask is not None:
             output = output * (~key_padding_mask[:, -output.shape[1]:]).to(output.dtype).unsqueeze(-1)
-
-        if self.use_residual:
-            output = output + ori_query
-
-        if self.use_gated:
-            _r = torch.relu(self.dense_x_r(ori_query) + self.dense_y_r(output))
-            _z = torch.relu(self.dense_x_z(ori_query) + self.dense_y_z(output))
-            _h = torch.tanh(self.dense_x_g(_r * ori_query) + self.dense_y_g(output))
-            output = (1 - _z) * ori_query + _z * _h
 
         return output, attn_weights
 
@@ -346,37 +449,47 @@ class EpisodeMultiheadAttention(nn.Module):
     def __init__(self, embed_dim: int,
                  num_layers: int = 2,
                  num_heads: Union[int, List[int]] = 1,
-                 use_residual: Union[bool, List[bool]] = True,
-                 use_gated: Union[bool, List[bool]] = True,
+                 pe: Union[Optional[POSITIONAL_ENCODING], List[Optional[POSITIONAL_ENCODING]]] = False,
+                 dropout: Union[float, List[float]] = 0.,
+                 gate: Union[Optional[GATE], List[Optional[GATE]]] = True,
                  use_layer_norm: Union[bool, List[bool]] = False):
         super().__init__()
 
         self.num_layers = num_layers
 
-        if isinstance(num_heads, int):
+        if not isinstance(num_heads, list):
             num_heads = [num_heads] * num_layers
         assert len(num_heads) == num_layers
 
-        if isinstance(use_residual, int):
-            use_residual = [use_residual] * num_layers
-        assert len(use_residual) == num_layers
+        if not isinstance(pe, list):
+            pe = [pe] * num_layers
+        assert len(pe) == num_layers
 
-        if isinstance(use_gated, int):
-            use_gated = [use_gated] * num_layers
-        assert len(use_gated) == num_layers
+        if not isinstance(dropout, list):
+            dropout = [dropout] * num_layers
+        assert len(dropout) == num_layers
 
-        if isinstance(use_layer_norm, int):
+        if not isinstance(gate, list):
+            gate = [gate] * num_layers
+        assert len(gate) == num_layers
+
+        if not isinstance(use_layer_norm, list):
             use_layer_norm = [use_layer_norm] * num_layers
         assert len(use_layer_norm) == num_layers
 
-        self._attn_list = nn.ModuleList(
-            [EpisodeMultiheadAttentionBlock(embed_dim, num_heads[i],
-                                            use_pe=i == 0,
-                                            use_residual=use_residual[i],
-                                            use_gated=use_gated[i],
-                                            use_layer_norm=use_layer_norm[i])
-             for i in range(num_layers)]
-        )
+        self._attn_list = nn.ModuleList()
+        _embed_dim = embed_dim
+        for i in range(num_layers):
+            attn = EpisodeMultiheadAttentionBlock(_embed_dim, num_heads[i],
+                                                  pe=pe[i],
+                                                  dropout=dropout[i],
+                                                  gate=gate[i],
+                                                  use_layer_norm=use_layer_norm[i])
+            self._attn_list.append(attn)
+            _embed_dim = attn.output_dim
+
+        self.output_dim_list = [attn.output_dim for attn in self._attn_list]
+        self.output_dim = _embed_dim
 
     def forward(self,
                 key: torch.Tensor,
@@ -399,8 +512,8 @@ class EpisodeMultiheadAttention(nn.Module):
             key_padding_mask: [batch, seq_k_len]
 
         Returns:
-            encoded_query: [batch, seq_q_len, embed_dim]
-            next_hidden_state: [batch, seq_q_len, embed_dim * num_layers]
+            encoded_query: [batch, seq_q_len, output_dim]
+            next_hidden_state: [batch, seq_q_len, sum(output_dim_list[:-1])]
             attn_weights_list: List[[batch, seq_q_len, seq_k_len_i], ...]
         """
         seq_k_len = key.shape[1]
@@ -420,7 +533,7 @@ class EpisodeMultiheadAttention(nn.Module):
                 _k = output
                 _q = _k[:, -seq_q_len:]
                 next_hidden_state_list.append(_q)
-                attn_weights_list.append(attn_weight[:, -seq_q_len:])
+                attn_weights_list.append(attn_weight)
 
             output, attn_weight = self._attn_list[-1](_k, seq_q_len,
                                                       cut_query=True,
@@ -438,7 +551,7 @@ class EpisodeMultiheadAttention(nn.Module):
             attn_weights_list.append(attn_weight)
 
             if self.num_layers > 1:
-                hidden_state_list = hidden_state.chunk(self.num_layers - 1, dim=-1)
+                hidden_state_list = hidden_state.split(self.output_dim_list[:-1], dim=-1)
 
             for i, attn in enumerate(self._attn_list[1:]):
                 next_hidden_state_list.append(output)
@@ -460,10 +573,10 @@ class EpisodeMultiheadAttention(nn.Module):
                                                      key_index=key_index,
                                                      key_padding_mask=key_padding_mask)
             next_hidden_state_list.append(output[:, -seq_q_len:])
-            attn_weights_list.append(attn_weight[:, -seq_q_len:])
+            attn_weights_list.append(attn_weight)
 
             if self.num_layers > 1:
-                hidden_state_list = hidden_state.chunk(self.num_layers - 1, dim=-1)
+                hidden_state_list = hidden_state.split(self.output_dim_list[:-1], dim=-1)
             else:
                 output = output[:, -seq_q_len:]
 
@@ -477,7 +590,7 @@ class EpisodeMultiheadAttention(nn.Module):
                                            key_index=key_index,
                                            key_padding_mask=key_padding_mask)
                 next_hidden_state_list.append(output[:, -seq_q_len:])
-                attn_weights_list.append(attn_weight[:, -seq_q_len:])
+                attn_weights_list.append(attn_weight)
 
             if self.num_layers > 1:
                 _k = output[:, -seq_k_len:]

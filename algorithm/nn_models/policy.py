@@ -51,13 +51,11 @@ class ModelBasePolicy(nn.Module):
     def __init__(self,
                  state_size: int,
                  d_action_sizes: List[int], c_action_size: int,
-                 train_mode: bool,
                  model_abs_dir: Optional[Path] = None, **kwargs):
         super().__init__()
         self.state_size = state_size
         self.d_action_sizes = d_action_sizes
         self.c_action_size = c_action_size
-        self.train_mode = train_mode
         self.model_abs_dir = model_abs_dir
 
         self._build_model(**kwargs)
@@ -150,8 +148,9 @@ class ModelTermination(nn.Module):
 
         self._build_model()
 
-    def _build_model(self, dense_n=64, dense_depth=2):
-        self.dense = LinearLayers(self.state_size, dense_n, dense_depth, output_size=1)
+    def _build_model(self, dense_n=64, dense_depth=2,
+                     dropout=0.):
+        self.dense = LinearLayers(self.state_size, dense_n, dense_depth, output_size=1, dropout=dropout)
 
     def forward(self, state):
         return torch.sigmoid(self.dense(state))

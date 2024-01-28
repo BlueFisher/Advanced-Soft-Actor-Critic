@@ -2,6 +2,7 @@ import logging
 import multiprocessing
 import os
 import time
+from typing import Dict, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -58,13 +59,14 @@ def start_dm_control_process(domain, task, render, conn):
 
 class DMControlWrapper(EnvWrapper):
     def __init__(self,
-                 train_mode=True,
-                 env_name=None,
-                 n_envs=1,
+                 train_mode: bool = True,
+                 env_name: str = None,
+                 env_args: Optional[Union[str, Dict]] = None,
+                 n_envs: int = 1,
 
                  render=False,
                  force_seq=None):
-        super().__init__(train_mode, env_name, n_envs)
+        super().__init__(train_mode, env_name, env_args, n_envs)
         self.render = render
 
         # If use multiple processes

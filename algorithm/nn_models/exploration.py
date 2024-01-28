@@ -18,6 +18,9 @@ class ModelBaseRND(nn.Module):
     def _build_model(self):
         pass
 
+    def cal_s_rnd(self, state) -> torch.Tensor:
+        raise Exception("ModelBaseRND not implemented")
+
     def cal_d_rnd(self, state) -> torch.Tensor:
         raise Exception("ModelBaseRND not implemented")
 
@@ -27,6 +30,9 @@ class ModelBaseRND(nn.Module):
 
 class ModelRND(ModelBaseRND):
     def _build_model(self, dense_n=64, dense_depth=2, output_size=None):
+        self.s_dense = LinearLayers(self.state_size,
+                                    dense_n, dense_depth, output_size)
+
         if self.d_action_summed_size:
             self.d_dense_list = nn.ModuleList([
                 LinearLayers(self.state_size,
@@ -37,6 +43,16 @@ class ModelRND(ModelBaseRND):
         if self.c_action_size:
             self.c_dense = LinearLayers(self.state_size + self.c_action_size,
                                         dense_n, dense_depth, output_size)
+
+    def cal_s_rnd(self, state) -> torch.Tensor:
+        """
+        Returns:
+            s_rnd: [*batch, f]
+        """
+        s_rnd = self.s_dense(state)
+        s_rnd = torch.sigmoid(s_rnd)
+
+        return s_rnd
 
     def cal_d_rnd(self, state) -> torch.Tensor:
         """

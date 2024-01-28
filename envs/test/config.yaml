@@ -53,7 +53,9 @@ attn:
       pe: nope
 
   oc_config:
+    option_seq_encoder: null
     option_burn_in_step: 2
+    key_max_length: 200
 
   ma_config:
     test0:

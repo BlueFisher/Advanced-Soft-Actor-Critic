@@ -3,7 +3,7 @@ default:
     env_name: Roller
     unity_args:
       build_path:
-        win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
+        win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
     n_envs: 10
@@ -76,3 +76,23 @@ visual:
     init_log_alpha: -2.3
 
     clip_epsilon: 0.2
+
+hard_oc_attn:
+  base_config:
+    name: "hard_oc_attn_{time}"
+    max_iter: 500
+
+  sac_config:
+    nn: nn_hard_oc_attn
+    burn_in_step: 0
+    n_step: 5
+    seq_encoder: ATTN
+
+    tau: 0.005
+
+  oc_config:
+    num_options: 2
+    use_dilation: true
+    option_burn_in_step: 0
+    terminal_entropy: 0.
+    option_seq_encoder: null

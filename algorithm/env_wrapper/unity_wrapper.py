@@ -481,7 +481,7 @@ class UnityWrapper(EnvWrapper):
             scene: The scene name
             group_aggregation: If aggregate group agents
         """
-        super().__init__(train_mode, env_name, n_envs)
+        super().__init__(train_mode, env_name, None, n_envs)
         self.base_port = base_port
         self.no_graphics = no_graphics
         self.time_scale = time_scale
@@ -729,7 +729,7 @@ if __name__ == "__main__":
     GROUP_AGGREGATION = True
 
     env = UnityWrapper(train_mode=True,
-                       #    file_name=r'D:\Unity\win-RL-Envs\RLEnvironments.exe',
+                       #    file_name=r'C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe',
                        #    scene='Roller',
                        n_envs=N_ENVS,
                        group_aggregation=GROUP_AGGREGATION)
