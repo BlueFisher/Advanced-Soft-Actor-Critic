@@ -5,7 +5,10 @@ from typing import List, Optional, Union
 import torch
 from torch import nn
 
-from .linear_layers import LinearLayers
+if __name__ == '__main__':
+    from linear_layers import LinearLayers
+else:
+    from .linear_layers import LinearLayers
 
 
 class GRU(nn.GRU):
@@ -163,7 +166,12 @@ class MultiheadAttention(nn.Module):
                                          device=query.device).masked_fill_(attn_mask, float("-inf"))
 
             if len(attn_mask.shape) == 3:
-                attn_mask = attn_mask.repeat_interleave(self.num_heads, dim=0)
+                # [bsz, seq_q_len, seq_k_len] -> [bsz * num_heads, seq_q_len, seq_k_len]
+                attn_mask = attn_mask.repeat(self.num_heads, 1, 1)
+
+            # Prevent NAN
+            nan_attn_mask = attn_mask.all(dim=-1)  # [bsz * num_heads, seq_q_len]
+            attn_mask[nan_attn_mask] = torch.zeros_like(attn_mask[-1, -1])
 
             # [bsz * num_heads, seq_q_len, seq_k_len]
             attn_output_weights = torch.baddbmm(attn_mask, q_scaled, k.transpose(-2, -1))
@@ -189,6 +197,10 @@ class MultiheadAttention(nn.Module):
             attn_output = torch.cat(attn_output.chunk(self.num_heads, dim=0), dim=-1)  # [bsz, seq_q_len, embed_dim]
 
         attn_output = self.out_proj(attn_output)  # [bsz, seq_q_len, embed_dim]
+
+        if attn_mask is not None:  # Set NAN zero
+            nan_attn_mask = nan_attn_mask[:query.shape[0]]  # [bsz, seq_q_len]
+            attn_output = attn_output * ~nan_attn_mask.unsqueeze(-1)
 
         attn_output = attn_output.reshape(*batch, *attn_output.shape[1:])
         attn_output_weights = attn_output_weights.reshape(*batch, *attn_output_weights.shape[1:])
@@ -338,8 +350,8 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
 
                 attn_mask[:, -seq_q_len:, :seq_k_len - seq_q_len] = _attn_mask  # [batch, seq_k_len, seq_k_len]
 
-                # Preventing NAN, each element should attend to the first element.
-                attn_mask[:, -seq_q_len:, 0] = False
+                # # Preventing NAN, each element should attend to the first element.
+                # attn_mask[:, -seq_q_len:, 0] = False
 
         if key_padding_mask is not None:
             batch = key_padding_mask.shape[0]
@@ -350,8 +362,8 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
             key_padding_mask = key_padding_mask.unsqueeze(1)  # [batch, 1, seq_k_len]
             attn_mask = torch.logical_or(attn_mask, key_padding_mask)  # [batch, seq_k_len, seq_k_len]
 
-            # Preventing NAN, each element should attend to the first element.
-            attn_mask[:, :, 0] = False
+            # # Preventing NAN, each element should attend to the first element.
+            # attn_mask[:, :, 0] = False
 
         return attn_mask
 
@@ -672,3 +684,14 @@ class RotaryPositionalEncoding(nn.Module):
         xq_out = torch.view_as_real(xq_ * xq_freqs_cis).flatten(2)
         xk_out = torch.view_as_real(xk_ * xk_freqs_cis).flatten(2)
         return xq_out.type_as(xq), xk_out.type_as(xk)
+
+
+if __name__ == '__main__':
+    attn = MultiheadAttention(4, num_heads=2)
+    x = torch.rand(2, 3, 4)
+    y, w = attn(x, x, x, key_padding_mask=torch.tensor([[True, True, True], [False, True, True]]))
+    # print(y)
+    # print(w)
+    y.mean().backward()
+    for p in attn.parameters():
+        print(p.grad)
