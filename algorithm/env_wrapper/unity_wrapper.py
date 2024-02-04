@@ -160,7 +160,7 @@ class UnityWrapperProcess:
             continuous action size: int
         """
         self.ma_obs_names: Dict[str, List[str]] = {}
-        self.ma_padding_index: Dict[str, int] = {}
+        self.ma_padding_index: Dict[str, int] = {}  # The index of obs with name `_Padding`
         self.ma_obs_shapes: Dict[str, Tuple[int, ...]] = {}
         self.ma_d_action_sizes: Dict[str, List[int]] = {}
         self.ma_c_action_size: Dict[str, int] = {}
@@ -417,6 +417,10 @@ class UnityWrapperProcess:
 
                 del ma_obs_list[n][self.ma_padding_index[n]]
 
+        for n in self.behavior_names:
+            done = ma_done[n]
+            max_step = ma_max_step[n]
+
         if self.group_aggregation:
             for n in self.behavior_names:
                 group_ids = self._ma_group_ids[n]
@@ -433,19 +437,25 @@ class UnityWrapperProcess:
                 reward = ma_reward[n]
                 done = ma_done[n]
                 max_step = ma_max_step[n]
+                padding_mask = ma_padding_mask[n]
 
                 aggr_reward = np.zeros(len(u_group_ids), dtype=reward.dtype)
                 aggr_done = np.zeros(len(u_group_ids), dtype=done.dtype)
                 aggr_max_step = np.zeros(len(u_group_ids), dtype=max_step.dtype)
+                aggr_padding_mask = np.zeros(len(u_group_ids), dtype=padding_mask.dtype)
 
                 for j, (group_id, group_id_count) in enumerate(zip(u_group_ids, u_group_id_counts)):
                     aggr_reward[j] = reward[group_ids == group_id].sum()
-                    aggr_done[j] = done[group_ids == group_id].any()
-                    aggr_max_step[j] = max_step[group_ids == group_id].any()
+                    # If all agents in the group is done, then the group is done
+                    aggr_done[j] = done[group_ids == group_id].all()
+                    # If all agents in the group reaches the max step, then the group reaches the max step
+                    aggr_max_step[j] = max_step[group_ids == group_id].all()
+                    aggr_padding_mask[j] = padding_mask[group_ids == group_id].all()
 
                 ma_reward[n] = aggr_reward
                 ma_done[n] = aggr_done
                 ma_max_step[n] = aggr_max_step
+                ma_padding_mask[n] = aggr_padding_mask
 
         return ma_obs_list, ma_reward, ma_done, ma_max_step, ma_padding_mask
 
