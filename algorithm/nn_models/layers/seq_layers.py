@@ -53,6 +53,8 @@ class MultiheadAttention(nn.Module):
                  embed_dim: int,
                  num_heads: int = 1,
                  pe: Optional[POSITIONAL_ENCODING] = None,
+                 qkv_dense_depth: int = 0,
+                 out_dense_depth: int = 1,
                  dropout: float = 0.) -> None:
 
         super().__init__()
@@ -76,12 +78,11 @@ class MultiheadAttention(nn.Module):
 
         self.dropout = dropout
 
-        self.q_proj = LinearLayers(_ori_embed_dim, output_size=embed_dim)
-        self.k_proj = LinearLayers(_ori_embed_dim, output_size=embed_dim)
-        self.v_proj = LinearLayers(_ori_embed_dim, output_size=embed_dim)
+        self.q_proj = LinearLayers(_ori_embed_dim, dense_n=embed_dim, dense_depth=qkv_dense_depth, output_size=embed_dim, dropout=dropout)
+        self.k_proj = LinearLayers(_ori_embed_dim, dense_n=embed_dim, dense_depth=qkv_dense_depth, output_size=embed_dim, dropout=dropout)
+        self.v_proj = LinearLayers(_ori_embed_dim, dense_n=embed_dim, dense_depth=qkv_dense_depth, output_size=embed_dim, dropout=dropout)
 
-        self.out_proj = LinearLayers(_ori_embed_dim, dense_n=embed_dim, dense_depth=1,
-                                     activation=nn.ReLU)
+        self.out_proj = LinearLayers(_ori_embed_dim, dense_n=embed_dim, dense_depth=out_dense_depth, dropout=dropout)
 
     def forward(self,
                 query: torch.Tensor,
@@ -263,6 +264,8 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
     def __init__(self, embed_dim: int, num_heads: int,
 
                  pe: Optional[POSITIONAL_ENCODING] = None,
+                 qkv_dense_depth: int = 0,
+                 out_dense_depth: int = 1,
                  dropout: float = 0.,
                  gate: Optional[GATE] = None,
                  use_layer_norm: bool = False):
@@ -282,6 +285,8 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
         self.attn = MultiheadAttention(embed_dim=embed_dim,
                                        num_heads=num_heads,
                                        pe=pe,
+                                       qkv_dense_depth=qkv_dense_depth,
+                                       out_dense_depth=out_dense_depth,
                                        dropout=dropout)
 
         if gate == GATE.RESIDUAL:
@@ -462,6 +467,8 @@ class EpisodeMultiheadAttention(nn.Module):
                  num_layers: int = 2,
                  num_heads: Union[int, List[int]] = 1,
                  pe: Union[Optional[POSITIONAL_ENCODING], List[Optional[POSITIONAL_ENCODING]]] = False,
+                 qkv_dense_depth: Union[int, List[int]] = 0,
+                 out_dense_depth: Union[int, List[int]] = 1,
                  dropout: Union[float, List[float]] = 0.,
                  gate: Union[Optional[GATE], List[Optional[GATE]]] = True,
                  use_layer_norm: Union[bool, List[bool]] = False):
@@ -476,6 +483,14 @@ class EpisodeMultiheadAttention(nn.Module):
         if not isinstance(pe, list):
             pe = [pe] * num_layers
         assert len(pe) == num_layers
+
+        if not isinstance(qkv_dense_depth, list):
+            qkv_dense_depth = [qkv_dense_depth] * num_layers
+        assert len(qkv_dense_depth) == num_layers
+
+        if not isinstance(out_dense_depth, list):
+            out_dense_depth = [out_dense_depth] * num_layers
+        assert len(out_dense_depth) == num_layers
 
         if not isinstance(dropout, list):
             dropout = [dropout] * num_layers
@@ -494,6 +509,8 @@ class EpisodeMultiheadAttention(nn.Module):
         for i in range(num_layers):
             attn = EpisodeMultiheadAttentionBlock(_embed_dim, num_heads[i],
                                                   pe=pe[i],
+                                                  qkv_dense_depth=qkv_dense_depth[i],
+                                                  out_dense_depth=out_dense_depth[i],
                                                   dropout=dropout[i],
                                                   gate=gate[i],
                                                   use_layer_norm=use_layer_norm[i])
