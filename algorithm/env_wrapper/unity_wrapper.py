@@ -58,7 +58,8 @@ class UnityWrapperProcess:
                  scene=None,
                  additional_args=None,
                  n_envs=1,
-                 group_aggregation=False):
+                 group_aggregation=False,
+                 group_aggregation_done_all=True):
         """
         Args:
             conn: Connection if run in multiprocessing mode
@@ -72,10 +73,13 @@ class UnityWrapperProcess:
             scene: The scene name
             n_envs: The env copies count
             group_aggregation: If aggregate group agents
+            group_aggregation_done_all: If group done or max reached when all agents in the group done or max reached
+                                        Otherwise, when any agent in the group done or max reached
         """
         self.scene = scene
         self.n_envs = n_envs
         self.group_aggregation = group_aggregation
+        self.group_aggregation_done_all = group_aggregation_done_all
 
         seed = seed if seed is not None else random.randint(0, 65536)
         if additional_args is None:
@@ -175,7 +179,6 @@ class UnityWrapperProcess:
             if '_Padding' in obs_names:
                 self.ma_padding_index[n] = obs_names.index('_Padding')
                 self._logger.info(f'{n} Padding index: {self.ma_padding_index[n]}')
-                del obs_names[self.ma_padding_index[n]]
             else:
                 self.ma_padding_index[n] = -1
             self._logger.info(f'{n} Observation names: {obs_names}')
@@ -184,8 +187,6 @@ class UnityWrapperProcess:
             obs_shapes = [o.shape for o in behavior_spec.observation_specs]
             self.ma_unity_obs_shapes[n] = obs_shapes.copy()
 
-            if self.ma_padding_index[n] != -1:
-                del obs_shapes[self.ma_padding_index[n]]
             self._logger.info(f'{n} Observation shapes: {obs_shapes}')
             self.ma_obs_shapes[n] = obs_shapes
 
@@ -249,9 +250,9 @@ class UnityWrapperProcess:
         self._ma_agents_ids: Dict[str, np.ndarray] = {}
         self._ma_agent_id_to_index: Dict[int, int] = {}
 
-        self._ma_group_ids: Dict[str, np.ndarray] = {}
-        self._ma_u_group_ids: Dict[str, np.ndarray] = {}
-        self._ma_u_group_id_counts: Dict[str, np.ndarray] = {}
+        self._ma_group_ids: Dict[str, np.ndarray] = {}  # the group id corresponding to each agent
+        self._ma_u_group_ids: Dict[str, np.ndarray] = {}  # all unique group ids
+        self._ma_u_group_id_counts: Dict[str, np.ndarray] = {}  # the agent count in each unique group
 
         ma_obs_list = {}
         for n in self.behavior_names:
@@ -262,9 +263,6 @@ class UnityWrapperProcess:
                 for a_idx, a_id in enumerate(decision_steps.agent_id)
             }
             ma_obs_list[n] = [obs.astype(np.float32) for obs in decision_steps.obs]
-
-            if self.ma_padding_index[n] != -1:
-                del ma_obs_list[n][self.ma_padding_index[n]]
 
             if self.group_aggregation:
                 self._ma_group_ids[n] = decision_steps.group_id
@@ -415,8 +413,6 @@ class UnityWrapperProcess:
                 mask = ma_obs_list[n][self.ma_padding_index[n]][:, 0] == 1
                 ma_padding_mask[n][mask] = True
 
-                del ma_obs_list[n][self.ma_padding_index[n]]
-
         for n in self.behavior_names:
             done = ma_done[n]
             max_step = ma_max_step[n]
@@ -428,6 +424,7 @@ class UnityWrapperProcess:
                 u_group_id_counts = self._ma_u_group_id_counts[n]
 
                 for i, obs in enumerate(ma_obs_list[n]):
+                    # [group_count, max_agent_count_in_all_groups, ...]
                     aggr_obs = np.zeros((len(u_group_ids), u_group_id_counts.max(), *obs.shape[1:]), dtype=obs.dtype)
                     for j, (group_id, group_id_count) in enumerate(zip(u_group_ids, u_group_id_counts)):
                         aggr_obs[j, :group_id_count] = obs[group_ids == group_id]
@@ -446,10 +443,12 @@ class UnityWrapperProcess:
 
                 for j, (group_id, group_id_count) in enumerate(zip(u_group_ids, u_group_id_counts)):
                     aggr_reward[j] = reward[group_ids == group_id].sum()
-                    # If all agents in the group is done, then the group is done
-                    aggr_done[j] = done[group_ids == group_id].all()
-                    # If all agents in the group reaches the max step, then the group reaches the max step
-                    aggr_max_step[j] = max_step[group_ids == group_id].all()
+                    if self.group_aggregation_done_all:
+                        aggr_done[j] = done[group_ids == group_id].all()
+                        aggr_max_step[j] = max_step[group_ids == group_id].all()
+                    else:
+                        aggr_done[j] = done[group_ids == group_id].any()
+                        aggr_max_step[j] = max_step[group_ids == group_id].any()
                     aggr_padding_mask[j] = padding_mask[group_ids == group_id].all()
 
                 ma_reward[n] = aggr_reward
@@ -477,6 +476,7 @@ class UnityWrapper(EnvWrapper):
                  scene=None,
                  additional_args=None,
                  group_aggregation=False,
+                 group_aggregation_done_all=True,
                  force_seq=None):
         """
         Args:
@@ -490,6 +490,8 @@ class UnityWrapper(EnvWrapper):
             seed: Random seed
             scene: The scene name
             group_aggregation: If aggregate group agents
+            group_aggregation_done_all: If group done or max reached when all agents in the group done or max reached
+                                        Otherwise, when any agent in the group done or max reached
         """
         super().__init__(train_mode, env_name, None, n_envs)
         self.base_port = base_port
@@ -499,6 +501,7 @@ class UnityWrapper(EnvWrapper):
         self.scene = scene
         self.additional_args = additional_args
         self.group_aggregation = group_aggregation
+        self.group_aggregation_done_all = group_aggregation_done_all
 
         self._logger = logging.getLogger('UnityWrapper')
 
@@ -531,7 +534,8 @@ class UnityWrapper(EnvWrapper):
                                                       scene=scene,
                                                       additional_args=additional_args,
                                                       n_envs=min(MAX_N_ENVS_PER_PROCESS, self.n_envs - i * MAX_N_ENVS_PER_PROCESS),
-                                                      group_aggregation=group_aggregation))
+                                                      group_aggregation=group_aggregation,
+                                                      group_aggregation_done_all=group_aggregation_done_all))
         else:
             self._logger.info('Using multi-processing environments')
 
@@ -572,7 +576,8 @@ class UnityWrapper(EnvWrapper):
                                               self.scene,
                                               self.additional_args,
                                               min(MAX_N_ENVS_PER_PROCESS, self.n_envs - i * MAX_N_ENVS_PER_PROCESS),
-                                              self.group_aggregation),
+                                              self.group_aggregation,
+                                              self.group_aggregation_done_all),
                                         daemon=True)
             p.start()
             self._processes[i] = p
