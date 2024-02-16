@@ -113,7 +113,8 @@ class Main:
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         n_envs=self.base_config['n_envs'],
                                         time_scale=self.unity_time_scale,
-                                        group_aggregation=self.base_config['unity_args']['group_aggregation'])
+                                        group_aggregation=self.base_config['unity_args']['group_aggregation'],
+                                        group_aggregation_done_all=self.base_config['unity_args']['group_aggregation_done_all'])
             else:
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         env_name=self.base_config['unity_args']['build_path'][sys.platform],
@@ -123,7 +124,8 @@ class Main:
                                         time_scale=self.unity_time_scale,
                                         scene=self.base_config['env_name'],
                                         additional_args=self.base_config['env_args'],
-                                        group_aggregation=self.base_config['unity_args']['group_aggregation'])
+                                        group_aggregation=self.base_config['unity_args']['group_aggregation'],
+                                        group_aggregation_done_all=self.base_config['unity_args']['group_aggregation_done_all'])
 
         elif self.base_config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
