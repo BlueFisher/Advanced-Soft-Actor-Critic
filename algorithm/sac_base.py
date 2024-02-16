@@ -429,7 +429,7 @@ class SAC_Base:
             self.target_d_alpha = self.target_d_alpha * (-torch.log(1 / d_action_sizes))
 
         if self.c_action_size:
-            self.target_c_alpha = self.target_c_alpha * torch.tensor(self.d_action_summed_size,
+            self.target_c_alpha = self.target_c_alpha * torch.tensor(-self.c_action_size,
                                                                      dtype=torch.float32,
                                                                      device=self.device)
 
