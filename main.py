@@ -24,7 +24,8 @@ if __name__ == '__main__':
     parser.add_argument('--oc', action='store_true', default=False)
 
     parser.add_argument('--config', '-c', help='config file')
-    parser.add_argument('--run', action='store_true', help='inference mode')
+    parser.add_argument('--run', action='store_true', help='inference mode for all agents, ignore run_a')
+    parser.add_argument('--run_a', action='append', default=[], help='inference mode for specific agents')
     parser.add_argument('--logger_in_file', action='store_true', help='logging into a file')
 
     parser.add_argument('--render', action='store_true', help='render')
