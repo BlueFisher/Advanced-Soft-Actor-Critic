@@ -2,14 +2,17 @@ import torch
 
 import algorithm.nn_models as m
 
-OBS_NAMES = ['AgentsBufferSensor', 'BoundingBoxSensor', 'CameraSensor', 'RayPerceptionSensor1', 'RayPerceptionSensor2', 'RayPerceptionSensor3', 'VectorSensor_size9']
-OBS_SHAPES = [(4, 10), (5, 6), (84, 84, 1), (22,), (22,), (22,), (10,)]
+OBS_NAMES = ['_Padding',
+             'AgentsBufferSensor', 'BoundingBoxSensor', 'CameraSensor',
+             'RayPerceptionSensor1', 'RayPerceptionSensor2', 'RayPerceptionSensor3',
+             'VectorSensor_size9']
+OBS_SHAPES = [(1,), (4, 10), (5, 6), (84, 84, 1), (22,), (22,), (22,), (10,)]
 
 
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):
         for u_s, s in zip(self.obs_shapes, OBS_SHAPES):
-            assert u_s == s
+            assert u_s == s, f'{u_s} {s}'
 
         self.attn_uavs = m.MultiheadAttention(10, 1)
 
@@ -25,16 +28,14 @@ class ModelRep(m.ModelBaseRNNRep):
         self.rnn = m.GRU(10 + 6 + 64 + 64 + 10 + self.c_action_size, 128, 1)
 
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
-        feat_uavs, feat_bbox, vis_obs, ray_obs_1, ray_obs_2, ray_obs_3, vec_obs = obs_list
+        _, feat_uavs, feat_bbox, vis_obs, ray_obs_1, ray_obs_2, ray_obs_3, vec_obs = obs_list
 
         feat_uavs_mask = ~feat_uavs.any(dim=-1)
-        feat_uavs_mask[..., 0] = False
         attned_uavs, _ = self.attn_uavs(vec_obs.unsqueeze(-2), feat_uavs, feat_uavs,
                                         key_padding_mask=feat_uavs_mask)
         attned_uavs = attned_uavs.squeeze(-2)
 
         feat_bbox_mask = ~feat_bbox.any(dim=-1)
-        feat_bbox_mask[..., 0] = False
         attned_bbox, _ = self.attn_bbox(feat_bbox, feat_bbox, feat_bbox,
                                         key_padding_mask=feat_bbox_mask)
         attned_bbox = attned_bbox.mean(-2)
@@ -49,9 +50,9 @@ class ModelRep(m.ModelBaseRNNRep):
 
         state, hn = self.rnn(torch.concat([attned_uavs,
                                            attned_bbox,
-                                           vec_obs,
                                            vis_obs,
                                            ray,
+                                           vec_obs,
                                            pre_action], dim=-1), rnn_state)
 
         if padding_mask is not None:

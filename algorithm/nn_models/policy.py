@@ -3,8 +3,46 @@ from typing import List, Optional, Tuple
 
 import torch
 from torch import nn
+from torch.distributions.utils import _standard_normal
 
 from .layers import LinearLayers
+
+
+class NormalWithPadding(torch.distributions.Normal):
+    def __init__(self, loc, scale, padding_mask, validate_args=None):
+        super().__init__(loc, scale, validate_args)
+
+        self.padding_mask = padding_mask
+
+    def sample(self, sample_shape=torch.Size()):
+        v = super().sample(sample_shape)
+
+        v[..., self.padding_mask] = 0.
+
+        return v
+
+    def rsample(self, sample_shape=torch.Size()):
+        shape = self._extended_shape(sample_shape)
+        eps = _standard_normal(shape, dtype=self.loc.dtype, device=self.loc.device)
+
+        loc = self.loc * ~self.padding_mask
+        scale = self.scale * ~self.padding_mask
+
+        return loc + eps * scale
+
+    def log_prob(self, value):
+        _log_prob = super().log_prob(value)
+
+        _log_prob[self.padding_mask] = torch.inf
+
+        return _log_prob
+
+    def entropy(self):
+        _entropy = super().entropy()
+
+        _entropy[self.padding_mask] = torch.inf
+
+        return _entropy
 
 
 class JointOneHotCategorical(torch.distributions.Distribution):

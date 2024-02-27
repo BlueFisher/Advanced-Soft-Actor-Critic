@@ -25,7 +25,7 @@ class ModelBaseQ(nn.Module):
     def _build_model(self):
         pass
 
-    def forward(self, state, action):
+    def forward(self, state, action, obs_list):
         raise Exception("ModelQ not implemented")
 
 
@@ -69,7 +69,7 @@ class ModelQ(ModelBaseQ):
             self.c_dense = LinearLayers(self.c_state_dense.output_size + self.c_action_dense.output_size,
                                         c_dense_n, c_dense_depth, 1, dropout=dropout)
 
-    def forward(self, state, c_action):
+    def forward(self, state, c_action, obs_list):
         state = self.dense(state)
 
         if self.d_action_sizes:
