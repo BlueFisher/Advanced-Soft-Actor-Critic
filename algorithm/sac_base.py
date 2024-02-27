@@ -1902,14 +1902,14 @@ class SAC_Base:
         if self.curiosity == CURIOSITY.FORWARD:
             approx_next_n_states = self.model_forward_dynamic(n_states, n_actions)
             loss_curiosity = functional.mse_loss(approx_next_n_states, next_n_states, reduction='none')
-            loss_curiosity = loss_curiosity * ~bn_padding_masks.unsqueeze(-1)
+            loss_curiosity = loss_curiosity * ~n_padding_masks.unsqueeze(-1)
             loss_curiosity = torch.mean(loss_curiosity)
             loss_curiosity.backward(inputs=list(self.model_forward_dynamic.parameters()))
 
         elif self.curiosity == CURIOSITY.INVERSE:
             approx_n_actions = self.model_inverse_dynamic(n_states, next_n_states)
             loss_curiosity = functional.mse_loss(approx_n_actions, n_actions, reduction='none')
-            loss_curiosity = loss_curiosity * ~bn_padding_masks.unsqueeze(-1)
+            loss_curiosity = loss_curiosity * ~n_padding_masks.unsqueeze(-1)
             loss_curiosity = torch.mean(loss_curiosity)
             loss_curiosity.backward(inputs=list(self.model_inverse_dynamic.parameters()))
 

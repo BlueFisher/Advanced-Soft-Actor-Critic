@@ -478,6 +478,11 @@ class MultiAgentsManager:
         for n, mgr in self:
             mgr.pre_run(ma_num_agents[n])
 
+        # if not agents, remove ma_name in ma_manager
+        for n in list(self._ma_manager.keys()):
+            if len(self._ma_manager[n].agents) == 0:
+                del self._ma_manager[n]
+
     def is_max_reached(self) -> bool:
         return any([any([a.max_reached for a in mgr.agents]) for n, mgr in self])
 

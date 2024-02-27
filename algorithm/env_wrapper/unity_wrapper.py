@@ -335,16 +335,17 @@ class UnityWrapperProcess:
         for n in self.behavior_names:  # sending actions to the environment
             d_action = c_action = None
 
-            if self.ma_unity_d_action_sizes[n]:
+            if self.ma_unity_d_action_sizes[n] and n in ma_d_action:
                 d_action_list = np.split(ma_d_action[n], np.cumsum(self.ma_unity_d_action_sizes[n]), axis=-1)[:-1]
                 d_action_list = [np.argmax(d_action, axis=-1) for d_action in d_action_list]
                 d_action = np.stack(d_action_list, axis=-1)
 
-            if self.ma_unity_c_action_size[n]:
+            if self.ma_unity_c_action_size[n] and n in ma_c_action:
                 c_action = ma_c_action[n]
 
-            self._env.set_actions(n,
-                                  ActionTuple(continuous=c_action, discrete=d_action))
+            if d_action is not None or c_action is not None:
+                self._env.set_actions(n,
+                                      ActionTuple(continuous=c_action, discrete=d_action))
 
         self._env.step()
 
@@ -647,8 +648,11 @@ class UnityWrapper(EnvWrapper):
             tmp_ma_c_actions = {}
 
             for n in self.behavior_names:
-                d_action = ma_d_action[n]
-                c_action = ma_c_action[n]
+                d_action = c_action = None
+                if n in ma_d_action:
+                    d_action = ma_d_action[n]
+                if n in ma_c_action:
+                    c_action = ma_c_action[n]
                 n_agents_list = self.ma_n_agents_list[n]
 
                 if d_action is not None:
