@@ -1,6 +1,6 @@
 from copy import deepcopy
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Tuple, Union
+from typing import Dict, Iterator, List, Optional, Set, Tuple, Union
 
 import numpy as np
 
@@ -451,8 +451,10 @@ class MultiAgentsManager:
                  ma_obs_shapes: dict,
                  ma_d_action_sizes: dict,
                  ma_c_action_size: dict,
+                 inferece_ma_names: Set[str],
                  model_abs_dir: Path):
         self._ma_manager: Dict[str, AgentManager] = {}
+        self._inferece_ma_names = inferece_ma_names
         for n in ma_obs_shapes:
             self._ma_manager[n] = AgentManager(n,
                                                ma_obs_names[n],
@@ -507,6 +509,8 @@ class MultiAgentsManager:
 
     def set_train_mode(self, train_mode: bool = True):
         for n, mgr in self:
+            if n in self._inferece_ma_names:
+                continue
             mgr.rl.set_train_mode(train_mode)
 
     def get_ma_action(self,
@@ -544,16 +548,22 @@ class MultiAgentsManager:
 
     def put_episode(self) -> None:
         for n, mgr in self:
+            if n in self._inferece_ma_names:
+                continue
             mgr.put_episode()
 
     def train(self, trained_steps: int) -> int:
         for n, mgr in self:
+            if n in self._inferece_ma_names:
+                continue
             trained_steps = max(mgr.train(), trained_steps)
 
         return trained_steps
 
     def log_episode(self) -> None:
         for n, mgr in self:
+            if n in self._inferece_ma_names:
+                continue
             mgr.log_episode()
 
     def post_step(self, ma_next_obs_list, ma_local_done, ma_next_padding_mask) -> None:
@@ -562,4 +572,6 @@ class MultiAgentsManager:
 
     def save_model(self, save_replay_buffer=False) -> None:
         for n, mgr in self:
+            if n in self._inferece_ma_names:
+                continue
             mgr.rl.save_model(save_replay_buffer)

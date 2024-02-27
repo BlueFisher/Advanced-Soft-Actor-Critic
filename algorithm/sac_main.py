@@ -4,7 +4,7 @@ import shutil
 import sys
 import time
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Set
 
 import numpy as np
 
@@ -14,7 +14,6 @@ from .agent import MultiAgentsManager
 from .sac_base import SAC_Base
 from .utils import UnifiedElapsedTimer, format_global_step
 from .utils.enums import *
-import time
 
 
 class Main:
@@ -51,6 +50,7 @@ class Main:
 
         # Initialize config from command line arguments
         self.train_mode = not args.run
+        self.inference_ma_names: Set[str] = set(args.run_a)
         self.render = args.render
         self.unity_run_in_editor = args.editor
         self.unity_time_scale = args.timescale
@@ -93,7 +93,7 @@ class Main:
         convert_config_to_enum(config['sac_config'])
 
         for n, ma_config in ma_configs.items():
-            if self.train_mode:
+            if self.train_mode and n not in self.inference_ma_names:
                 config_helper.save_config(ma_config, model_abs_dir, f'config_{n.replace("?", "-")}.yaml')
             config_helper.display_config(ma_config, self._logger, n)
             convert_config_to_enum(ma_config['sac_config'])
@@ -166,6 +166,7 @@ class Main:
                                              ma_obs_shapes,
                                              ma_d_action_sizes,
                                              ma_c_action_size,
+                                             self.inference_ma_names,
                                              self.model_abs_dir)
         for n, mgr in self.ma_manager:
             if n not in self.ma_configs:
@@ -206,7 +207,7 @@ class Main:
                                 model_abs_dir=mgr.model_abs_dir,
                                 device=self.device,
                                 ma_name=None if len(self.ma_manager) == 1 else n,
-                                train_mode=self.train_mode,
+                                train_mode=self.train_mode and n not in self.inference_ma_names,
                                 last_ckpt=self.last_ckpt,
 
                                 nn_config=mgr.config['nn_config'],
@@ -332,6 +333,9 @@ class Main:
 
     def _log_episode_summaries(self):
         for n, mgr in self.ma_manager:
+            if n in self.inference_ma_names:
+                continue
+
             rewards = np.array([a.reward for a in mgr.agents])
             mgr.rl.write_constant_summaries([
                 {'tag': 'reward/mean', 'simple_value': rewards.mean()},

@@ -1,7 +1,6 @@
 import importlib.util
 import logging
 import shutil
-from collections import defaultdict
 from pathlib import Path
 from typing import Dict
 
@@ -62,7 +61,7 @@ class OC_Main(Main):
                                           model_abs_dir=mgr.model_abs_dir,
                                           device=self.device,
                                           ma_name=None if len(self.ma_manager) == 1 else n,
-                                          train_mode=self.train_mode,
+                                          train_mode=self.train_mode and n not in self.inference_ma_names,
                                           last_ckpt=self.last_ckpt,
 
                                           nn_config=mgr.config['nn_config'],

@@ -62,6 +62,9 @@ class MainHitted(Main):
 
     def _log_episode_summaries(self):
         for n, mgr in self.ma_manager:
+            if n in self.inference_ma_names:
+                continue
+
             rewards = np.array([a.reward for a in mgr.agents])
             hitted = sum([a.hitted for a in mgr.agents])
 
