@@ -19,6 +19,21 @@ def squash_correction_prob(dist: torch.distributions.Distribution,
     return torch.exp(dist.log_prob(x)) / (torch.maximum(1 - torch.square(torch.tanh(x)), torch.tensor(1e-2)))
 
 
+def sum_log_prob(log_prob: torch.Tensor, keepdim=False):
+    log_prob[log_prob == torch.inf] = 0.
+    return log_prob.sum(-1, keepdim=keepdim)
+
+
+def prod_prob(prob: torch.Tensor, keepdim=False):
+    prob[prob == torch.inf] = 1.
+    return prob.prod(-1, keepdim=keepdim)
+
+
+def sum_entropy(entropy: torch.Tensor):
+    entropy[entropy == torch.inf] = 0.
+    return entropy.sum(-1)
+
+
 def gen_pre_n_actions(n_actions: Union[torch.Tensor, np.ndarray],
                       keep_last_action=False) -> Union[torch.Tensor, np.ndarray]:
     if isinstance(n_actions, torch.Tensor):

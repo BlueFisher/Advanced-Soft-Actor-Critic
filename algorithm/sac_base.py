@@ -429,9 +429,7 @@ class SAC_Base:
             self.target_d_alpha = self.target_d_alpha * (-torch.log(1 / d_action_sizes))
 
         if self.c_action_size:
-            self.target_c_alpha = self.target_c_alpha * torch.tensor(-self.c_action_size,
-                                                                     dtype=torch.float32,
-                                                                     device=self.device)
+            self.target_c_alpha = self.target_c_alpha
 
         if self.use_auto_alpha:
             self.optimizer_alpha = adam_optimizer([self.log_d_alpha, self.log_c_alpha])
@@ -811,7 +809,7 @@ class SAC_Base:
         if offline_action is None:
             if self.d_action_sizes:
                 if self.discrete_dqn_like:
-                    d_qs, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None)
+                    d_qs, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None, obs_list)
                     d_action_list = [torch.argmax(d_q, dim=-1) for d_q in d_qs.split(self.d_action_sizes, dim=-1)]
                     d_action_list = [functional.one_hot(d_action, d_action_size).type(torch.float32)
                                      for d_action, d_action_size in zip(d_action_list, self.d_action_sizes)]
@@ -1308,8 +1306,8 @@ class SAC_Base:
             n_c_actions_sampled = torch.zeros(0, device=self.device)
             next_n_c_actions_sampled = torch.zeros(0, device=self.device)
 
-        n_qs_list = [q(n_states, torch.tanh(n_c_actions_sampled)) for q in self.model_target_q_list]
-        next_n_qs_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled)) for q in self.model_target_q_list]
+        n_qs_list = [q(n_states, torch.tanh(n_c_actions_sampled), n_obses_list) for q in self.model_target_q_list]
+        next_n_qs_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled), next_n_obses_list) for q in self.model_target_q_list]
         # ([batch, n, d_action_summed_size], [batch, n, 1])
 
         n_d_qs_list = [q[0] for q in n_qs_list]  # [batch, n, d_action_summed_size]
@@ -1325,7 +1323,7 @@ class SAC_Base:
             # [ensemble_q_num, batch, n, d_action_summed_size] -> [ensemble_q_sample, batch, n, d_action_summed_size]
 
             if self.discrete_dqn_like:
-                next_n_d_eval_qs_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled))[0] for q in self.model_q_list]
+                next_n_d_eval_qs_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled), next_n_obses_list)[0] for q in self.model_q_list]
                 stacked_next_n_d_eval_qs = torch.stack(next_n_d_eval_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
                 # [ensemble_q_num, batch, n, d_action_summed_size] -> [ensemble_q_sample, batch, n, d_action_summed_size]
 
@@ -1370,8 +1368,8 @@ class SAC_Base:
                                     next_n_vs=next_n_vs)
 
         if self.c_action_size:
-            n_actions_log_prob = torch.sum(squash_correction_log_prob(c_policy, n_c_actions_sampled), dim=-1)  # [batch, n]
-            next_n_actions_log_prob = torch.sum(squash_correction_log_prob(next_c_policy, next_n_c_actions_sampled), dim=-1)  # [batch, n]
+            n_actions_log_prob = sum_log_prob(squash_correction_log_prob(c_policy, n_c_actions_sampled))  # [batch, n]
+            next_n_actions_log_prob = sum_log_prob(squash_correction_log_prob(next_c_policy, next_n_c_actions_sampled))  # [batch, n]
 
             stacked_n_c_qs = torch.stack(n_c_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
             # [ensemble_q_num, batch, n, 1] -> [ensemble_q_sample, batch, n, 1]
@@ -1398,8 +1396,8 @@ class SAC_Base:
             c_y = self._v_trace(n_padding_masks=n_padding_masks,
                                 n_rewards=n_rewards,
                                 n_dones=n_dones,
-                                n_mu_probs=n_c_mu_probs.prod(-1) if self.use_n_step_is else None,
-                                n_pi_probs=n_c_pi_probs.prod(-1) if self.use_n_step_is else None,
+                                n_mu_probs=prod_prob(n_c_mu_probs) if self.use_n_step_is else None,
+                                n_pi_probs=prod_prob(n_c_pi_probs) if self.use_n_step_is else None,
                                 n_vs=n_vs,
                                 next_n_vs=next_n_vs)
 
@@ -1445,6 +1443,7 @@ class SAC_Base:
             loss_predictions: tuple(torch.float32, torch.float32, torch.float32)
         """
 
+        obs_list = [bn_obses[:, self.burn_in_step, ...] for bn_obses in bn_obses_list]
         state = bn_states[:, self.burn_in_step, ...]
         action = bn_actions[:, self.burn_in_step, ...]
         d_action = action[..., :self.d_action_summed_size]
@@ -1452,7 +1451,7 @@ class SAC_Base:
 
         batch = state.shape[0]
 
-        q_list = [q(state, c_action) for q in self.model_q_list]
+        q_list = [q(state, c_action, obs_list) for q in self.model_q_list]
         # ([batch, d_action_summed_size], [batch, 1])
         d_q_list = [q[0] for q in q_list]  # [batch, action_size]
         c_q_list = [q[1] for q in q_list]  # [batch, 1]
@@ -1478,7 +1477,7 @@ class SAC_Base:
 
         if self.c_action_size:
             if self.clip_epsilon > 0:
-                target_c_q_list = [q(state.detach(), c_action)[1] for q in self.model_target_q_list]
+                target_c_q_list = [q(state.detach(), c_action, obs_list)[1] for q in self.model_target_q_list]
 
                 clipped_q_list = [target_c_q_list[i] + torch.clamp(
                     c_q_list[i] - target_c_q_list[i],
@@ -1687,12 +1686,13 @@ class SAC_Base:
 
             q_loss_list = []
 
+            obs_list = [bn_obses[:, self.burn_in_step, ...] for bn_obses in bn_obses_list]
             d_action = bn_actions[:, self.burn_in_step, :self.d_action_summed_size]
             c_action = bn_actions[:, self.burn_in_step, self.d_action_summed_size:]
 
-            q_list = [q(state, c_action)
+            q_list = [q(state, c_action, obs_list)
                       for q in self.model_q_list]  # ([batch, d_action_summed_size], [batch, 1]), ...
-            target_q_list = [q(target_state, c_action)
+            target_q_list = [q(target_state, c_action, obs_list)
                              for q in self.model_target_q_list]  # ([batch, d_action_summed_size], [batch, 1]), ...
 
             if self.d_action_sizes:
@@ -1807,7 +1807,7 @@ class SAC_Base:
 
             c_action = action[..., self.d_action_summed_size:]
 
-            q_list = [q(state, c_action) for q in self.model_q_list]
+            q_list = [q(state, c_action, obs_list) for q in self.model_q_list]
             # ([batch, d_action_summed_size], [batch, 1])
             d_q_list = [q[0] for q in q_list]  # [batch, d_action_summed_size]
 
@@ -1827,13 +1827,13 @@ class SAC_Base:
 
         if self.c_action_size:
             action_sampled = c_policy.rsample()
-            c_q_for_gradient_list = [q(state, torch.tanh(action_sampled))[1] for q in self.model_q_list]
+            c_q_for_gradient_list = [q(state, torch.tanh(action_sampled), obs_list)[1] for q in self.model_q_list]
             # [[batch, 1], ...]
 
             stacked_c_q_for_gradient = torch.stack(c_q_for_gradient_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
             # [ensemble_q_num, batch, 1] -> [ensemble_q_sample, batch, 1]
 
-            log_prob = torch.sum(squash_correction_log_prob(c_policy, action_sampled), dim=1, keepdim=True)
+            log_prob = sum_log_prob(squash_correction_log_prob(c_policy, action_sampled), keepdim=True)
             # [batch, 1]
 
             min_c_q_for_gradient, _ = torch.min(stacked_c_q_for_gradient, dim=0)
@@ -1850,7 +1850,7 @@ class SAC_Base:
             self.optimizer_policy.step()
 
         return (torch.mean(d_policy.entropy().sum(-1) / self.d_action_branch_size) if self.d_action_sizes else None,
-                torch.mean(c_policy.entropy()) if self.c_action_size else None)
+                torch.mean(sum_entropy(c_policy.entropy())) if self.c_action_size else None)
 
     def _train_alpha(self,
                      obs_list: torch.Tensor,
@@ -1867,15 +1867,17 @@ class SAC_Base:
             probs = d_policy.probs   # [batch, d_action_summed_size]
             clipped_probs = probs.clamp(min=1e-8)
 
-            _loss_alpha = -self.log_d_alpha * (torch.log(clipped_probs) + self.target_d_alpha)  # [batch, d_action_summed_size]
+            _loss_alpha = self.log_d_alpha * (-torch.log(clipped_probs) - self.target_d_alpha)  # [batch, d_action_summed_size]
             loss_d_alpha = torch.sum(probs * _loss_alpha, dim=1, keepdim=True) / self.d_action_branch_size  # [batch, 1]
 
         if self.c_action_size:
             action_sampled = c_policy.sample()
-            log_prob = torch.sum(squash_correction_log_prob(c_policy, action_sampled), dim=1, keepdim=True)
-            # [batch, 1]
+            log_prob = squash_correction_log_prob(c_policy, action_sampled)  # [batch, c_action_size]
+            valid_c_action_size = torch.sum(log_prob != torch.inf, dim=-1, keepdim=True)  # [batch, 1]
+            log_prob = sum_log_prob(log_prob, keepdim=True)  # [batch, 1]
 
-            loss_c_alpha = -self.log_c_alpha * (log_prob + self.target_c_alpha)  # [batch, 1]
+            target_c_alpha = self.target_c_alpha * -valid_c_action_size
+            loss_c_alpha = self.log_c_alpha * (-log_prob - target_c_alpha)  # [batch, 1]
 
         loss_alpha = torch.mean(loss_d_alpha + loss_c_alpha)
 
@@ -2139,12 +2141,13 @@ class SAC_Base:
         Returns:
             The td-error of observations, [batch, 1]
         """
+        obs_list = [bn_obses[:, self.burn_in_step, ...] for bn_obses in bn_obses_list]
         state = bn_states[:, self.burn_in_step, ...]
         action = bn_actions[:, self.burn_in_step, ...]
         d_action = action[..., :self.d_action_summed_size]
         c_action = action[..., self.d_action_summed_size:]
 
-        q_list = [q(state, c_action) for q in self.model_q_list]
+        q_list = [q(state, c_action, obs_list) for q in self.model_q_list]
         # ([batch, d_action_summed_size], [batch, 1])
         d_q_list = [q[0] for q in q_list]  # [batch, d_action_summed_size]
         c_q_list = [q[1] for q in q_list]  # [batch, 1]

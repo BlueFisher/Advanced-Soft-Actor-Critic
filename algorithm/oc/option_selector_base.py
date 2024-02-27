@@ -504,18 +504,19 @@ class OptionSelectorBase(SAC_Base):
             mask = (option_index == i)
             if not torch.any(mask):
                 continue
-
+                
+            o_low_obs_list = [low_obs[mask] for low_obs in low_obs_list]
             o_low_state = low_state_all_options[i][mask]
 
-            termination[mask] = option.model_termination(o_low_state)
+            termination[mask] = option.model_termination(o_low_state, o_low_obs_list)
 
         termination = termination.squeeze(-1)
-        if self.train_mode:
+        if disable_sample:
+            termination_mask = termination > 0.5
+        else:
             termination_dist = torch.distributions.Categorical(probs=torch.stack([termination, 1 - termination],
                                                                                  dim=-1))
             termination_mask = termination_dist.sample() == 0
-        else:
-            termination_mask = termination > 0.5
 
         option_index[termination_mask] = new_option_index[termination_mask]
 
@@ -1291,6 +1292,7 @@ class OptionSelectorBase(SAC_Base):
                       bn_states: torch.Tensor,
                       bn_option_indexes: torch.Tensor,
                       obn_low_obses_list: List[torch.Tensor],
+                      obn_low_target_obses_list: List[torch.Tensor],
                       mg_obn_low_states: torch.Tensor,
                       mg_obn_low_target_states: torch.Tensor,
                       bn_actions: torch.Tensor,
@@ -1307,6 +1309,7 @@ class OptionSelectorBase(SAC_Base):
             bn_states: [batch, b + n, state_size]
             bn_option_indexes (torch.int64): [batch, b + n]
             obn_low_obses_list: list([batch, ob + n, *low_obs_shapes_i], ...)
+            obn_low_target_obses_list: list([batch, ob + n, *low_obs_shapes_i], ...)
             mg_obn_low_states: [batch, ob + n, low_state_size]
             mg_obn_low_target_states: [batch, ob + n, low_state_size]
             bn_actions: [batch, b + n, action_size]
@@ -1336,6 +1339,7 @@ class OptionSelectorBase(SAC_Base):
 
                 bn_padding_masks=bn_padding_masks[mask, self.option_burn_in_from:],
                 bn_obses_list=[obn_low_obses[mask] for obn_low_obses in obn_low_obses_list],
+                bn_target_obses_list=[obn_low_target_obses[mask] for obn_low_target_obses in obn_low_target_obses_list],
                 bn_states=mg_obn_low_states[mask],
                 bn_target_states=mg_obn_low_target_states[mask],
                 bn_actions=bn_actions[mask, self.option_burn_in_from:],
@@ -1537,6 +1541,7 @@ class OptionSelectorBase(SAC_Base):
 
             option.compute_termination_grads(
                 terminal_entropy=self.terminal_entropy,
+                next_obs_list=next_low_obs_list,
                 next_state=next_low_state,
                 next_v_over_options=v_over_options,
                 done=done
@@ -2327,6 +2332,7 @@ class OptionSelectorBase(SAC_Base):
                             bn_states=bn_states,
                             bn_option_indexes=bn_option_indexes,
                             obn_low_obses_list=[bn_low_obses[:, self.option_burn_in_from:] for bn_low_obses in bn_low_obses_list],
+                            obn_low_target_obses_list=[m_low_target_obses[:, self.option_burn_in_from:-1] for m_low_target_obses in om_low_target_obses_list],
                             mg_obn_low_states=mg_obn_low_states,
                             mg_obn_low_target_states=mg_om_low_target_states[:, :-1, ...],
                             bn_actions=bn_actions,

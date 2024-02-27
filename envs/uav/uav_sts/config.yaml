@@ -11,7 +11,8 @@ default:
     reset_on_iteration: false
 
   reset_config:
-    force_reset: true
+    disable_after_dead: false
+    strike_agents_appear_time: 0.5
 
   sac_config:
     write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
@@ -21,10 +22,29 @@ default:
     burn_in_step: 20
     seq_encoder: RNN
 
+    target_c_alpha: 0.2 # Target continuous alpha ratio
+
+    # use_rnd: true
+    # rnd_n_sample: 50
+
+  ma_config:
+    UAVSearchTracking?team=0:
+      sac_config:
+        nn: nn_search_tracking
+
+    UAVStrike?team=0:
+      sac_config:
+        nn: nn_strike
+
 aggr:
   base_config:
     unity_args:
       group_aggregation: true
+      group_aggregation_done_all: true
+    name: aggr_{time}
+
+  reset_config:
+    disable_after_dead: false
 
   sac_config:
     nn: nn_aggr
