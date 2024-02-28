@@ -6,7 +6,7 @@ OBS_NAMES = ['_Padding',
              'AgentsBufferSensor', 'BoundingBoxSensor', 'CameraSensor',
              'RayPerceptionSensor1', 'RayPerceptionSensor2', 'RayPerceptionSensor3',
              'VectorSensor_size9']
-OBS_SHAPES = [(1,), (4, 10), (5, 6), (84, 84, 1), (22,), (22,), (22,), (10,)]
+OBS_SHAPES = [(1,), (8, 10), (8, 6), (84, 84, 1), (22,), (22,), (22,), (10,)]
 
 
 class ModelRep(m.ModelBaseRNNRep):
@@ -38,7 +38,10 @@ class ModelRep(m.ModelBaseRNNRep):
         feat_bbox_mask = ~feat_bbox.any(dim=-1)
         attned_bbox, _ = self.attn_bbox(feat_bbox, feat_bbox, feat_bbox,
                                         key_padding_mask=feat_bbox_mask)
-        attned_bbox = attned_bbox.mean(-2)
+        attned_bbox = attned_bbox.sum(-2)  # [batch, seq_len, f]
+        count = (~feat_bbox_mask).sum(-1, keepdim=True)  # [batch, seq_len, f]
+        count = torch.maximum(torch.ones_like(count), count)
+        attned_bbox = attned_bbox / count  # [batch, seq_len, f]
 
         # if padding_mask is not None:
         #     attned_uavs[padding_mask] = 0.

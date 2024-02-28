@@ -6,7 +6,7 @@ OBS_NAMES = ['_Padding',
              'AgentsBufferSensor', 'BoundingBoxSensor', 'CameraSensor',
              'RayPerceptionSensor1', 'RayPerceptionSensor2', 'RayPerceptionSensor3',
              'VectorSensor_size9']
-OBS_SHAPES = [(1,), (4, 10), (5, 6), (84, 84, 1), (22,), (22,), (22,), (13,)]
+OBS_SHAPES = [(1,), (8, 10), (8, 6), (84, 84, 1), (22,), (22,), (22,), (13,)]
 
 
 class ModelRep(m.ModelBaseRNNRep):
