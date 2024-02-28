@@ -637,7 +637,7 @@ class EpisodeMultiheadAttention(nn.Module):
         if self.num_layers > 1:
             return _q, torch.concat(next_hidden_state_list, dim=-1), attn_weights_list
         else:
-            return _q, torch.zeros(key.shape[0], seq_q_len, 1), attn_weights_list
+            return _q, torch.zeros(key.shape[0], seq_q_len, 1, device=key.device), attn_weights_list
 
 
 class AbsolutePositionalEncoding(nn.Module):
