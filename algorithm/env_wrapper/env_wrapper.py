@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
@@ -7,7 +7,7 @@ class EnvWrapper:
     def __init__(self,
                  train_mode: bool = True,
                  env_name: str = None,
-                 env_args: Optional[Union[str, Dict]] = None,
+                 env_args: Optional[Union[List[str], Dict]] = None,
                  n_envs: int = 1):
         self.train_mode = train_mode
         self.env_name = env_name
@@ -16,9 +16,8 @@ class EnvWrapper:
             if isinstance(env_args, dict):
                 self.env_args = env_args
             else:
-                kv_pairs = env_args.split(' ')
-                for kv in kv_pairs:
-                    k, v = kv.split(',')
+                for kv in env_args:
+                    k, v = kv.split('=')
                     self.env_args[k] = v
         self.n_envs = n_envs
 

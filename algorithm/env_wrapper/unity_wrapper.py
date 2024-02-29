@@ -8,7 +8,7 @@ import random
 import time
 import uuid
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from mlagents_envs.environment import (ActionTuple, DecisionSteps,
@@ -47,19 +47,19 @@ class OptionChannel(SideChannel):
 
 class UnityWrapperProcess:
     def __init__(self,
-                 conn: multiprocessing.connection.Connection = None,
-                 train_mode=True,
-                 file_name=None,
-                 worker_id=0,
-                 base_port=5005,
-                 no_graphics=True,
-                 time_scale=None,
-                 seed=None,
-                 scene=None,
-                 additional_args=None,
-                 n_envs=1,
-                 group_aggregation=False,
-                 group_aggregation_done_all=True):
+                 conn: Optional[multiprocessing.connection.Connection] = None,
+                 train_mode: bool = True,
+                 file_name: Optional[str] = None,
+                 worker_id: int = 0,
+                 base_port: int = 5005,
+                 no_graphics: bool = True,
+                 time_scale: Optional[float] = None,
+                 seed: Optional[int] = None,
+                 scene: Optional[str] = None,
+                 additional_args: Optional[List[str]] = None,
+                 n_envs: int = 1,
+                 group_aggregation: bool = False,
+                 group_aggregation_done_all: bool = True):
         """
         Args:
             conn: Connection if run in multiprocessing mode
@@ -84,8 +84,6 @@ class UnityWrapperProcess:
         seed = seed if seed is not None else random.randint(0, 65536)
         if additional_args is None:
             additional_args = []
-        elif isinstance(additional_args, str):
-            additional_args = additional_args.split(' ')
 
         self.engine_configuration_channel = EngineConfigurationChannel()
         self.environment_parameters_channel = EnvironmentParametersChannel()
@@ -470,15 +468,15 @@ class UnityWrapper(EnvWrapper):
                  env_name: str = None,
                  n_envs: int = 1,
 
-                 base_port=5005,
-                 no_graphics=True,
-                 time_scale=None,
-                 seed=None,
-                 scene=None,
-                 additional_args=None,
-                 group_aggregation=False,
-                 group_aggregation_done_all=True,
-                 force_seq=None):
+                 base_port: int = 5005,
+                 no_graphics: bool = True,
+                 time_scale: Optional[float] = None,
+                 seed: Optional[int] = None,
+                 scene: Optional[str] = None,
+                 additional_args: Optional[List[str]] = None,
+                 group_aggregation: bool = False,
+                 group_aggregation_done_all: bool = True,
+                 force_seq: Optional[bool] = None):
         """
         Args:
             train_mode: If in train mode, Unity will run in the highest quality
