@@ -2066,6 +2066,10 @@ class SAC_Base:
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             self.summary_available = True
 
+            if self.use_replay_buffer:
+                curr_rb_id = self.replay_buffer.get_curr_id()
+                self.summary_writer.add_scalar('metric/replay_id', curr_rb_id, self.global_step)
+
             with torch.no_grad():
                 self.summary_writer.add_scalar('loss/q', loss_q, self.global_step)
                 if self.d_action_sizes and not self.discrete_dqn_like:

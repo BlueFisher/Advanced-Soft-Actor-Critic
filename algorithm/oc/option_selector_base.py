@@ -504,7 +504,7 @@ class OptionSelectorBase(SAC_Base):
             mask = (option_index == i)
             if not torch.any(mask):
                 continue
-                
+
             o_low_obs_list = [low_obs[mask] for low_obs in low_obs_list]
             o_low_state = low_state_all_options[i][mask]
 
@@ -1745,6 +1745,10 @@ class OptionSelectorBase(SAC_Base):
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             self.summary_available = True
+
+            if self.use_replay_buffer:
+                curr_rb_id = self.replay_buffer.get_curr_id()
+                self.summary_writer.add_scalar('metric/replay_id', curr_rb_id, self.global_step)
 
             self.summary_writer.flush()
 
