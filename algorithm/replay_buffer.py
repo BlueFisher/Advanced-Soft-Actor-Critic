@@ -56,6 +56,9 @@ class DataStorage:
             self._id = 0
 
         return pointers
+    
+    def get_curr_id(self) -> int:
+        return self._id
 
     def update(self, ids, key, data):
         self._buffer[key][ids % self.capacity] = data
@@ -306,6 +309,9 @@ class PrioritizedReplayBuffer:
             is_weights = np.power(is_weights / np.min(is_weights), -self.beta).astype(np.float32)
 
             return data_ids, transitions, np.expand_dims(is_weights, axis=1)
+
+    def get_curr_id(self) -> int:
+        return self._trans_storage.get_curr_id()
 
     def get_storage_data(self, data_ids) -> Dict[str, np.ndarray]:
         """
