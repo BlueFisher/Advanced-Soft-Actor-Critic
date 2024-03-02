@@ -8,7 +8,7 @@ import random
 import time
 import uuid
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from mlagents_envs.environment import (ActionTuple, DecisionSteps,
@@ -53,10 +53,11 @@ class UnityWrapperProcess:
                  worker_id: int = 0,
                  base_port: int = 5005,
                  no_graphics: bool = True,
+                 force_vulkan: bool = False,
                  time_scale: Optional[float] = None,
                  seed: Optional[int] = None,
                  scene: Optional[str] = None,
-                 additional_args: Optional[List[str]] = None,
+                 env_args: Dict = None,
                  n_envs: int = 1,
                  group_aggregation: bool = False,
                  group_aggregation_done_all: bool = True):
@@ -68,9 +69,11 @@ class UnityWrapperProcess:
             worker_id: Offset from base_port
             base_port: The port that communicate to Unity. It will be set to 5004 automatically if in editor.
             no_graphics: If Unity runs in no graphic mode. It must be set to False if Unity has camera sensor.
+            force_vulkan: -force-vulkan
             time_scale: Time scale of Unity. If None: time_scale = 20 if train_mode else 1
             seed: Random seed
             scene: The scene name
+            env_args: Additional environment arguments when initializing
             n_envs: The env copies count
             group_aggregation: If aggregate group agents
             group_aggregation_done_all: If group done or max reached when all agents in the group done or max reached
@@ -82,13 +85,15 @@ class UnityWrapperProcess:
         self.group_aggregation_done_all = group_aggregation_done_all
 
         seed = seed if seed is not None else random.randint(0, 65536)
-        if additional_args is None:
-            additional_args = []
+        if env_args is None:
+            env_args = {}
 
         self.engine_configuration_channel = EngineConfigurationChannel()
         self.environment_parameters_channel = EnvironmentParametersChannel()
 
         self.environment_parameters_channel.set_float_parameter('env_copys', float(n_envs))
+        for k, v in env_args.items():
+            self.environment_parameters_channel.set_float_parameter(k, float(v))
 
         self.option_channel = OptionChannel()
 
@@ -103,12 +108,16 @@ class UnityWrapperProcess:
         else:
             self._logger = logging.getLogger(f'UnityWrapper.Process_{worker_id}')
 
+        additional_args = ['--scene', scene]
+        if force_vulkan:
+            additional_args.append('-force-vulkan')
+
         self._env = UnityEnvironment(file_name=file_name,
                                      worker_id=worker_id,
                                      base_port=base_port if file_name else None,
                                      no_graphics=no_graphics and train_mode,
                                      seed=seed,
-                                     additional_args=['--scene', scene] + additional_args,
+                                     additional_args=additional_args,
                                      side_channels=[self.engine_configuration_channel,
                                                     self.environment_parameters_channel,
                                                     self.option_channel])
@@ -124,6 +133,7 @@ class UnityWrapperProcess:
             # 2: URP-HighFidelity-Renderer
             time_scale=time_scale)
 
+        self.environment_parameters_channel.set_float_parameter('aaa', 222)
         self._env.reset()
         self.behavior_names: List[str] = list(self._env.behavior_specs)
 
@@ -470,10 +480,11 @@ class UnityWrapper(EnvWrapper):
 
                  base_port: int = 5005,
                  no_graphics: bool = True,
+                 force_vulkan: bool = False,
                  time_scale: Optional[float] = None,
                  seed: Optional[int] = None,
                  scene: Optional[str] = None,
-                 additional_args: Optional[List[str]] = None,
+                 env_args: Optional[Union[List[str], Dict]] = None,
                  group_aggregation: bool = False,
                  group_aggregation_done_all: bool = True,
                  force_seq: Optional[bool] = None):
@@ -485,6 +496,7 @@ class UnityWrapper(EnvWrapper):
 
             base_port: The port that communicate to Unity. It will be set to 5004 automatically if in editor.
             no_graphics: If Unity runs in no graphic mode. It must be set to False if Unity has camera sensor.
+            force_vulkan: -force-vulkan
             time_scale: Time scale of Unity. If None: time_scale = 20 if train_mode else 1
             seed: Random seed
             scene: The scene name
@@ -492,13 +504,13 @@ class UnityWrapper(EnvWrapper):
             group_aggregation_done_all: If group done or max reached when all agents in the group done or max reached
                                         Otherwise, when any agent in the group done or max reached
         """
-        super().__init__(train_mode, env_name, None, n_envs)
+        super().__init__(train_mode, env_name, env_args, n_envs)
         self.base_port = base_port
         self.no_graphics = no_graphics
+        self.force_vulkan = force_vulkan
         self.time_scale = time_scale
         self.seed = seed
         self.scene = scene
-        self.additional_args = additional_args
         self.group_aggregation = group_aggregation
         self.group_aggregation_done_all = group_aggregation_done_all
 
@@ -523,15 +535,16 @@ class UnityWrapper(EnvWrapper):
 
             for i in range(self.env_length):
                 self._envs.append(UnityWrapperProcess(conn=None,
-                                                      train_mode=train_mode,
-                                                      file_name=env_name,
+                                                      train_mode=self.train_mode,
+                                                      file_name=self.env_name,
                                                       worker_id=i,
                                                       base_port=base_port,
                                                       no_graphics=no_graphics,
+                                                      force_vulkan=force_vulkan,
                                                       time_scale=time_scale,
                                                       seed=seed,
                                                       scene=scene,
-                                                      additional_args=additional_args,
+                                                      env_args=self.env_args,
                                                       n_envs=min(MAX_N_ENVS_PER_PROCESS, self.n_envs - i * MAX_N_ENVS_PER_PROCESS),
                                                       group_aggregation=group_aggregation,
                                                       group_aggregation_done_all=group_aggregation_done_all))
@@ -570,10 +583,11 @@ class UnityWrapper(EnvWrapper):
                                               self._process_id,
                                               self.base_port,
                                               self.no_graphics,
+                                              self.force_vulkan,
                                               self.time_scale,
                                               self.seed,
                                               self.scene,
-                                              self.additional_args,
+                                              self.env_args,
                                               min(MAX_N_ENVS_PER_PROCESS, self.n_envs - i * MAX_N_ENVS_PER_PROCESS),
                                               self.group_aggregation,
                                               self.group_aggregation_done_all),

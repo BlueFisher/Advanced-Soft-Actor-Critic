@@ -60,7 +60,7 @@ class Main:
         self.device = args.device
         self.last_ckpt = args.ckpt
 
-        if args.env_args is not None:
+        if len(args.env_args) > 0:
             config['base_config']['env_args'] = args.env_args
         if args.port is not None:
             config['base_config']['unity_args']['port'] = args.port
@@ -113,17 +113,19 @@ class Main:
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         n_envs=self.base_config['n_envs'],
                                         time_scale=self.unity_time_scale,
+                                        env_args=self.base_config['env_args'],
                                         group_aggregation=self.base_config['unity_args']['group_aggregation'],
                                         group_aggregation_done_all=self.base_config['unity_args']['group_aggregation_done_all'])
             else:
                 self.env = UnityWrapper(train_mode=self.train_mode,
-                                        env_name=self.base_config['unity_args']['build_path'][sys.platform],
+                                        env_name=self.base_config['unity_args']['build_path'],
                                         n_envs=self.base_config['n_envs'],
                                         base_port=self.base_config['unity_args']['port'],
                                         no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
+                                        force_vulkan=self.base_config['unity_args']['force_vulkan'],
                                         time_scale=self.unity_time_scale,
                                         scene=self.base_config['env_name'],
-                                        additional_args=self.base_config['env_args'],
+                                        env_args=self.base_config['env_args'],
                                         group_aggregation=self.base_config['unity_args']['group_aggregation'],
                                         group_aggregation_done_all=self.base_config['unity_args']['group_aggregation_done_all'])
 
