@@ -56,9 +56,9 @@ class DataStorage:
             self._id = 0
 
         return pointers
-    
+
     def get_curr_id(self) -> int:
-        return self._id
+        return self._id % self.capacity
 
     def update(self, ids, key, data):
         self._buffer[key][ids % self.capacity] = data

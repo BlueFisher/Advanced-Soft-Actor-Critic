@@ -27,26 +27,37 @@ def initialize_config_from_yaml(default_config_path, config_file_path,
     with open(config_file_path) as f:
         config_file = yaml.load(f, Loader=yaml.FullLoader)
 
-    def _tra_dict(dict_ori: dict, dict_new: dict):
+    def _modify_platform(d: dict):
+        for k, v in d.items():
+            if isinstance(v, dict):
+                if 'win32' in v or 'linux' in v:
+                    d[k] = v[sys.platform]
+                else:
+                    _modify_platform(v)
+
+    def _update_dict(dict_ori: dict, dict_new: dict):
         if 'inherited' in dict_new:
             if isinstance(dict_new['inherited'], str):
-                _tra_dict(dict_ori, config_file[dict_new['inherited']])
+                _update_dict(dict_ori, config_file[dict_new['inherited']])
             elif isinstance(dict_new['inherited'], list):
                 for inherited_config_cat in dict_new['inherited']:
-                    _tra_dict(dict_ori, config_file[inherited_config_cat])
+                    _update_dict(dict_ori, config_file[inherited_config_cat])
 
         for k, v in dict_new.items():
             if k not in dict_ori:
                 dict_ori[k] = v
             else:
                 if isinstance(dict_ori[k], dict) and isinstance(v, dict):
-                    _tra_dict(dict_ori[k], v)
+                    _update_dict(dict_ori[k], v)
                 else:
                     dict_ori[k] = v
 
-    _tra_dict(config, config_file['default'])
+    _modify_platform(config)
+    _modify_platform(config_file['default'])
+    _update_dict(config, config_file['default'])
     if config_cat is not None:
-        _tra_dict(config, config_file[config_cat])
+        _modify_platform(config_file[config_cat])
+        _update_dict(config, config_file[config_cat])
 
     ma_configs = {}
     # Deal with multi-agents config
@@ -54,7 +65,7 @@ def initialize_config_from_yaml(default_config_path, config_file_path,
         for ma_name, ma_config in config['ma_config'].items():
             ma_configs[ma_name] = deepcopy(config)
             del ma_configs[ma_name]['ma_config']
-            _tra_dict(ma_configs[ma_name], ma_config)
+            _update_dict(ma_configs[ma_name], ma_config)
     del config['ma_config']
 
     # Deal with random_params

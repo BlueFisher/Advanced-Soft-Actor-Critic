@@ -17,7 +17,10 @@ class EnvWrapper:
                 self.env_args = env_args
             else:
                 for kv in env_args:
-                    k, v = kv.split('=')
+                    if '=' in kv:
+                        k, v = kv.split('=')
+                    else:
+                        k, v = kv, 1.
                     self.env_args[k] = v
         self.n_envs = n_envs
 
