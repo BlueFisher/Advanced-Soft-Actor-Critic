@@ -3,6 +3,7 @@ base_config:
   env_name: env_name # The environment name.
   env_args: null
   unity_args: # Only for Unity Environments
+    max_n_envs_per_process: 10 # The max env copies count in each process
     no_graphics: true # If an env does not need pixel input, set true
     build_path: # Unity executable path
       win32: path_win32

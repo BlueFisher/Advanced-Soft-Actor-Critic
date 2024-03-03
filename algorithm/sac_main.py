@@ -112,6 +112,7 @@ class Main:
             if self.unity_run_in_editor:
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         n_envs=self.base_config['n_envs'],
+                                        max_n_envs_per_process=self.base_config['unity_args']['max_n_envs_per_process'],
                                         time_scale=self.unity_time_scale,
                                         env_args=self.base_config['env_args'],
                                         group_aggregation=self.base_config['unity_args']['group_aggregation'],
@@ -121,6 +122,7 @@ class Main:
                                         env_name=self.base_config['unity_args']['build_path'],
                                         n_envs=self.base_config['n_envs'],
                                         base_port=self.base_config['unity_args']['port'],
+                                        max_n_envs_per_process=self.base_config['unity_args']['max_n_envs_per_process'],
                                         no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
                                         force_vulkan=self.base_config['unity_args']['force_vulkan'],
                                         time_scale=self.unity_time_scale,
