@@ -27,7 +27,6 @@ INIT = 0
 RESET = 1
 STEP = 2
 CLOSE = 3
-MAX_N_ENVS_PER_PROCESS = 10
 
 
 class OptionChannel(SideChannel):
@@ -479,6 +478,7 @@ class UnityWrapper(EnvWrapper):
                  n_envs: int = 1,
 
                  base_port: int = 5005,
+                 max_n_envs_per_process: int = 10,
                  no_graphics: bool = True,
                  force_vulkan: bool = False,
                  time_scale: Optional[float] = None,
@@ -495,6 +495,7 @@ class UnityWrapper(EnvWrapper):
             n_envs: The env copies count
 
             base_port: The port that communicate to Unity. It will be set to 5004 automatically if in editor.
+            max_n_envs_per_process: The max env copies count in each process
             no_graphics: If Unity runs in no graphic mode. It must be set to False if Unity has camera sensor.
             force_vulkan: -force-vulkan
             time_scale: Time scale of Unity. If None: time_scale = 20 if train_mode else 1
@@ -506,6 +507,7 @@ class UnityWrapper(EnvWrapper):
         """
         super().__init__(train_mode, env_name, env_args, n_envs)
         self.base_port = base_port
+        self.max_n_envs_per_process = max_n_envs_per_process
         self.no_graphics = no_graphics
         self.force_vulkan = force_vulkan
         self.time_scale = time_scale
@@ -519,13 +521,13 @@ class UnityWrapper(EnvWrapper):
         # force_seq: Whether forcing use multiple processes
         # self._seq_envs: Whether use multiple processes
         if force_seq is None:
-            self._seq_envs: bool = self.n_envs <= MAX_N_ENVS_PER_PROCESS
+            self._seq_envs: bool = self.n_envs <= self.max_n_envs_per_process
         else:
             self._seq_envs: bool = force_seq
 
         self._process_id = 0
 
-        self.env_length = math.ceil(self.n_envs / MAX_N_ENVS_PER_PROCESS)
+        self.env_length = math.ceil(self.n_envs / self.max_n_envs_per_process)
 
         if self._seq_envs:
             self._logger.info('Using sequential environments')
@@ -545,7 +547,7 @@ class UnityWrapper(EnvWrapper):
                                                       seed=seed,
                                                       scene=scene,
                                                       env_args=self.env_args,
-                                                      n_envs=min(MAX_N_ENVS_PER_PROCESS, self.n_envs - i * MAX_N_ENVS_PER_PROCESS),
+                                                      n_envs=min(self.max_n_envs_per_process, self.n_envs - i * self.max_n_envs_per_process),
                                                       group_aggregation=group_aggregation,
                                                       group_aggregation_done_all=group_aggregation_done_all))
         else:
@@ -588,7 +590,7 @@ class UnityWrapper(EnvWrapper):
                                               self.seed,
                                               self.scene,
                                               self.env_args,
-                                              min(MAX_N_ENVS_PER_PROCESS, self.n_envs - i * MAX_N_ENVS_PER_PROCESS),
+                                              min(self.max_n_envs_per_process, self.n_envs - i * self.max_n_envs_per_process),
                                               self.group_aggregation,
                                               self.group_aggregation_done_all),
                                         daemon=True)
