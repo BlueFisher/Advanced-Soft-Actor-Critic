@@ -600,6 +600,8 @@ class UnityWrapper(EnvWrapper):
             if force_init:
                 parent_conn.send((INIT, None))
                 self._process_conn_receiving(parent_conn, i)
+                parent_conn.send((RESET, None))
+                self._process_conn_receiving(parent_conn, i)
 
             self._logger.info(f'Environment {i} started with process {self._process_id}')
             self._process_id += 1
