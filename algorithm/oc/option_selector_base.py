@@ -352,59 +352,6 @@ class OptionSelectorBase(SAC_Base):
             ckpt_dict['model_target_rep'] = self.model_target_rep
             ckpt_dict['optimizer_rep'] = self.optimizer_rep
 
-    def _init_or_restore(self, last_ckpt: int) -> None:
-        """
-        Initialize network weights from scratch or restore from model_abs_dir
-        """
-        self.ckpt_dir = None
-        if self.model_abs_dir:
-            self.ckpt_dir = ckpt_dir = self.model_abs_dir.joinpath('model')
-
-            ckpts = []
-            if ckpt_dir.exists():
-                for ckpt_path in ckpt_dir.glob('*.pth'):
-                    ckpts.append(int(ckpt_path.stem))
-                ckpts.sort()
-            else:
-                ckpt_dir.mkdir()
-
-            if ckpts:
-                if last_ckpt is None:
-                    last_ckpt = ckpts[-1]
-                else:
-                    assert last_ckpt in ckpts
-
-                ckpt_restore_path = ckpt_dir.joinpath(f'{last_ckpt}.pth')
-                ckpt_restore = torch.load(ckpt_restore_path, map_location=self.device)
-                self.global_step = self.global_step.to('cpu')
-                for name, model in self.ckpt_dict.items():
-                    if name not in ckpt_restore:
-                        self._logger.warning(f'{name} not in {last_ckpt}.pth')
-                        continue
-
-                    if isinstance(model, torch.Tensor):
-                        model.data = ckpt_restore[name]
-                    else:
-                        try:
-                            model.load_state_dict(ckpt_restore[name])
-                        except RuntimeError as e:
-                            self._logger.error(e)
-                        if isinstance(model, nn.Module):
-                            if self.train_mode:
-                                model.train()
-                            else:
-                                model.eval()
-
-                self._logger.info(f'Restored from {ckpt_restore_path}')
-
-                if self.train_mode and self.use_replay_buffer:
-                    self.replay_buffer.load(ckpt_dir, last_ckpt)
-
-                    self._logger.info(f'Replay buffer restored')
-            else:
-                self._logger.info('Initializing from scratch')
-                self._update_target_variables()
-
     def set_train_mode(self, train_mode=True):
         super().set_train_mode(train_mode)
 

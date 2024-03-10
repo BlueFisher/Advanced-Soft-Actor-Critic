@@ -412,6 +412,8 @@ class AgentManager:
                 )
                 if episode_trans is not None:
                     episode_trans_list.append(episode_trans)
+            elif local_done[i]:
+                a.done = True
 
         self['episode_trans_list'] = episode_trans_list
 

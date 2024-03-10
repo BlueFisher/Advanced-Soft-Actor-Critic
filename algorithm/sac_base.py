@@ -563,6 +563,7 @@ class SAC_Base:
                                 model.eval()
 
                 self.global_step = self.global_step.to('cpu')
+                self.ckpt_dict['global_step'] = self.global_step
 
                 self._logger.info(f'Restored from {ckpt_restore_path}')
 
