@@ -38,7 +38,10 @@ class ModelRep(m.ModelBaseRNNRep):
         feat_bbox_mask = ~feat_bbox.any(dim=-1)
         attned_bbox, _ = self.attn_bbox(feat_bbox, feat_bbox, feat_bbox,
                                         key_padding_mask=feat_bbox_mask)
-        attned_bbox = attned_bbox.mean(-2)
+        attned_bbox = attned_bbox.sum(-2)  # [batch, seq_len, f]
+        count = (~feat_bbox_mask).sum(-1, keepdim=True)  # [batch, seq_len, f]
+        count = torch.maximum(torch.ones_like(count), count)
+        attned_bbox = attned_bbox / count  # [batch, seq_len, f]
 
         # if padding_mask is not None:
         #     attned_uavs[padding_mask] = 0.
