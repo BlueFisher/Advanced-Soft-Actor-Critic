@@ -1666,12 +1666,12 @@ class OptionSelectorBase(SAC_Base):
                 mg_om_low_states = mg_om_low_states * ~_mask + om_low_states * _mask
 
             # TODO
-            option.train_policy_alpha(bn_padding_masks=bn_padding_masks[mask, self.option_burn_in_from:],
-                                      bn_obses_list=[o_m_obses[mask, :-1, ...]
+            option.train_policy_alpha(bn_padding_masks=bn_padding_masks[:, self.option_burn_in_from:],
+                                      bn_obses_list=[o_m_obses[:, :-1, ...]
                                                      for o_m_obses in om_low_obses_list],
-                                      m_states=mg_om_low_states[mask],
-                                      bn_actions=bn_actions[mask, self.option_burn_in_from:],
-                                      bn_mu_probs=bn_mu_probs[mask, self.option_burn_in_from:])
+                                      m_states=mg_om_low_states,
+                                      bn_actions=bn_actions[:, self.option_burn_in_from:],
+                                      bn_mu_probs=bn_mu_probs[:, self.option_burn_in_from:])
 
         self._train_v_terminations(bn_padding_masks=bn_padding_masks,
                                    bn_option_indexes=bn_option_indexes,

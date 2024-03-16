@@ -523,6 +523,7 @@ class EpisodeMultiheadAttention(nn.Module):
     def forward(self,
                 key: torch.Tensor,
                 seq_q_len: int = 1,
+                cut_query: bool = True,
                 hidden_state: Optional[torch.Tensor] = None,
                 is_prev_hidden_state: bool = False,
 
@@ -533,6 +534,7 @@ class EpisodeMultiheadAttention(nn.Module):
         Args:
             key: [batch, seq_k_len, embed_dim]
             seq_q_len: int
+            cut_query: bool
             hidden_state: [batch, hidden_state_length, embed_dim]
             is_prev_hidden_state: bool
 
@@ -541,9 +543,10 @@ class EpisodeMultiheadAttention(nn.Module):
             key_padding_mask: [batch, seq_k_len]
 
         Returns:
-            encoded_query: [batch, seq_q_len, output_dim]
+            encoded_query: [batch, seq_q_len, output_dim]  if cut_query
+                           [batch, seq_k_len, output_dim]  if not cut_query
             next_hidden_state: [batch, seq_q_len, sum(output_dim_list[:-1])]
-            attn_weights_list: List[[batch, seq_q_len, seq_k_len_i], ...]
+            attn_weights_list: List[[batch, seq_k_len_i, seq_k_len_i], ...]
         """
         seq_k_len = key.shape[1]
         assert seq_q_len <= seq_k_len
@@ -565,7 +568,7 @@ class EpisodeMultiheadAttention(nn.Module):
                 attn_weights_list.append(attn_weight)
 
             output, attn_weight = self._attn_list[-1](_k, seq_q_len,
-                                                      cut_query=True,
+                                                      cut_query=cut_query,
                                                       query_only_attend_to_rest_key=query_only_attend_to_rest_key,
                                                       key_index=key_index,
                                                       key_padding_mask=key_padding_mask)
@@ -587,7 +590,7 @@ class EpisodeMultiheadAttention(nn.Module):
 
                 _k = torch.concat([hidden_state_list[i], output], dim=1)
 
-                output, attn_weight = attn(_k, seq_q_len,
+                output, attn_weight = attn(_k, seq_q_len,  # TODO
                                            query_only_attend_to_rest_key=query_only_attend_to_rest_key,
                                            key_index=key_index,
                                            key_padding_mask=key_padding_mask)
@@ -607,7 +610,7 @@ class EpisodeMultiheadAttention(nn.Module):
             if self.num_layers > 1:
                 hidden_state_list = hidden_state.split(self.output_dim_list[:-1], dim=-1)
             else:
-                output = output[:, -seq_q_len:]
+                output = output[:, -seq_q_len:] if cut_query else output
 
             for i, attn in enumerate(self._attn_list[1:-1]):
                 _k = output[:, -seq_k_len:]
@@ -626,7 +629,7 @@ class EpisodeMultiheadAttention(nn.Module):
                 _k = torch.concat([hidden_state_list[-1], _k], dim=1)
 
                 output, attn_weight = self._attn_list[-1](_k, seq_q_len,
-                                                          cut_query=True,
+                                                          cut_query=cut_query,
                                                           query_only_attend_to_rest_key=query_only_attend_to_rest_key,
                                                           key_index=key_index,
                                                           key_padding_mask=key_padding_mask)

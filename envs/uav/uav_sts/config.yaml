@@ -1,18 +1,31 @@
 default:
   base_config:
     env_name: UAVSTS
+    env_args:
+      search_tracking_agents_count_min: 3
+      search_tracking_agents_count_max: 4
+      strike_agents_count_min: 3
+      strike_agents_count_max: 4
     unity_args:
       build_path:
         win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
       no_graphics: false
+      force_vulkan:
+        win32: false
+        linux: true
+      max_n_envs_per_process: 9 # The max env copies count in each process
 
     n_envs: 50
     reset_on_iteration: false
 
   reset_config:
-    disable_after_dead: false
+    disable_after_dead: true
     strike_agents_appear_time: 0.5
+    # disable_after_dead: false
+    # strike_agents_appear_time: 0.25
+    hole_probability: 0.75
+    strike_success_distance: 3
 
   sac_config:
     write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
@@ -35,6 +48,47 @@ default:
     UAVStrike?team=0:
       sac_config:
         nn: nn_strike
+
+train:
+  base_config:
+    env_args:
+      search_tracking_agents_count_min: 2
+      search_tracking_agents_count_max: 4
+      strike_agents_count_min: 2
+      strike_agents_count_max: 4
+
+  reset_config:
+    disable_after_dead: false
+    strike_agents_appear_time: 0.25
+    hole_probability: 0.5
+
+train_st:
+  base_config:
+    unity_args:
+      max_n_envs_per_process: 5 # The max env copies count in each process
+    env_args:
+      search_tracking_agents_count_min: 2
+      search_tracking_agents_count_max: 6
+      strike_agents_count_min: 0
+      strike_agents_count_max: 0
+
+  reset_config:
+    disable_after_dead: false
+    hole_probability: 0.5
+
+train_s:
+  base_config:
+    unity_args:
+      max_n_envs_per_process: 3 # The max env copies count in each process
+    env_args:
+      search_tracking_agents_count_min: 2
+      search_tracking_agents_count_max: 2
+      strike_agents_count_min: 2
+      strike_agents_count_max: 4
+  reset_config:
+    disable_after_dead: false
+    strike_agents_appear_time: 0.1
+    hole_probability: 0.5
 
 aggr:
   base_config:
