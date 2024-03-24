@@ -12,6 +12,7 @@ else:
 
 
 class OfflineWrapper(EnvWrapper):
+    # TODO
     def __init__(self,
                  env_name: str,
                  env_args: Optional[Union[str, Dict]] = None,

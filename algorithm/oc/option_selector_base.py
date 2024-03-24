@@ -810,7 +810,7 @@ class OptionSelectorBase(SAC_Base):
             key_indexes (np.int32): [batch, key_len]
             key_padding_masks (np.bool): [batch, key_len]
             key_obses_list (np): list([batch, key_len, *obs_shapes_i], ...)
-            key_option_indexes (np.int64): [batch, key_len]
+            key_option_indexes (np.int32): [batch, key_len]
             key_attn_states (np): [batch, key_len, *seq_hidden_state_shape]
             # The last key transition is the current transition
 
@@ -1778,86 +1778,45 @@ class OptionSelectorBase(SAC_Base):
 
         self.summary_available = False
 
-    def _padding_next_obs_list(self,
-                               ep_indexes: np.ndarray,
-                               ep_obses_list: List[np.ndarray],
-                               ep_option_indexes: np.ndarray,
-                               ep_option_changed_indexes: np.ndarray,
-                               ep_actions: np.ndarray,
-                               ep_rewards: np.ndarray,
-                               next_obs_list: List[np.ndarray],
-                               ep_dones: np.ndarray,
-                               ep_probs: List[np.ndarray],
-                               ep_seq_hidden_states: Optional[np.ndarray] = None,
-                               ep_low_seq_hidden_states: Optional[np.ndarray] = None) -> Tuple[np.ndarray, ...]:
-        """
-        Padding next_obs_list
+    def put_episode(self,
+                    ep_indexes: np.ndarray,
+                    ep_obses_list: List[np.ndarray],
+                    ep_option_indexes: np.ndarray,
+                    ep_option_changed_indexes: np.ndarray,
+                    ep_actions: np.ndarray,
+                    ep_rewards: np.ndarray,
+                    ep_dones: np.ndarray,
+                    ep_probs: List[np.ndarray],
+                    ep_seq_hidden_states: Optional[np.ndarray] = None,
+                    ep_low_seq_hidden_states: Optional[np.ndarray] = None) -> None:
+        # Ignore episodes which length is too short
+        if ep_indexes.shape[1] < self.n_step:
+            return
 
-        Args:
-            ep_indexes (np.int32): [1, ep_len]
-            ep_obses_list (np): list([1, ep_len, *obs_shapes_i], ...)
-            ep_option_indexes (np.int8): [1, ep_len]
-            ep_option_changed_indexes (np.int32): [1, ep_len]
-            ep_actions (np): [1, ep_len, action_size]
-            ep_rewards (np): [1, ep_len]
-            next_obs_list (np): list([1, *obs_shapes_i], ...)
-            ep_dones (bool): [1, ep_len]
-            ep_probs (np): [1, ep_len, action_size]
-            ep_seq_hidden_states (np): [1, ep_len, *seq_hidden_state_shape]
-            ep_low_seq_hidden_states (np): [1, ep_len, *low_seq_hidden_state_shape]
+        assert ep_indexes.dtype == np.int32
+        assert ep_option_indexes.dtype == np.int8
+        assert ep_option_changed_indexes.dtype == np.int32
 
-        Returns:
-            ep_indexes (np.int32): [1, ep_len + 1]
-            ep_padding_masks: (bool): [1, ep_len + 1]
-            ep_obses_list (np): list([1, ep_len + 1, *obs_shapes_i], ...)
-            ep_option_indexes (np.int8): [1, ep_len + 1]
-            ep_option_changed_indexes (np.int32): [1, ep_len + 1]
-            ep_actions (np): [1, ep_len + 1, action_size]
-            ep_rewards (np): [1, ep_len + 1]
-            ep_dones (bool): [1, ep_len + 1]
-            ep_probs (np): [1, ep_len + 1, action_size]
-            ep_seq_hidden_states (np): [1, ep_len + 1, *seq_hidden_state_shape]
-            ep_low_seq_hidden_states (np): [1, ep_len + 1, *low_seq_hidden_state_shape]
-        """
-        assert ep_indexes.dtype == np.int32, ep_indexes.dtype
-        assert ep_option_indexes.dtype == np.int8, ep_option_indexes.dtype
-        assert ep_option_changed_indexes.dtype == np.int32, ep_option_changed_indexes.dtype
+        ep_padding_masks = np.zeros_like(ep_indexes, dtype=bool)
+        ep_padding_masks[:, -1] = True  # The last step is next_step
+        ep_padding_masks[ep_indexes == -1] = True
 
-        (ep_indexes,
-         ep_padding_masks,
-         ep_obses_list,
-         ep_actions,
-         ep_rewards,
-         ep_dones,
-         ep_probs,
-         ep_seq_hidden_states) = super()._padding_next_obs_list(ep_indexes=ep_indexes,
-                                                                ep_obses_list=ep_obses_list,
-                                                                ep_actions=ep_actions,
-                                                                ep_rewards=ep_rewards,
-                                                                next_obs_list=next_obs_list,
-                                                                ep_dones=ep_dones,
-                                                                ep_probs=ep_probs,
-                                                                ep_seq_hidden_states=ep_seq_hidden_states)
+        episode = (ep_indexes,
+                   ep_padding_masks,
+                   ep_obses_list,
+                   ep_option_indexes,
+                   ep_option_changed_indexes,
+                   ep_actions,
+                   ep_rewards,
+                   ep_dones,
+                   ep_probs,
+                   ep_seq_hidden_states,
+                   ep_low_seq_hidden_states)
 
-        ep_option_indexes = np.concatenate([ep_option_indexes,
-                                            np.full([1, 1], 0, dtype=np.int8)], axis=1)
-        ep_option_changed_indexes = np.concatenate([ep_option_changed_indexes,
-                                                    ep_option_changed_indexes[:, -1:] + 1], axis=1)
-        if ep_low_seq_hidden_states is not None:
-            ep_low_seq_hidden_states = np.concatenate([ep_low_seq_hidden_states,
-                                                       np.zeros([1, 1, *ep_low_seq_hidden_states.shape[2:]], dtype=np.float32)], axis=1)
-
-        return (ep_indexes,
-                ep_padding_masks,
-                ep_obses_list,
-                ep_option_indexes,
-                ep_option_changed_indexes,
-                ep_actions,
-                ep_rewards,
-                ep_dones,
-                ep_probs,
-                ep_seq_hidden_states if ep_seq_hidden_states is not None else None,
-                ep_low_seq_hidden_states if ep_low_seq_hidden_states is not None else None)
+        if self.use_replay_buffer:
+            self._fill_replay_buffer(*episode)
+        else:
+            self.batch_buffer.put_episode(*episode)
 
     def _fill_replay_buffer(self,
                             ep_indexes: np.ndarray,

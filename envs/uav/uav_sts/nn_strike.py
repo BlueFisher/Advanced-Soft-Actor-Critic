@@ -2,11 +2,10 @@ import torch
 
 import algorithm.nn_models as m
 
-OBS_NAMES = ['_Padding',
-             'AgentsBufferSensor', 'BoundingBoxSensor', 'CameraSensor',
+OBS_NAMES = ['AgentsBufferSensor', 'BoundingBoxSensor', 'CameraSensor',
              'RayPerceptionSensor1', 'RayPerceptionSensor2', 'RayPerceptionSensor3',
-             'VectorSensor_size9']
-OBS_SHAPES = [(1,), (8, 10), (8, 6), (84, 84, 1), (22,), (22,), (22,), (13,)]
+             'VectorSensor_size13']
+OBS_SHAPES = [(8, 10), (8, 6), (84, 84, 1), (22,), (22,), (22,), (13,)]
 
 
 class ModelRep(m.ModelBaseRNNRep):
@@ -28,7 +27,7 @@ class ModelRep(m.ModelBaseRNNRep):
         self.rnn = m.GRU(10 + 6 + 64 + 64 + 13 + self.c_action_size, 128, 1)
 
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
-        _, feat_uavs, feat_bbox, vis_obs, ray_obs_1, ray_obs_2, ray_obs_3, vec_obs = obs_list
+        feat_uavs, feat_bbox, vis_obs, ray_obs_1, ray_obs_2, ray_obs_3, vec_obs = obs_list
 
         feat_uavs_mask = ~feat_uavs.any(dim=-1)
         attned_uavs, _ = self.attn_uavs(vec_obs[..., :-3].unsqueeze(-2), feat_uavs, feat_uavs,

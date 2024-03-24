@@ -8,28 +8,37 @@ sys.path.append(str(Path(__file__).parent.parent))
 from algorithm.sac_main import Main
 
 
+default_args = {
+    'run': True,
+    'run_a': [],
+    'logger_in_file': False,
+
+    'render': False,
+
+    'envs': None,
+    'max_iter': None,
+
+    'port': None,
+    'editor': None,
+    'timescale': None,
+
+    'name': None,
+    'disable_sample': False,
+    'use_env_nn': False,
+    'device': 'cpu',
+    'ckpt': None,
+    'nn': None,
+
+    'debug': True
+}
+
+
 class TestSACMain(unittest.TestCase):
     def _test_vanilla(self, env_args_dict):
         args = argparse.Namespace(
             config=None,
-            run=False,
-            logger_in_file=False,
-
-            render=False,
             env_args=env_args_dict,
-            envs=None,
-            max_iter=None,
-
-            port=None,
-            editor=None,
-            timescale=None,
-
-            name=None,
-            disable_sample=False,
-            use_env_nn=False,
-            device='cpu',
-            ckpt=None,
-            nn=None,
+            **default_args
         )
 
         root_dir = Path(__file__).resolve().parent.parent
@@ -38,24 +47,18 @@ class TestSACMain(unittest.TestCase):
     def _test_rnn(self, env_args_dict):
         args = argparse.Namespace(
             config='rnn',
-            run=False,
-            logger_in_file=False,
-
-            render=False,
             env_args=env_args_dict,
-            envs=None,
-            max_iter=None,
+            **default_args
+        )
 
-            port=None,
-            editor=None,
-            timescale=None,
+        root_dir = Path(__file__).resolve().parent.parent
+        Main(root_dir, f'envs/test', args)
 
-            name=None,
-            disable_sample=False,
-            use_env_nn=False,
-            device='cpu',
-            ckpt=None,
-            nn=None,
+    def _test_attn(self, env_args_dict):
+        args = argparse.Namespace(
+            config='attn',
+            env_args=env_args_dict,
+            **default_args
         )
 
         root_dir = Path(__file__).resolve().parent.parent
@@ -73,8 +76,14 @@ class TestSACMain(unittest.TestCase):
             self._test_rnn(param_dict)
         return func
 
+    @staticmethod
+    def gen_attn(param_dict):
+        def func(self):
+            self._test_attn(param_dict)
+        return func
 
-def __gen_vanilla():
+
+def __gen():
     env_args_dicts = [
         {
             'ma_obs_shapes': {
@@ -167,9 +176,18 @@ def __gen_vanilla():
         func_name = f'test_rnn_{i:03d}'
 
         setattr(TestSACMain, func_name,
-                TestSACMain.gen_vanilla(env_args_dict))
+                TestSACMain.gen_rnn(env_args_dict))
+
+        i += 1
+
+    i = 0
+    for env_args_dict in env_args_dicts:
+        func_name = f'test_attn_{i:03d}'
+
+        setattr(TestSACMain, func_name,
+                TestSACMain.gen_attn(env_args_dict))
 
         i += 1
 
 
-__gen_vanilla()
+__gen()

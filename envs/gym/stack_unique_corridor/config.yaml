@@ -12,10 +12,10 @@ default:
     n_envs: 100
 
   reset_config:
-    stack_nesting: 0.5
+    stack_nesting: 0.6
     max_nesting_depth: 10
     key_target_num: 10
-    block_gap: 5
+    block_gap: [3, 6]
     success_reward: 2.
     failure_reward: -1.
     max_episode_steps: 200
@@ -33,14 +33,11 @@ default:
 
     learning_rate: 0.001
 
-    ensemble_q_num: 5 # Number of Qs
-    ensemble_q_sample: 3 # Number of min Qs
-
   oc_config:
     option_eplison: 0.1 # Probability of switching options
     option_seq_encoder: null
     terminal_entropy: 0. # Tending not to terminate >0, tending to terminate <0
-    key_max_length: 200
+    key_max_length: 100
 
 offline:
   base_config:
@@ -150,6 +147,30 @@ oc_4_attn_dilated:
   oc_config:
     use_dilation: true
 
+oc_3_attn_dilated_te07:
+  inherited: oc_3_attn
+  base_config:
+    name: oc_3_attn_dilated_te07_{time}
+  oc_config:
+    terminal_entropy: 0.07
+    use_dilation: true
+
+oc_3_attn_dilated_te06:
+  inherited: oc_3_attn
+  base_config:
+    name: oc_3_attn_dilated_te06_{time}
+  oc_config:
+    terminal_entropy: 0.06
+    use_dilation: true
+
+oc_3_attn_dilated_te05:
+  inherited: oc_3_attn
+  base_config:
+    name: oc_3_attn_dilated_te05_{time}
+  oc_config:
+    terminal_entropy: 0.05
+    use_dilation: true
+
 oc_3_attn_dilated_te04:
   inherited: oc_3_attn
   base_config:
@@ -190,12 +211,44 @@ oc_3_attn_dilated_te00:
     terminal_entropy: 0.0
     use_dilation: true
 
+oc_3_attn_dilated_te001:
+  inherited: oc_3_attn
+  base_config:
+    name: oc_3_attn_dilated_te001_{time}
+  oc_config:
+    terminal_entropy: 0.001
+    use_dilation: true
+
+oc_3_attn_dilated_te-001:
+  inherited: oc_3_attn
+  base_config:
+    name: oc_3_attn_dilated_te-001_{time}
+  oc_config:
+    terminal_entropy: -0.001
+    use_dilation: true
+
+oc_3_attn_dilated_te-005:
+  inherited: oc_3_attn
+  base_config:
+    name: oc_3_attn_dilated_te-005_{time}
+  oc_config:
+    terminal_entropy: -0.005
+    use_dilation: true
+
 oc_3_attn_dilated_te-01:
   inherited: oc_3_attn
   base_config:
     name: oc_3_attn_dilated_te-01_{time}
   oc_config:
     terminal_entropy: -0.01
+    use_dilation: true
+
+oc_3_attn_dilated_te-02:
+  inherited: oc_3_attn
+  base_config:
+    name: oc_3_attn_dilated_te-02_{time}
+  oc_config:
+    terminal_entropy: -0.02
     use_dilation: true
 
 oc_3_attn_dilated_te01_offline:

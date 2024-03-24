@@ -1,17 +1,14 @@
 base_config:
-  env_type: UNITY # UNITY | GYM | DM_CONTROL | MINIGRID
+  env_type: UNITY # UNITY | GYM
   env_name: env_name # The environment name.
   env_args: null
   unity_args: # Only for Unity Environments
     max_n_envs_per_process: 10 # The max env copies count in each process
     no_graphics: true # If an env does not need pixel input, set true
+    force_vulkan: false # -force-vulkan
     build_path: # Unity executable path
       win32: path_win32
       linux: path_linux
-    group_aggregation: false # If aggregate group agents
-    group_aggregation_done_all:
-      true # If group done or max reached when all agents in the group done or max reached
-      # Otherwise, when any agent in the group done or max reached
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
 

@@ -191,5 +191,5 @@ class ModelTermination(nn.Module):
                      dropout=0.):
         self.dense = LinearLayers(self.state_size, dense_n, dense_depth, output_size=1, dropout=dropout)
 
-    def forward(self, state):
+    def forward(self, state, obs_list):
         return torch.sigmoid(self.dense(state))
