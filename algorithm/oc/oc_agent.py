@@ -1,5 +1,5 @@
-from re import M
-from typing import Dict, List, Optional, Tuple, Union
+from pathlib import Path
+from typing import Dict, Iterator, List, Optional, Set, Tuple, Union
 
 import numpy as np
 
@@ -8,20 +8,15 @@ from algorithm.utils.enums import *
 from algorithm.utils.operators import gen_pre_n_actions
 
 from .. import agent
-from ..agent import (ACTION, AGENT_MAX_LIVENESS, INDEX, OBS_LIST,
-                     SEQ_HIDDEN_STATE, Agent, AgentManager, MultiAgentsManager)
-
-OPTION_INDEX = 4
-KEY_SEQ_HIDDEN_STATE = 5
-LOW_SEQ_HIDDEN_STATE = 6
+from ..agent import AGENT_MAX_LIVENESS, Agent, AgentManager, MultiAgentsManager
 
 
 class OC_Agent(Agent):
     # tmp data, waiting for reward and done to `end_transition`
-    tmp_option_changed_index: int = -1  # The latest option start index
-    tmp_option_index: int = -1  # The latest option index
-    tmp_key_seq_hidden_state: Optional[np.ndarray] = None
-    tmp_low_seq_hidden_state: Optional[np.ndarray] = None
+    _tmp_option_changed_index: int = -1  # The latest option start index
+    _tmp_option_index: int = -1  # The latest option index
+    _tmp_key_seq_hidden_state: Optional[np.ndarray] = None
+    _tmp_low_seq_hidden_state: Optional[np.ndarray] = None
 
     def __init__(self,
                  agent_id: int,
@@ -65,49 +60,48 @@ class OC_Agent(Agent):
 
         super().set_tmp_obs_action(obs_list, action, prob, seq_hidden_state)
 
-        if option_index != self.tmp_option_index:
-            option_changed_index = self.tmp_index
+        if option_index != self._tmp_option_index:
+            option_changed_index = self._tmp_index
             self._tmp_option_changed_indexes.append(option_changed_index)
-            self.tmp_option_changed_index = option_changed_index
-            self.tmp_key_seq_hidden_state = seq_hidden_state
+            self._tmp_option_changed_index = option_changed_index
+            self._tmp_key_seq_hidden_state = seq_hidden_state
 
-        self.tmp_option_index = option_index
-        self.tmp_low_seq_hidden_state = low_seq_hidden_state
+        self._tmp_option_index = option_index
+        self._tmp_low_seq_hidden_state = low_seq_hidden_state
 
-    def get_tmp_data(self, key: int):
-        if key == OPTION_INDEX:
-            return self.tmp_option_index
-        elif key == KEY_SEQ_HIDDEN_STATE:
-            if self.seq_hidden_state_shape is None:
-                return None
-            return self.tmp_key_seq_hidden_state if self.tmp_key_seq_hidden_state is not None else self._padding_seq_hidden_state
-        elif key == LOW_SEQ_HIDDEN_STATE:
-            if self.low_seq_hidden_state_shape is None:
-                return None
-            return self.tmp_low_seq_hidden_state if self.tmp_low_seq_hidden_state is not None else self._padding_low_seq_hidden_state
-        else:
-            return super().get_tmp_data(key)
+    def get_tmp_option_index(self) -> int:
+        return self._tmp_option_index
+
+    def get_key_seq_hidden_state(self) -> Optional[np.ndarray]:
+        if self.seq_hidden_state_shape is None:
+            return None
+        return self._tmp_key_seq_hidden_state if self._tmp_key_seq_hidden_state is not None else self._padding_seq_hidden_state
+
+    def get_low_seq_hidden_state(self) -> Optional[np.ndarray]:
+        if self.low_seq_hidden_state_shape is None:
+            return None
+        return self._tmp_low_seq_hidden_state if self._tmp_low_seq_hidden_state is not None else self._padding_low_seq_hidden_state
 
     def end_transition(self,
                        reward: float,
                        done: bool = False,
                        max_reached: bool = False,
                        next_obs_list: Optional[List[np.ndarray]] = None) -> Optional[Dict[str, Union[np.ndarray, List[np.ndarray]]]]:
-        if self.tmp_obs_list is None:
+        if self._tmp_obs_list is None:
             return
 
         self._add_transition(
-            index=self.tmp_index,
-            obs_list=self.tmp_obs_list,
-            option_index=self.tmp_option_index,
-            option_changed_index=self.tmp_option_changed_index,
-            action=self.tmp_action,
+            index=self._tmp_index,
+            obs_list=self._tmp_obs_list,
+            option_index=self._tmp_option_index,
+            option_changed_index=self._tmp_option_changed_index,
+            action=self._tmp_action,
             reward=reward,
             done=done,
             max_reached=max_reached,
-            prob=self.tmp_prob,
-            seq_hidden_state=self.tmp_seq_hidden_state,
-            low_seq_hidden_state=self.tmp_low_seq_hidden_state
+            prob=self._tmp_prob,
+            seq_hidden_state=self._tmp_seq_hidden_state,
+            low_seq_hidden_state=self._tmp_low_seq_hidden_state
         )
 
         self.current_reward += reward
@@ -128,7 +122,7 @@ class OC_Agent(Agent):
             -> Optional[Dict[str, Union[np.ndarray, List[np.ndarray]]]]:
 
         self._add_transition(
-            index=self.tmp_index + 1,
+            index=self._tmp_index + 1,
             obs_list=next_obs_list,
             option_index=-1,
             option_changed_index=-1,
@@ -146,14 +140,14 @@ class OC_Agent(Agent):
         self.current_reward = 0
         self.current_step = 0
 
-        self.tmp_index: int = -1
-        self.tmp_obs_list = None
-        self.tmp_option_index = -1
-        self.tmp_option_changed_index = -1
-        self.tmp_action = None
-        self.tmp_prob = None
-        self.tmp_seq_hidden_state = None
-        self.tmp_low_seq_hidden_state = None
+        self._tmp_index: int = -1
+        self._tmp_obs_list = None
+        self._tmp_option_index = -1
+        self._tmp_option_changed_index = -1
+        self._tmp_action = None
+        self._tmp_prob = None
+        self._tmp_seq_hidden_state = None
+        self._tmp_low_seq_hidden_state = None
         self._tmp_episode_trans = self._generate_empty_episode_trans()
         self._tmp_option_changed_indexes = []
 
@@ -353,10 +347,10 @@ class OC_Agent(Agent):
         """
         The agent may continue in a new iteration but save its last status
         """
-        self.tmp_option_index = -1
-        self.tmp_option_changed_index = -1
-        self.tmp_key_seq_hidden_state = None
-        self.tmp_low_seq_hidden_state = None
+        self._tmp_option_index = -1
+        self._tmp_option_changed_index = -1
+        self._tmp_key_seq_hidden_state = None
+        self._tmp_low_seq_hidden_state = None
         self._tmp_option_changed_indexes = []
         return super().reset()
 
@@ -398,11 +392,26 @@ class OC_AgentManager(AgentManager):
                 )
             self.agents_liveness[agent_id] = AGENT_MAX_LIVENESS
 
-        # Some agents may disabled unexpectively. Set done to these dead agents
+        # Some agents may disabled unexpectively
+        # Some agents in Unity may disabled and enabled again in a new episode,
+        #   but are assigned new agent ids
+        # Set done to these zombie agents
         for agent_id in self.agents_liveness:
             agent = self.agents_dict[agent_id]
             if self.agents_liveness[agent_id] <= 0 and not agent.done:
                 agent.force_done()
+
+    def _get_merged_option_index(self, agent_ids: np.ndarray) -> np.ndarray:
+        return np.stack([self.agents_dict[_id].get_tmp_option_index() for _id in agent_ids])
+
+    def get_merged_option_index(self) -> np.ndarray:
+        return self._get_merged_option_index(self.agents_dict.keys())
+
+    def _get_merged_low_seq_hidden_state(self, agent_ids: np.ndarray) -> np.ndarray:
+        return np.stack([self.agents_dict[_id].get_low_seq_hidden_state() for _id in agent_ids])
+
+    def _get_merged_key_seq_hidden_state(self, agent_ids: np.ndarray) -> np.ndarray:
+        return np.stack([self.agents_dict[_id].get_key_seq_hidden_state() for _id in agent_ids])
 
     def get_action(self,
                    agent_ids: np.ndarray,
@@ -429,12 +438,11 @@ class OC_AgentManager(AgentManager):
                 max_reached=False
             )
 
+        pre_option_index = self._get_merged_option_index(agent_ids)
         if self.seq_encoder == SEQ_ENCODER.RNN and not self.use_dilation:
-            # TODO
-            pre_option_index = self._merge_agents_data(agent_id, OPTION_INDEX)
-            pre_action = self._merge_agents_data(agent_ids, ACTION)
-            seq_hidden_state = self._merge_agents_data(agent_ids, SEQ_HIDDEN_STATE)
-            low_seq_hidden_state = self._merge_agents_data(agent_ids, LOW_SEQ_HIDDEN_STATE) \
+            pre_action = self._get_merged_action(agent_ids)
+            seq_hidden_state = self._get_merged_seq_hidden_state(agent_ids)
+            low_seq_hidden_state = self._get_merged_low_seq_hidden_state(agent_ids) \
                 if self.option_seq_encoder is not None else None
 
             (option_index,
@@ -453,12 +461,11 @@ class OC_AgentManager(AgentManager):
             )
 
         elif self.seq_encoder == SEQ_ENCODER.RNN and self.use_dilation:
-            # TODO
-            pre_option_index = self._merge_agents_data(agent_id, OPTION_INDEX)
-            pre_action = self._merge_agents_data(agent_ids, ACTION)
-            seq_hidden_state = self._merge_agents_data(agent_ids, SEQ_HIDDEN_STATE)
-            low_seq_hidden_state = self._merge_agents_data(agent_ids, LOW_SEQ_HIDDEN_STATE) \
+            pre_action = self._get_merged_action(agent_ids)
+            seq_hidden_state = self._get_merged_seq_hidden_state(agent_ids)
+            low_seq_hidden_state = self._get_merged_low_seq_hidden_state(agent_ids) \
                 if self.option_seq_encoder is not None else None
+            key_seq_hidden_state = self._get_merged_key_seq_hidden_state(agent_ids)
 
             (option_index,
              action,
@@ -468,7 +475,7 @@ class OC_AgentManager(AgentManager):
                 obs_list=obs_list,
                 pre_option_index=pre_option_index,
                 pre_action=pre_action,
-                rnn_state=self['key_seq_hidden_state'],  # The previous key rnn_state
+                rnn_state=key_seq_hidden_state,  # The previous key rnn_state
                 low_rnn_state=low_seq_hidden_state,
 
                 disable_sample=disable_sample,
@@ -476,8 +483,7 @@ class OC_AgentManager(AgentManager):
             )
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN and not self.use_dilation:
-            pre_option_index = self._merge_agents_data(agent_id, OPTION_INDEX)
-            low_seq_hidden_state = self._merge_agents_data(agent_ids, LOW_SEQ_HIDDEN_STATE) \
+            low_seq_hidden_state = self._get_merged_low_seq_hidden_state(agent_ids) \
                 if self.option_seq_encoder is not None else None
 
             ep_length = min(512, max([self.agents_dict[agent_id].episode_length for agent_id in agent_ids]))
@@ -527,13 +533,11 @@ class OC_AgentManager(AgentManager):
             )
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilation:
-            index = self._merge_agents_data(agent_ids, INDEX)
-            pre_option_index = self._merge_agents_data(agent_ids, OPTION_INDEX)
-            pre_action = self._merge_agents_data(agent_ids, ACTION)
-            low_seq_hidden_state = self._merge_agents_data(agent_ids, LOW_SEQ_HIDDEN_STATE) \
+            index = self._get_merged_index(agent_ids)
+            pre_action = self._get_merged_action(agent_ids)
+            low_seq_hidden_state = self._get_merged_low_seq_hidden_state(agent_ids) \
                 if self.option_seq_encoder is not None else None
-
-            key_seq_hidden_state = self._merge_agents_data(agent_ids, KEY_SEQ_HIDDEN_STATE)
+            key_seq_hidden_state = self._get_merged_key_seq_hidden_state(agent_ids)
 
             key_trans_length = max([self.agents_dict[agent_id].key_trans_length for agent_id in agent_ids])
 
@@ -584,6 +588,7 @@ class OC_AgentManager(AgentManager):
 
         else:
             option_index, action, prob = self.rl.choose_action(obs_list,
+                                                               pre_option_index,
                                                                disable_sample=disable_sample,
                                                                force_rnd_if_available=force_rnd_if_available)
             next_seq_hidden_state = None
@@ -604,10 +609,23 @@ class OC_AgentManager(AgentManager):
 
 
 class OC_MultiAgentsManager(MultiAgentsManager):
-    # TODO
+    _ma_manager: Dict[str, OC_AgentManager] = {}
+
+    def __init__(self,
+                 ma_obs_names: Dict[str, List[str]],
+                 ma_obs_shapes: Dict[str, List[Tuple[int, ...]]],
+                 ma_d_action_sizes: Dict[str, List[int]],
+                 ma_c_action_size: Dict[str, int],
+                 inference_ma_names: Set[str],
+                 model_abs_dir: Path):
+
+        agent.Agent = OC_Agent
+        agent.AgentManager = OC_AgentManager
+
+        super().__init__(ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size, inference_ma_names, model_abs_dir)
+
+    def __iter__(self) -> Iterator[Tuple[str, OC_AgentManager]]:
+        return iter(self._ma_manager.items())
+
     def get_option(self):
-        return {n: mgr._merge_agents_data() for n, mgr in self}
-
-
-agent.Agent = OC_Agent
-agent.AgentManager = OC_AgentManager
+        return {n: mgr.get_merged_option_index() for n, mgr in self}

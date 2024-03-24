@@ -11,6 +11,7 @@ default:
 
   sac_config:
     batch_size: 10
+    nn: nn
 
   replay_config:
     capacity: 65536
@@ -18,38 +19,37 @@ default:
   ma_config:
     test0:
       sac_config:
-        nn: nn
         n_step: 5
     test1:
       sac_config:
-        nn: nn
         n_step: 10
 
 rnn:
   sac_config:
     burn_in_step: 2
     seq_encoder: RNN
-
-  ma_config:
-    test0:
-      sac_config:
-        nn: nn_rnn
-    test1:
-      sac_config:
-        nn: nn_rnn
+    nn: nn_rnn
 
 attn:
   sac_config:
     burn_in_step: 8
     seq_encoder: ATTN
+    nn: nn_attn
 
-  ma_config:
-    test0:
-      sac_config:
-        nn: nn_attn
-    test1:
-      sac_config:
-        nn: nn_attn
+oc_rnn:
+  inherited: rnn
+
+  oc_config:
+    option_seq_encoder: null
+
+oc_rnn_o_rnn:
+  inherited: rnn
+
+  sac_config:
+    nn: nn_rnn_o_rnn
+
+  oc_config:
+    option_seq_encoder: RNN
 
 oc_dilated_rnn:
   inherited: rnn
@@ -57,6 +57,16 @@ oc_dilated_rnn:
   oc_config:
     use_dilation: true
     option_seq_encoder: null
+
+oc_dilated_rnn_o_rnn:
+  inherited: rnn
+
+  sac_config:
+    nn: nn_rnn_o_rnn
+
+  oc_config:
+    use_dilation: true
+    option_seq_encoder: RNN
 
 oc_dilated_attn:
   inherited: attn
@@ -68,14 +78,9 @@ oc_dilated_attn:
 oc_dilated_attn_o_rnn:
   inherited: attn
 
+  sac_config:
+    nn: nn_attn_o_rnn
+
   oc_config:
     use_dilation: true
     option_seq_encoder: RNN
-
-  ma_config:
-    test0:
-      sac_config:
-        nn: nn_attn_o_rnn
-    test1:
-      sac_config:
-        nn: nn_attn_o_rnn
