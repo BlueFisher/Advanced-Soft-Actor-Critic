@@ -9,12 +9,8 @@ from algorithm.sac_base import SAC_Base
 from algorithm.utils.enums import *
 from algorithm.utils.operators import gen_pre_n_actions
 
-INDEX = 0
-OBS_LIST = 1
-ACTION = 2
-SEQ_HIDDEN_STATE = 3
-
 AGENT_MAX_LIVENESS = 20
+NON_EMPTY_STEPS = 2
 
 
 class Agent:
@@ -27,11 +23,13 @@ class Agent:
     current_step = 0  # The step count of the current episode
 
     # tmp data, waiting for reward and done to `end_transition`
-    tmp_index: int = -1
-    tmp_obs_list: Optional[List[np.ndarray]] = None
-    tmp_action: Optional[np.ndarray] = None
-    tmp_prob: Optional[np.ndarray] = None
-    tmp_seq_hidden_state: Optional[np.ndarray] = None
+    _tmp_index: int = -1
+    _tmp_obs_list: Optional[List[np.ndarray]] = None
+    _tmp_action: Optional[np.ndarray] = None
+    _tmp_prob: Optional[np.ndarray] = None
+    _tmp_seq_hidden_state: Optional[np.ndarray] = None
+
+    _tmp_episode_trans: Dict[str, Union[np.ndarray, List[np.ndarray]]]
 
     def __init__(self,
                  agent_id: int,
@@ -74,42 +72,43 @@ class Agent:
                            action: np.ndarray,
                            prob: np.ndarray,
                            seq_hidden_state: Optional[np.ndarray] = None):
-        self.tmp_index += 1
-        self.tmp_obs_list = obs_list
-        self.tmp_action = action
-        self.tmp_prob = prob
-        self.tmp_seq_hidden_state = seq_hidden_state
+        self._tmp_index += 1
+        self._tmp_obs_list = obs_list
+        self._tmp_action = action
+        self._tmp_prob = prob
+        self._tmp_seq_hidden_state = seq_hidden_state
 
-    def get_tmp_data(self,
-                     key: int):
-        if key == INDEX:
-            return self.tmp_index
-        elif key == OBS_LIST:
-            return self.tmp_obs_list if self.tmp_obs_list is not None else self._padding_obs_list
-        elif key == ACTION:
-            return self.tmp_action if self.tmp_action is not None else self._padding_action
-        elif key == SEQ_HIDDEN_STATE:
-            if self.seq_hidden_state_shape is None:
-                return None
-            return self.tmp_seq_hidden_state if self.tmp_seq_hidden_state is not None else self._padding_seq_hidden_state
+    def get_tmp_index(self) -> int:
+        return self._tmp_index
+
+    def get_tmp_obs_list(self) -> List[np.ndarray]:
+        return self._tmp_obs_list if self._tmp_obs_list is not None else self._padding_obs_list
+
+    def get_tmp_action(self) -> np.ndarray:
+        return self._tmp_action if self._tmp_action is not None else self._padding_action
+
+    def get_tmp_seq_hidden_state(self) -> Optional[np.ndarray]:
+        if self.seq_hidden_state_shape is None:
+            return None
+        return self._tmp_seq_hidden_state if self._tmp_seq_hidden_state is not None else self._padding_seq_hidden_state
 
     def end_transition(self,
                        reward: float,
                        done: bool = False,
                        max_reached: bool = False,
                        next_obs_list: Optional[List[np.ndarray]] = None) -> Optional[Dict[str, Union[np.ndarray, List[np.ndarray]]]]:
-        if self.tmp_obs_list is None:
+        if self._tmp_obs_list is None:
             return
 
         self._add_transition(
-            index=self.tmp_index,
-            obs_list=self.tmp_obs_list,
-            action=self.tmp_action,
+            index=self._tmp_index,
+            obs_list=self._tmp_obs_list,
+            action=self._tmp_action,
             reward=reward,
             done=done,
             max_reached=max_reached,
-            prob=self.tmp_prob,
-            seq_hidden_state=self.tmp_seq_hidden_state
+            prob=self._tmp_prob,
+            seq_hidden_state=self._tmp_seq_hidden_state
         )
 
         self.current_reward += reward
@@ -130,7 +129,7 @@ class Agent:
             -> Optional[Dict[str, Union[np.ndarray, List[np.ndarray]]]]:
 
         self._add_transition(
-            index=self.tmp_index + 1,
+            index=self._tmp_index + 1,
             obs_list=next_obs_list,
             action=self._padding_action,
             reward=0.,
@@ -145,11 +144,11 @@ class Agent:
         self.current_reward = 0
         self.current_step = 0
 
-        self.tmp_index: int = -1
-        self.tmp_obs_list = None
-        self.tmp_action = None
-        self.tmp_prob = None
-        self.tmp_seq_hidden_state = None
+        self._tmp_index: int = -1
+        self._tmp_obs_list = None
+        self._tmp_action = None
+        self._tmp_prob = None
+        self._tmp_seq_hidden_state = None
         self._tmp_episode_trans = self._generate_empty_episode_trans()
 
         return episode_trans
@@ -335,9 +334,10 @@ class AgentManager:
     @property
     def non_empty_agents(self) -> List[Agent]:
         """
-        Get agents which steps > 1. Agents may contain useless `next_step`
+        Get agents which steps > NON_EMPTY_STEPS.
+        Agents in Unity enabled after disable may contain useless `next_step`
         """
-        return [a for a in self.agents if a.steps > 1]
+        return [a for a in self.agents if a.steps > NON_EMPTY_STEPS]
 
     @property
     def done(self) -> bool:
@@ -386,6 +386,9 @@ class AgentManager:
 
     def _verify_agents(self,
                        agent_ids: np.ndarray):
+        """
+        Verify whether id in self.agents_dict and whether agent is active
+        """
 
         for agent_id in self.agents_liveness:
             self.agents_liveness[agent_id] -= 1
@@ -402,11 +405,27 @@ class AgentManager:
                 )
             self.agents_liveness[agent_id] = AGENT_MAX_LIVENESS
 
-        # Some agents may disabled unexpectively. Set done to these dead agents
+        # Some agents may disabled unexpectively
+        # Some agents in Unity may disabled and enabled again in a new episode,
+        #   but are assigned new agent ids
+        # Set done to these zombie agents
         for agent_id in self.agents_liveness:
             agent = self.agents_dict[agent_id]
             if self.agents_liveness[agent_id] <= 0 and not agent.done:
                 agent.force_done()
+
+    def _get_merged_index(self, agent_ids: np.ndarray) -> np.ndarray:
+        return np.stack([self.agents_dict[_id].get_tmp_index() for _id in agent_ids])
+
+    def _get_merged_obs_list(self, agent_ids: np.ndarray) -> List[np.ndarray]:
+        agents_obs_list = [self.agents_dict[_id].get_tmp_obs_list() for _id in agent_ids]
+        return [np.stack(o) for o in zip(*agents_obs_list)]
+
+    def _get_merged_action(self, agent_ids: np.ndarray) -> np.ndarray:
+        return np.stack([self.agents_dict[_id].get_tmp_action() for _id in agent_ids])
+
+    def _get_merged_seq_hidden_state(self, agent_ids: np.ndarray) -> np.ndarray:
+        return np.stack([self.agents_dict[_id].get_tmp_seq_hidden_state() for _id in agent_ids])
 
     def _merge_agents_data(self,
                            agent_ids: np.ndarray,
@@ -444,8 +463,8 @@ class AgentManager:
             )
 
         if self.seq_encoder == SEQ_ENCODER.RNN:
-            pre_action = self._merge_agents_data(agent_ids, ACTION)
-            seq_hidden_state = self._merge_agents_data(agent_ids, SEQ_HIDDEN_STATE)
+            pre_action = self._get_merged_action(agent_ids)
+            seq_hidden_state = self._get_merged_seq_hidden_state(agent_ids)
 
             action, prob, next_seq_hidden_state = self.rl.choose_rnn_action(
                 obs_list=obs_list,
@@ -604,6 +623,8 @@ class AgentManager:
 
 
 class MultiAgentsManager:
+    _ma_manager: Dict[str, AgentManager] = {}
+
     def __init__(self,
                  ma_obs_names: Dict[str, List[str]],
                  ma_obs_shapes: Dict[str, List[Tuple[int, ...]]],
@@ -611,7 +632,6 @@ class MultiAgentsManager:
                  ma_c_action_size: Dict[str, int],
                  inference_ma_names: Set[str],
                  model_abs_dir: Path):
-        self._ma_manager: Dict[str, AgentManager] = {}
         self._inference_ma_names = inference_ma_names
         for n in ma_obs_shapes:
             self._ma_manager[n] = AgentManager(n,

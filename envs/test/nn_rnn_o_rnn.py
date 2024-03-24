@@ -24,13 +24,22 @@ class ModelRep(m.ModelBaseRNNRep):
         return state, hn
 
 
-class ModelOptionRep(m.ModelBaseSimpleRep):
-    def forward(self, obs_list):
-        high_state, vec_obs = obs_list
+class ModelOptionRep(ModelRep):
+    def _build_model(self):
+        if self.use_dilation:
+            self.rnn = m.GRU(self.obs_shapes[0][0], 8, 2)
+        else:
+            self.rnn = m.GRU(self.obs_shapes[0][0] + sum(self.d_action_sizes) + self.c_action_size, 11, 1)
 
-        output = torch.concat([high_state, vec_obs], dim=-1)
+    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
+        obs = obs_list[0]
 
-        return output
+        if self.use_dilation:
+            state, hn = self.rnn(obs, rnn_state)
+        else:
+            state, hn = self.rnn(torch.cat([obs, pre_action], dim=-1), rnn_state)
+
+        return state, hn
 
 
 ModelQ = m.ModelQ

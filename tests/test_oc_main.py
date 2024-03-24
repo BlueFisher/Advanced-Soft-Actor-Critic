@@ -7,7 +7,6 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from algorithm.oc.oc_main import OC_Main
 
-
 default_args = {
     'oc': True,
 
@@ -36,19 +35,9 @@ default_args = {
 
 
 class TestOCMain(unittest.TestCase):
-    def _test_oc_dilated_attn(self, env_args_dict):
+    def _test(self, config, env_args_dict):
         args = argparse.Namespace(
-            config='oc_dilated_attn',
-            env_args=env_args_dict,
-            **default_args
-        )
-
-        root_dir = Path(__file__).resolve().parent.parent
-        OC_Main(root_dir, f'envs/test', args)
-
-    def _test_oc_dilated_attn_o_rnn(self, env_args_dict):
-        args = argparse.Namespace(
-            config='oc_dilated_attn_o_rnn',
+            config=config,
             env_args=env_args_dict,
             **default_args
         )
@@ -57,51 +46,42 @@ class TestOCMain(unittest.TestCase):
         OC_Main(root_dir, f'envs/test', args)
 
     @staticmethod
-    def gen_oc_dilated_attn(param_dict):
+    def gen_oc(config, param_dict):
         def func(self):
-            self._test_oc_dilated_attn(param_dict)
-        return func
-
-    @staticmethod
-    def gen_oc_dilated_attn_o_rnn(param_dict):
-        def func(self):
-            self._test_oc_dilated_attn_o_rnn(param_dict)
+            self._test(config, param_dict)
         return func
 
 
 def __gen():
-    env_args_dicts = [
-        {
-            'ma_obs_shapes': {
-                'test0': [(6,)],
-                'test1': [(8,)]
-            },
-            'ma_d_action_sizes': {
-                'test0': [2, 4],
-                'test1': [4, 2]
-            },
-            'ma_c_action_size': {
-                'test0': 2,
-                'test1': 4
-            }
+    configs = [None,
+               'oc_rnn',
+               'oc_rnn_o_rnn',
+               'oc_dilated_rnn',
+               'oc_dilated_rnn_o_rnn',
+               'oc_dilated_attn',
+               'oc_dilated_attn_o_rnn']
+
+    env_args_dict = {
+        'ma_obs_shapes': {
+            'test0': [(6,)],
+            'test1': [(8,)]
         },
-    ]
+        'ma_d_action_sizes': {
+            'test0': [2, 4],
+            'test1': [4, 2]
+        },
+        'ma_c_action_size': {
+            'test0': 2,
+            'test1': 4
+        }
+    }
 
     i = 0
-    for env_args_dict in env_args_dicts:
-        func_name = f'test_oc_dilated_attn_{i:03d}'
+    for config in configs:
+        func_name = f'test_{i:03d}_{config}'
 
         setattr(TestOCMain, func_name,
-                TestOCMain.gen_oc_dilated_attn(env_args_dict))
-
-        i += 1
-
-    i = 0
-    for env_args_dict in env_args_dicts:
-        func_name = f'test_oc_dilated_attn_o_rnn_{i:03d}'
-
-        setattr(TestOCMain, func_name,
-                TestOCMain.gen_oc_dilated_attn_o_rnn(env_args_dict))
+                TestOCMain.gen_oc(config, env_args_dict))
 
         i += 1
 

@@ -34,29 +34,9 @@ default_args = {
 
 
 class TestSACMain(unittest.TestCase):
-    def _test_vanilla(self, env_args_dict):
+    def _test(self, config, env_args_dict):
         args = argparse.Namespace(
-            config=None,
-            env_args=env_args_dict,
-            **default_args
-        )
-
-        root_dir = Path(__file__).resolve().parent.parent
-        Main(root_dir, f'envs/test', args)
-
-    def _test_rnn(self, env_args_dict):
-        args = argparse.Namespace(
-            config='rnn',
-            env_args=env_args_dict,
-            **default_args
-        )
-
-        root_dir = Path(__file__).resolve().parent.parent
-        Main(root_dir, f'envs/test', args)
-
-    def _test_attn(self, env_args_dict):
-        args = argparse.Namespace(
-            config='attn',
+            config=config,
             env_args=env_args_dict,
             **default_args
         )
@@ -65,25 +45,15 @@ class TestSACMain(unittest.TestCase):
         Main(root_dir, f'envs/test', args)
 
     @staticmethod
-    def gen_vanilla(param_dict):
+    def gen(config, param_dict):
         def func(self):
-            self._test_vanilla(param_dict)
-        return func
-
-    @staticmethod
-    def gen_rnn(param_dict):
-        def func(self):
-            self._test_rnn(param_dict)
-        return func
-
-    @staticmethod
-    def gen_attn(param_dict):
-        def func(self):
-            self._test_attn(param_dict)
+            self._test(config, param_dict)
         return func
 
 
 def __gen():
+    configs = [None, 'rnn', 'attn']
+
     env_args_dicts = [
         {
             'ma_obs_shapes': {
@@ -163,31 +133,14 @@ def __gen():
     ]
 
     i = 0
-    for env_args_dict in env_args_dicts:
-        func_name = f'test_vanilla_{i:03d}'
+    for config in configs:
+        for env_args_dict in env_args_dicts:
+            func_name = f'test_{i:03d}_{config}'
 
-        setattr(TestSACMain, func_name,
-                TestSACMain.gen_vanilla(env_args_dict))
+            setattr(TestSACMain, func_name,
+                    TestSACMain.gen(config, env_args_dict))
 
-        i += 1
-
-    i = 0
-    for env_args_dict in env_args_dicts:
-        func_name = f'test_rnn_{i:03d}'
-
-        setattr(TestSACMain, func_name,
-                TestSACMain.gen_rnn(env_args_dict))
-
-        i += 1
-
-    i = 0
-    for env_args_dict in env_args_dicts:
-        func_name = f'test_attn_{i:03d}'
-
-        setattr(TestSACMain, func_name,
-                TestSACMain.gen_attn(env_args_dict))
-
-        i += 1
+            i += 1
 
 
 __gen()
