@@ -2,8 +2,8 @@ import logging
 import time
 from typing import Dict, Optional
 
-CLEAR_EACH_LOG = True
-FORCE_REPEAT = 1
+CLEAR_EACH_LOG = True  # Whether clear last avg time when step % repeat == 0
+REPEAT_OVERRIDE = None  # Override repeat argument
 
 
 class UnifiedElapsedTimer:
@@ -42,8 +42,10 @@ class ElapsedTimer:
         self._log = log
         self._logger = logger
         self._repeat = repeat
-        if FORCE_REPEAT != -1:
-            self._repeat = FORCE_REPEAT
+        if REPEAT_OVERRIDE is not None:
+            self._repeat = REPEAT_OVERRIDE
+        # Whether force report when step % repeat == 0.
+        # Otherwise, report if current avg time is highly different from last reported avg time
         self._force_report = force_report
 
         self._step = 1

@@ -2320,80 +2320,37 @@ class SAC_Base:
 
         self.summary_available = False
 
-    def put_episode(self, **episode_trans: np.ndarray) -> None:
+    def put_episode(self,
+                    ep_indexes: np.ndarray,
+                    ep_obses_list: List[np.ndarray],
+                    ep_actions: np.ndarray,
+                    ep_rewards: np.ndarray,
+                    ep_dones: np.ndarray,
+                    ep_probs: List[np.ndarray],
+                    ep_seq_hidden_states: Optional[np.ndarray] = None) -> None:
         # Ignore episodes which length is too short
-        if episode_trans['ep_indexes'].shape[1] < self.n_step:
+        if ep_indexes.shape[1] < self.n_step:
             return
 
-        episodes = self._padding_next_obs_list(**episode_trans)
+        assert ep_indexes.dtype == np.int32
+
+        ep_padding_masks = np.zeros_like(ep_indexes, dtype=bool)
+        ep_padding_masks[:, -1] = True  # The last step is next_step
+        ep_padding_masks[ep_indexes == -1] = True
+
+        episode = (ep_indexes,
+                   ep_padding_masks,
+                   ep_obses_list,
+                   ep_actions,
+                   ep_rewards,
+                   ep_dones,
+                   ep_probs,
+                   ep_seq_hidden_states)
 
         if self.use_replay_buffer:
-            self._fill_replay_buffer(*episodes)
+            self._fill_replay_buffer(*episode)
         else:
-            self.batch_buffer.put_episode(*episodes)
-
-    def _padding_next_obs_list(self,
-                               ep_indexes: np.ndarray,
-                               ep_obses_list: List[np.ndarray],
-                               ep_actions: np.ndarray,
-                               ep_rewards: np.ndarray,
-                               next_obs_list: List[np.ndarray],
-                               ep_dones: np.ndarray,
-                               ep_probs: List[np.ndarray],
-                               ep_seq_hidden_states: Optional[np.ndarray] = None) -> Tuple[np.ndarray, ...]:
-        """
-        Padding next_obs_list
-
-        Args:
-            ep_indexes (np.int32): [1, ep_len]
-            ep_obses_list (np): list([1, ep_len, *obs_shapes_i], ...)
-            ep_actions (np): [1, ep_len, action_size]
-            ep_rewards (np): [1, ep_len]
-            next_obs_list (np): list([1, *obs_shapes_i], ...)
-            ep_dones (bool): [1, ep_len]
-            ep_probs (np): [1, ep_len, action_size]
-            ep_seq_hidden_states (np): [1, ep_len, *seq_hidden_state_shape]
-
-        Returns:
-            ep_indexes (np.int32): [1, ep_len + 1]
-            ep_padding_masks: (bool): [1, ep_len + 1]
-            ep_obses_list (np): list([1, ep_len + 1, *obs_shapes_i], ...)
-            ep_actions (np): [1, ep_len + 1, action_size]
-            ep_rewards (np): [1, ep_len + 1]
-            ep_dones (bool): [1, ep_len + 1]
-            ep_probs (np): [1, ep_len + 1, action_size]
-            ep_seq_hidden_states (np): [1, ep_len + 1, *seq_hidden_state_shape]
-        """
-
-        ep_indexes = np.concatenate([ep_indexes,
-                                     ep_indexes[:, -1:] + 1], axis=1)
-        ep_padding_masks = np.zeros_like(ep_indexes, dtype=bool)
-        ep_padding_masks[:, -1] = True
-        ep_obses_list = [np.concatenate([obs, np.expand_dims(next_obs, 1)], axis=1)
-                         for obs, next_obs in zip(ep_obses_list, next_obs_list)]
-        ep_actions = np.concatenate([ep_actions,
-                                     self._padding_action.reshape(1, 1, -1)], axis=1)
-        ep_rewards = np.concatenate([ep_rewards,
-                                     np.zeros([1, 1], dtype=np.float32)], axis=1)
-        ep_dones = np.concatenate([ep_dones,
-                                   np.ones([1, 1], dtype=bool)], axis=1)
-        ep_probs = np.concatenate([ep_probs,
-                                  np.ones([1, 1, ep_probs.shape[-1]], dtype=np.float32)], axis=1)
-
-        if ep_seq_hidden_states is not None:
-            ep_seq_hidden_states = np.concatenate([ep_seq_hidden_states,
-                                                   np.zeros([1, 1, *ep_seq_hidden_states.shape[2:]], dtype=np.float32)], axis=1)
-
-        return (
-            ep_indexes,
-            ep_padding_masks,
-            ep_obses_list,
-            ep_actions,
-            ep_rewards,
-            ep_dones,
-            ep_probs,
-            ep_seq_hidden_states if ep_seq_hidden_states is not None else None
-        )
+            self.batch_buffer.put_episode(*episode)
 
     def _fill_replay_buffer(self,
                             ep_indexes: np.ndarray,

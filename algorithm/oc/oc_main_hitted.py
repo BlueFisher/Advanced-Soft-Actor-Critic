@@ -1,5 +1,4 @@
 import socket
-from collections import defaultdict
 
 import numpy as np
 
@@ -17,17 +16,12 @@ class OC_AgentHitted(OC_Agent):
                    obs_list,
                    action,
                    reward,
-                   local_done,
+                   done,
                    max_reached,
-                   next_obs_list,
                    prob):
 
         if not self.done and reward >= 1:
             self.hitted += 1
-
-    def clear(self):
-        super().clear()
-        self.hitted = 0
 
     def reset(self):
         super().reset()
@@ -63,11 +57,11 @@ class OC_MainHitted(OC_Main):
 
     def _log_episode_summaries(self):
         for n, mgr in self.ma_manager:
-            if n in self.inference_ma_names:
+            if n in self.inference_ma_names or len(mgr.non_empty_agents) == 0:
                 continue
 
-            rewards = np.array([a.reward for a in mgr.agents])
-            hitted = sum([a.hitted for a in mgr.agents])
+            rewards = np.array([a.reward for a in mgr.non_empty_agents])
+            hitted = sum([a.hitted for a in mgr.non_empty_agents])
 
             mgr.rl.write_constant_summaries([
                 {'tag': 'reward/mean', 'simple_value': rewards.mean()},
@@ -80,7 +74,7 @@ class OC_MainHitted(OC_Main):
                 {'tag': 'reward', 'histogram': rewards}
             ])
 
-            steps = np.array([a.steps for a in mgr.agents])
+            steps = np.array([a.steps for a in mgr.non_empty_agents])
 
             mgr.rl.write_constant_summaries([
                 {'tag': 'metric/steps', 'simple_value': steps.mean()},
@@ -88,14 +82,16 @@ class OC_MainHitted(OC_Main):
 
     def _log_episode_info(self, iteration, iter_time):
         for n, mgr in self.ma_manager:
+            if len(mgr.non_empty_agents) == 0:
+                continue
             global_step = format_global_step(mgr.rl.get_global_step())
-            rewards = [a.reward for a in mgr.agents]
+            rewards = [a.reward for a in mgr.non_empty_agents]
             rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-            hitted = sum([a.hitted for a in mgr.agents])
-            max_step = max([a.steps for a in mgr.agents])
+            hitted = sum([a.hitted for a in mgr.non_empty_agents])
+            max_step = max([a.steps for a in mgr.non_empty_agents])
 
             if not self.train_mode:
-                for agent in mgr.agents:
+                for agent in mgr.non_empty_agents:
                     if agent.steps > 10:
                         mgr['evaluation_data']['episodes'] += 1
                         if agent.hitted:

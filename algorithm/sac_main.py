@@ -1,7 +1,6 @@
 import importlib.util
 import logging
 import shutil
-import sys
 import time
 from pathlib import Path
 from typing import Dict, Set
@@ -91,12 +90,14 @@ class Main:
             config_helper.save_config(config, model_abs_dir, 'config.yaml')
         config_helper.display_config(config, self._logger)
         convert_config_to_enum(config['sac_config'])
+        convert_config_to_enum(config['oc_config'])
 
         for n, ma_config in ma_configs.items():
             if self.train_mode and n not in self.inference_ma_names:
                 config_helper.save_config(ma_config, model_abs_dir, f'config_{n.replace("?", "-")}.yaml')
             config_helper.display_config(ma_config, self._logger, n)
             convert_config_to_enum(ma_config['sac_config'])
+            convert_config_to_enum(ma_config['oc_config'])
 
         self.base_config = config['base_config']
         self.reset_config = config['reset_config']
@@ -114,9 +115,7 @@ class Main:
                                         n_envs=self.base_config['n_envs'],
                                         max_n_envs_per_process=self.base_config['unity_args']['max_n_envs_per_process'],
                                         time_scale=self.unity_time_scale,
-                                        env_args=self.base_config['env_args'],
-                                        group_aggregation=self.base_config['unity_args']['group_aggregation'],
-                                        group_aggregation_done_all=self.base_config['unity_args']['group_aggregation_done_all'])
+                                        env_args=self.base_config['env_args'])
             else:
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         env_name=self.base_config['unity_args']['build_path'],
@@ -127,9 +126,7 @@ class Main:
                                         force_vulkan=self.base_config['unity_args']['force_vulkan'],
                                         time_scale=self.unity_time_scale,
                                         scene=self.base_config['env_name'],
-                                        env_args=self.base_config['env_args'],
-                                        group_aggregation=self.base_config['unity_args']['group_aggregation'],
-                                        group_aggregation_done_all=self.base_config['unity_args']['group_aggregation_done_all'])
+                                        env_args=self.base_config['env_args'])
 
         elif self.base_config['env_type'] == 'GYM':
             from algorithm.env_wrapper.gym_wrapper import GymWrapper
@@ -139,15 +136,6 @@ class Main:
                                   env_args=self.base_config['env_args'],
                                   n_envs=self.base_config['n_envs'],
                                   render=self.render)
-
-        elif self.base_config['env_type'] == 'DM_CONTROL':
-            from algorithm.env_wrapper.dm_control_wrapper import \
-                DMControlWrapper
-
-            self.env = DMControlWrapper(train_mode=self.train_mode,
-                                        env_name=self.base_config['env_name'],
-                                        n_envs=self.base_config['n_envs'],
-                                        render=self.render)
 
         elif self.base_config['env_type'] == 'OFFLINE':
             from algorithm.env_wrapper.offline_wrapper import OfflineWrapper
@@ -220,91 +208,98 @@ class Main:
                                 replay_config=mgr.config['replay_config']))
 
     def _run(self):
-        ma_obs_list = self.env.reset(reset_config=self.reset_config)
-
-        self.ma_manager.pre_run({
-            n: obs_list[0].shape[0] for n, obs_list in ma_obs_list.items()
-        })
-        self.ma_manager.set_obs_list(ma_obs_list)
-
-        training_iteration = False
-
         force_reset = False
-        iteration = 0
-        trained_steps = 0
+        is_training = False  # Is current iteration training
+        inference_iteration = 0  # The inference iteration count
+        trained_steps = 0  # The steps that RL trained
+
+        self.ma_manager.set_train_mode(False)  # The first iteration is inference
 
         try:
-            while iteration != self.base_config['max_iter']:
+            while inference_iteration != self.base_config['max_iter']:
                 if self.base_config['max_step'] != -1 and trained_steps >= self.base_config['max_step']:
                     break
-
-                if self.base_config['reset_on_iteration'] \
-                        or self.ma_manager.is_max_reached() \
-                        or force_reset:
-                    ma_obs_list = self.env.reset(reset_config=self.reset_config)
-                    self.ma_manager.set_obs_list(ma_obs_list)
-                    self.ma_manager.clear()
-
-                    force_reset = False
-                else:
-                    self.ma_manager.reset()
 
                 step = 0
                 iter_time = time.time()
 
-                while not self.ma_manager.is_done():
-                    with self._profiler('get_ma_action', repeat=10):
-                        ma_d_action, ma_c_action = self.ma_manager.get_ma_action(disable_sample=self.disable_sample)
+                if inference_iteration == 0 \
+                        or self.base_config['reset_on_iteration'] \
+                        or self.ma_manager.max_reached \
+                        or force_reset:
+                    self.ma_manager.reset()
+                    ma_agent_ids, ma_obs_list = self.env.reset(reset_config=self.reset_config)
+                    ma_d_action, ma_c_action = self.ma_manager.get_ma_action(
+                        ma_agent_ids=ma_agent_ids,
+                        ma_obs_list=ma_obs_list,
+                        ma_last_reward={n: np.zeros(len(agent_ids), dtype=bool)
+                                        for n, agent_ids in ma_agent_ids.items()},
+                        disable_sample=self.disable_sample
+                    )
 
+                    force_reset = False
+                else:
+                    self.ma_manager.reset_and_continue()
+
+                while not self.ma_manager.done:
                     with self._profiler('env.step', repeat=10):
-                        (ma_next_obs_list,
-                         ma_reward,
-                         ma_local_done,
-                         ma_max_reached,
-                         ma_next_padding_mask) = self.env.step(ma_d_action, ma_c_action)
+                        (decision_step,
+                         terminal_step,
+                         all_envs_done) = self.env.step(ma_d_action, ma_c_action)
                         self._extra_step(ma_d_action, ma_c_action)
 
-                    if ma_next_obs_list is None:
+                    if decision_step is None:
                         force_reset = True
 
-                        self._logger.warning('Step encounters error, episode ignored')
-                        continue
+                        self._logger.error('Step encounters error, episode ignored')
+                        break
 
-                    for n, mgr in self.ma_manager:
-                        if step == self.base_config['max_step_each_iter']:
-                            ma_local_done[n] = [True] * len(mgr.agents)
-                            ma_max_reached[n] = [True] * len(mgr.agents)
+                    with self._profiler('get_ma_action', repeat=10):
+                        ma_d_action, ma_c_action = self.ma_manager.get_ma_action(
+                            ma_agent_ids=decision_step.ma_agent_ids,
+                            ma_obs_list=decision_step.ma_obs_list,
+                            ma_last_reward=decision_step.ma_last_reward,
+                            disable_sample=self.disable_sample
+                        )
 
-                    self.ma_manager.set_ma_env_step(ma_next_obs_list,
-                                                    ma_reward,
-                                                    ma_local_done,
-                                                    ma_max_reached)
+                    self.ma_manager.end_episode(
+                        ma_agent_ids=terminal_step.ma_agent_ids,
+                        ma_obs_list=terminal_step.ma_obs_list,
+                        ma_last_reward=terminal_step.ma_last_reward,
+                        ma_max_reached=terminal_step.ma_max_reached
+                    )
+                    if all_envs_done or step == self.base_config['max_step_each_iter']:
+                        self.ma_manager.end_episode(
+                            ma_agent_ids=decision_step.ma_agent_ids,
+                            ma_obs_list=decision_step.ma_obs_list,
+                            ma_last_reward=decision_step.ma_last_reward,
+                            ma_max_reached={n: np.ones_like(agent_ids, dtype=bool)
+                                            for n, agent_ids in decision_step.ma_agent_ids.items()}
+                        )
+                        self.ma_manager.force_end_all_episode()
 
-                    if self.train_mode and training_iteration:
+                    if self.train_mode and is_training:
                         with self._profiler('train', repeat=10) as profiler:
                             next_trained_steps = self.ma_manager.train(trained_steps)
                             if next_trained_steps == trained_steps:
                                 profiler.ignore()
                             trained_steps = next_trained_steps
-                    elif self.train_mode and not training_iteration:
+                    elif self.train_mode and not is_training:
                         self.ma_manager.log_episode()
-
-                    with self._profiler('post_step', repeat=10):
-                        self.ma_manager.post_step(ma_next_obs_list,
-                                                  ma_local_done,
-                                                  ma_next_padding_mask)
 
                     step += 1
 
-                if self.train_mode and not training_iteration:
+                if self.train_mode and not is_training:
                     self._log_episode_summaries()
 
-                if not training_iteration:
-                    self._log_episode_info(iteration, time.time() - iter_time)
+                if not is_training:
+                    self._log_episode_info(inference_iteration, time.time() - iter_time)
 
                 if self.train_mode:
-                    training_iteration = not training_iteration
-                    self.ma_manager.set_train_mode(training_iteration)
+                    is_training = not is_training
+                    self.ma_manager.set_train_mode(is_training)
+
+                self.ma_manager.reset_dead_agents()
 
                 p_model = self.model_abs_dir.joinpath('save_model')
                 if self.train_mode and p_model.exists():
@@ -317,8 +312,8 @@ class Main:
 
                     p_model.unlink()
 
-                if not training_iteration:
-                    iteration += 1
+                if not is_training:
+                    inference_iteration += 1
 
         except KeyboardInterrupt:
             self._logger.warning('KeyboardInterrupt')
@@ -337,10 +332,10 @@ class Main:
 
     def _log_episode_summaries(self):
         for n, mgr in self.ma_manager:
-            if n in self.inference_ma_names:
+            if n in self.inference_ma_names or len(mgr.non_empty_agents) == 0:
                 continue
 
-            rewards = np.array([a.reward for a in mgr.agents])
+            rewards = np.array([a.reward for a in mgr.non_empty_agents])
             mgr.rl.write_constant_summaries([
                 {'tag': 'reward/mean', 'simple_value': rewards.mean()},
                 {'tag': 'reward/max', 'simple_value': rewards.max()},
@@ -350,7 +345,7 @@ class Main:
                 {'tag': 'reward', 'histogram': rewards}
             ])
 
-            steps = np.array([a.steps for a in mgr.agents])
+            steps = np.array([a.steps for a in mgr.non_empty_agents])
 
             mgr.rl.write_constant_summaries([
                 {'tag': 'metric/steps', 'simple_value': steps.mean()},
@@ -358,8 +353,10 @@ class Main:
 
     def _log_episode_info(self, iteration, iter_time):
         for n, mgr in self.ma_manager:
+            if len(mgr.non_empty_agents) == 0:
+                continue
             global_step = format_global_step(mgr.rl.get_global_step())
-            rewards = [a.reward for a in mgr.agents]
+            rewards = [a.reward for a in mgr.non_empty_agents]
             rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-            max_step = max([a.steps for a in mgr.agents])
+            max_step = max([a.steps for a in mgr.non_empty_agents])
             self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}')

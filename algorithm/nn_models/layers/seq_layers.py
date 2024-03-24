@@ -470,7 +470,7 @@ class EpisodeMultiheadAttention(nn.Module):
                  qkv_dense_depth: Union[int, List[int]] = 0,
                  out_dense_depth: Union[int, List[int]] = 1,
                  dropout: Union[float, List[float]] = 0.,
-                 gate: Union[Optional[GATE], List[Optional[GATE]]] = True,
+                 gate: Union[Optional[GATE], List[Optional[GATE]]] = None,
                  use_layer_norm: Union[bool, List[bool]] = False):
         super().__init__()
 

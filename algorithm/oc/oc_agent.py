@@ -1,4 +1,5 @@
-from typing import List, Optional, Tuple
+from re import M
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -7,23 +8,34 @@ from algorithm.utils.enums import *
 from algorithm.utils.operators import gen_pre_n_actions
 
 from .. import agent
-from ..agent import Agent, AgentManager, MultiAgentsManager
+from ..agent import (ACTION, AGENT_MAX_LIVENESS, INDEX, OBS_LIST,
+                     SEQ_HIDDEN_STATE, Agent, AgentManager, MultiAgentsManager)
+
+OPTION_INDEX = 4
+KEY_SEQ_HIDDEN_STATE = 5
+LOW_SEQ_HIDDEN_STATE = 6
 
 
 class OC_Agent(Agent):
-    _last_option_changed_index = -1  # The latest option start index
-    _last_option_index = -1  # The latest option index
+    # tmp data, waiting for reward and done to `end_transition`
+    tmp_option_changed_index: int = -1  # The latest option start index
+    tmp_option_index: int = -1  # The latest option index
+    tmp_key_seq_hidden_state: Optional[np.ndarray] = None
+    tmp_low_seq_hidden_state: Optional[np.ndarray] = None
 
     def __init__(self,
                  agent_id: int,
                  obs_shapes: List[Tuple],
                  d_action_sizes: List[int],
                  c_action_size: int,
-                 seq_hidden_state_shape=None,
-                 low_seq_hidden_state_shape=None,
+                 seq_hidden_state_shape: Optional[Tuple[int, ...]] = None,
+                 low_seq_hidden_state_shape: Optional[Tuple[int, ...]] = None,
                  max_return_episode_trans=-1):
 
         self.low_seq_hidden_state_shape = low_seq_hidden_state_shape
+
+        if self.low_seq_hidden_state_shape is not None:
+            self._padding_low_seq_hidden_state = np.zeros(self.low_seq_hidden_state_shape, dtype=np.float32)
 
         self._tmp_option_changed_indexes = []
 
@@ -34,42 +46,141 @@ class OC_Agent(Agent):
                          seq_hidden_state_shape,
                          max_return_episode_trans)
 
-    def _generate_empty_episode_trans(self, episode_length: int = 0):
-        return {
-            'index': -np.ones((episode_length, ), dtype=np.int32),
-            'obs_list': [np.zeros((episode_length, *s), dtype=np.float32) for s in self.obs_shapes],
-            'option_index': np.full((episode_length, ), -1, dtype=np.int8),
-            'option_changed_index': np.full((episode_length, ), -1, dtype=np.int32),
-            'action': np.zeros((episode_length, self.d_action_summed_size + self.c_action_size), dtype=np.float32),
-            'reward': np.zeros((episode_length, ), dtype=np.float32),
-            'local_done': np.zeros((episode_length, ), dtype=bool),
-            'max_reached': np.zeros((episode_length, ), dtype=bool),
-            'next_obs_list': [np.zeros(s, dtype=np.float32) for s in self.obs_shapes],
-            'prob': np.zeros((episode_length, self.d_action_summed_size + self.c_action_size), dtype=np.float32),
-            'seq_hidden_state': np.zeros((episode_length, *self.seq_hidden_state_shape), dtype=np.float32) if self.seq_hidden_state_shape is not None else None,
-            'low_seq_hidden_state': np.zeros((episode_length, *self.low_seq_hidden_state_shape), dtype=np.float32) if self.low_seq_hidden_state_shape is not None else None,
-        }
+    def _generate_empty_episode_trans(self, episode_length: int = 0) -> Dict[str, Union[np.ndarray, List[np.ndarray]]]:
+        empty_episode_trans = super()._generate_empty_episode_trans(episode_length)
+        empty_episode_trans['option_index'] = np.full((episode_length, ), -1, dtype=np.int8)
+        empty_episode_trans['option_changed_index'] = np.full((episode_length, ), -1, dtype=np.int32)
+        empty_episode_trans['low_seq_hidden_state'] = np.zeros((episode_length, *self.low_seq_hidden_state_shape),
+                                                               dtype=np.float32) if self.low_seq_hidden_state_shape is not None else None
 
-    def add_transition(self,
-                       obs_list: List[np.ndarray],
-                       option_index: int,
-                       action: np.ndarray,
+        return empty_episode_trans
+
+    def set_tmp_obs_action(self,
+                           obs_list: List[np.ndarray],
+                           option_index: int,
+                           action: np.ndarray,
+                           prob: np.ndarray,
+                           seq_hidden_state: Optional[np.ndarray] = None,
+                           low_seq_hidden_state: Optional[np.ndarray] = None):
+
+        super().set_tmp_obs_action(obs_list, action, prob, seq_hidden_state)
+
+        if option_index != self.tmp_option_index:
+            option_changed_index = self.tmp_index
+            self._tmp_option_changed_indexes.append(option_changed_index)
+            self.tmp_option_changed_index = option_changed_index
+            self.tmp_key_seq_hidden_state = seq_hidden_state
+
+        self.tmp_option_index = option_index
+        self.tmp_low_seq_hidden_state = low_seq_hidden_state
+
+    def get_tmp_data(self, key: int):
+        if key == OPTION_INDEX:
+            return self.tmp_option_index
+        elif key == KEY_SEQ_HIDDEN_STATE:
+            if self.seq_hidden_state_shape is None:
+                return None
+            return self.tmp_key_seq_hidden_state if self.tmp_key_seq_hidden_state is not None else self._padding_seq_hidden_state
+        elif key == LOW_SEQ_HIDDEN_STATE:
+            if self.low_seq_hidden_state_shape is None:
+                return None
+            return self.tmp_low_seq_hidden_state if self.tmp_low_seq_hidden_state is not None else self._padding_low_seq_hidden_state
+        else:
+            return super().get_tmp_data(key)
+
+    def end_transition(self,
                        reward: float,
-                       local_done: bool,
-                       max_reached: bool,
-                       next_obs_list: List[np.ndarray],
-                       prob: np.ndarray,
-                       seq_hidden_state: Optional[np.ndarray] = None,
-                       low_seq_hidden_state: Optional[np.ndarray] = None):
+                       done: bool = False,
+                       max_reached: bool = False,
+                       next_obs_list: Optional[List[np.ndarray]] = None) -> Optional[Dict[str, Union[np.ndarray, List[np.ndarray]]]]:
+        if self.tmp_obs_list is None:
+            return
+
+        self._add_transition(
+            index=self.tmp_index,
+            obs_list=self.tmp_obs_list,
+            option_index=self.tmp_option_index,
+            option_changed_index=self.tmp_option_changed_index,
+            action=self.tmp_action,
+            reward=reward,
+            done=done,
+            max_reached=max_reached,
+            prob=self.tmp_prob,
+            seq_hidden_state=self.tmp_seq_hidden_state,
+            low_seq_hidden_state=self.tmp_low_seq_hidden_state
+        )
+
+        self.current_reward += reward
+
+        if not self.done:
+            self.steps += 1
+            self.reward += reward
+
+        if done:
+            if not self.done:
+                self.done = True
+                self.max_reached = max_reached
+
+            return self._end_episode(next_obs_list if next_obs_list is not None else self._padding_obs_list)
+
+    def _end_episode(self,
+                     next_obs_list: List[np.ndarray]) \
+            -> Optional[Dict[str, Union[np.ndarray, List[np.ndarray]]]]:
+
+        self._add_transition(
+            index=self.tmp_index + 1,
+            obs_list=next_obs_list,
+            option_index=-1,
+            option_changed_index=-1,
+            action=self._padding_action,
+            reward=0,
+            done=True,
+            max_reached=True,
+            prob=np.ones_like(self._padding_action),
+            seq_hidden_state=self._padding_seq_hidden_state if self.seq_hidden_state_shape is not None else None,
+            low_seq_hidden_state=self._padding_low_seq_hidden_state if self.low_seq_hidden_state_shape is not None else None
+        )
+
+        episode_trans = self.get_episode_trans()
+
+        self.current_reward = 0
+        self.current_step = 0
+
+        self.tmp_index: int = -1
+        self.tmp_obs_list = None
+        self.tmp_option_index = -1
+        self.tmp_option_changed_index = -1
+        self.tmp_action = None
+        self.tmp_prob = None
+        self.tmp_seq_hidden_state = None
+        self.tmp_low_seq_hidden_state = None
+        self._tmp_episode_trans = self._generate_empty_episode_trans()
+        self._tmp_option_changed_indexes = []
+
+        return episode_trans
+
+    def _add_transition(self,
+                        index: int,
+                        obs_list: List[np.ndarray],
+                        option_index: int,
+                        option_changed_index: int,
+                        action: np.ndarray,
+                        reward: float,
+                        done: bool,
+                        max_reached: bool,
+                        prob: np.ndarray,
+                        seq_hidden_state: Optional[np.ndarray] = None,
+                        low_seq_hidden_state: Optional[np.ndarray] = None):
         """
         Args:
+            index: int
             obs_list: List([*obs_shapes_i], ...)
             option_index: int
+            option_changed_index: int
             action: [action_size, ]
             reward: float
-            local_done: bool
+            done: bool
             max_reached: bool
-            next_obs_list: List([*obs_shapes_i], ...)
             prob: [action_size, ]
             seq_hidden_state: [*seq_hidden_state_shape]
             low_seq_hidden_state: [*low_seq_hidden_state_shape]
@@ -80,29 +191,20 @@ class OC_Agent(Agent):
             ep_option_indexes (np.int8): [1, episode_len]
             ep_actions: [1, episode_len, action_size]
             ep_rewards: [1, episode_len]
-            next_obs_list: List([1, *obs_shapes_i], ...)
             ep_dones (np.bool): [1, episode_len], bool
             ep_probs: [1, episode_len, action_size]
             ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
             ep_low_seq_hidden_states: [1, episode_len, *low_seq_hidden_state_shape]
         """
-        if option_index == self._last_option_index:
-            option_changed_index = self._last_option_changed_index
-        else:
-            option_changed_index = self._last_steps
-            self._tmp_option_changed_indexes.append(self._last_steps)
-
         expaned_transition = {
-            'index': np.expand_dims(self._last_steps, 0).astype(np.int32),
-
+            'index': np.expand_dims(index, 0).astype(np.int32),
             'obs_list': [np.expand_dims(o, 0).astype(np.float32) for o in obs_list],
             'option_index': np.expand_dims(option_index, 0).astype(np.int8),
             'option_changed_index': np.expand_dims(option_changed_index, 0).astype(np.int32),
             'action': np.expand_dims(action, 0).astype(np.float32),
             'reward': np.expand_dims(reward, 0).astype(np.float32),
-            'local_done': np.expand_dims(local_done, 0).astype(bool),
+            'done': np.expand_dims(done, 0).astype(bool),
             'max_reached': np.expand_dims(max_reached, 0).astype(bool),
-            'next_obs_list': [o.astype(np.float32) for o in next_obs_list],
             'prob': np.expand_dims(prob, 0).astype(np.float32),
             'seq_hidden_state': np.expand_dims(seq_hidden_state, 0).astype(np.float32) if seq_hidden_state is not None else None,
             'low_seq_hidden_state': np.expand_dims(low_seq_hidden_state, 0).astype(np.float32) if low_seq_hidden_state is not None else None,
@@ -114,47 +216,19 @@ class OC_Agent(Agent):
                     np.concatenate([o, t_o]) for o, t_o in zip(self._tmp_episode_trans[k],
                                                                expaned_transition[k])
                 ]
-            elif k == 'next_obs_list':
-                self._tmp_episode_trans[k] = expaned_transition[k]
             elif self._tmp_episode_trans[k] is not None:
                 self._tmp_episode_trans[k] = np.concatenate([self._tmp_episode_trans[k],
                                                              expaned_transition[k]])
 
-        if not self.done:
-            self.reward += reward
-            self.steps += 1
-
-        self._last_reward += reward
-        self._last_steps += 1
-
-        self._last_option_index = option_index
-        self._last_option_changed_index = option_changed_index
-
         self._extra_log(obs_list,
                         action,
                         reward,
-                        local_done,
+                        done,
                         max_reached,
-                        next_obs_list,
                         prob)
 
-        if local_done:
-            self.done = True
-            self.max_reached = max_reached
-            self._last_reward = 0
-            self._last_steps = 0
-            self._last_option_index = -1
-            self._last_option_changed_index = -1
-
-        if local_done or self.episode_length == self.max_return_episode_trans:
-            episode_trans = self.get_episode_trans()
-            self._tmp_episode_trans = self._generate_empty_episode_trans()
-            self._tmp_option_changed_indexes = []
-
-            return episode_trans
-
     def get_episode_trans(self,
-                          force_length: int = None):
+                          force_length: int = None) -> Optional[Dict[str, Union[np.ndarray, List[np.ndarray]]]]:
         """
         Returns:
             ep_indexes (np.int32): [1, episode_len]
@@ -163,7 +237,6 @@ class OC_Agent(Agent):
             ep_option_changed_indexes (np.int32): [1, episode_len]
             ep_actions: [1, episode_len, action_size]
             ep_rewards: [1, episode_len]
-            next_obs_list: List([1, *obs_shapes_i], ...)
             ep_dones (np.bool): [1, episode_len]
             ep_probs: [1, episode_len]
             ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
@@ -177,8 +250,6 @@ class OC_Agent(Agent):
                 for k in tmp:
                     if k == 'obs_list':
                         tmp[k] = [o[-force_length:] for o in tmp[k]]
-                    elif k == 'next_obs_list':
-                        pass
                     elif tmp[k] is not None:
                         tmp[k] = tmp[k][-force_length:]
             else:
@@ -186,10 +257,11 @@ class OC_Agent(Agent):
                 for k in tmp:
                     if k == 'obs_list':
                         tmp[k] = [np.concatenate([t_o, o]) for t_o, o in zip(tmp_empty[k], tmp[k])]
-                    elif k == 'next_obs_list':
-                        pass
                     elif tmp[k] is not None:
                         tmp[k] = np.concatenate([tmp_empty[k], tmp[k]])
+        else:
+            if tmp['index'].shape[0] <= 1:
+                return None
 
         ep_indexes = np.expand_dims(tmp['index'], 0)
         # [1, episode_len]
@@ -199,9 +271,7 @@ class OC_Agent(Agent):
         ep_option_changed_indexes = np.expand_dims(tmp['option_changed_index'], 0)  # [1, episode_len]
         ep_actions = np.expand_dims(tmp['action'], 0)  # [1, episode_len, action_size]
         ep_rewards = np.expand_dims(tmp['reward'], 0)  # [1, episode_len]
-        next_obs_list = [np.expand_dims(o, 0) for o in tmp['next_obs_list']]
-        # List([1, *obs_shapes_i], ...)
-        ep_dones = np.expand_dims(np.logical_and(tmp['local_done'],
+        ep_dones = np.expand_dims(np.logical_and(tmp['done'],
                                                  ~tmp['max_reached']),
                                   0)  # [1, episode_len]
         ep_probs = np.expand_dims(tmp['prob'], 0)  # [1, episode_len]
@@ -217,7 +287,6 @@ class OC_Agent(Agent):
             'ep_option_changed_indexes': ep_option_changed_indexes,
             'ep_actions': ep_actions,
             'ep_rewards': ep_rewards,
-            'next_obs_list': next_obs_list,
             'ep_dones': ep_dones,
             'ep_probs': ep_probs,
             'ep_seq_hidden_states': ep_seq_hidden_states,
@@ -228,13 +297,14 @@ class OC_Agent(Agent):
     def key_trans_length(self):
         return len(self._tmp_option_changed_indexes)
 
-    def get_key_trans(self, force_length: int):
+    def get_key_trans(self,
+                      force_length: int) -> Dict[str, Union[np.ndarray, List[np.ndarray]]]:
         """
         Returns:
             key_indexes (np.int32): [1, key_len]
             key_padding_masks (np.bool): [1, key_len]
             key_obses_list: List([1, key_len, *obs_shapes_i], ...)
-            key_option_indexes (np.int64): [1, key_len]
+            key_option_indexes (np.int32): [1, key_len]
             key_seq_hidden_states: [1, key_len, *seq_hidden_state_shape]
         """
         tmp = self._tmp_episode_trans
@@ -262,7 +332,7 @@ class OC_Agent(Agent):
             delta_key_indexes = -np.ones((1, delta), dtype=np.int32)
             delta_padding_masks = np.ones((1, delta), dtype=bool)  # `True` indicates ignored
             delta_obses_list = [np.zeros((1, delta, *s), dtype=np.float32) for s in self.obs_shapes]
-            delta_option_indexes = -np.ones((1, delta), dtype=np.int64)
+            delta_option_indexes = -np.ones((1, delta), dtype=np.int32)
             delta_seq_hidden_states = np.zeros((1, delta, *self.seq_hidden_state_shape), dtype=np.float32)
 
             key_indexes = np.concatenate([delta_key_indexes, key_indexes], axis=1)
@@ -279,109 +349,146 @@ class OC_Agent(Agent):
             key_seq_hidden_states,
         )
 
-    def get_last_index(self) -> np.ndarray:
-        index = self._tmp_episode_trans['index'][-1:]
-        if len(index) == 0:
-            index = np.full((1, ), -1, dtype=np.int32)
-        index = np.expand_dims(index, 0)
-
-        return index
-
-    def clear(self):
-        self._last_option_changed_index = -1
-        self._last_option_index = -1
+    def reset(self) -> None:
+        """
+        The agent may continue in a new iteration but save its last status
+        """
+        self.tmp_option_index = -1
+        self.tmp_option_changed_index = -1
+        self.tmp_key_seq_hidden_state = None
+        self.tmp_low_seq_hidden_state = None
         self._tmp_option_changed_indexes = []
-        return super().clear()
+        return super().reset()
 
 
 class OC_AgentManager(AgentManager):
-    def set_rl(self, rl: OptionSelectorBase):
-        self.rl = rl
-        self.seq_encoder = rl.seq_encoder
+    def __init__(self,
+                 name: str,
+                 obs_names: List[str],
+                 obs_shapes: List[Tuple[int]],
+                 d_action_sizes: List[int],
+                 c_action_size: int):
+        super().__init__(name, obs_names, obs_shapes, d_action_sizes, c_action_size)
+        self.agents_dict: Dict[int, OC_Agent] = {}
+        self.rl: Optional[OptionSelectorBase] = None
+
+    def set_rl(self, rl: OptionSelectorBase) -> None:
+        super().set_rl(rl)
+
         self.option_seq_encoder = rl.option_seq_encoder
         self.use_dilation = rl.use_dilation
 
-    def pre_run(self, num_agents: int):
-        self['option_index'] = np.full(num_agents, -1, dtype=np.int8)
-        self['initial_option_index'] = self.rl.get_initial_option_index(num_agents)  # [n_envs, action_size]
-        self['pre_option_index'] = self['initial_option_index']
-        self['initial_pre_action'] = self.rl.get_initial_action(num_agents)  # [n_envs, action_size]
-        self['pre_action'] = self['initial_pre_action']
-        if self.seq_encoder is not None:
-            self['initial_seq_hidden_state'] = self.rl.get_initial_seq_hidden_state(num_agents)  # [n_envs, *seq_hidden_state_shape]
-            self['seq_hidden_state'] = self['initial_seq_hidden_state'].copy()
-            if self.use_dilation:
-                self['key_seq_hidden_state'] = self['initial_seq_hidden_state'].copy()
+    def _verify_agents(self,
+                       agent_ids: np.ndarray):
 
-            if self.option_seq_encoder is not None:
-                self['initial_low_seq_hidden_state'] = self.rl.get_initial_low_seq_hidden_state(num_agents)  # [n_envs, *los_seq_hidden_state_shape]
-                self['low_seq_hidden_state'] = self['initial_low_seq_hidden_state']
+        for agent_id in self.agents_liveness:
+            self.agents_liveness[agent_id] -= 1
 
-        self.agents: List[OC_Agent] = [
-            OC_Agent(i,
-                     self.obs_shapes,
-                     self.d_action_sizes,
-                     self.c_action_size,
-                     seq_hidden_state_shape=self.rl.seq_hidden_state_shape
-                     if self.seq_encoder is not None else None,
-                     low_seq_hidden_state_shape=self.rl.low_seq_hidden_state_shape
-                     if self.option_seq_encoder is not None else None)
-            for i in range(num_agents)
-        ]
+        for agent_id in agent_ids:
+            if agent_id not in self.agents_dict:
+                self.agents_dict[agent_id] = OC_Agent(
+                    agent_id,
+                    self.obs_shapes,
+                    self.d_action_sizes,
+                    self.c_action_size,
+                    seq_hidden_state_shape=self.rl.seq_hidden_state_shape
+                    if self.seq_encoder is not None else None,
+                    low_seq_hidden_state_shape=self.rl.low_seq_hidden_state_shape
+                    if self.option_seq_encoder is not None else None
+                )
+            self.agents_liveness[agent_id] = AGENT_MAX_LIVENESS
 
-    def clear(self) -> None:
-        self['pre_option_index'] = self['initial_option_index']
-        if self.seq_encoder is not None and self.option_seq_encoder is not None:
-            self['low_seq_hidden_state'] = self['initial_low_seq_hidden_state']
-
-        return super().clear()
+        # Some agents may disabled unexpectively. Set done to these dead agents
+        for agent_id in self.agents_liveness:
+            agent = self.agents_dict[agent_id]
+            if self.agents_liveness[agent_id] <= 0 and not agent.done:
+                agent.force_done()
 
     def get_action(self,
+                   agent_ids: np.ndarray,
+                   obs_list: List[np.ndarray],
+                   last_reward: np.ndarray,
                    disable_sample: bool = False,
                    force_rnd_if_available: bool = False) -> None:
+        assert len(agent_ids) == obs_list[0].shape[0]
+
+        if self.rl is None:
+            return self.get_test_action(
+                agent_ids=agent_ids,
+                obs_list=obs_list,
+                last_reward=last_reward
+            )
+
+        self._verify_agents(agent_ids)
+
+        for i, agent_id in enumerate(agent_ids):
+            agent = self.agents_dict[agent_id]
+            agent.end_transition(
+                reward=last_reward[i],
+                done=False,
+                max_reached=False
+            )
+
         if self.seq_encoder == SEQ_ENCODER.RNN and not self.use_dilation:
+            # TODO
+            pre_option_index = self._merge_agents_data(agent_id, OPTION_INDEX)
+            pre_action = self._merge_agents_data(agent_ids, ACTION)
+            seq_hidden_state = self._merge_agents_data(agent_ids, SEQ_HIDDEN_STATE)
+            low_seq_hidden_state = self._merge_agents_data(agent_ids, LOW_SEQ_HIDDEN_STATE) \
+                if self.option_seq_encoder is not None else None
+
             (option_index,
              action,
              prob,
              next_seq_hidden_state,
              next_low_seq_hidden_state) = self.rl.choose_rnn_action(
-                obs_list=self['obs_list'],
-                pre_option_index=self['pre_option_index'],
-                pre_action=self['pre_action'],
-                rnn_state=self['seq_hidden_state'],
-                low_rnn_state=self['low_seq_hidden_state'] if self.option_seq_encoder is not None else None,
+                obs_list=obs_list,
+                pre_option_index=pre_option_index,
+                pre_action=pre_action,
+                rnn_state=seq_hidden_state,
+                low_rnn_state=low_seq_hidden_state,
 
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
 
         elif self.seq_encoder == SEQ_ENCODER.RNN and self.use_dilation:
+            # TODO
+            pre_option_index = self._merge_agents_data(agent_id, OPTION_INDEX)
+            pre_action = self._merge_agents_data(agent_ids, ACTION)
+            seq_hidden_state = self._merge_agents_data(agent_ids, SEQ_HIDDEN_STATE)
+            low_seq_hidden_state = self._merge_agents_data(agent_ids, LOW_SEQ_HIDDEN_STATE) \
+                if self.option_seq_encoder is not None else None
+
             (option_index,
              action,
              prob,
              next_seq_hidden_state,
              next_low_seq_hidden_state) = self.rl.choose_rnn_action(
-                obs_list=self['obs_list'],
-                pre_option_index=self['pre_option_index'],
-                pre_action=self['pre_action'],
+                obs_list=obs_list,
+                pre_option_index=pre_option_index,
+                pre_action=pre_action,
                 rnn_state=self['key_seq_hidden_state'],  # The previous key rnn_state
-                low_rnn_state=self['low_seq_hidden_state'] if self.option_seq_encoder is not None else None,
+                low_rnn_state=low_seq_hidden_state,
 
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN and not self.use_dilation:
-            ep_length = min(512, max([a.episode_length for a in self.agents]))
+            pre_option_index = self._merge_agents_data(agent_id, OPTION_INDEX)
+            low_seq_hidden_state = self._merge_agents_data(agent_ids, LOW_SEQ_HIDDEN_STATE) \
+                if self.option_seq_encoder is not None else None
 
-            all_episode_trans = [a.get_episode_trans(ep_length).values() for a in self.agents]
+            ep_length = min(512, max([self.agents_dict[agent_id].episode_length for agent_id in agent_ids]))
+
+            all_episode_trans = [self.agents_dict[agent_id].get_episode_trans(ep_length).values() for agent_id in agent_ids]
             (all_ep_indexes,
              all_ep_obses_list,
              all_option_indexes,
              all_option_changed_indexes,
              all_ep_actions,
              all_all_ep_rewards,
-             all_next_obs_list,
              all_ep_dones,
              all_ep_probs,
              all_ep_attn_states,
@@ -398,10 +505,8 @@ class OC_AgentManager(AgentManager):
                 ep_indexes = np.concatenate([ep_indexes, ep_indexes[:, -1:] + 1], axis=1)
             ep_padding_masks = ep_indexes == -1
             ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
-                             for o, t_o in zip(ep_obses_list, self['obs_list'])]
+                             for o, t_o in zip(ep_obses_list, obs_list)]
             ep_pre_actions = gen_pre_n_actions(ep_actions, True)
-            ep_attn_states = np.concatenate([ep_attn_states,
-                                             np.expand_dims(self['seq_hidden_state'], 1)], axis=1)
 
             (option_index,
              action,
@@ -414,17 +519,25 @@ class OC_AgentManager(AgentManager):
                 ep_pre_actions=ep_pre_actions,
                 ep_attn_states=ep_attn_states,
 
-                pre_option_index=self['pre_option_index'],
-                low_rnn_state=self['low_seq_hidden_state'] if self.option_seq_encoder is not None else None,
+                pre_option_index=pre_option_index,
+                low_rnn_state=low_seq_hidden_state,
 
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilation:
-            key_trans_length = max([a.key_trans_length for a in self.agents])
+            index = self._merge_agents_data(agent_ids, INDEX)
+            pre_option_index = self._merge_agents_data(agent_ids, OPTION_INDEX)
+            pre_action = self._merge_agents_data(agent_ids, ACTION)
+            low_seq_hidden_state = self._merge_agents_data(agent_ids, LOW_SEQ_HIDDEN_STATE) \
+                if self.option_seq_encoder is not None else None
 
-            all_key_trans = [a.get_key_trans(key_trans_length) for a in self.agents]
+            key_seq_hidden_state = self._merge_agents_data(agent_ids, KEY_SEQ_HIDDEN_STATE)
+
+            key_trans_length = max([self.agents_dict[agent_id].key_trans_length for agent_id in agent_ids])
+
+            all_key_trans = [self.agents_dict[agent_id].get_key_trans(key_trans_length) for agent_id in agent_ids]
             (all_key_indexes,
              all_key_padding_masks,
              all_key_obses_list,
@@ -437,21 +550,18 @@ class OC_AgentManager(AgentManager):
             key_option_indexes = np.concatenate(all_key_option_indexes)
             key_attn_states = np.concatenate(all_key_attn_states)
 
-            all_last_indexes = [a.get_last_index() for a in self.agents]
-            last_indexes = np.concatenate(all_last_indexes)
-
             if key_indexes.shape[1] == 0:
                 key_indexes = np.zeros((key_indexes.shape[0], 1), dtype=key_indexes.dtype)
             else:
-                key_indexes = np.concatenate([key_indexes, last_indexes + 1], axis=1)
+                key_indexes = np.concatenate([key_indexes, np.expand_dims(index + 1, 1)], axis=1)
             key_padding_masks = np.concatenate([key_padding_masks,
                                                 np.zeros((key_padding_masks.shape[0], 1), dtype=bool)], axis=1)
             key_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
-                              for o, t_o in zip(key_obses_list, self['obs_list'])]
+                              for o, t_o in zip(key_obses_list, obs_list)]
             key_option_indexes = np.concatenate([key_option_indexes,
-                                                 -np.ones((key_padding_masks.shape[0], 1), dtype=np.int64)], axis=1)
+                                                 -np.ones((key_padding_masks.shape[0], 1), dtype=np.int32)], axis=1)
             key_attn_states = np.concatenate([key_attn_states,
-                                              np.expand_dims(self['key_seq_hidden_state'], 1)], axis=1)
+                                              np.expand_dims(key_seq_hidden_state, 1)], axis=1)
 
             (option_index,
              action,
@@ -464,72 +574,39 @@ class OC_AgentManager(AgentManager):
                 key_option_indexes=key_option_indexes,
                 key_attn_states=key_attn_states,
 
-                pre_option_index=self['pre_option_index'],
-                pre_action=self['pre_action'],
-                low_rnn_state=self['low_seq_hidden_state'] if self.option_seq_encoder is not None else None,
+                pre_option_index=pre_option_index,
+                pre_action=pre_action,
+                low_rnn_state=low_seq_hidden_state,
 
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
 
         else:
-            option_index, action, prob = self.rl.choose_action(
-                obs_list=self['obs_list'],
-                pre_option_index=self['pre_option_index']
-            )
+            option_index, action, prob = self.rl.choose_action(obs_list,
+                                                               disable_sample=disable_sample,
+                                                               force_rnd_if_available=force_rnd_if_available)
             next_seq_hidden_state = None
             next_low_seq_hidden_state = None
 
-        if self.use_dilation:
-            key_mask = self['option_index'] != option_index
-            self['key_seq_hidden_state'][key_mask] = next_seq_hidden_state[key_mask]
+        for i, agent_id in enumerate(agent_ids):
+            agent = self.agents_dict[agent_id]
+            agent.set_tmp_obs_action(
+                obs_list=[o[i] for o in obs_list],
+                option_index=option_index[i],
+                action=action[i],
+                prob=prob[i],
+                seq_hidden_state=next_seq_hidden_state[i] if self.seq_encoder is not None else None,
+                low_seq_hidden_state=next_low_seq_hidden_state[i] if self.option_seq_encoder is not None else None
+            )
 
-        self['option_index'] = option_index
-        self['action'] = action
-        self['d_action'] = action[..., :self.d_action_summed_size]
-        self['c_action'] = action[..., self.d_action_summed_size:]
-        self['prob'] = prob
-        self['next_seq_hidden_state'] = next_seq_hidden_state
-        self['next_low_seq_hidden_state'] = next_low_seq_hidden_state
-
-    def set_env_step(self,
-                     next_obs_list: List[np.ndarray],
-                     reward: np.ndarray,
-                     local_done: np.ndarray,
-                     max_reached: np.ndarray) -> None:
-        episode_trans_list = []
-
-        for i, a in enumerate(self.agents):
-            if not self['padding_mask'][i]:
-                episode_trans = a.add_transition(
-                    obs_list=[o[i] for o in self['obs_list']],
-                    option_index=self['option_index'][i],
-                    action=self['action'][i],
-                    reward=reward[i],
-                    local_done=local_done[i],
-                    max_reached=max_reached[i],
-                    next_obs_list=[o[i] for o in next_obs_list],
-                    prob=self['prob'][i],
-                    seq_hidden_state=self['seq_hidden_state'][i] if self.seq_encoder is not None else None,
-                    low_seq_hidden_state=self['low_seq_hidden_state'][i] if self.option_seq_encoder is not None else None,
-                )
-                if episode_trans is not None:
-                    episode_trans_list.append(episode_trans)
-
-        self['episode_trans_list'] = episode_trans_list
-
-    def post_step(self, next_obs_list, local_done, next_padding_mask) -> None:
-        super().post_step(next_obs_list, local_done, next_padding_mask)
-
-        self['pre_option_index'] = self['option_index']
-        if self.option_seq_encoder is not None:
-            self['low_seq_hidden_state'] = self['next_low_seq_hidden_state']
-            self['low_seq_hidden_state'][local_done] = self['initial_low_seq_hidden_state'][local_done]
+        return action[..., :self.d_action_summed_size], action[..., self.d_action_summed_size:]
 
 
 class OC_MultiAgentsManager(MultiAgentsManager):
+    # TODO
     def get_option(self):
-        return {n: mgr['option_index'] for n, mgr in self}
+        return {n: mgr._merge_agents_data() for n, mgr in self}
 
 
 agent.Agent = OC_Agent

@@ -15,7 +15,7 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         embed_dim = 6 - EXTRA_SIZE + 2  # 6
         self.mlp = m.LinearLayers(embed_dim, output_size=32)
-        self.attn = m.EpisodeMultiheadAttention(32, 2, num_layers=2)
+        self.attn = m.EpisodeMultiheadAttention(32)
         self.pos = m.AbsolutePositionalEncoding(32)
 
     def forward(self, index, obs_list, pre_action,
@@ -32,12 +32,14 @@ class ModelRep(m.ModelBaseAttentionRep):
         pe = self.pos(index)
 
         output, hn, attn_weights_list = self.attn(x,
-                                                  pe,
-                                                  seq_q_len,
-                                                  hidden_state,
-                                                  is_prev_hidden_state,
-                                                  query_only_attend_to_rest_key,
-                                                  padding_mask)
+                                                  seq_q_len=seq_q_len,
+                                                  cut_query=True,
+                                                  hidden_state=hidden_state,
+                                                  is_prev_hidden_state=is_prev_hidden_state,
+
+                                                  query_only_attend_to_rest_key=query_only_attend_to_rest_key,
+                                                  key_index=index,
+                                                  key_padding_mask=padding_mask)
 
         return output, hn, attn_weights_list
 

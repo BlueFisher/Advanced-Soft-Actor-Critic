@@ -5,6 +5,8 @@ import algorithm.nn_models as m
 ModelVOverOption = m.ModelVOverOption
 ModelTermination = m.ModelTermination
 
+# from nn_attn import ModelOptionRep
+
 
 class ModelRep(m.ModelBaseAttentionRep):
     def _build_model(self):
@@ -40,13 +42,16 @@ class ModelRep(m.ModelBaseAttentionRep):
         return output, hn, attn_weights_list
 
 
-class ModelOptionRep(m.ModelBaseSimpleRep):
-    def forward(self, obs_list):
-        high_state, vec_obs = obs_list
+class ModelOptionRep(m.ModelBaseRNNRep):
+    def _build_model(self):
+        self.rnn = m.GRU(self.obs_shapes[0][0] + self.obs_shapes[1][0] + sum(self.d_action_sizes) + self.c_action_size, 8, 2)
 
-        output = torch.concat([high_state, vec_obs], dim=-1)
+    def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
+        high_state, obs = obs_list
 
-        return output
+        state, hn = self.rnn(torch.cat([high_state, obs, pre_action], dim=-1), rnn_state)
+
+        return state, hn
 
 
 ModelQ = m.ModelQ

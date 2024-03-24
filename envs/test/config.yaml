@@ -3,9 +3,17 @@ default:
     env_type: TEST
     env_name: TEST
 
-    max_step: 10
-    max_step_each_iter: 200
     n_envs: 2
+
+    max_iter: 3
+    max_step: 10
+    max_step_each_iter: 100
+
+  sac_config:
+    batch_size: 10
+
+  replay_config:
+    capacity: 65536
 
   ma_config:
     test0:
@@ -17,15 +25,10 @@ default:
         nn: nn
         n_step: 10
 
-  replay_config:
-    capacity: 65536
-
 rnn:
   sac_config:
     burn_in_step: 2
     seq_encoder: RNN
-
-    batch_size: 10
 
   ma_config:
     test0:
@@ -34,29 +37,12 @@ rnn:
     test1:
       sac_config:
         nn: nn_rnn
-
-dilated_rnn:
-  inherited: rnn
-
-  oc_config:
-    use_dilation: true
 
 attn:
   sac_config:
     burn_in_step: 8
     seq_encoder: ATTN
 
-    batch_size: 10
-
-  nn_config:
-    rep:
-      pe: nope
-
-  oc_config:
-    option_seq_encoder: null
-    option_burn_in_step: 2
-    key_max_length: 200
-
   ma_config:
     test0:
       sac_config:
@@ -65,8 +51,31 @@ attn:
       sac_config:
         nn: nn_attn
 
-dilated_attn:
+oc_dilated_rnn:
+  inherited: rnn
+
+  oc_config:
+    use_dilation: true
+    option_seq_encoder: null
+
+oc_dilated_attn:
   inherited: attn
 
   oc_config:
     use_dilation: true
+    option_seq_encoder: null
+
+oc_dilated_attn_o_rnn:
+  inherited: attn
+
+  oc_config:
+    use_dilation: true
+    option_seq_encoder: RNN
+
+  ma_config:
+    test0:
+      sac_config:
+        nn: nn_attn_o_rnn
+    test1:
+      sac_config:
+        nn: nn_attn_o_rnn

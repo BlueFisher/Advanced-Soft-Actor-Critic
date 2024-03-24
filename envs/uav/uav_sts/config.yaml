@@ -17,7 +17,7 @@ default:
       max_n_envs_per_process: 9 # The max env copies count in each process
 
     n_envs: 50
-    reset_on_iteration: false
+    reset_on_iteration: true
 
   reset_config:
     disable_after_dead: true
@@ -58,9 +58,9 @@ train:
       strike_agents_count_max: 4
 
   reset_config:
-    disable_after_dead: false
-    strike_agents_appear_time: 0.25
-    hole_probability: 0.5
+    disable_after_dead: true
+    strike_agents_appear_time: 0.5
+    hole_probability: 0.75
 
 train_st:
   base_config:
@@ -89,16 +89,3 @@ train_s:
     disable_after_dead: false
     strike_agents_appear_time: 0.1
     hole_probability: 0.5
-
-aggr:
-  base_config:
-    unity_args:
-      group_aggregation: true
-      group_aggregation_done_all: true
-    name: aggr_{time}
-
-  reset_config:
-    disable_after_dead: false
-
-  sac_config:
-    nn: nn_aggr

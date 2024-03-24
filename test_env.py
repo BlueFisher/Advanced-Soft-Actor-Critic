@@ -1,20 +1,13 @@
 import argparse
 import logging
-import sys
-import time
 from pathlib import Path
 
-import algorithm.config_helper as config_helper
-from algorithm.agent import MultiAgentsManager
 from algorithm.config_helper import set_logger
-
-try:
-    import memory_corridor
-except:
-    pass
+from algorithm.sac_main import Main as SACMain
+from algorithm.utils.elapse_timer import UnifiedElapsedTimer
 
 
-class Main(object):
+class Main(SACMain):
     def __init__(self, root_dir, config_dir, args):
         """
         config_path: the directory of config file
@@ -22,181 +15,27 @@ class Main(object):
         """
         self._logger = logging.getLogger('test_env')
 
+        self._profiler = UnifiedElapsedTimer(self._logger)
+
         config_abs_dir = self._init_config(root_dir, config_dir, args)
+
+        self.train_mode = False
 
         self._init_env()
         self._run()
 
-    def _init_config(self, root_dir, config_dir, args):
-        config_abs_dir = Path(root_dir).joinpath(config_dir)
-        config_abs_path = config_abs_dir.joinpath('config.yaml')
-        default_config_abs_path = Path(__file__).resolve().parent.joinpath('algorithm', 'default_config.yaml')
-        # Merge default_config.yaml and custom config.yaml
-        config, ma_configs = config_helper.initialize_config_from_yaml(default_config_abs_path,
-                                                                       config_abs_path,
-                                                                       args.config)
-
-        # Initialize config from command line arguments
-        self.train_mode = not args.run
-        self.render = args.render
-        self.run_in_editor = args.editor
-
-        if args.env_args is not None:
-            config['base_config']['env_args'] = args.env_args
-        if args.port is not None:
-            config['base_config']['unity_args']['port'] = args.port
-
-        if args.envs is not None:
-            config['base_config']['n_envs'] = args.envs
-
-        config['base_config']['name'] = config_helper.generate_base_name(config['base_config']['name'])
-
-        # The absolute directory of a specific training
-        model_abs_dir = Path(root_dir).joinpath('models',
-                                                config['base_config']['env_name'],
-                                                config['base_config']['name'])
-        model_abs_dir.mkdir(parents=True, exist_ok=True)
-        self.model_abs_dir = model_abs_dir
-
-        config_helper.display_config(config, self._logger)
-
-        self.base_config = config['base_config']
-        self.reset_config = config['reset_config']
-        self.config = config
-        self.ma_configs = ma_configs
-
-        return config_abs_dir
-
-    def _init_env(self):
-        if self.base_config['env_type'] == 'UNITY':
-            from algorithm.env_wrapper.unity_wrapper import UnityWrapper
-
-            if self.run_in_editor:
-                self.env = UnityWrapper(train_mode=self.train_mode,
-                                        n_envs=self.base_config['n_envs'])
-            else:
-                self.env = UnityWrapper(train_mode=self.train_mode,
-                                        env_name=self.base_config['unity_args']['build_path'][sys.platform],
-                                        n_envs=self.base_config['n_envs'],
-                                        base_port=self.base_config['unity_args']['port'],
-                                        no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
-                                        scene=self.base_config['env_name'],
-                                        additional_args=self.base_config['env_args'])
-
-        elif self.base_config['env_type'] == 'GYM':
-            from algorithm.env_wrapper.gym_wrapper import GymWrapper
-
-            self.env = GymWrapper(train_mode=self.train_mode,
-                                  env_name=self.base_config['env_name'],
-                                  n_envs=self.base_config['n_envs'],
-                                  render=self.render)
-
-        elif self.base_config['env_type'] == 'DM_CONTROL':
-            from algorithm.env_wrapper.dm_control_wrapper import \
-                DMControlWrapper
-
-            self.env = DMControlWrapper(train_mode=self.train_mode,
-                                        env_name=self.base_config['env_name'],
-                                        n_envs=self.base_config['n_envs'],
-                                        render=self.render)
-
-        else:
-            raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
-
-        ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size = self.env.init()
-        self.ma_manager = MultiAgentsManager(ma_obs_names,
-                                             ma_obs_shapes,
-                                             ma_d_action_sizes,
-                                             ma_c_action_size,
-                                             self.model_abs_dir)
-        for n, mgr in self.ma_manager:
-            if n not in self.ma_configs:
-                self._logger.warning(f'{n} not in ma_configs')
-                mgr.set_config(self.config)
-            else:
-                mgr.set_config(self.ma_configs[n])
-
-            self._logger.info(f'{n} observation shapes: {mgr.obs_shapes}')
-            self._logger.info(f'{n} discrete action sizes: {mgr.d_action_sizes}')
-            self._logger.info(f'{n} continuous action size: {mgr.c_action_size}')
-
-        self._logger.info(f'{self.base_config["env_name"]} initialized')
-
-    def _run(self):
-        ma_obs_list = self.env.reset(reset_config=self.reset_config)
-
-        self.ma_manager.pre_run({
-            n: obs_list[0].shape[0] for n, obs_list in ma_obs_list.items()
-        })
-        self.ma_manager.set_obs_list(ma_obs_list)
-
-        force_reset = False
-        iteration = 0
-        trained_steps = 0
-
-        try:
-            while iteration != self.base_config['max_iter']:
-                if self.base_config['max_step'] != -1 and trained_steps >= self.base_config['max_step']:
-                    break
-
-                if self.base_config['reset_on_iteration'] \
-                        or self.ma_manager.is_max_reached() \
-                        or force_reset:
-                    ma_obs_list = self.env.reset(reset_config=self.reset_config)
-                    self.ma_manager.set_obs_list(ma_obs_list)
-                    self.ma_manager.clear()
-
-                    force_reset = False
-                else:
-                    self.ma_manager.reset()
-
-                step = 0
-                iter_time = time.time()
-
-                while not self.ma_manager.is_done():
-                    ma_d_action, ma_c_action = self.ma_manager.get_test_ma_action()
-
-                    (ma_next_obs_list,
-                     ma_reward,
-                     ma_local_done,
-                     ma_max_reached,
-                     ma_next_padding_mask) = self.env.step(ma_d_action, ma_c_action)
-
-                    if ma_next_obs_list is None:
-                        force_reset = True
-
-                        self._logger.warning('Step encounters error, episode ignored')
-                        continue
-
-                    for n, mgr in self.ma_manager:
-                        if step == self.base_config['max_step_each_iter']:
-                            ma_local_done[n] = [True] * len(mgr.agents)
-                            ma_max_reached[n] = [True] * len(mgr.agents)
-
-                    self.ma_manager.set_ma_env_step(ma_next_obs_list,
-                                                    ma_reward,
-                                                    ma_local_done,
-                                                    ma_max_reached)
-
-                    step += 1
-
-                self._log_episode_info(iteration, time.time() - iter_time)
-
-                iteration += 1
-
-        finally:
-            self.env.close()
-
     def _log_episode_info(self, iteration, iter_time):
         for n, mgr in self.ma_manager:
-            rewards = [a.reward for a in mgr.agents]
+            if len(mgr.agents) == 0:
+                continue
+            rewards = [a.reward for a in mgr.agents.values()]
             rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-            max_step = max([a.steps for a in mgr.agents])
+            max_step = max([a.steps for a in mgr.agents.values()])
             self._logger.info(f'{n} {iteration}, T {iter_time:.2f}s, S {max_step}, R {rewards}')
 
 
 if __name__ == '__main__':
-    set_logger()
+    set_logger(debug=True)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('env')
@@ -204,13 +43,23 @@ if __name__ == '__main__':
     parser.add_argument('--run', action='store_true', help='inference mode')
 
     parser.add_argument('--render', action='store_true', help='render')
-    parser.add_argument('--env_args', help='additional args for Unity')
+    parser.add_argument('--env_args', default=[], nargs='+', help='additional arguments for environments')
     parser.add_argument('--envs', type=int, help='number of env copies')
+    parser.add_argument('--max_iter', type=int, help='max iteration')
 
     parser.add_argument('--port', '-p', type=int, default=5005, help='UNITY: communication port')
     parser.add_argument('--editor', action='store_true', help='UNITY: running in Unity Editor')
+    parser.add_argument('--timescale', type=float, default=None, help='UNITY: timescale')
 
     args = parser.parse_args()
+    args.run_a = []
+    args.logger_in_file = False
+    args.name = ''
+    args.disable_sample = True
+    args.use_env_nn = False
+    args.device = None
+    args.ckpt = None
+    args.nn = None
 
     root_dir = Path(__file__).resolve().parent
     Main(root_dir, f'envs/{args.env}', args)

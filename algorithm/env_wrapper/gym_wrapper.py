@@ -1,13 +1,13 @@
 import logging
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import gymnasium as gym
 import numpy as np
 
 if __name__ in ('__main__', '__mp_main__'):
-    from env_wrapper import EnvWrapper
+    from env_wrapper import DecisionStep, EnvWrapper, TerminalStep
 else:
-    from .env_wrapper import EnvWrapper
+    from .env_wrapper import DecisionStep, EnvWrapper, TerminalStep
 
 
 try:
@@ -32,7 +32,10 @@ class GymWrapper(EnvWrapper):
 
         self._logger.info(', '.join(gym.registry.keys()))
 
-    def init(self):
+    def init(self) -> Tuple[Dict[str, List[str]],
+                            Dict[str, List[Tuple[int]]],
+                            Dict[str, List[int]],
+                            Dict[str, int]]:
         self.env = env = gym.vector.make(self.env_name,
                                          render_mode='human' if self.render else None,
                                          num_envs=self.n_envs,
@@ -56,17 +59,19 @@ class GymWrapper(EnvWrapper):
                 {'gym': d_action_sizes},
                 {'gym': c_action_size})
 
-    def reset(self, reset_config: Optional[Dict] = None):
+    def reset(self, reset_config: Optional[Dict] = None) -> Tuple[Dict[str, List[int]],
+                                                                  Dict[str, List[np.ndarray]]]:
         obs, info = self.env.reset(options={**reset_config}
                                    if reset_config is not None else None)
 
+        agent_ids = np.arange(len(obs))
         obs = obs.astype(np.float32)
 
-        return {'gym': [obs]}
+        return {'gym': agent_ids}, {'gym': [obs]}
 
     def step(self,
              ma_d_action: Dict[str, np.ndarray],
-             ma_c_action: Dict[str, np.ndarray]):
+             ma_c_action: Dict[str, np.ndarray]) -> Tuple[DecisionStep, TerminalStep]:
         if self.is_discrete:
             d_action = ma_d_action['gym']
             # Convert one-hot to label
@@ -75,12 +80,27 @@ class GymWrapper(EnvWrapper):
             c_action = ma_c_action['gym']
             action = c_action
 
-        obs, reward, done, max_step, info = self.env.step(action)
+        obs, reward, termination, truncation, info = self.env.step(action)
 
+        agent_ids = np.arange(len(obs))
         obs = obs.astype(np.float32)
         reward = reward.astype(np.float32)
 
-        return {'gym': [obs]}, {'gym': reward}, {'gym': done}, {'gym': max_step}, {'gym': np.zeros_like(done)}
+        done = np.logical_or(termination, truncation)
+
+        decision_step = DecisionStep(
+            ma_agent_ids={'gym': agent_ids},
+            ma_obs_list={'gym': [obs]},
+            ma_last_reward={'gym': reward}
+        )
+        terminal_step = TerminalStep(
+            ma_agent_ids={'gym': agent_ids[done]},
+            ma_obs_list={'gym': [obs[done]]},
+            ma_last_reward={'gym': reward[done]},
+            ma_max_reached={'gym': truncation[done]}
+        )
+
+        return decision_step, terminal_step, False
 
     def close(self):
         self.env.close()
@@ -91,7 +111,7 @@ if __name__ == "__main__":
 
     N_ENVS = 2
 
-    env = GymWrapper(True, 'MemoryCorridor-v0', render=True, n_envs=N_ENVS)
+    env = GymWrapper(True, 'StackCorridor-v0', render=True, n_envs=N_ENVS)
     ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size = env.init()
     ma_names = list(ma_obs_shapes.keys())
 
@@ -116,6 +136,6 @@ if __name__ == "__main__":
             ma_d_action[n] = d_action
             ma_c_action[n] = c_action
 
-            ma_obs_list, ma_reward, ma_done, ma_max_step, ma_padding_mask = env.step(ma_d_action, ma_c_action)
+            decision_step, terminal_step = env.step(ma_d_action, ma_c_action)
 
     env.close()
