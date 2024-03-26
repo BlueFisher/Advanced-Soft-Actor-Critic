@@ -1665,7 +1665,6 @@ class OptionSelectorBase(SAC_Base):
 
                 mg_om_low_states = mg_om_low_states * ~_mask + om_low_states * _mask
 
-            # TODO
             option.train_policy_alpha(bn_padding_masks=bn_padding_masks[:, self.option_burn_in_from:],
                                       bn_obses_list=[o_m_obses[:, :-1, ...]
                                                      for o_m_obses in om_low_obses_list],
