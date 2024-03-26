@@ -25,8 +25,7 @@ INIT = 0
 RESET = 1
 STEP = 2
 CLOSE = 3
-GET_ENVS_DONE = 4
-RESET_ENVS_DONE = 5
+RESET_ENVS_DONE = 4
 
 MAX_N_ENVS = 100
 
@@ -159,10 +158,8 @@ class UnityWrapperProcess:
                     elif cmd == STEP:
                         conn.send(self.step(*data))
                     elif cmd == CLOSE:
-                        self._logger.warning('Receive CLOSE')
+                        self._logger.warning('Received CLOSE')
                         break
-                    elif cmd == GET_ENVS_DONE:
-                        conn.send(self.env_done)
                     elif cmd == RESET_ENVS_DONE:
                         self.env_done = False
             except Exception as e:
@@ -245,6 +242,10 @@ class UnityWrapperProcess:
             ma_agent_ids[n] = decision_steps.agent_id
             ma_obs_list[n] = decision_steps.obs
 
+            if len(terminal_steps) != 0:
+                self._logger.warning(f'terminal_steps in reset, {terminal_steps.agent_id}')
+                self._logger.warning(f'decision_steps, {decision_steps.agent_id}')
+
         return ma_agent_ids, ma_obs_list
 
     def step(self, ma_d_action, ma_c_action):
@@ -309,7 +310,7 @@ class UnityWrapperProcess:
             terminal_ma_obs_list,
             terminal_ma_last_reward,
             terminal_ma_max_reached
-        )
+        ), self.env_done
 
     def reset_env_done(self):
         self.env_done = False
@@ -481,6 +482,9 @@ class UnityWrapper(EnvWrapper):
                 n_agents_list[i] += n_agents_list[i - 1]
             n_agents_list.insert(0, 0)
 
+    def _map_agent_ids(self, agent_ids: np.ndarray, i: int) -> np.ndarray:
+        return agent_ids * MAX_N_ENVS + i
+
     def reset(self, reset_config=None) -> Tuple[Dict[str, List[int]],
                                                 Dict[str, List[np.ndarray]]]:
         ma_envs_agent_ids = {n: [] for n in self.behavior_names}
@@ -490,9 +494,7 @@ class UnityWrapper(EnvWrapper):
             for i in range(self._env_processes_size):
                 ma_agent_ids, ma_obs_list = self._env_processes[i].reset(reset_config)
                 for n in self.behavior_names:
-                    agent_ids = ma_agent_ids[n]
-                    agent_ids = [_id * MAX_N_ENVS + i for _id in agent_ids]
-                    ma_envs_agent_ids[n].append(agent_ids)
+                    ma_envs_agent_ids[n].append(self._map_agent_ids(ma_agent_ids[n], i))
                     ma_envs_obs_list[n].append(ma_obs_list[n])
         else:
             for conn in self._conns:
@@ -501,9 +503,7 @@ class UnityWrapper(EnvWrapper):
             for i, conn in enumerate(self._conns):
                 ma_agent_ids, ma_obs_list = self._process_conn_receiving(conn, i)
                 for n in self.behavior_names:
-                    agent_ids = ma_agent_ids[n]
-                    agent_ids = [_id * MAX_N_ENVS + i for _id in agent_ids]
-                    ma_envs_agent_ids[n].append(agent_ids)
+                    ma_envs_agent_ids[n].append(self._map_agent_ids(ma_agent_ids[n], i))
                     ma_envs_obs_list[n].append(ma_obs_list[n])
 
         self._cumulate_ma_n_agents_list(ma_envs_agent_ids)
@@ -552,23 +552,19 @@ class UnityWrapper(EnvWrapper):
                     terminal_ma_obs_list,
                     terminal_ma_last_reward,
                     terminal_ma_max_reached
-                ) = self._env_processes[i].step(tmp_ma_d_actions, tmp_ma_c_actions)
+                ), envs_done = self._env_processes[i].step(tmp_ma_d_actions, tmp_ma_c_actions)
 
                 for n in self.behavior_names:
-                    decision_agent_ids = decision_ma_agent_ids[n]
-                    decision_agent_ids = [_id * MAX_N_ENVS + i for _id in decision_agent_ids]
-
-                    decision_ma_envs_agent_ids[n].append(decision_agent_ids)
+                    decision_ma_envs_agent_ids[n].append(self._map_agent_ids(decision_ma_agent_ids[n], i))
                     decision_ma_envs_obs_list[n].append(decision_ma_obs_list[n])
                     decision_ma_envs_last_reward[n].append(decision_ma_last_reward[n])
 
-                    terminal_agent_ids = terminal_ma_agent_ids[n]
-                    terminal_agent_ids = [_id * MAX_N_ENVS + i for _id in terminal_agent_ids]
-
-                    terminal_ma_envs_agent_ids[n].append(terminal_agent_ids)
+                    terminal_ma_envs_agent_ids[n].append(self._map_agent_ids(terminal_ma_agent_ids[n], i))
                     terminal_ma_envs_obs_list[n].append(terminal_ma_obs_list[n])
                     terminal_ma_envs_last_reward[n].append(terminal_ma_last_reward[n])
                     terminal_ma_envs_max_reached[n].append(terminal_ma_max_reached[n])
+
+                self._all_env_processes_done[i] = envs_done
             else:
                 self._conns[i].send((STEP, (tmp_ma_d_actions, tmp_ma_c_actions)))
 
@@ -589,19 +585,19 @@ class UnityWrapper(EnvWrapper):
                         terminal_ma_obs_list,
                         terminal_ma_last_reward,
                         terminal_ma_max_reached
-                    ) = self._process_conn_receiving(conn, i)
-
-                    conn.send((GET_ENVS_DONE, None))
-                    self._all_env_processes_done[i] = self._process_conn_receiving(conn, i)
+                    ), envs_done = self._process_conn_receiving(conn, i)
 
                     for n in self.behavior_names:
-                        decision_ma_envs_agent_ids[n].append(decision_ma_agent_ids[n])
+                        decision_ma_envs_agent_ids[n].append(self._map_agent_ids(decision_ma_agent_ids[n], i))
                         decision_ma_envs_obs_list[n].append(decision_ma_obs_list[n])
                         decision_ma_envs_last_reward[n].append(decision_ma_last_reward[n])
-                        terminal_ma_envs_agent_ids[n].append(terminal_ma_agent_ids[n])
+                        terminal_ma_envs_agent_ids[n].append(self._map_agent_ids(terminal_ma_agent_ids[n], i))
                         terminal_ma_envs_obs_list[n].append(terminal_ma_obs_list[n])
                         terminal_ma_envs_last_reward[n].append(terminal_ma_last_reward[n])
                         terminal_ma_envs_max_reached[n].append(terminal_ma_max_reached[n])
+
+                    self._all_env_processes_done[i] = envs_done
+
                 except Exception as e:
                     self._logger.error(f'Environment {i} error, {e.__class__.__name__} {e}')
 

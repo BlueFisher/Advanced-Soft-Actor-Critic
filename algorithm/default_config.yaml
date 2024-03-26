@@ -1,8 +1,8 @@
 base_config:
   env_type: UNITY # UNITY | GYM
   env_name: env_name # The environment name.
-  env_args: null
-  unity_args: # Only for Unity Environments
+  env_args: null # The environment build arguments
+  unity_args: # Specific for Unity Environments
     max_n_envs_per_process: 10 # The max env copies count in each process
     no_graphics: true # If an env does not need pixel input, set true
     force_vulkan: false # -force-vulkan
