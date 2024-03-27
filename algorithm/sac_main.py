@@ -45,7 +45,8 @@ class Main:
         # Merge default_config.yaml and custom config.yaml
         config, ma_configs = config_helper.initialize_config_from_yaml(default_config_abs_path,
                                                                        config_abs_path,
-                                                                       args.config)
+                                                                       config_cat=args.config,
+                                                                       override=args.override)
 
         # Initialize config from command line arguments
         self.train_mode = not args.run

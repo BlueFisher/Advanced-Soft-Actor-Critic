@@ -91,7 +91,7 @@ class GymWrapper(EnvWrapper):
         decision_step = DecisionStep(
             ma_agent_ids={'gym': agent_ids},
             ma_obs_list={'gym': [obs]},
-            ma_last_reward={'gym': reward}
+            ma_last_reward={'gym': reward * ~done}  # The done agent's reward is moved to the terminal_step
         )
         terminal_step = TerminalStep(
             ma_agent_ids={'gym': agent_ids[done]},
