@@ -6,17 +6,21 @@ import sys
 import time
 from copy import copy, deepcopy
 from pathlib import Path
+from typing import List, Optional
 
 import numpy as np
 import yaml
 
 
-def initialize_config_from_yaml(default_config_path, config_file_path,
-                                config_cat=None,
+def initialize_config_from_yaml(default_config_path: Path,
+                                config_file_path: Path,
+                                config_cat: Optional[str] = None,
+                                override: Optional[List[str]] = None,
                                 is_evolver=False):
     """
     config_cat: Specific experiment name. 
                 The `config_cat` will override `default` if it is not None
+    override: Override config
     """
     config = dict()
 
@@ -53,11 +57,27 @@ def initialize_config_from_yaml(default_config_path, config_file_path,
                     dict_ori[k] = v
 
     _modify_platform(config)
-    _modify_platform(config_file['default'])
+    _modify_platform(config_file)
     _update_dict(config, config_file['default'])
     if config_cat is not None:
-        _modify_platform(config_file[config_cat])
         _update_dict(config, config_file[config_cat])
+
+    if override is not None:
+        for kv in override:  # a.b.c=x
+            k, v = kv.split('=')
+            k_list = k.split('.')
+            last_k = k_list[-1]
+
+            tmp_config = config
+            for k in k_list[:-1]:
+                tmp_config = tmp_config[k]
+            assert isinstance(tmp_config[last_k], (str, int, float)), f'{kv} not in type {type(tmp_config[last_k])}'
+            if isinstance(tmp_config[last_k], int):
+                tmp_config[last_k] = int(v)
+            elif isinstance(tmp_config[last_k], float):
+                tmp_config[last_k] = float(v)
+            else:
+                tmp_config[last_k] = v
 
     ma_configs = {}
     # Deal with multi-agents config
