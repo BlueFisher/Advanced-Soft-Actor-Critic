@@ -23,7 +23,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                                                 pe=[POSITIONAL_ENCODING.ROPE, None],
                                                 qkv_dense_depth=1,
                                                 out_dense_depth=1,
-                                                dropout=0.02,
+                                                dropout=0.005,
                                                 gate=GATE.RESIDUAL,
                                                 use_layer_norm=False)
 
@@ -34,7 +34,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                                                  pe=None,
                                                  qkv_dense_depth=1,
                                                  out_dense_depth=1,
-                                                 dropout=0.02,
+                                                 dropout=0.005,
                                                  gate=GATE.RESIDUAL,
                                                  use_layer_norm=False)
 
@@ -117,7 +117,7 @@ class ModelOptionRep(m.ModelBaseSimpleRep):
 
         embed_size = 3 * 4
 
-        # self.mlp = m.LinearLayers(embed_size, dense_n=embed_size, dense_depth=2, dropout=0.02)
+        # self.mlp = m.LinearLayers(embed_size, dense_n=embed_size, dense_depth=2, dropout=0.005)
 
     def forward(self, obs_list):
         if self._offline_action_index != -1:
@@ -134,12 +134,12 @@ class ModelOptionRep(m.ModelBaseSimpleRep):
 
 class ModelQ(m.ModelQ):
     def _build_model(self):
-        return super()._build_model(d_dense_n=128, d_dense_depth=2, dropout=0.02)
+        return super()._build_model(d_dense_n=128, d_dense_depth=2, dropout=0.005)
 
 
 class ModelTermination(m.ModelTermination):
     def _build_model(self):
-        return super()._build_model(dense_n=128, dense_depth=2, dropout=0.02)
+        return super()._build_model(dense_n=128, dense_depth=2, dropout=0.005)
 
     def forward(self, state, obs_list):
         high_state, vec_obs = obs_list
@@ -153,7 +153,7 @@ class ModelTermination(m.ModelTermination):
 
 class ModelPolicy(m.ModelPolicy):
     def _build_model(self):
-        return super()._build_model(d_dense_n=128, d_dense_depth=1, dropout=0.02)
+        return super()._build_model(d_dense_n=128, d_dense_depth=1, dropout=0.005)
 
 
 class ModelRND(m.ModelRND):

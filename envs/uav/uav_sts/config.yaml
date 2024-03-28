@@ -3,9 +3,9 @@ default:
     env_name: UAVSTS
     env_args:
       search_tracking_agents_count_min: 3
-      search_tracking_agents_count_max: 4
+      search_tracking_agents_count_max: 3
       strike_agents_count_min: 3
-      strike_agents_count_max: 4
+      strike_agents_count_max: 3
     unity_args:
       build_path:
         win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe
@@ -22,8 +22,6 @@ default:
   reset_config:
     disable_after_dead: true
     strike_agents_appear_time: 0.5
-    # disable_after_dead: false
-    # strike_agents_appear_time: 0.25
     hole_probability: 0.75
     strike_success_distance: 3
 
@@ -37,9 +35,6 @@ default:
 
     target_c_alpha: 0.2 # Target continuous alpha ratio
 
-    # use_rnd: true
-    # rnd_n_sample: 50
-
   ma_config:
     UAVSearchTracking?team=0:
       sac_config:
@@ -48,6 +43,20 @@ default:
     UAVStrike?team=0:
       sac_config:
         nn: nn_strike
+
+debug:
+  base_config:
+    env_args:
+      search_tracking_agents_count_min: 3
+      search_tracking_agents_count_max: 4
+      strike_agents_count_min: 3
+      strike_agents_count_max: 4
+
+  reset_config:
+    disable_after_dead: true
+    strike_agents_appear_time: 0.5
+    hole_probability: 0.75
+    strike_success_distance: 3
 
 train:
   base_config:
@@ -74,18 +83,18 @@ train_st:
 
   reset_config:
     disable_after_dead: false
-    hole_probability: 0.5
+    hole_probability: 0.75
 
 train_s:
   base_config:
     unity_args:
       max_n_envs_per_process: 3 # The max env copies count in each process
     env_args:
-      search_tracking_agents_count_min: 2
-      search_tracking_agents_count_max: 2
+      search_tracking_agents_count_min: 3
+      search_tracking_agents_count_max: 3
       strike_agents_count_min: 2
       strike_agents_count_max: 4
   reset_config:
     disable_after_dead: false
     strike_agents_appear_time: 0.1
-    hole_probability: 0.5
+    hole_probability: 0.75
