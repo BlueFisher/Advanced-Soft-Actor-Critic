@@ -31,23 +31,21 @@ class ImageVisual:
         fig_size = len(images)
 
         if self.fig is None:
-            self.fig, self.axes = plt.subplots(nrows=batch_size, ncols=fig_size,
+            self.fig, self.axes = plt.subplots(nrows=max_batch, ncols=fig_size,
                                                squeeze=False,
-                                               figsize=(3 * fig_size, 3 * batch_size))
-            self.ims = [[] for _ in range(batch_size)]
-            for i in range(batch_size):
+                                               figsize=(3 * fig_size, 3 * max_batch))
+            self.ims = [[] for _ in range(max_batch)]
+
+            self._bg = self.fig.canvas.copy_from_bbox(self.fig.bbox)
+
+            for i in range(max_batch):
                 for j, image in enumerate(images):
                     self.axes[i][j].axis('off')
-                    if image.shape[-1] > 1:
-                        self.ims[i].append(self.axes[i][j].imshow(image[i], vmin=0, vmax=1))
-                    else:
-                        self.ims[i].append(self.axes[i][j].imshow(image[i], cmap='gray', vmin=0, vmax=1))
+                    self.ims[i].append(self.axes[i][j].imshow(image[i], vmin=0, vmax=1))
 
             plt.show(block=False)
 
             plt.pause(0.1)
-
-            self._bg = self.fig.canvas.copy_from_bbox(self.fig.bbox)
 
         self.fig.canvas.restore_region(self._bg)
         for i in range(batch_size):

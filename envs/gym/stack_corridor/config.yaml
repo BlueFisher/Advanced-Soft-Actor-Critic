@@ -12,7 +12,7 @@ default:
 
   reset_config:
     stack_len: 100
-    stack_nesting: 0.5
+    stack_nesting: 0.75
     max_nesting_depth: 10
     block_gap: [3, 6]
     success_reward: 2.
@@ -147,6 +147,15 @@ oc_3_attn_dilated_c:
   inherited: oc_3_attn
   base_config:
     name: oc_3_attn_dilated_{time}
+  sac_config:
+    discrete_dqn_like: false
+  oc_config:
+    use_dilation: true
+
+oc_4_attn_dilated_c:
+  inherited: oc_4_attn
+  base_config:
+    name: oc_4_attn_dilated_{time}
   sac_config:
     discrete_dqn_like: false
   oc_config:

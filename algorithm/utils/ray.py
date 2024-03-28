@@ -31,11 +31,14 @@ class RayVisual:
         fig_size = len(rays)
 
         if self.fig is None:
-            self.fig, self.axes = plt.subplots(nrows=batch_size, ncols=fig_size,
+            self.fig, self.axes = plt.subplots(nrows=max_batch, ncols=fig_size,
                                                squeeze=False,
-                                               figsize=(3 * fig_size, 3 * batch_size))
-            self.scs = [[] for _ in range(batch_size)]
-            for i in range(batch_size):
+                                               figsize=(3 * fig_size, 3 * max_batch))
+            self.scs = [[] for _ in range(max_batch)]
+
+            self._bg = self.fig.canvas.copy_from_bbox(self.fig.bbox)
+
+            for i in range(max_batch):
                 for j, ray in enumerate(rays):
                     # ray: [batch, ray_size, C]
                     self.axes[i][j].spines['right'].set_visible(False)
@@ -49,8 +52,6 @@ class RayVisual:
             plt.show(block=False)
 
             plt.pause(0.1)
-
-            self._bg = self.fig.canvas.copy_from_bbox(self.fig.bbox)
 
         self.fig.canvas.restore_region(self._bg)
         for i in range(batch_size):
