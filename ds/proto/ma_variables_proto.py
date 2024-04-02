@@ -12,7 +12,7 @@ def ma_variables_to_proto(ma_variables: dict):
     })
 
 
-def proto_to_ma_variables(proto: MAVariables):
+def proto_to_ma_variables(proto):
     if not proto.succeeded:
         return None
 

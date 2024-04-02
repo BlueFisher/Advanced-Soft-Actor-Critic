@@ -18,14 +18,10 @@ class ModelRep(m.ModelBaseAttentionRep):
         else:
             embed_dim = self.conv.output_size + sum(self.d_action_sizes) + self.c_action_size
 
-        self.attn = m.EpisodeMultiheadAttention(embed_dim,
-                                                num_layers=1,
-                                                use_residual=True,
-                                                use_gated=False,
-                                                use_layer_norm=False)
+        self.attn = m.EpisodeMultiheadAttention(embed_dim)
 
         self.dense = nn.Sequential(
-            nn.Linear(self.obs_shapes[0][0] - EXTRA_SIZE + embed_dim, 8),
+            nn.Linear(embed_dim, 8),
             nn.Tanh()
         )
 
@@ -35,7 +31,11 @@ class ModelRep(m.ModelBaseAttentionRep):
                 is_prev_hidden_state=False,
                 query_only_attend_to_rest_key=False,
                 padding_mask=None):
-        obs_vec, obs_vis = obs_list
+        if self.obs_names[0] == '_OPTION_INDEX':
+            _, obs_vec, obs_vis = obs_list
+        else:
+            obs_vec, obs_vis = obs_list
+
         obs_vec = obs_vec[..., EXTRA_SIZE:]
 
         vis = self.conv(obs_vis)
@@ -59,7 +59,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                                                      key_index=index,
                                                      key_padding_mask=padding_mask)
 
-        state = self.dense(torch.cat([obs_vec[:, -seq_q_len:], state], dim=-1))
+        state = self.dense(state)
 
         return state, hn, attn_weights_list
 

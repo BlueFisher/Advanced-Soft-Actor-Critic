@@ -73,6 +73,7 @@ class TestOCSeqEncoderModel(unittest.TestCase):
             obs_shapes=OBS_SHAPES,
             model_abs_dir=None,
             nn=nn_conv,
+            batch_size=10,
             **param_dict
         )
 
@@ -86,17 +87,25 @@ class TestOCSeqEncoderModel(unittest.TestCase):
         step = 0
         while step < 10:
             if param_dict['seq_encoder'] == SEQ_ENCODER.RNN:
+                # The same as dialated
                 sac.choose_rnn_action(**gen_batch_oc_obs_for_rnn(OBS_SHAPES,
                                                                  d_action_sizes=param_dict['d_action_sizes'],
                                                                  c_action_size=param_dict['c_action_size'],
                                                                  seq_hidden_state_shape=seq_hidden_state_shape,
                                                                  low_seq_hidden_state_shape=low_seq_hidden_state_shape))
             elif param_dict['seq_encoder'] == SEQ_ENCODER.ATTN:
-                sac.choose_attn_action(**gen_batch_oc_obs_for_attn(OBS_SHAPES,
-                                                                   d_action_sizes=param_dict['d_action_sizes'],
-                                                                   c_action_size=param_dict['c_action_size'],
-                                                                   seq_hidden_state_shape=seq_hidden_state_shape,
-                                                                   low_seq_hidden_state_shape=low_seq_hidden_state_shape))
+                if param_dict['use_dilation']:
+                    sac.choose_dilated_attn_action(**gen_batch_oc_obs_for_dilated_attn(OBS_SHAPES,
+                                                                                       d_action_sizes=param_dict['d_action_sizes'],
+                                                                                       c_action_size=param_dict['c_action_size'],
+                                                                                       seq_hidden_state_shape=seq_hidden_state_shape,
+                                                                                       low_seq_hidden_state_shape=low_seq_hidden_state_shape))
+                else:
+                    sac.choose_attn_action(**gen_batch_oc_obs_for_attn(OBS_SHAPES,
+                                                                       d_action_sizes=param_dict['d_action_sizes'],
+                                                                       c_action_size=param_dict['c_action_size'],
+                                                                       seq_hidden_state_shape=seq_hidden_state_shape,
+                                                                       low_seq_hidden_state_shape=low_seq_hidden_state_shape))
             sac.put_episode(**gen_episode_oc_trans(OBS_SHAPES,
                                                    d_action_sizes=param_dict['d_action_sizes'],
                                                    c_action_size=param_dict['c_action_size'],
@@ -165,19 +174,13 @@ def __gen_seq_encoder(test_from: int):
         'burn_in_step': [5],
         'n_step': [3],
         'discrete_dqn_like': [True, False],
-        'seq_encoder': ['RNN', 'ATTN'],
-        # 'use_prediction': [True, False],
-        # 'use_extra_data': [True, False],
+        'seq_encoder': ['RNN', 'ATTN']
     }
 
     possible_param_dicts = get_product(param_dict_candidates)
 
     i = 0
     for param_dict in possible_param_dicts:
-        if param_dict['use_dilation']:
-            if not param_dict['use_replay_buffer']:
-                continue
-
         if param_dict['option_seq_encoder'] is None:
             if param_dict['option_burn_in_step'] == -1:
                 param_dict['option_burn_in_step'] = 0

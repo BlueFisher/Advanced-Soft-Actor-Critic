@@ -517,8 +517,9 @@ class EpisodeMultiheadAttention(nn.Module):
             self._attn_list.append(attn)
             _embed_dim = attn.output_dim
 
-        self.output_dim_list = [attn.output_dim for attn in self._attn_list]
+        self._output_dim_list = [attn.output_dim for attn in self._attn_list]
         self.output_dim = _embed_dim
+        self.output_hidden_state_dim = sum(self._output_dim_list[:-1]) if self.num_layers > 1 else 1
 
     def forward(self,
                 key: torch.Tensor,
@@ -583,7 +584,7 @@ class EpisodeMultiheadAttention(nn.Module):
             attn_weights_list.append(attn_weight)
 
             if self.num_layers > 1:
-                hidden_state_list = hidden_state.split(self.output_dim_list[:-1], dim=-1)
+                hidden_state_list = hidden_state.split(self._output_dim_list[:-1], dim=-1)
 
             for i, attn in enumerate(self._attn_list[1:]):
                 next_hidden_state_list.append(output)
@@ -608,7 +609,7 @@ class EpisodeMultiheadAttention(nn.Module):
             attn_weights_list.append(attn_weight)
 
             if self.num_layers > 1:
-                hidden_state_list = hidden_state.split(self.output_dim_list[:-1], dim=-1)
+                hidden_state_list = hidden_state.split(self._output_dim_list[:-1], dim=-1)
             else:
                 output = output[:, -seq_q_len:] if cut_query else output
 

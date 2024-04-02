@@ -14,8 +14,6 @@ from ..sac_base import SAC_Base
 from ..utils import *
 from .oc_batch_buffer import BatchBuffer
 
-sac_base.BatchBuffer = BatchBuffer
-
 
 class OptionSelectorBase(SAC_Base):
     def __init__(self,
@@ -88,6 +86,8 @@ class OptionSelectorBase(SAC_Base):
                  option_nn_config: Optional[dict] = None,
 
                  replay_config: Optional[dict] = None):
+
+        sac_base.BatchBuffer = BatchBuffer
 
         self.num_options = num_options
         self.use_dilation = use_dilation
@@ -810,7 +810,7 @@ class OptionSelectorBase(SAC_Base):
             key_indexes (np.int32): [batch, key_len]
             key_padding_masks (np.bool): [batch, key_len]
             key_obses_list (np): list([batch, key_len, *obs_shapes_i], ...)
-            key_option_indexes (np.int32): [batch, key_len]
+            key_option_indexes (np.int8): [batch, key_len]
             key_attn_states (np): [batch, key_len, *seq_hidden_state_shape]
             # The last key transition is the current transition
 
@@ -829,6 +829,7 @@ class OptionSelectorBase(SAC_Base):
         key_indexes = torch.from_numpy(key_indexes).to(self.device)
         key_padding_masks = torch.from_numpy(key_padding_masks).to(self.device)
         key_obses_list = [torch.from_numpy(obs).to(self.device) for obs in key_obses_list]
+        key_option_indexes = key_option_indexes.astype(np.int32)
         key_option_indexes = torch.from_numpy(key_option_indexes).to(self.device)
         key_attn_states = torch.from_numpy(key_attn_states).to(self.device)
 
@@ -1800,22 +1801,30 @@ class OptionSelectorBase(SAC_Base):
         ep_padding_masks[:, -1] = True  # The last step is next_step
         ep_padding_masks[ep_indexes == -1] = True
 
-        episode = (ep_indexes,
-                   ep_padding_masks,
-                   ep_obses_list,
-                   ep_option_indexes,
-                   ep_option_changed_indexes,
-                   ep_actions,
-                   ep_rewards,
-                   ep_dones,
-                   ep_probs,
-                   ep_seq_hidden_states,
-                   ep_low_seq_hidden_states)
-
         if self.use_replay_buffer:
-            self._fill_replay_buffer(*episode)
+            self._fill_replay_buffer(ep_indexes=ep_indexes,
+                                     ep_padding_masks=ep_padding_masks,
+                                     ep_obses_list=ep_obses_list,
+                                     ep_option_indexes=ep_option_indexes,
+                                     ep_option_changed_indexes=ep_option_changed_indexes,
+                                     ep_actions=ep_actions,
+                                     ep_rewards=ep_rewards,
+                                     ep_dones=ep_dones,
+                                     ep_probs=ep_probs,
+                                     ep_seq_hidden_states=ep_seq_hidden_states,
+                                     ep_low_seq_hidden_states=ep_low_seq_hidden_states)
         else:
-            self.batch_buffer.put_episode(*episode)
+            self.batch_buffer.put_episode(ep_indexes=ep_indexes,
+                                          ep_padding_masks=ep_padding_masks,
+                                          ep_obses_list=ep_obses_list,
+                                          ep_option_indexes=ep_option_indexes,
+                                          ep_option_changed_indexes=ep_option_changed_indexes,
+                                          ep_actions=ep_actions,
+                                          ep_rewards=ep_rewards,
+                                          ep_dones=ep_dones,
+                                          ep_probs=ep_probs,
+                                          ep_seq_hidden_states=ep_seq_hidden_states,
+                                          ep_low_seq_hidden_states=ep_low_seq_hidden_states)
 
     def _fill_replay_buffer(self,
                             ep_indexes: np.ndarray,
@@ -2078,19 +2087,17 @@ class OptionSelectorBase(SAC_Base):
         if self.use_replay_buffer:
             with self._profiler('sample_from_replay_buffer', repeat=10) as profiler:
                 train_data = self._sample_from_replay_buffer()
-            if train_data is None:
-                profiler.ignore()
-                train_all_profiler.ignore()
-                return step
+                if train_data is None:
+                    profiler.ignore()
+                    train_all_profiler.ignore()
+                    return step
 
             pointers, batch, key_batch = train_data
             batch_list = [batch]
             key_batch_list = [key_batch]
         else:
-            assert not self.use_dilation
-            batch_list = self.batch_buffer.get_batch()
+            batch_list, key_batch_list = self.batch_buffer.get_batch()
             batch_list = [(*batch, None) for batch in batch_list]  # None is priority_is
-            key_batch_list = [None] * len(batch_list)
 
         for batch, key_batch in zip(batch_list, key_batch_list):
             (bn_indexes,

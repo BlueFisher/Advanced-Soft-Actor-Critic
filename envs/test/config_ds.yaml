@@ -7,8 +7,6 @@ default:
     max_step_each_iter: 100
     n_envs: 2
 
-    evolver_enabled: false
-
     episode_queue_size: 2
     episode_sender_process_num: 2
     batch_queue_size: 2

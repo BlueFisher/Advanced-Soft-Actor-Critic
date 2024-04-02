@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from algorithm.utils.enums import *
+from algorithm.utils import *
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from algorithm.sac_base import SAC_Base
@@ -16,7 +16,8 @@ from algorithm.sac_base import SAC_Base
 
 class SAC_DS_Base(SAC_Base):
     def __init__(self,
-                 obs_shapes: List[Tuple],
+                 obs_names: List[str],
+                 obs_shapes: List[Tuple[int]],
                  d_action_sizes: List[int],
                  c_action_size: int,
                  model_abs_dir: Optional[Path],
@@ -45,7 +46,12 @@ class SAC_DS_Base(SAC_Base):
                  update_target_per_step: int = 1,
                  init_log_alpha: float = -2.3,
                  use_auto_alpha: bool = True,
+                 target_d_alpha: float = 0.98,
+                 target_c_alpha: float = 1.,
+                 d_policy_entropy_penalty: float = 0.5,
+
                  learning_rate: float = 3e-4,
+
                  gamma: float = 0.99,
                  v_lambda: float = 0.9,
                  v_rho: float = 1.,
@@ -53,6 +59,7 @@ class SAC_DS_Base(SAC_Base):
                  clip_epsilon: float = 0.2,
 
                  discrete_dqn_like: bool = False,
+                 discrete_dqn_epsilon: float = 0.2,
                  siamese: Optional[SIAMESE] = None,
                  siamese_use_q: bool = False,
                  siamese_use_adaptive: bool = False,
@@ -66,12 +73,14 @@ class SAC_DS_Base(SAC_Base):
                  use_normalization: bool = False,
                  action_noise: Optional[List[float]] = None):
 
+        self.obs_names = obs_names
         self.obs_shapes = obs_shapes
         self.d_action_sizes = d_action_sizes
         self.d_action_summed_size = sum(d_action_sizes)
         self.d_action_branch_size = len(d_action_sizes)
         self.c_action_size = c_action_size
         self.model_abs_dir = model_abs_dir
+        self.ma_name = ma_name
         self.train_mode = train_mode
 
         self.ensemble_q_num = ensemble_q_num
@@ -87,6 +96,9 @@ class SAC_DS_Base(SAC_Base):
         self.tau = tau
         self.update_target_per_step = update_target_per_step
         self.use_auto_alpha = use_auto_alpha
+        self.target_d_alpha = target_d_alpha
+        self.target_c_alpha = target_c_alpha
+        self.d_policy_entropy_penalty = d_policy_entropy_penalty
         self.gamma = gamma
         self.v_lambda = v_lambda
         self.v_rho = v_rho
@@ -94,6 +106,7 @@ class SAC_DS_Base(SAC_Base):
         self.clip_epsilon = clip_epsilon
 
         self.discrete_dqn_like = discrete_dqn_like
+        self.discrete_dqn_epsilon = discrete_dqn_epsilon
         self.siamese = siamese
         self.siamese_use_q = siamese_use_q
         self.siamese_use_adaptive = siamese_use_adaptive
@@ -111,27 +124,34 @@ class SAC_DS_Base(SAC_Base):
         self.use_priority = False
         self.use_n_step_is = True
 
+        self._set_logger()
+
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
             self.device = torch.device(device)
+        self._logger.info(f'Device: {self.device.type}:{self.device.index}')
 
         if seed is not None:
             torch.manual_seed(seed)
             torch.cuda.manual_seed_all(seed)
+
+        self._profiler = UnifiedElapsedTimer(self._logger)
 
         self.summary_writer = None
         if self.model_abs_dir:
             summary_path = Path(self.model_abs_dir).joinpath(summary_path)
             self.summary_writer = SummaryWriter(str(summary_path))
 
-        if ma_name is None:
+        self._build_model(nn, nn_config, init_log_alpha, learning_rate)
+        self._build_ckpt()
+        self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
+
+    def _set_logger(self):
+        if self.ma_name is None:
             self._logger = logging.getLogger('sac.base.ds')
         else:
-            self._logger = logging.getLogger(f'sac.base.ds.{ma_name}')
-
-        self._build_model(nn, nn_config, init_log_alpha, learning_rate)
-        self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
+            self._logger = logging.getLogger(f'sac.base.ds.{self.ma_name}')
 
     def get_policy_variables(self, get_numpy=True):
         """
@@ -258,11 +278,11 @@ class SAC_DS_Base(SAC_Base):
                     priority_is=None,
                     f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None)
 
-        step = self.global_step.item()
+        step = self.get_global_step()
 
         if step % self.save_model_per_step == 0:
             self.save_model()
 
-        self._increase_global_step()
+        step = self._increase_global_step()
 
-        return step + 1
+        return step

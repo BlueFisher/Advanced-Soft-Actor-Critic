@@ -29,13 +29,11 @@ message RegisterActorResponse{
 
 message AddRequest {
   string ma_name = 1;
-  NDarray l_indexes = 2;
-  NDarray l_padding_masks = 3;
-  repeated NDarray l_obses_list = 4;
-  NDarray l_actions = 5;
-  NDarray l_rewards = 6;
-  repeated NDarray next_obs_list = 7;
-  NDarray l_dones = 8;
-  NDarray l_mu_probs = 9;
-  NDarray l_seq_hidden_states = 10;
+  NDarray ep_indexes = 2;
+  repeated NDarray ep_obses_list = 3;
+  NDarray ep_actions = 4;
+  NDarray ep_rewards = 5;
+  NDarray ep_dones = 6;
+  NDarray ep_mu_probs = 7;
+  NDarray ep_seq_hidden_states = 8;
 }

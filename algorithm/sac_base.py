@@ -2187,117 +2187,6 @@ class SAC_Base:
                               dim=-1, keepdim=True)
         return td_error
 
-    def get_episode_td_error(self,
-                             l_indexes: np.ndarray,
-                             l_padding_masks: np.ndarray,
-                             l_obses_list: List[np.ndarray],
-                             l_actions: np.ndarray,
-                             l_rewards: np.ndarray,
-                             l_dones: np.ndarray,
-                             l_probs: np.ndarray = None,
-                             l_seq_hidden_states: np.ndarray = None) -> torch.Tensor:
-        """
-        Args:
-            l_indexes: [1, ep_len]
-            l_padding_masks (bool): [1, ep_len]
-            l_obses_list: list([1, ep_len, *obs_shapes_i], ...)
-            l_actions: [1, ep_len, action_size]
-            l_rewards: [1, ep_len]
-            l_dones: [1, ep_len]
-            l_probs: [1, ep_len, action_size]
-            l_seq_hidden_states: [1, ep_len, *seq_hidden_state_shape]
-
-        Returns:
-            The td-error of raw episode observations
-            [ep_len, ]
-        """
-        (bn_indexes,
-         bn_padding_masks,
-         bn_obses_list,
-         bn_actions,
-         bn_rewards,
-         next_obs_list,
-         bn_dones,
-         bn_probs,
-         f_seq_hidden_states) = episode_to_batch(burn_in_step=self.burn_in_step,
-                                                 n_step=self.n_step,
-                                                 padding_action=self._padding_action,
-                                                 l_indexes=l_indexes,
-                                                 l_padding_masks=l_padding_masks,
-                                                 l_obses_list=l_obses_list,
-                                                 l_actions=l_actions,
-                                                 l_rewards=l_rewards,
-                                                 l_dones=l_dones,
-                                                 l_probs=l_probs,
-                                                 l_seq_hidden_states=l_seq_hidden_states)
-
-        """
-        bn_indexes: [ep_len - bn + 1, bn]
-        bn_padding_masks: [ep_len - bn + 1, bn]
-        bn_obses_list: list([ep_len - bn + 1, bn, *obs_shapes_i], ...)
-        bn_actions: [ep_len - bn + 1, bn, action_size]
-        bn_rewards: [ep_len - bn + 1, bn]
-        next_obs_list: list([ep_len - bn + 1, *obs_shapes_i], ...)
-        bn_dones: [ep_len - bn + 1, bn]
-        bn_probs: [ep_len - bn + 1, bn, action_size]
-        f_seq_hidden_states: [ep_len - bn + 1, 1, *seq_hidden_state_shape]
-        """
-
-        td_error_list = []
-        all_batch = bn_obses_list[0].shape[0]
-        batch_size = self.batch_size
-        for i in range(math.ceil(all_batch / batch_size)):
-            b_i, b_j = i * batch_size, (i + 1) * batch_size
-
-            _bn_indexes = torch.from_numpy(bn_indexes[b_i:b_j]).to(self.device)
-            _bn_padding_masks = torch.from_numpy(bn_padding_masks[b_i:b_j]).to(self.device)
-            _bn_obses_list = [torch.from_numpy(o[b_i:b_j]).to(self.device) for o in bn_obses_list]
-            _bn_actions = torch.from_numpy(bn_actions[b_i:b_j]).to(self.device)
-            _bn_rewards = torch.from_numpy(bn_rewards[b_i:b_j]).to(self.device)
-            _next_obs_list = [torch.from_numpy(o[b_i:b_j]).to(self.device) for o in next_obs_list]
-            _bn_dones = torch.from_numpy(bn_dones[b_i:b_j]).to(self.device)
-            _bn_probs = torch.from_numpy(bn_probs[b_i:b_j]).to(self.device)
-            _f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states[b_i:b_j]).to(self.device) if self.seq_encoder is not None else None
-
-            (_m_indexes,
-             _m_padding_masks,
-             _m_obses_list,
-             _m_pre_actions) = self.get_m_data(bn_indexes=_bn_indexes,
-                                               bn_padding_masks=_bn_padding_masks,
-                                               bn_obses_list=_bn_obses_list,
-                                               bn_actions=_bn_actions,
-                                               next_obs_list=_next_obs_list)
-
-            _m_states, _ = self.get_l_states(l_indexes=_m_indexes,
-                                             l_padding_masks=_m_padding_masks,
-                                             l_obses_list=_m_obses_list,
-                                             l_pre_actions=_m_pre_actions,
-                                             f_seq_hidden_states=_f_seq_hidden_states if self.seq_encoder is not None else None,
-                                             is_target=False)
-
-            _m_target_states, _ = self.get_l_states(l_indexes=_m_indexes,
-                                                    l_padding_masks=_m_padding_masks,
-                                                    l_obses_list=_m_obses_list,
-                                                    l_pre_actions=_m_pre_actions,
-                                                    f_seq_hidden_states=_f_seq_hidden_states if self.seq_encoder is not None else None,
-                                                    is_target=True)
-
-            td_error = self._get_td_error(bn_padding_masks=_bn_padding_masks,
-                                          bn_obses_list=_bn_obses_list,
-                                          bn_states=_m_states[:, :-1, ...],
-                                          bn_target_states=_m_target_states[:, :-1, ...],
-                                          bn_actions=_bn_actions,
-                                          bn_rewards=_bn_rewards,
-                                          next_obs_list=_next_obs_list,
-                                          next_target_state=_m_target_states[:, -1, ...],
-                                          bn_dones=_bn_dones,
-                                          bn_mu_probs=_bn_probs).detach().cpu().numpy()
-            td_error_list.append(td_error.flatten())
-
-        td_error = np.concatenate([*td_error_list,
-                                   np.zeros(1, dtype=np.float32)])
-        return td_error
-
     def log_episode(self, **episode_trans: np.ndarray) -> None:
         if self.summary_writer is None or not self.summary_available:
             return
@@ -2338,19 +2227,24 @@ class SAC_Base:
         ep_padding_masks[:, -1] = True  # The last step is next_step
         ep_padding_masks[ep_indexes == -1] = True
 
-        episode = (ep_indexes,
-                   ep_padding_masks,
-                   ep_obses_list,
-                   ep_actions,
-                   ep_rewards,
-                   ep_dones,
-                   ep_probs,
-                   ep_seq_hidden_states)
-
         if self.use_replay_buffer:
-            self._fill_replay_buffer(*episode)
+            self._fill_replay_buffer(ep_indexes=ep_indexes,
+                                     ep_padding_masks=ep_padding_masks,
+                                     ep_obses_list=ep_obses_list,
+                                     ep_actions=ep_actions,
+                                     ep_rewards=ep_rewards,
+                                     ep_dones=ep_dones,
+                                     ep_probs=ep_probs,
+                                     ep_seq_hidden_states=ep_seq_hidden_states)
         else:
-            self.batch_buffer.put_episode(*episode)
+            self.batch_buffer.put_episode(ep_indexes=ep_indexes,
+                                          ep_padding_masks=ep_padding_masks,
+                                          ep_obses_list=ep_obses_list,
+                                          ep_actions=ep_actions,
+                                          ep_rewards=ep_rewards,
+                                          ep_dones=ep_dones,
+                                          ep_probs=ep_probs,
+                                          ep_seq_hidden_states=ep_seq_hidden_states)
 
     def _fill_replay_buffer(self,
                             ep_indexes: np.ndarray,
@@ -2359,7 +2253,7 @@ class SAC_Base:
                             ep_actions: np.ndarray,
                             ep_rewards: np.ndarray,
                             ep_dones: np.ndarray,
-                            ep_probs: List[np.ndarray],
+                            ep_probs: np.ndarray,
                             ep_seq_hidden_states: Optional[np.ndarray] = None) -> None:
         """
         Args:

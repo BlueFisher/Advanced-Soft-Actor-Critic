@@ -8,14 +8,17 @@ REPEAT_OVERRIDE = None  # Override repeat argument
 
 class UnifiedElapsedTimer:
     def __init__(self,
-                 logger: Optional[logging.Logger] = None):
-        self.logger = logging.getLogger(logger.name + '.profiler')
+                 logger: Optional[logging.Logger] = None,
+                 logger_level: int = logging.DEBUG):
+        self._logger = logging.getLogger(logger.name + '.profiler')
+        self._logger_level = logger_level
         self._elapsed_timer_dict: Dict[str, ElapsedTimer] = {}
 
     def __call__(self, log: str, repeat: int = 1, force_report: bool = True):
         if log not in self._elapsed_timer_dict:
             self._elapsed_timer_dict[log] = ElapsedTimer(log,
-                                                         logger=self.logger,
+                                                         logger=self._logger,
+                                                         logger_level=self._logger_level,
                                                          repeat=repeat,
                                                          force_report=force_report)
 
@@ -35,12 +38,14 @@ def unified_elapsed_timer(log: str, repeat: int = 1, force_report: bool = True,
 
 class ElapsedTimer:
     def __init__(self,
-                 log: str,
+                 log: Optional[str],
                  logger: Optional[logging.Logger] = None,
+                 logger_level: int = logging.DEBUG,
                  repeat: int = 1,
                  force_report: bool = True):
         self._log = log
         self._logger = logger
+        self._logger_level = logger_level
         self._repeat = repeat
         if REPEAT_OVERRIDE is not None:
             self._repeat = REPEAT_OVERRIDE
@@ -52,7 +57,9 @@ class ElapsedTimer:
         self._last_report_avg_time = -1
         self._last_avg_time = 0
 
-        self._logger_effective = logger.getEffectiveLevel() == logging.DEBUG
+        self._logger_effective = log is not None \
+            and logger is not None \
+            and logger.getEffectiveLevel() <= self._logger_level
 
         self._ignore = False
 
@@ -75,10 +82,13 @@ class ElapsedTimer:
 
         if self._step % self._repeat == 0:
             if self._force_report or abs(average_time - self._last_report_avg_time) > 0.01:
-                if self._logger is not None:
-                    self._logger.debug(f'{self._log}: {average_time:.2f}s')
-                else:
-                    print(f'{self._log}: {average_time:.2f}s')
+                log = f'{self._log}: {average_time:.2f}s'
+                if self._logger_level == logging.DEBUG:
+                    self._logger.debug(log)
+                elif self._logger_level == logging.INFO:
+                    self._logger.info(log)
+                elif self._logger_level == logging.WARNING:
+                    self._logger.warning(log)
             self._last_report_avg_time = average_time
 
         if CLEAR_EACH_LOG and self._step % self._repeat == 0:
@@ -96,21 +106,36 @@ class ElapsedCounter:
     def __init__(self,
                  log: str,
                  logger: Optional[logging.Logger] = None,
+                 logger_level: int = logging.DEBUG,
                  repeat=1):
         self._log = log
         self._logger = logger
+        self._logger_level = logger_level
         self._repeat = repeat
 
         self._step = 1
         self._counter = 0
 
+        self._logger_effective = log is not None \
+            and logger is not None \
+            and logger.getEffectiveLevel() <= self._logger_level
+
     def __enter__(self):
         pass
 
     def __exit__(self, exc_type, exc_value, traceback):
+        if not self._logger_effective:
+            return
+
         if self._step == self._repeat:
-            if self._logger is not None and self._counter > 0:
-                self._logger.debug(f'{self._log}: {self._counter} in {self._repeat}')
+            if self._counter > 0:
+                log = f'{self._log}: {self._counter} in {self._repeat}'
+                if self._logger_level == logging.DEBUG:
+                    self._logger.debug(log)
+                elif self._logger_level == logging.INFO:
+                    self._logger.info(log)
+                elif self._logger_level == logging.WARNING:
+                    self._logger.warning(log)
             self._step = 0
             self._counter = 0
 

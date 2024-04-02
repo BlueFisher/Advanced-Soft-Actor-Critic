@@ -15,7 +15,7 @@ This project is the algorithm [Soft Actor-Critic](https://arxiv.org/pdf/1812.059
 - Distributed training ([Distributed Prioritized Experience Replay](http://arxiv.org/abs/1803.00933))
 - Discrete action ([Soft Actor-Critic for Discrete Action Settings](http://arxiv.org/abs/1910.07207))
 - Curiosity mechanism ([Curiosity-driven Exploration by Self-supervised Prediction](http://arxiv.org/abs/1705.05363))
-- ~~*Large-scale Distributed Evolutionary Reinforcement Learning~~ (***The distributed training module is suspended for maintenance***)
+- Large-scale Distributed Evolutionary Reinforcement Learning (***The distributed training module is suspended for maintenance***)
 - [ATC](http://proceedings.mlr.press/v139/stooke21a.html), [BYOL](https://proceedings.neurips.cc/paper/2020/hash/f3ada80d5c4ee70142b17b8192b2958e-Abstract.html)
 
 \* denotes the features that we implemented.
