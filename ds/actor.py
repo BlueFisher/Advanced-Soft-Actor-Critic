@@ -4,19 +4,18 @@ import logging
 import logging.handlers
 import multiprocessing as mp
 import os
-import sys
 import threading
 import time
 from pathlib import Path
-from typing import List
+from typing import Dict, List, Set
 
 import grpc
 import numpy as np
 
 import algorithm.config_helper as config_helper
-from algorithm.agent import Agent
+from algorithm.agent import Agent, AgentManager
 from algorithm.sac_main import Main
-from algorithm.utils import ReadWriteLock, elapsed_timer, gen_pre_n_actions
+from algorithm.utils import ElapsedTimer, ReadWriteLock, gen_pre_n_actions
 from algorithm.utils.enums import *
 
 from .constants import *
@@ -31,32 +30,56 @@ from .utils import (SharedMemoryManager, get_episode_shapes_dtypes,
                     rpc_error_inspector, traverse_lists)
 
 
+class AgentManagerBuffer:
+    def __init__(self,
+                 episode_buffer: SharedMemoryManager,
+                 episode_length_array: mp.Array,
+                 episode_sender_processes: List[mp.Process]):
+        self.episode_buffer = episode_buffer
+        self.episode_length_array = episode_length_array
+        self.episode_sender_processes = episode_sender_processes
+
+
 class EpisodeSender:
     def __init__(self,
+                 _id: int,
+                 episode_buffer: SharedMemoryManager,
+                 episode_length_array: mp.Array,
+
                  logger_in_file: bool,
+                 debug: bool,
+                 ma_name: str,
+
                  model_abs_dir: str,
                  learner_host: str,
-                 learner_port: int,
-                 ma_name: str,
-                 episode_buffer: SharedMemoryManager,
-                 episode_length_array: mp.Array):
-        self.ma_name = ma_name
+                 learner_port: int):
         self._episode_buffer = episode_buffer
         self._episode_length_array = episode_length_array
+        self.ma_name = ma_name
 
-        config_helper.set_logger(Path(model_abs_dir).joinpath(f'actor_episode_sender_{os.getpid()}.log') if logger_in_file else None)
-        self._logger = logging.getLogger(f'ds.actor.episode_sender_{os.getpid()}')
+        # Since no set_logger() in main.py
+        config_helper.set_logger(debug)
+
+        if logger_in_file:
+            config_helper.add_file_logger(model_abs_dir.joinpath(f'actor_episode_sender_{_id}.log'))
+
+        if ma_name is None:
+            self._logger = logging.getLogger(f'ds.actor.episode_sender_{_id}')
+        else:
+            self._logger = logging.getLogger(f'ds.actor.episode_sender_{_id}.{ma_name}')
+
+        episode_buffer.init_logger(self._logger)
 
         self._stub = StubEpisodeSenderController(learner_host, learner_port)
 
-        self._logger.info(f'EpisodeSender {os.getpid()} initialized')
-
-        episode_buffer.init_logger(self._logger)
+        self._logger.info(f'EpisodeSender {_id} ({os.getpid()}) initialized')
 
         self._run()
 
     def _run(self):
-        timer_add_trans = elapsed_timer(self._logger, 'Add trans', repeat=ELAPSED_REPEAT)
+        timer_add_trans = ElapsedTimer('Add trans', self._logger, logging.INFO,
+                                       repeat=ELAPSED_REPEAT,
+                                       force_report=False)
 
         while True:
             episode, episode_idx = self._episode_buffer.get(timeout=EPISODE_QUEUE_TIMEOUT)
@@ -99,7 +122,9 @@ class Actor(Main):
                                                                        args.config)
 
         # Initialize config from command line arguments
+        self.debug = args.debug
         self.logger_in_file = args.logger_in_file
+        self.inference_ma_names = set()
 
         self.device = args.device
 
@@ -107,12 +132,13 @@ class Actor(Main):
             config['net_config']['learner_host'] = args.learner_host
         if args.learner_port is not None:
             config['net_config']['learner_port'] = args.learner_port
-        if args.env_args is not None:
+
+        if len(args.env_args) > 0:
             config['base_config']['env_args'] = args.env_args
-        if args.unity_port is not None:
-            config['base_config']['unity_args']['port'] = args.unity_port
-        if args.agents is not None:
-            config['base_config']['n_envs'] = args.agents
+        if args.u_port is not None:
+            config['base_config']['unity_args']['port'] = args.u_port
+        if args.envs is not None:
+            config['base_config']['n_envs'] = args.envs
 
         self._stub = StubController(config['net_config']['learner_host'],
                                     config['net_config']['learner_port'])
@@ -134,16 +160,18 @@ class Actor(Main):
             ma_configs[n]['sac_config'] = ma_sac_configs[n]
 
         if self.logger_in_file:
-            config_helper.set_logger(model_abs_dir.joinpath(f'actor-{_id}.log'))
+            config_helper.add_file_logger(model_abs_dir.joinpath(f'actor-{_id}.log'))
 
         self._logger.info(f'Assigned to id {_id}')
 
         config_helper.display_config(config, self._logger)
         convert_config_to_enum(config['sac_config'])
+        convert_config_to_enum(config['oc_config'])
 
         for n, ma_config in ma_configs.items():
             config_helper.display_config(ma_config, self._logger, n)
             convert_config_to_enum(ma_config['sac_config'])
+            convert_config_to_enum(ma_config['oc_config'])
 
         self.base_config = config['base_config']
         self.net_config = config['net_config']
@@ -154,6 +182,8 @@ class Actor(Main):
         return config_abs_dir
 
     def _init_sac(self, config_abs_dir):
+        self._ma_agent_manager_buffer: Dict[str, AgentManagerBuffer] = {}
+
         for n, mgr in self.ma_manager:
             # If nn models exists, load saved model, or copy a new one
             saved_nn_abs_path = mgr.model_abs_dir / 'saved_nn.py'
@@ -170,16 +200,17 @@ class Actor(Main):
             spec.loader.exec_module(nn)
             mgr.config['sac_config']['nn'] = nn
 
-            mgr.set_sac(SAC_DS_Base(obs_shapes=mgr.obs_shapes,
-                                    d_action_size=mgr.d_action_size,
-                                    c_action_size=mgr.c_action_size,
-                                    model_abs_dir=None,
-                                    device=self.device,
-                                    ma_name=None if len(self.ma_manager) == 1 else n,
-                                    train_mode=False,
+            mgr.set_rl(SAC_DS_Base(obs_names=mgr.obs_names,
+                                   obs_shapes=mgr.obs_shapes,
+                                   d_action_sizes=mgr.d_action_sizes,
+                                   c_action_size=mgr.c_action_size,
+                                   model_abs_dir=None,
+                                   device=self.device,
+                                   ma_name=None if len(self.ma_manager) == 1 else n,
+                                   train_mode=False,
 
-                                    nn_config=mgr.config['nn_config'],
-                                    **mgr.config['sac_config']))
+                                   nn_config=mgr.config['nn_config'],
+                                   **mgr.config['sac_config']))
 
         self._logger.info(f'SAC_ACTOR started')
 
@@ -191,28 +222,41 @@ class Actor(Main):
                 max_episode_length,
                 mgr.obs_shapes,
                 mgr.action_size,
-                mgr.sac.seq_hidden_state_shape if mgr.seq_encoder is not None else None)
+                mgr.rl.seq_hidden_state_shape if mgr.seq_encoder is not None else None)
 
-            mgr['episode_buffer'] = SharedMemoryManager(self.base_config['episode_queue_size'],
-                                                        logger=self._logger,
-                                                        counter_get_shm_index_empty_log='Episode shm index is empty',
-                                                        timer_get_shm_index_log='Get an episode shm index',
-                                                        timer_get_data_log='Get an episode',
-                                                        log_repeat=ELAPSED_REPEAT)
+            ep_shmm = SharedMemoryManager(self.base_config['episode_queue_size'],
+                                          logger=logging.getLogger(f'ds.actor.ep_shmm.{n}'),
+                                          logger_level=logging.INFO,
+                                          counter_get_shm_index_empty_log='Episode shm index is empty',
+                                          timer_get_shm_index_log='Get an episode shm index',
+                                          timer_get_data_log='Get an episode',
+                                          timer_put_data_log='Put an episode',
+                                          log_repeat=ELAPSED_REPEAT,
+                                          force_report=ELAPSED_FORCE_REPORT)
+            ep_shmm.init_from_shapes(episode_shapes, episode_dtypes)
+            ep_length_array = mp.Array('i', range(self.base_config['episode_queue_size']))
 
-            mgr['episode_buffer'].init_from_shapes(episode_shapes, episode_dtypes)
-            mgr['episode_length_array'] = mp.Array('i', range(self.base_config['episode_queue_size']))
+            episode_sender_processes = []
+            for i in range(self.base_config['episode_sender_process_num']):
+                p = mp.Process(target=EpisodeSender, kwargs={
+                    '_id': i,
+                    'episode_buffer': ep_shmm,
+                    'episode_length_array': ep_length_array,
 
-            for _ in range(self.base_config['episode_sender_process_num']):
-                mp.Process(target=EpisodeSender, kwargs={
                     'logger_in_file': self.logger_in_file,
+                    'debug': self.debug,
+                    'ma_name': n,
+
                     'model_abs_dir': self.model_abs_dir,
                     'learner_host': self.net_config['learner_host'],
                     'learner_port': self.net_config['learner_port'],
-                    'ma_name': n,
-                    'episode_buffer': mgr['episode_buffer'],
-                    'episode_length_array': mgr['episode_length_array']
-                }).start()
+                })
+                p.start()
+                episode_sender_processes.append(p)
+
+            self._ma_agent_manager_buffer[n] = AgentManagerBuffer(ep_shmm,
+                                                                  ep_length_array,
+                                                                  episode_sender_processes)
 
     def _update_policy_variables(self):
         ma_variables = self._stub.get_ma_policy_variables()
@@ -222,128 +266,130 @@ class Actor(Main):
         with self._sac_actor_lock.write():
             for n, variables in ma_variables.items():
                 if not any([np.isnan(np.min(v)) for v in variables]):
-                    self.ma_manager[n].sac.update_policy_variables(variables)
-                    self._logger.info('Policy variables updated')
+                    self.ma_manager[n].rl.update_policy_variables(variables)
+                    self._logger.info(f'{n} policy variables updated')
                 else:
-                    self._logger.warning('NAN in variables, skip updating')
+                    self._logger.warning(f'NAN in {n} variables, skip updating')
 
     def _add_trans(self,
                    ma_name: str,
-                   l_indexes: np.ndarray,
-                   l_padding_masks: np.ndarray,
-                   l_obses_list: List[np.ndarray],
-                   l_actions: np.ndarray,
-                   l_rewards: np.ndarray,
-                   next_obs_list: List[np.ndarray],
-                   l_dones: np.ndarray,
-                   l_probs: List[np.ndarray],
-                   l_seq_hidden_states: np.ndarray = None):
+
+                   ep_indexes: np.ndarray,
+                   ep_obses_list: List[np.ndarray],
+                   ep_actions: np.ndarray,
+                   ep_rewards: np.ndarray,
+                   ep_dones: np.ndarray,
+                   ep_probs: List[np.ndarray],
+                   ep_seq_hidden_states: np.ndarray = None):
 
         mgr = self.ma_manager[ma_name]
-        if l_indexes.shape[1] < mgr.sac.burn_in_step + mgr.sac.n_step:
+        mgr_buffer = self._ma_agent_manager_buffer[ma_name]
+        if ep_indexes.shape[1] < mgr.rl.n_step:
             return
 
         """
         Args:
             ma_name: str
-            l_indexes: [1, episode_len]
-            l_padding_masks: [1, episode_len]
-            l_obses_list: list([1, episode_len, *obs_shapes_i], ...)
-            l_actions: [1, episode_len, action_size]
-            l_rewards: [1, episode_len]
-            next_obs_list: list([1, *obs_shapes_i], ...)
-            l_dones: [1, episode_len]
-            l_probs: [1, episode_len]
-            l_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
+
+            ep_indexes: [1, episode_len]
+            ep_obses_list: list([1, episode_len, *obs_shapes_i], ...)
+            ep_actions: [1, episode_len, action_size]
+            ep_rewards: [1, episode_len]
+            ep_dones: [1, episode_len]
+            ep_probs: [1, episode_len]
+            ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
-        episode_idx = mgr['episode_buffer'].put([
-            l_indexes,
-            l_padding_masks,
-            l_obses_list,
-            l_actions,
-            l_rewards,
-            next_obs_list,
-            l_dones,
-            l_probs,
-            l_seq_hidden_states
+        episode_idx = mgr_buffer.episode_buffer.put([
+            ep_indexes,
+            ep_obses_list,
+            ep_actions,
+            ep_rewards,
+            ep_dones,
+            ep_probs,
+            ep_seq_hidden_states
         ])
-        mgr['episode_length_array'][episode_idx] = l_indexes.shape[1]
+        mgr_buffer.episode_length_array[episode_idx] = ep_indexes.shape[1]
 
     def _run(self):
-        self.ma_manager.init(self.base_config['n_envs'])
-
-        ma_obs_list = self.env.reset(reset_config=self.reset_config)
-        self.ma_manager.set_obs_list(ma_obs_list)
-
         force_reset = False
         iteration = 0
 
         try:
             while self._stub.connected:
-                if self.base_config['reset_on_iteration'] \
-                        or self.ma_manager.is_max_reached() \
-                        or force_reset:
-                    ma_obs_list = self.env.reset(reset_config=self.reset_config)
-                    self.ma_manager.set_obs_list(ma_obs_list)
-                    self.ma_manager.clear()
-
-                    force_reset = False
-                else:
-                    self.ma_manager.reset()
-
                 step = 0
+                iter_time = time.time()
 
                 self._update_policy_variables()
 
-                while not self.ma_manager.is_done() and self._stub.connected:
-                    self.ma_manager.burn_in_padding()
+                if self.base_config['reset_on_iteration'] \
+                        or self.ma_manager.max_reached \
+                        or force_reset:
+                    self.ma_manager.reset()
+                    ma_agent_ids, ma_obs_list = self.env.reset(reset_config=self.reset_config)
+                    ma_d_action, ma_c_action = self.ma_manager.get_ma_action(
+                        ma_agent_ids=ma_agent_ids,
+                        ma_obs_list=ma_obs_list,
+                        ma_last_reward={n: np.zeros(len(agent_ids), dtype=bool)
+                                        for n, agent_ids in ma_agent_ids.items()},
+                        force_rnd_if_available=True
+                    )
 
-                    with self._sac_actor_lock.read():
-                        ma_d_action, ma_c_action = self.ma_manager.get_ma_action(force_rnd_if_available=True)
+                    force_reset = False
+                else:
+                    self.ma_manager.reset_and_continue()
 
-                    (ma_next_obs_list,
-                     ma_reward,
-                     ma_local_done,
-                     ma_max_reached) = self.env.step(ma_d_action, ma_c_action)
+                while not self.ma_manager.done and self._stub.connected:
+                    (decision_step,
+                     terminal_step,
+                     all_envs_done) = self.env.step(ma_d_action, ma_c_action)
 
-                    if ma_next_obs_list is None:
+                    if decision_step is None:
                         force_reset = True
 
-                        self._logger.warning('Step encounters error, episode ignored')
-                        continue
+                        self._logger.error('Step encounters error, episode ignored')
+                        break
+
+                    with self._sac_actor_lock.read():
+                        ma_d_action, ma_c_action = self.ma_manager.get_ma_action(
+                            ma_agent_ids=decision_step.ma_agent_ids,
+                            ma_obs_list=decision_step.ma_obs_list,
+                            ma_last_reward=decision_step.ma_last_reward,
+                            force_rnd_if_available=True
+                        )
+
+                    self.ma_manager.end_episode(
+                        ma_agent_ids=terminal_step.ma_agent_ids,
+                        ma_obs_list=terminal_step.ma_obs_list,
+                        ma_last_reward=terminal_step.ma_last_reward,
+                        ma_max_reached=terminal_step.ma_max_reached
+                    )
+                    if all_envs_done or step == self.base_config['max_step_each_iter']:
+                        self.ma_manager.end_episode(
+                            ma_agent_ids=decision_step.ma_agent_ids,
+                            ma_obs_list=decision_step.ma_obs_list,
+                            ma_last_reward=decision_step.ma_last_reward,
+                            ma_max_reached={n: np.ones_like(agent_ids, dtype=bool)
+                                            for n, agent_ids in decision_step.ma_agent_ids.items()}
+                        )
+                        self.ma_manager.force_end_all_episode()
 
                     for n, mgr in self.ma_manager:
-                        if step == self.base_config['max_step_each_iter']:
-                            ma_local_done[n] = [True] * len(mgr.agents)
-                            ma_max_reached[n] = [True] * len(mgr.agents)
+                        episode_trans_list = mgr.get_tmp_episode_trans_list()
 
-                        episode_trans_list = [
-                            a.add_transition(
-                                obs_list=[o[i] for o in mgr['obs_list']],
-                                action=mgr['action'][i],
-                                reward=ma_reward[n][i],
-                                local_done=ma_local_done[n][i],
-                                max_reached=ma_max_reached[n][i],
-                                next_obs_list=[o[i] for o in ma_next_obs_list[n]],
-                                prob=mgr['prob'][i],
-                                is_padding=False,
-                                seq_hidden_state=mgr['seq_hidden_state'][i] if mgr.seq_encoder is not None else None,
-                            ) for i, a in enumerate(mgr.agents)
-                        ]
+                        # ep_indexes,
+                        # ep_obses_list, ep_actions, ep_rewards, ep_dones, ep_probs,
+                        # ep_seq_hidden_states
+                        for episode_trans in episode_trans_list:
+                            self._add_trans(n, **episode_trans)
 
-                        episode_trans_list = [t for t in episode_trans_list if t is not None]
-                        if len(episode_trans_list) != 0:
-                            # ep_indexes, ep_padding_masks,
-                            # ep_obses_list, ep_actions, ep_rewards, next_obs_list, ep_dones, ep_probs,
-                            # ep_seq_hidden_states
-                            for episode_trans in episode_trans_list:
-                                self._add_trans(n, *episode_trans)  # TODO
-
-                    self.ma_manager.post_step(ma_next_obs_list, ma_local_done)
+                        mgr.clear_tmp_episode_trans_list()
 
                     step += 1
 
-                self._log_episode_info(iteration)
+                self._log_episode_info(iteration, time.time() - iter_time)
+
+                self.ma_manager.reset_dead_agents()
+
                 iteration += 1
 
         finally:
@@ -351,19 +397,25 @@ class Actor(Main):
 
             self._logger.error('Actor terminated')
 
-    def _log_episode_info(self, iteration):
+    def _log_episode_info(self, iteration, iter_time):
         for n, mgr in self.ma_manager:
-            rewards = [a.reward for a in mgr.agents]
-            rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-            max_step = max([a.steps for a in mgr.agents])
+            if len(mgr.non_empty_agents) == 0:
+                continue
 
-            self._logger.info(f'{n} {iteration}, S {max_step}, R {rewards}')
+            rewards = [a.reward for a in mgr.non_empty_agents]
+            rewards = ", ".join([f"{i:6.1f}" for i in rewards])
+            max_step = max([a.steps for a in mgr.non_empty_agents])
+            self._logger.info(f'{n} {iteration}, T {iter_time:.2f}s, S {max_step}, R {rewards}')
 
     def close(self):
         if hasattr(self, 'env'):
             self.env.close()
         if hasattr(self, '_stub'):
             self._stub.close()
+
+        for n, mgr_buffer in self._ma_agent_manager_buffer.items():
+            for p in mgr_buffer.episode_sender_processes:
+                p.terminate()
 
         self._logger.warning('Closed')
 
@@ -382,7 +434,7 @@ class StubController:
 
         self._learner_connected = False
 
-        t_learner = threading.Thread(target=self._start_learner_persistence)
+        t_learner = threading.Thread(target=self._start_learner_persistence, daemon=True)
         t_learner.start()
 
     @property
@@ -453,27 +505,24 @@ class StubEpisodeSenderController:
         ])
         self._learner_stub = learner_pb2_grpc.LearnerServiceStub(self._learner_channel)
 
+        self._logger = logging.getLogger('ds.actor.stub_episode_sender')
+
     @rpc_error_inspector
     def add_transitions(self,
                         ma_name,
-                        l_indexes,
-                        l_padding_masks,
-                        l_obses_list,
-                        l_actions,
-                        l_rewards,
-                        next_obs_list,
-                        l_dones,
-                        l_mu_probs,
-                        l_seq_hidden_states=None):
+                        ep_indexes,
+                        ep_obses_list,
+                        ep_actions,
+                        ep_rewards,
+                        ep_dones,
+                        ep_mu_probs,
+                        ep_seq_hidden_states=None):
         self._learner_stub.Add(learner_pb2.AddRequest(ma_name=ma_name,
-                                                      l_indexes=ndarray_to_proto(l_indexes),
-                                                      l_padding_masks=ndarray_to_proto(l_padding_masks),
-                                                      l_obses_list=[ndarray_to_proto(l_obses)
-                                                                    for l_obses in l_obses_list],
-                                                      l_actions=ndarray_to_proto(l_actions),
-                                                      l_rewards=ndarray_to_proto(l_rewards),
-                                                      next_obs_list=[ndarray_to_proto(next_obs)
-                                                                     for next_obs in next_obs_list],
-                                                      l_dones=ndarray_to_proto(l_dones),
-                                                      l_mu_probs=ndarray_to_proto(l_mu_probs),
-                                                      l_seq_hidden_states=ndarray_to_proto(l_seq_hidden_states)))
+                                                      ep_indexes=ndarray_to_proto(ep_indexes),
+                                                      ep_obses_list=[ndarray_to_proto(ep_obses)
+                                                                     for ep_obses in ep_obses_list],
+                                                      ep_actions=ndarray_to_proto(ep_actions),
+                                                      ep_rewards=ndarray_to_proto(ep_rewards),
+                                                      ep_dones=ndarray_to_proto(ep_dones),
+                                                      ep_mu_probs=ndarray_to_proto(ep_mu_probs),
+                                                      ep_seq_hidden_states=ndarray_to_proto(ep_seq_hidden_states)))

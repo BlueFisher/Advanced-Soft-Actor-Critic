@@ -108,6 +108,29 @@ def gen_batch_oc_obs_for_attn(obs_shapes, d_action_sizes, c_action_size,
     return gen_batch
 
 
+def gen_batch_oc_obs_for_dilated_attn(obs_shapes, d_action_sizes, c_action_size,
+                                      seq_hidden_state_shape, low_seq_hidden_state_shape=None,
+                                      num_options=2,
+                                      batch=10):
+    key_len = random.randint(1, 20)
+
+    gen_batch = {
+        'key_indexes': np.expand_dims(np.arange(key_len, dtype=np.int32), 0).repeat(batch, 0),
+        'key_padding_masks': np.zeros((batch, key_len), dtype=bool),
+        'key_obses_list': [np.random.randn(batch, key_len, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
+        'key_option_indexes': np.random.randint(0, num_options, size=(batch, key_len), dtype=np.int8),
+        'key_attn_states': np.random.randn(batch, key_len, *seq_hidden_state_shape).astype(np.float32),
+
+        'pre_option_index': np.random.randint(0, num_options, size=(batch, ), dtype=np.int32),
+        'pre_action': get_action(batch, None, d_action_sizes, c_action_size),
+    }
+
+    if low_seq_hidden_state_shape is not None:
+        gen_batch['low_rnn_state'] = np.random.randn(batch, *low_seq_hidden_state_shape).astype(np.float32)
+
+    return gen_batch
+
+
 def gen_episode_trans(obs_shapes, d_action_sizes, c_action_size, seq_hidden_state_shape=None, episode_len=None):
     if episode_len is None:
         episode_len = random.randint(1, 100)
@@ -117,7 +140,6 @@ def gen_episode_trans(obs_shapes, d_action_sizes, c_action_size, seq_hidden_stat
         'ep_obses_list': [np.random.randn(1, episode_len, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
         'ep_actions': get_action(1, episode_len, d_action_sizes, c_action_size),
         'ep_rewards': np.random.randn(1, episode_len).astype(np.float32),
-        'next_obs_list': [np.random.randn(1, *obs_shape).astype(np.float32) for obs_shape in obs_shapes],
         'ep_dones': np.random.randint(0, 2, size=(1, episode_len), dtype=bool),
         'ep_probs': np.random.rand(1, episode_len, sum(d_action_sizes) + c_action_size).astype(np.float32),
     }

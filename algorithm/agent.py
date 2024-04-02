@@ -582,7 +582,7 @@ class AgentManager:
             if agent_id not in self.agents_dict:
                 continue
             agent = self.agents_dict[agent_id]
-            ep_trans = ep_trans = agent.end_transition(
+            ep_trans = agent.end_transition(
                 reward=last_reward[i],
                 done=True,
                 max_reached=max_reached[i],
@@ -613,6 +613,14 @@ class AgentManager:
         trained_steps = self.rl.train()
 
         return trained_steps
+
+    def get_tmp_episode_trans_list(self) -> List[
+        Dict[str, Union[np.ndarray, List[np.ndarray]]]
+    ]:
+        return self._tmp_episode_trans_list
+
+    def clear_tmp_episode_trans_list(self) -> None:
+        self._tmp_episode_trans_list.clear()
 
     def log_episode(self) -> None:
         # ep_indexes,

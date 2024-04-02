@@ -8,17 +8,16 @@ from algorithm.utils import episode_to_batch, traverse_lists
 
 class BatchBuffer:
     _rest_batch = None
-    _batch_list = []
 
     def __init__(self,
                  burn_in_step: int,
                  n_step: int,
-                 padding_action: np.ndarray,
                  batch_size: int):
         self.burn_in_step = burn_in_step
         self.n_step = n_step
-        self.padding_action = padding_action
         self.batch_size = batch_size
+        
+        self._batch_list = []
 
     def put_episode(self,
                     ep_indexes: np.ndarray,
@@ -27,7 +26,7 @@ class BatchBuffer:
                     ep_actions: np.ndarray,
                     ep_rewards: np.ndarray,
                     ep_dones: np.ndarray,
-                    ep_probs: List[np.ndarray],
+                    ep_probs: np.ndarray,
                     ep_seq_hidden_states: Optional[np.ndarray] = None) -> None:
         """
         Args:
@@ -44,7 +43,6 @@ class BatchBuffer:
 
         ori_batch = episode_to_batch(burn_in_step=self.burn_in_step,
                                      n_step=self.n_step,
-                                     padding_action=self.padding_action,
                                      l_indexes=ep_indexes,
                                      l_padding_masks=ep_padding_masks,
                                      l_obses_list=ep_obses_list,

@@ -15,15 +15,6 @@ base_config:
   max_step_each_iter: -1 # Max step in each iteration
   reset_on_iteration: true # Whether forcing reset agent if an episode terminated
 
-  evolver_enabled: true
-  evolver_cem_length: 50 # Start CEM if all learners have eavluated evolver_cem_length times
-  evolver_cem_best: 0.3 # The ratio of best learners
-  evolver_cem_min_length:
-    2 # Start CEM if all learners have eavluated `evolver_cem_min_length` times,
-    # and it has been more than `evolver_cem_time` minutes since the last update
-  evolver_cem_time: 3
-  evolver_remove_worst: 4
-
   max_actors_each_learner: -1 # The max number of actors of each learner, -1 indicates no limit
   noise_increasing_rate: 0 # Noise = N * number of actors
   noise_max: 0.1 # Max noise for actors
@@ -91,5 +82,17 @@ sac_config:
   #     in: [n1, n2, n3]
   #     truncated: [n1 ,n2]
   #     std: n
+
+oc_config:
+  num_options: 4
+  use_dilation: false
+  option_burn_in_step: -1
+  option_seq_encoder: null # RNN
+  option_eplison: 0.2 # Probability of switching options
+  terminal_entropy: 0.01 # Tending not to terminate >0, tending to terminate <0
+  key_max_length: 200
+
+  option_nn_config:
+    rep: null
 
 ma_config: null

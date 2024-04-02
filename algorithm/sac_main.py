@@ -52,8 +52,8 @@ class Main:
         self.train_mode = not args.run
         self.inference_ma_names: Set[str] = set(args.run_a)
         self.render = args.render
-        self.unity_run_in_editor = args.editor
-        self.unity_time_scale = args.timescale
+        self.unity_run_in_editor = args.u_editor
+        self.unity_time_scale = args.u_timescale
 
         self.disable_sample = args.disable_sample
         self.alway_use_env_nn = args.use_env_nn
@@ -62,8 +62,8 @@ class Main:
 
         if len(args.env_args) > 0:
             config['base_config']['env_args'] = args.env_args
-        if args.port is not None:
-            config['base_config']['unity_args']['port'] = args.port
+        if args.u_port is not None:
+            config['base_config']['unity_args']['port'] = args.u_port
         if args.envs is not None:
             config['base_config']['n_envs'] = args.envs
         if args.max_iter is not None:
@@ -341,9 +341,6 @@ class Main:
                 {'tag': 'reward/mean', 'simple_value': rewards.mean()},
                 {'tag': 'reward/max', 'simple_value': rewards.max()},
                 {'tag': 'reward/min', 'simple_value': rewards.min()}
-            ])
-            mgr.rl.write_histogram_summaries([
-                {'tag': 'reward', 'histogram': rewards}
             ])
 
             steps = np.array([a.steps for a in mgr.non_empty_agents])
