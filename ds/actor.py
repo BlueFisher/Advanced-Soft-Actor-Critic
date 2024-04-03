@@ -42,6 +42,7 @@ class AgentManagerBuffer:
 
 class EpisodeSender:
     def __init__(self,
+                 actor_id: int,
                  _id: int,
                  episode_buffer: SharedMemoryManager,
                  episode_length_array: mp.Array,
@@ -50,7 +51,7 @@ class EpisodeSender:
                  debug: bool,
                  ma_name: str,
 
-                 model_abs_dir: str,
+                 model_abs_dir: Path,
                  learner_host: str,
                  learner_port: int):
         self._episode_buffer = episode_buffer
@@ -61,16 +62,16 @@ class EpisodeSender:
         config_helper.set_logger(debug)
 
         if logger_in_file:
-            config_helper.add_file_logger(model_abs_dir.joinpath(f'actor_episode_sender_{_id}.log'))
+            config_helper.add_file_logger(model_abs_dir.joinpath(f'actor_{actor_id}.log'))
 
         if ma_name is None:
-            self._logger = logging.getLogger(f'ds.actor.episode_sender_{_id}')
+            self._logger = logging.getLogger(f'ds.actor-{actor_id}.episode_sender-{_id}')
         else:
-            self._logger = logging.getLogger(f'ds.actor.episode_sender_{_id}.{ma_name}')
+            self._logger = logging.getLogger(f'ds.actor-{actor_id}.episode_sender-{_id}.{ma_name}')
 
         episode_buffer.init_logger(self._logger)
 
-        self._stub = StubEpisodeSenderController(learner_host, learner_port)
+        self._stub = StubEpisodeSenderController(actor_id, learner_host, learner_port)
 
         self._logger.info(f'EpisodeSender {_id} ({os.getpid()}) initialized')
 
@@ -91,12 +92,13 @@ class EpisodeSender:
             episode = traverse_lists(episode, lambda e: e[:, :episode_length])
 
             with timer_add_trans:
-                self._stub.add_transitions(self.ma_name, *episode)
+                self._stub.add_episode(self.ma_name, *episode)
 
 
 class Actor(Main):
     train_mode = False
 
+    _id = -1
     _stub = None
 
     def __init__(self, root_dir, config_dir, args):
@@ -154,6 +156,8 @@ class Actor(Main):
          sac_config,
          ma_sac_configs) = register_response
 
+        self._id = _id
+
         self.model_abs_dir = model_abs_dir
         config['reset_config'] = reset_config
         config['nn_config'] = nn_config
@@ -162,10 +166,12 @@ class Actor(Main):
             ma_configs[n]['nn_config'] = ma_nn_configs[n]
             ma_configs[n]['sac_config'] = ma_sac_configs[n]
 
-        if self.logger_in_file:
-            config_helper.add_file_logger(model_abs_dir.joinpath(f'actor-{_id}.log'))
-
+        self._logger.name = self._logger.name + f'-{_id}'
         self._logger.info(f'Assigned to id {_id}')
+        self._stub.update_actor_id(_id)
+
+        if self.logger_in_file:
+            config_helper.add_file_logger(model_abs_dir.joinpath(f'actor_{_id}.log'))
 
         config_helper.display_config(config, self._logger)
         convert_config_to_enum(config['sac_config'])
@@ -242,6 +248,7 @@ class Actor(Main):
             episode_sender_processes = []
             for i in range(self.base_config['episode_sender_process_num']):
                 p = mp.Process(target=EpisodeSender, kwargs={
+                    'actor_id': self._id,
                     '_id': i,
                     'episode_buffer': ep_shmm,
                     'episode_length_array': ep_length_array,
@@ -448,6 +455,9 @@ class StubController:
     def closed(self):
         return self._closed
 
+    def update_actor_id(self, actor_id: int):
+        self._logger.name = f'ds.actor-{actor_id}.stub'
+
     @rpc_error_inspector
     def register_to_learner(self):
         self._logger.info('Waiting for learner connection')
@@ -507,24 +517,27 @@ class StubController:
 
 
 class StubEpisodeSenderController:
-    def __init__(self, learner_host, learner_port):
+    def __init__(self,
+                 actor_id: int,
+                 learner_host,
+                 learner_port):
         self._learner_channel = grpc.insecure_channel(f'{learner_host}:{learner_port}', [
             ('grpc.max_reconnect_backoff_ms', MAX_RECONNECT_BACKOFF_MS)
         ])
         self._learner_stub = learner_pb2_grpc.LearnerServiceStub(self._learner_channel)
 
-        self._logger = logging.getLogger('ds.actor.stub_episode_sender')
+        self._logger = logging.getLogger(f'ds.actor-{actor_id}.stub_episode_sender')
 
     @rpc_error_inspector
-    def add_transitions(self,
-                        ma_name,
-                        ep_indexes,
-                        ep_obses_list,
-                        ep_actions,
-                        ep_rewards,
-                        ep_dones,
-                        ep_mu_probs,
-                        ep_seq_hidden_states=None):
+    def add_episode(self,
+                    ma_name,
+                    ep_indexes,
+                    ep_obses_list,
+                    ep_actions,
+                    ep_rewards,
+                    ep_dones,
+                    ep_mu_probs,
+                    ep_seq_hidden_states=None):
         self._learner_stub.Add(learner_pb2.AddRequest(ma_name=ma_name,
                                                       ep_indexes=ndarray_to_proto(ep_indexes),
                                                       ep_obses_list=[ndarray_to_proto(ep_obses)
