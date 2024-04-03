@@ -96,7 +96,8 @@ class EpisodeSender:
 
 class Actor(Main):
     train_mode = False
-    _agent_class = Agent
+
+    _stub = None
 
     def __init__(self, root_dir, config_dir, args):
         self._logger = logging.getLogger('ds.actor')
@@ -109,8 +110,6 @@ class Actor(Main):
         self._init_episode_sender()
 
         self._run()
-
-        self.close()
 
     def _init_config(self, root_dir, config_dir, args):
         config_abs_dir = Path(root_dir).joinpath(config_dir)
@@ -125,6 +124,10 @@ class Actor(Main):
         self.debug = args.debug
         self.logger_in_file = args.logger_in_file
         self.inference_ma_names = set()
+
+        self.render = args.render
+        self.unity_run_in_editor = args.u_editor
+        self.unity_time_scale = args.u_timescale
 
         self.device = args.device
 
@@ -395,7 +398,7 @@ class Actor(Main):
         finally:
             self.close()
 
-            self._logger.error('Actor terminated')
+            self._logger.warning('Actor terminated')
 
     def _log_episode_info(self, iteration, iter_time):
         for n, mgr in self.ma_manager:
@@ -410,7 +413,7 @@ class Actor(Main):
     def close(self):
         if hasattr(self, 'env'):
             self.env.close()
-        if hasattr(self, '_stub'):
+        if self._stub is not None:
             self._stub.close()
 
         for n, mgr_buffer in self._ma_agent_manager_buffer.items():
@@ -440,6 +443,10 @@ class StubController:
     @property
     def connected(self):
         return self._learner_connected
+
+    @property
+    def closed(self):
+        return self._closed
 
     @rpc_error_inspector
     def register_to_learner(self):
@@ -482,6 +489,7 @@ class StubController:
 
         while not self._closed:
             try:
+                self._logger.info('Connecting to learner...')
                 reponse_iterator = self._learner_stub.Persistence(request_messages())
                 for response in reponse_iterator:
                     if not self._learner_connected:

@@ -1,23 +1,28 @@
 base_config:
-  env_type: UNITY # UNITY or GYM
+  env_type: UNITY # UNITY | GYM
   env_name: env_name # The environment name.
-  env_args: null
-  unity_args: # Only for Unity Environments
+  env_args: null # The environment build arguments
+  unity_args: # Specific for Unity Environments
+    max_n_envs_per_process: 10 # The max env copies count in each process
     no_graphics: true # If an env does not need pixel input, set true
+    force_vulkan: false # -force-vulkan
     build_path: # Unity executable path
       win32: path_win32
       linux: path_linux
-    port: 5005
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
-  update_sac_bak_per_step: 200 # Every N step update sac_bak
+
   n_envs: 1 # N agents running in parallel
+
   max_step_each_iter: -1 # Max step in each iteration
   reset_on_iteration: true # Whether forcing reset agent if an episode terminated
+
+  update_sac_bak_per_step: 200 # Every N step update sac_bak for evaluation
 
   max_actors_each_learner: -1 # The max number of actors of each learner, -1 indicates no limit
   noise_increasing_rate: 0 # Noise = N * number of actors
   noise_max: 0.1 # Max noise for actors
+
   max_episode_length: 500
   episode_queue_size: 5
   episode_sender_process_num: 5
@@ -38,22 +43,25 @@ sac_config:
   nn: nn # Neural network models file
   seed: null # Random seed
   write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
-  save_model_per_step: 100000 # Save model every N steps
+  save_model_per_step: 10000 # Save model every N steps
 
   ensemble_q_num: 2 # Number of Qs
   ensemble_q_sample: 2 # Number of min Qs
 
   burn_in_step: 0 # Burn-in steps in R2D2
-  n_step: 1 # Update Q function by N steps
+  n_step: 1 # Update Q function by N-steps
   seq_encoder: null # RNN | ATTN
 
-  batch_size: 256
+  batch_size: 256 # Batch size for training
 
   tau: 0.005 # Coefficient of updating target network
   update_target_per_step: 1 # Update target network every N steps
 
   init_log_alpha: -2.3 # The initial log_alpha
-  use_auto_alpha: true # If using automating entropy adjustment
+  use_auto_alpha: true # Whether using automating entropy adjustment
+  target_d_alpha: 0.98 # Target discrete alpha ratio
+  target_c_alpha: 1.0 # Target continuous alpha ratio
+  d_policy_entropy_penalty: 0.5 # Discrete policy entropy penalty ratio
 
   learning_rate: 0.0003 # Learning rate of all optimizers
 
@@ -63,18 +71,24 @@ sac_config:
   v_c: 1.0 # C for V-trace
   clip_epsilon: 0.2 # Epsilon for q clip
 
-  discrete_dqn_like: false # If using policy or only Q network if discrete is in action spaces
+  discrete_dqn_like: false # Whether using policy or only Q network if discrete is in action spaces
+  discrete_dqn_epsilon: 0.2 # Probability of using random action
+
   siamese: null # ATC | BYOL
-  siamese_use_q: false # If using contrastive q
-  siamese_use_adaptive: false # If using adaptive weights
-  use_prediction: false # If train a transition model
+  siamese_use_q: false # Whether using contrastive q
+  siamese_use_adaptive: false # Whether using adaptive weights
+
+  use_prediction: false # Whether training a transition model
   transition_kl: 0.8 # The coefficient of KL of transition and standard normal
-  use_extra_data: true # If using extra data to train prediction model
+  use_extra_data: true # Whether using extra data to train prediction model
+
   curiosity: null # FORWARD | INVERSE
   curiosity_strength: 1 # Curiosity strength if using curiosity
-  use_rnd: false # If using RND
+  use_rnd: false # Whether using RND
   rnd_n_sample: 10 # RND sample times
-  use_normalization: false # If using observation normalization
+
+  use_normalization: false # Whether using observation normalization
+
   action_noise: null # [noise_min, noise_max]
 
   # random_params:

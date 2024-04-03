@@ -16,6 +16,14 @@ default:
     evolver_host: 127.0.0.1
     learner_host: 127.0.0.1
 
+  ma_config:
+    test0:
+      sac_config:
+        n_step: 5
+    test1:
+      sac_config:
+        n_step: 10
+
 rnn:
   base_config:
     nn: nn_rnn

@@ -1,0 +1,63 @@
+default:
+  base_config:
+    env_name: UAVSTS
+    env_args:
+      search_tracking_agents_count_min: 3
+      search_tracking_agents_count_max: 3
+      strike_agents_count_min: 3
+      strike_agents_count_max: 3
+    unity_args:
+      build_path:
+        win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe
+        linux: /data/linux-RL-Envs/RLEnvironments.x86_64
+      no_graphics: false
+      force_vulkan:
+        win32: false
+        linux: true
+      max_n_envs_per_process: 9 # The max env copies count in each process
+
+    n_envs: 50
+    reset_on_iteration: true
+
+  net_config:
+    evolver_host: 127.0.0.1
+    learner_host: 127.0.0.1
+
+  reset_config:
+    disable_after_dead: true
+    strike_agents_appear_time: 0.5
+    hole_probability: 0.75
+    strike_success_distance: 3
+
+  sac_config:
+    write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
+    save_model_per_step: 10000 # Save model every N steps
+
+    n_step: 3
+    burn_in_step: 20
+    seq_encoder: RNN
+
+    target_c_alpha: 0.2 # Target continuous alpha ratio
+
+  ma_config:
+    UAVSearchTracking?team=0:
+      sac_config:
+        nn: nn_search_tracking
+
+    UAVStrike?team=0:
+      sac_config:
+        nn: nn_strike
+
+train_st:
+  base_config:
+    unity_args:
+      max_n_envs_per_process: 5 # The max env copies count in each process
+    env_args:
+      search_tracking_agents_count_min: 2
+      search_tracking_agents_count_max: 6
+      strike_agents_count_min: 0
+      strike_agents_count_max: 0
+
+  reset_config:
+    disable_after_dead: false
+    hole_probability: 0.75

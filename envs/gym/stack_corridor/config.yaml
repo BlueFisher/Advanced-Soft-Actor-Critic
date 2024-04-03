@@ -29,10 +29,11 @@ default:
     discrete_dqn_like: true
     discrete_dqn_epsilon: 0.01
     use_priority: true # Whether using PER importance ratio
+    # use_replay_buffer: false
 
     batch_size: 1024
 
-    learning_rate: 0.002
+    learning_rate: 0.0003 # Learning rate of all optimizers
 
     # use_rnd: true
 

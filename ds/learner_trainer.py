@@ -35,7 +35,9 @@ class BatchGenerator:
                  model_abs_dir: str,
                  burn_in_step: int,
                  n_step: int,
-                 batch_size: int):
+                 batch_size: int,
+
+                 padding_action: np.ndarray):
         self._episode_buffer = episode_buffer
         self._episode_length_array = episode_length_array
         self._batch_buffer = batch_buffer
@@ -43,6 +45,8 @@ class BatchGenerator:
         self.burn_in_step = burn_in_step
         self.n_step = n_step
         self.batch_size = batch_size
+
+        self.padding_action = padding_action
 
         # Since no set_logger() in main.py
         config_helper.set_logger(debug)
@@ -60,7 +64,10 @@ class BatchGenerator:
         episode_buffer.init_logger(self._logger)
         batch_buffer.init_logger(self._logger)
 
-        self.run()
+        try:
+            self.run()
+        except KeyboardInterrupt:
+            self._logger.warning('KeyboardInterrupt')
 
     def run(self):
         _rest_batch = None
@@ -100,6 +107,7 @@ class BatchGenerator:
             """
             ori_batch = episode_to_batch(self.burn_in_step,
                                          self.n_step,
+                                         self.padding_action,
                                          l_indexes=ep_indexes,
                                          l_padding_masks=ep_padding_masks,
                                          l_obses_list=ep_obses_list,
@@ -129,6 +137,8 @@ class BatchGenerator:
 
 
 class Trainer:
+    _closed = False
+
     def __init__(self,
                  all_variables_buffer: SharedMemoryManager,
                  episode_buffer: SharedMemoryManager,
@@ -222,7 +232,9 @@ class Trainer:
                 'model_abs_dir': model_abs_dir,
                 'burn_in_step': self.sac.burn_in_step,
                 'n_step': self.sac.n_step,
-                'batch_size': batch_size
+                'batch_size': batch_size,
+
+                'padding_action': self.sac._padding_action
             }).start()
 
         threading.Thread(target=self._forever_run_cmd_pipe,
@@ -230,7 +242,13 @@ class Trainer:
                          daemon=True).start()
 
         self._update_sac_bak()
-        self.run_train()
+
+        try:
+            self.run_train()
+        except KeyboardInterrupt:
+            self._logger.warning('KeyboardInterrupt')
+        finally:
+            self._closed = True
 
     def _update_sac_bak(self):
         self._logger.info('Updating sac_bak...')
@@ -240,7 +258,7 @@ class Trainer:
         self._all_variables_buffer.put(all_variables, pop_last=False)
 
     def _forever_run_cmd_pipe(self, cmd_pipe_server):
-        while True:
+        while not self._closed:
             cmd, args = cmd_pipe_server.recv()
             if cmd == 'UPDATE':
                 with self.sac_lock:
@@ -260,7 +278,7 @@ class Trainer:
 
         self._logger.info('Start training...')
 
-        while True:
+        while not self._closed:
             batch, _ = self._batch_buffer.get(timeout=BATCH_QUEUE_TIMEOUT)
 
             if batch is None:

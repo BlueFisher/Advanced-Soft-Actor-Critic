@@ -12,9 +12,11 @@ class BatchBuffer:
     def __init__(self,
                  burn_in_step: int,
                  n_step: int,
+                 padding_action: np.ndarray,
                  batch_size: int):
         self.burn_in_step = burn_in_step
         self.n_step = n_step
+        self.padding_action = padding_action  # The discrete padding actions cannot be all zeros
         self.batch_size = batch_size
         
         self._batch_list = []
@@ -43,6 +45,7 @@ class BatchBuffer:
 
         ori_batch = episode_to_batch(burn_in_step=self.burn_in_step,
                                      n_step=self.n_step,
+                                     padding_action=self.padding_action,
                                      l_indexes=ep_indexes,
                                      l_padding_masks=ep_padding_masks,
                                      l_obses_list=ep_obses_list,

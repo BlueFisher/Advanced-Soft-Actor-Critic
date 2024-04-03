@@ -53,7 +53,7 @@ class SAC_DS_Base(SAC_Base):
                  learning_rate: float = 3e-4,
 
                  gamma: float = 0.99,
-                 v_lambda: float = 0.9,
+                 v_lambda: float = 1.,
                  v_rho: float = 1.,
                  v_c: float = 1.,
                  clip_epsilon: float = 0.2,
