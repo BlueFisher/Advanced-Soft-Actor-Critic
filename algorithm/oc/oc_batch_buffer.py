@@ -10,6 +10,7 @@ from ..utils import traverse_lists
 
 def episode_to_batch(burn_in_step: int,
                      n_step: int,
+                     padding_action: np.ndarray,
                      l_indexes: np.ndarray,
                      l_padding_masks: np.ndarray,
                      l_obses_list: List[np.ndarray],
@@ -26,6 +27,7 @@ def episode_to_batch(burn_in_step: int,
     Args:
         burn_in_step: int
         n_step: int
+        padding_action (np): [action_size, ]  The discrete padding actions cannot be all zeros
         l_indexes (np.int32): [1, ep_len]
         l_padding_masks (bool): [1, episode_len]
         l_obses_list: list([1, ep_len, *obs_shapes_i], ...)
@@ -67,6 +69,7 @@ def episode_to_batch(burn_in_step: int,
      bn_probs,
      bn_seq_hidden_states) = vanilla_episode_to_batch(burn_in_step=burn_in_step,
                                                       n_step=n_step,
+                                                      padding_action=padding_action,
                                                       l_indexes=l_indexes,
                                                       l_padding_masks=l_padding_masks,
                                                       l_obses_list=l_obses_list,

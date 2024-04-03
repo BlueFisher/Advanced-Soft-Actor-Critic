@@ -4,14 +4,13 @@ import logging
 import multiprocessing as mp
 import shutil
 import socket
-import sys
 import threading
 import time
 from concurrent import futures
 from copy import deepcopy
-from multiprocessing.connection import PipeConnection
+from multiprocessing.connection import Connection
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, final
 
 import grpc
 import numpy as np
@@ -37,7 +36,7 @@ class AgentManagerBuffer:
                  all_variables_buffer: SharedMemoryManager,
                  episode_buffer: SharedMemoryManager,
                  episode_length_array: mp.Array,
-                 cmd_pipe_client: PipeConnection,
+                 cmd_pipe_client: Connection,
                  learner_trainer_process: mp.Process):
         self.all_variables_buffer = all_variables_buffer
         self.episode_buffer = episode_buffer
@@ -52,6 +51,9 @@ class Learner(Main):
     _closed = False
     _ma_policy_variables_cache = {}
 
+    _servicer = None
+    _server = None
+
     def __init__(self, root_dir, config_dir, args):
         self._logger = logging.getLogger('ds.learner')
 
@@ -65,11 +67,14 @@ class Learner(Main):
         self._init_env()
         self._init_sac(config_abs_dir)
 
-        # threading.Thread(target=self._policy_evaluation, daemon=True).start()
+        threading.Thread(target=self._policy_evaluation, daemon=True).start()
 
-        self._run_learner_server(learner_port)
-
-        self.close()
+        try:
+            self._run_learner_server(learner_port)
+        except KeyboardInterrupt:
+            self._logger.warning('KeyboardInterrupt')
+        finally:
+            self.close()
 
     def _init_config(self, root_dir, config_dir, args):
         config_abs_dir = Path(root_dir).joinpath(config_dir)
@@ -252,8 +257,10 @@ class Learner(Main):
                 res = mgr.rl.update_all_variables(all_variables)
 
             if not res:
-                self._logger.warning('NAN in variables, closing...')
-                self._force_close()
+                self._logger.error('NAN in variables, closing...')
+                with open(self.model_abs_dir.joinpath('force_closed'), 'w') as f:
+                    f.write('NAN in variables')
+                self.close()
                 return
 
             self._ma_policy_variables_cache[n] = mgr.rl.get_policy_variables()
@@ -261,21 +268,21 @@ class Learner(Main):
         self._logger.info('Updated sac_bak')
 
     def _forever_update_sac_bak(self):
-        while True:
+        while not self._closed:
             self._update_sac_bak()
 
     def _get_actor_register_result(self, actor_id):
         if self._initialized:
             actor_nn_config = deepcopy(self.config['nn_config'])
-            ma_actor_nn_configs = {n: deepcopy(c['nn_config']) for n, c in self.ma_configs}
+            ma_actor_nn_configs = {n: deepcopy(c['nn_config']) for n, c in self.ma_configs.items()}
             actor_sac_config = deepcopy(self.config['sac_config'])
-            ma_actor_sac_configs = {n: deepcopy(c['sac_config']) for n, c in self.ma_configs}
+            ma_actor_sac_configs = {n: deepcopy(c['sac_config']) for n, c in self.ma_configs.items()}
 
             noise = self.base_config['noise_increasing_rate'] * actor_id
             noise = min(noise, self.base_config['noise_max'])
             actor_sac_config['action_noise'] = [noise, noise]
             convert_config_to_string(actor_sac_config)
-            for n, c in ma_actor_sac_configs:
+            for n, c in ma_actor_sac_configs.items():
                 c['action_noise'] = [noise, noise]
                 convert_config_to_string(c)
 
@@ -290,7 +297,7 @@ class Learner(Main):
         return self._ma_policy_variables_cache
 
     def _save_model(self):
-        for n, mgr_buffer in self._ma_agent_manager_buffer:
+        for n, mgr_buffer in self._ma_agent_manager_buffer.items():
             mgr_buffer.cmd_pipe_client.send(('SAVE_MODEL', None))
 
     def _add_episode(self,
@@ -399,10 +406,14 @@ class Learner(Main):
 
                 iteration += 1
 
-                time.sleep(2)
+                while self.connected_actor_count == 0:
+                    time.sleep(1)
 
         finally:
-            self._save_model()
+            try:
+                self._save_model()
+            except:
+                pass
             self.env.close()
 
             self._logger.warning('Evaluation terminated')
@@ -411,56 +422,59 @@ class Learner(Main):
         for n, mgr in self.ma_manager:
             if len(mgr.non_empty_agents) == 0:
                 continue
-
             rewards = np.array([a.reward for a in mgr.non_empty_agents])
             steps = np.array([a.steps for a in mgr.non_empty_agents])
 
-            self._ma_agent_manager_buffer[n].cmd_pipe_client.send(('LOG_EPISODE_SUMMARIES', [
-                {'tag': 'reward/mean', 'simple_value': float(rewards.mean())},
-                {'tag': 'reward/max', 'simple_value': float(rewards.max())},
-                {'tag': 'reward/min', 'simple_value': float(rewards.min())},
-                {'tag': 'metric/steps', 'simple_value': steps.mean()}
-            ]))
+            try:
+                self._ma_agent_manager_buffer[n].cmd_pipe_client.send(('LOG_EPISODE_SUMMARIES', [
+                    {'tag': 'reward/mean', 'simple_value': float(rewards.mean())},
+                    {'tag': 'reward/max', 'simple_value': float(rewards.max())},
+                    {'tag': 'reward/min', 'simple_value': float(rewards.min())},
+                    {'tag': 'metric/steps', 'simple_value': steps.mean()}
+                ]))
+            except Exception as e:
+                self._logger.error(e)
 
     def _log_episode_info(self, iteration, iter_time):
         for n, mgr in self.ma_manager:
             if len(mgr.non_empty_agents) == 0:
                 continue
-
             rewards = [a.reward for a in mgr.non_empty_agents]
             rewards = ", ".join([f"{i:6.1f}" for i in rewards])
             max_step = max([a.steps for a in mgr.non_empty_agents])
             self._logger.info(f'{n} {iteration}, {iter_time:.2f}s, S {max_step}, R {rewards}')
 
     def _run_learner_server(self, learner_port):
-        servicer = LearnerService(self)
-        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS),
-                                  options=[
+        self._servicer = LearnerService(self)
+        self._server = grpc.server(futures.ThreadPoolExecutor(max_workers=MAX_THREAD_WORKERS),
+                                   options=[
             ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
             ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH)
         ])
-        learner_pb2_grpc.add_LearnerServiceServicer_to_server(servicer, self.server)
-        self.server.add_insecure_port(f'[::]:{learner_port}')
-        self.server.start()
+        learner_pb2_grpc.add_LearnerServiceServicer_to_server(self._servicer, self._server)
+        self._server.add_insecure_port(f'[::]:{learner_port}')
+        self._server.start()
         self._logger.info(f'Learner server is running on [{learner_port}]...')
 
-        self.server.wait_for_termination()
+        self._server.wait_for_termination()
 
-    def _force_close(self):
-        self._logger.warning('Force closing')
-        f = open(self.model_abs_dir.joinpath('force_closed'), 'w')
-        f.close()
-        self.close()
+    @property
+    def connected_actor_count(self):
+        return self._servicer.get_connected_length()
 
     def close(self):
+        if self._closed:
+            return
+
         self._closed = True
 
         if hasattr(self, 'env'):
             self.env.close()
-        if hasattr(self, 'server'):
-            self.server.stop(None)
+        if self._server is not None:
+            self._server.stop(None)
 
         for n, mgr_buffer in self._ma_agent_manager_buffer.items():
+            mgr_buffer.cmd_pipe_client.close()
             mgr_buffer.learner_trainer_process.terminate()
 
         self._logger.warning('Closed')
@@ -475,13 +489,14 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
         self._add_episode = learner._add_episode
         self._get_ma_policy_variables = learner._get_ma_policy_variables
 
-        self._force_close = learner._force_close
-
         self._logger = logging.getLogger('ds.learner.service')
         self._peer_set = PeerSet(self._logger)
 
         self._lock = RLock(timeout=1, logger=self._logger)
         self._actor_id = 0
+
+    def get_connected_length(self):
+        return len(self._peer_set)
 
     def _record_peer(self, context):
         peer = context.peer()

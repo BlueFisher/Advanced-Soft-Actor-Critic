@@ -1355,7 +1355,7 @@ class SAC_Base:
                 if self.use_n_step_is:
                     n_d_actions = n_actions[..., :self.d_action_summed_size]  # [batch, n, d_action_summed_size]
                     n_d_mu_probs = n_mu_probs[..., :self.d_action_summed_size]  # [batch, n, d_action_summed_size]
-                    n_d_mu_probs = n_d_mu_probs * n_d_actions  # [batch, n]
+                    n_d_mu_probs = n_d_mu_probs * n_d_actions  # [batch, n, d_action_summed_size]
                     n_d_mu_probs[n_d_mu_probs == 0.] = 1.
                     n_d_mu_probs = n_d_mu_probs.prod(-1)  # [batch, n]
                     n_d_pi_probs = torch.exp(d_policy.log_prob(n_d_actions).sum(-1))  # [batch, n]

@@ -70,10 +70,6 @@ class MainHitted(Main):
                 {'tag': 'reward/hitted', 'simple_value': hitted}
             ])
 
-            mgr.rl.write_histogram_summaries([
-                {'tag': 'reward', 'histogram': rewards}
-            ])
-
             steps = np.array([a.steps for a in mgr.non_empty_agents])
 
             mgr.rl.write_constant_summaries([

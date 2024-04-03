@@ -98,6 +98,7 @@ def traverse_lists(data: Union[Any, Tuple], process) -> List:
 
 def episode_to_batch(burn_in_step: int,
                      n_step: int,
+                     padding_action: np.ndarray,
                      l_indexes: np.ndarray,
                      l_padding_masks: np.ndarray,
                      l_obses_list: List[np.ndarray],
@@ -110,6 +111,7 @@ def episode_to_batch(burn_in_step: int,
     Args:
         burn_in_step: int
         n_step: int
+        padding_action (np): [action_size, ]  The discrete padding actions cannot be all zeros
         l_indexes (np.int32): [1, ep_len]
         l_padding_masks (bool): [1, ep_len]
         l_obses_list: list([1, ep_len, *obs_shapes_i], ...)
@@ -132,6 +134,7 @@ def episode_to_batch(burn_in_step: int,
     """
 
     bn = burn_in_step + n_step
+    padding_action = padding_action.reshape(1, 1, -1)
     ep_len = l_indexes.shape[1]
 
     # Padding burn_in_step and n_step
@@ -145,9 +148,9 @@ def episode_to_batch(burn_in_step: int,
         l_obses_list[j] = np.concatenate([np.zeros((1, burn_in_step, *l_obses.shape[2:]), dtype=l_obses.dtype),
                                           l_obses,
                                           np.zeros((1, n_step - 1, *l_obses.shape[2:]), dtype=l_obses.dtype)], axis=1)
-    l_actions = np.concatenate([np.zeros((1, burn_in_step, l_actions.shape[-1]), dtype=l_actions.dtype),
+    l_actions = np.concatenate([padding_action.repeat(burn_in_step, 1),
                                 l_actions,
-                                np.zeros((1, n_step - 1, l_actions.shape[-1]), dtype=l_actions.dtype)], axis=1)
+                                padding_action.repeat(n_step - 1, 1)], axis=1)
     l_rewards = np.concatenate([np.zeros((1, burn_in_step), dtype=l_rewards.dtype),
                                 l_rewards,
                                 np.zeros((1, n_step - 1), dtype=l_rewards.dtype)], axis=1)

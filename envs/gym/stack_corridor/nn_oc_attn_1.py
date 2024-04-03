@@ -19,22 +19,23 @@ class ModelRep(m.ModelBaseAttentionRep):
         self.embed_size = embed_size
 
         self.attn = m.EpisodeMultiheadAttention(embed_size, num_layers=2,
-                                                num_heads=[1, 2],
+                                                num_heads=2,
                                                 pe=[POSITIONAL_ENCODING.ROPE, None],
                                                 qkv_dense_depth=1,
                                                 out_dense_depth=1,
-                                                dropout=0.02,
+                                                dropout=0.005,
                                                 gate=GATE.RESIDUAL,
                                                 use_layer_norm=False)
 
         self.rnn1 = m.GRU(embed_size, embed_size, num_layers=1)
+        self._rnn1_hidden_state_dim = self.rnn1.num_layers * self.rnn1.hidden_size
 
         self.attn1 = m.EpisodeMultiheadAttention(embed_size, num_layers=2,
                                                  num_heads=2,
                                                  pe=None,
                                                  qkv_dense_depth=1,
                                                  out_dense_depth=1,
-                                                 dropout=0.02,
+                                                 dropout=0.005,
                                                  gate=GATE.RESIDUAL,
                                                  use_layer_norm=False)
 
@@ -59,9 +60,9 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         if hidden_state is not None:
             assert hidden_state.shape[1] == 1
-            attn_hidden_state = hidden_state[..., :self.embed_size]
-            rnn_1_hidden_state = hidden_state[..., self.embed_size:self.embed_size + self.embed_size]
-            attn1_hidden_state = hidden_state[..., self.embed_size + self.embed_size:]
+            attn_hidden_state = hidden_state[..., :self.attn.output_hidden_state_dim]
+            rnn_1_hidden_state = hidden_state[..., self.attn.output_hidden_state_dim:self.attn.output_hidden_state_dim + self._rnn1_hidden_state_dim]
+            attn1_hidden_state = hidden_state[..., self.attn.output_hidden_state_dim + self._rnn1_hidden_state_dim:]
 
             rnn1_hidden_state = rnn_1_hidden_state.reshape(batch,
                                                            self.rnn1.num_layers,
@@ -117,7 +118,7 @@ class ModelOptionRep(m.ModelBaseSimpleRep):
 
         embed_size = 3 * 4
 
-        # self.mlp = m.LinearLayers(embed_size, dense_n=embed_size, dense_depth=2, dropout=0.02)
+        # self.mlp = m.LinearLayers(embed_size, dense_n=embed_size, dense_depth=2, dropout=0.005)
 
     def forward(self, obs_list):
         if self._offline_action_index != -1:
@@ -134,12 +135,12 @@ class ModelOptionRep(m.ModelBaseSimpleRep):
 
 class ModelQ(m.ModelQ):
     def _build_model(self):
-        return super()._build_model(d_dense_n=128, d_dense_depth=2, dropout=0.02)
+        return super()._build_model(d_dense_n=128, d_dense_depth=2, dropout=0.005)
 
 
 class ModelTermination(m.ModelTermination):
     def _build_model(self):
-        return super()._build_model(dense_n=128, dense_depth=2, dropout=0.02)
+        return super()._build_model(dense_n=128, dense_depth=2, dropout=0.005)
 
     def forward(self, state, obs_list):
         high_state, vec_obs = obs_list
@@ -153,7 +154,7 @@ class ModelTermination(m.ModelTermination):
 
 class ModelPolicy(m.ModelPolicy):
     def _build_model(self):
-        return super()._build_model(d_dense_n=128, d_dense_depth=1, dropout=0.02)
+        return super()._build_model(d_dense_n=128, d_dense_depth=1, dropout=0.005)
 
 
 class ModelRND(m.ModelRND):
