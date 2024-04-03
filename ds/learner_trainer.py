@@ -32,7 +32,7 @@ class BatchGenerator:
                  debug: bool,
                  ma_name: Optional[str],
 
-                 model_abs_dir: str,
+                 model_abs_dir: Path,
                  burn_in_step: int,
                  n_step: int,
                  batch_size: int,
@@ -52,7 +52,7 @@ class BatchGenerator:
         config_helper.set_logger(debug)
 
         if logger_in_file:
-            config_helper.add_file_logger(Path(model_abs_dir).joinpath(f'learner_trainer_batch_generator_{_id}.log'))
+            config_helper.add_file_logger(model_abs_dir.joinpath(f'learner.log'))
 
         if ma_name is None:
             self._logger = logging.getLogger(f'ds.learner.trainer.batch_generator_{_id}')
@@ -165,7 +165,7 @@ class Trainer:
         config_helper.set_logger(debug)
 
         if logger_in_file:
-            config_helper.add_file_logger(model_abs_dir.joinpath('learner_trainer.log'))
+            config_helper.add_file_logger(model_abs_dir.joinpath('learner.log'))
 
         if ma_name is None:
             self._logger = logging.getLogger('ds.learner.trainer')
