@@ -244,32 +244,37 @@ class Learner(Main):
                                                                   cmd_pipe_client,
                                                                   learner_trainer_process)
 
-        self._logger.info('Waiting for updating sac_bak for the first time')
-        self._update_sac_bak()
+            self._logger.info(f'Waiting for updating {n} SAC_BAK for the first time')
+            self._update_sac_bak(n)
+            self._logger.info(f'Updated {n} SAC_BAK, start forever updating')
 
-        threading.Thread(target=self._forever_update_sac_bak, daemon=True).start()
+            threading.Thread(target=self._forever_update_sac_bak,
+                             args=(n,),
+                             daemon=True).start()
 
-    def _update_sac_bak(self):
-        for n, mgr in self.ma_manager:
-            all_variables, _ = self._ma_agent_manager_buffer[n].all_variables_buffer.get()  # Block, waiting for all variables available
+    def _update_sac_bak(self, ma_name: str):
+        mgr = self.ma_manager[ma_name]
+        all_variables, _ = self._ma_agent_manager_buffer[ma_name].all_variables_buffer.get()  # Block, waiting for all variables available
 
-            with self._sac_learner_eval_lock.write():
-                res = mgr.rl.update_all_variables(all_variables)
+        with self._sac_learner_eval_lock.write():
+            res = mgr.rl.update_all_variables(all_variables)
 
-            if not res:
-                self._logger.error('NAN in variables, closing...')
-                with open(self.model_abs_dir.joinpath('force_closed'), 'w') as f:
-                    f.write('NAN in variables')
-                self.close()
-                return
+        if not res:
+            self._logger.error(f'NAN in {ma_name} SAC_BAK variables, closing...')
+            with open(self.model_abs_dir.joinpath('force_closed'), 'w') as f:
+                f.write(f'NAN in {ma_name} SAC_BAK variables')
+            self.close()
+            return
 
-            self._ma_policy_variables_cache[n] = mgr.rl.get_policy_variables()
+        self._ma_policy_variables_cache[ma_name] = mgr.rl.get_policy_variables()
 
-        self._logger.info('Updated sac_bak')
-
-    def _forever_update_sac_bak(self):
+    def _forever_update_sac_bak(self, ma_name: str):
+        i = 1
         while not self._closed:
-            self._update_sac_bak()
+            self._logger.info(f'Updating {ma_name} SAC_BAK ({i})...')
+            self._update_sac_bak(ma_name)
+            self._logger.info(f'Updated {ma_name} SAC_BAK ({i})')
+            i += 1
 
     def _get_actor_register_result(self, actor_id):
         if self._initialized:

@@ -92,6 +92,10 @@ class SharedMemoryManager:
         return self.buffer, shm_idx
 
     def put(self, data, pop_last=True, timeout=None):
+        """
+        pop_last: True: if there is no free shm index, pop the last shm index
+                  False: block until get the last shm index or timeout (return None)
+        """
         if pop_last:
             shm_idx = None
             while shm_idx is None:

@@ -7,6 +7,8 @@ default:
     max_step_each_iter: 100
     n_envs: 2
 
+    update_sac_bak_per_step: 10 # Every N step update sac_bak for evaluation
+
     episode_queue_size: 2
     episode_sender_process_num: 2
     batch_queue_size: 2
