@@ -18,6 +18,8 @@ default:
 
     n_envs: 50
     reset_on_iteration: true
+    
+    update_sac_bak_per_step: 50 # Every N step update sac_bak for evaluation
 
   net_config:
     evolver_host: 127.0.0.1

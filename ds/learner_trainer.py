@@ -251,20 +251,18 @@ class Trainer:
             self._closed = True
 
     def _update_sac_bak(self):
-        self._logger.info('Updating sac_bak...')
+        step = self.sac.get_global_step()
+        self._logger.info(f'Putting all variables for sac_bak updating...')
         with self.sac_lock:
             all_variables = self.sac.get_all_variables()
 
         self._all_variables_buffer.put(all_variables, pop_last=False)
+        self._logger.info(f'All variables are put in buffer (S {step})')
 
     def _forever_run_cmd_pipe(self, cmd_pipe_server):
         while not self._closed:
             cmd, args = cmd_pipe_server.recv()
-            if cmd == 'UPDATE':
-                with self.sac_lock:
-                    self.sac.update_nn_variables(args)
-                self._logger.info('Updated all nn variables')
-            elif cmd == 'LOG_EPISODE_SUMMARIES':
+            if cmd == 'LOG_EPISODE_SUMMARIES':
                 with self.sac_lock:
                     self.sac.write_constant_summaries(args)
             elif cmd == 'SAVE_MODEL':

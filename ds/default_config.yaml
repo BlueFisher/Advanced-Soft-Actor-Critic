@@ -19,7 +19,6 @@ base_config:
 
   update_sac_bak_per_step: 200 # Every N step update sac_bak for evaluation
 
-  max_actors_each_learner: -1 # The max number of actors of each learner, -1 indicates no limit
   noise_increasing_rate: 0 # Noise = N * number of actors
   noise_max: 0.1 # Max noise for actors
 
