@@ -32,7 +32,7 @@ class LearnerHitted(Learner):
                 continue
             rewards = [a.reward for a in mgr.non_empty_agents]
             rewards = ", ".join([f"{i:6.1f}" for i in rewards])
-            hitted = sum([a.hitted for a in mgr.agents.non_empty_agents])
+            hitted = sum([a.hitted for a in mgr.non_empty_agents])
             max_step = max([a.steps for a in mgr.non_empty_agents])
 
             self._logger.info(f'{n} {iteration}, {iter_time:.2f}s, S {max_step}, R {rewards}, hitted {hitted}')

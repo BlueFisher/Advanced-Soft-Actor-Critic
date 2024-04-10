@@ -96,7 +96,7 @@ class EpisodeSender:
 
 
 class Actor(Main):
-    train_mode = False
+    train_mode = True
 
     _id = -1
     _stub = None
@@ -236,10 +236,8 @@ class Actor(Main):
             ep_shmm = SharedMemoryManager(self.base_config['episode_queue_size'],
                                           logger=logging.getLogger(f'ds.actor.ep_shmm.{n}'),
                                           logger_level=logging.INFO,
-                                          counter_get_shm_index_empty_log='Episode shm index is empty',
-                                          timer_get_shm_index_log='Get an episode shm index',
-                                          timer_get_data_log='Get an episode',
-                                          timer_put_data_log='Put an episode',
+                                          counter_get_shm_index_empty_log='Get an episode but is empty',
+                                          timer_get_shm_index_log='Get an episode waited',
                                           log_repeat=ELAPSED_REPEAT,
                                           force_report=ELAPSED_FORCE_REPORT)
             ep_shmm.init_from_shapes(episode_shapes, episode_dtypes)
@@ -270,16 +268,15 @@ class Actor(Main):
 
     def _update_policy_variables(self):
         ma_variables = self._stub.get_ma_policy_variables()
-        if ma_variables is None:
-            return
 
         with self._sac_actor_lock.write():
             for n, variables in ma_variables.items():
-                if not any([np.isnan(np.min(v)) for v in variables]):
-                    self.ma_manager[n].rl.update_policy_variables(variables)
-                    self._logger.info(f'{n} policy variables updated')
-                else:
-                    self._logger.warning(f'NAN in {n} variables, skip updating')
+                if variables is not None:
+                    if any([np.isnan(np.min(v)) for v in variables]):
+                        self._logger.warning(f'NAN in {n} variables, skip updating')
+                    else:
+                        self.ma_manager[n].rl.update_policy_variables(variables)
+                        self._logger.info(f'{n} policy variables updated')
 
     def _add_trans(self,
                    ma_name: str,
@@ -331,7 +328,8 @@ class Actor(Main):
 
                 self._update_policy_variables()
 
-                if self.base_config['reset_on_iteration'] \
+                if iteration == 0 \
+                        or self.base_config['reset_on_iteration'] \
                         or self.ma_manager.max_reached \
                         or force_reset:
                     self.ma_manager.reset()
@@ -399,6 +397,7 @@ class Actor(Main):
                 self._log_episode_info(iteration, time.time() - iter_time)
 
                 self.ma_manager.reset_dead_agents()
+                self.ma_manager.clear_tmp_episode_trans_list()
 
                 iteration += 1
 
@@ -486,8 +485,7 @@ class StubController:
     @rpc_error_inspector
     def get_ma_policy_variables(self):
         response = self._learner_stub.GetPolicyVariables(Empty())
-        if response.succeeded:
-            return proto_to_ma_variables(response)
+        return proto_to_ma_variables(response)
 
     def _start_learner_persistence(self):
         def request_messages():

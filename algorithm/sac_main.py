@@ -301,6 +301,7 @@ class Main:
                     self.ma_manager.set_train_mode(is_training)
 
                 self.ma_manager.reset_dead_agents()
+                self.ma_manager.clear_tmp_episode_trans_list()
 
                 p_model = self.model_abs_dir.joinpath('save_model')
                 if self.train_mode and p_model.exists():

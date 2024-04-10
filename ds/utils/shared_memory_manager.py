@@ -16,12 +16,29 @@ class SharedMemoryManager:
                  logger_level: int = logging.INFO,
                  counter_get_shm_index_empty_log: Optional[str] = None,
                  timer_get_shm_index_log: Optional[str] = None,
+
                  timer_get_data_log: Optional[str] = None,
+
                  counter_get_free_shm_index_empty_log: Optional[str] = None,
                  timer_get_free_shm_index_log: Optional[str] = None,
+
                  timer_put_data_log: Optional[str] = None,
+
                  log_repeat: int = 1,
                  force_report: bool = True):
+        """
+        GETTING:
+            counter_get_shm_index_empty_log: The counter of getting data shm index from the queue but is empty after waiting timeout
+            timer_get_shm_index_log: The timer of waiting for getting data shm index
+
+            timer_get_data_log: The timer of copying data from shm to buffer np
+
+        PUTTING (if not pop_last):
+            counter_get_free_shm_index_empty_log: The counter of getting free shm index from the queue but is empty after waiting timeout
+            timer_get_free_shm_index_log: The timer of waiting for getting data free shm index
+
+            timer_put_data_log: The timer of copying data from buffer np to shm
+        """
 
         self.queue_size = queue_size
         self.counter_get_shm_index_empty_log = counter_get_shm_index_empty_log

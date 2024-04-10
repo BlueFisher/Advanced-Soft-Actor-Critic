@@ -243,8 +243,7 @@ class UnityWrapperProcess:
             ma_obs_list[n] = decision_steps.obs
 
             if len(terminal_steps) != 0:
-                self._logger.warning(f'terminal_steps in reset, {terminal_steps.agent_id}')
-                self._logger.warning(f'decision_steps, {decision_steps.agent_id}')
+                self._logger.warning(f'{n} terminal_steps in reset, {terminal_steps.agent_id}')
 
         return ma_agent_ids, ma_obs_list
 
