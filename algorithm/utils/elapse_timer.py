@@ -138,7 +138,7 @@ class ElapsedCounter:
         if self._step == self._repeat:
             if self._counter > 0:
                 log = f'{self._log}: {self._counter} in {self._repeat}'
-                if self._counter < self._repeat / 2:
+                if self._counter < self._repeat / 3:
                     if self._logger_level == logging.DEBUG:
                         self._logger.debug(log)
                     elif self._logger_level == logging.INFO:

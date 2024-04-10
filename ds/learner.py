@@ -1,3 +1,4 @@
+from collections import defaultdict
 import importlib
 import json
 import logging
@@ -116,12 +117,6 @@ class Learner(Main):
             for ma_config in ma_configs.values():
                 ma_config['sac_config']['nn'] = args.nn
 
-        # If learner_host is not set, use ip as default
-        if config['net_config']['learner_host'] is None:
-            hostname = socket.gethostname()
-            ip = socket.gethostbyname(hostname)
-            config['net_config']['learner_host'] = ip
-
         config['base_config']['name'] = config_helper.generate_base_name(config['base_config']['name'])
 
         model_abs_dir = Path(root_dir).joinpath('models',
@@ -202,10 +197,8 @@ class Learner(Main):
             ep_shmm = SharedMemoryManager(self.base_config['episode_queue_size'],
                                           logger=logging.getLogger(f'ds.learner.ep_shmm.{n}'),
                                           logger_level=logging.INFO,
-                                          counter_get_shm_index_empty_log='Episode shm index is empty',
-                                          timer_get_shm_index_log='Get an episode shm index',
-                                          timer_get_data_log='Get an episode',
-                                          timer_put_data_log='Put an episode',
+                                          counter_get_shm_index_empty_log='Get an episode but is empty',
+                                          timer_get_shm_index_log='Get an episode waited',
                                           log_repeat=ELAPSED_REPEAT,
                                           force_report=ELAPSED_FORCE_REPORT)
             ep_shmm.init_from_shapes(episode_shapes, episode_dtypes)
@@ -325,6 +318,10 @@ class Learner(Main):
             ep_probs: [1, episode_len]
             ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
+        if ep_indexes.shape[1] > self.base_config['max_episode_length']:
+            self._logger.error(f'Episode length {ep_indexes.shape[1]} > max episode length {self.base_config["max_episode_length"]}')
+            return
+
         episode_idx = self._ma_agent_manager_buffer[ma_name].episode_buffer.put([
             ep_indexes,
             ep_obses_list,
@@ -345,7 +342,8 @@ class Learner(Main):
                 step = 0
                 iter_time = time.time()
 
-                if self.base_config['reset_on_iteration'] \
+                if iteration == 0 \
+                        or self.base_config['reset_on_iteration'] \
                         or self.ma_manager.max_reached \
                         or force_reset:
                     self.ma_manager.reset()
@@ -403,6 +401,7 @@ class Learner(Main):
                 self._log_episode_info(iteration, time.time() - iter_time)
 
                 self.ma_manager.reset_dead_agents()
+                self.ma_manager.clear_tmp_episode_trans_list()
 
                 p_model = self.model_abs_dir.joinpath('save_model')
                 if p_model.exists():
@@ -486,8 +485,6 @@ class Learner(Main):
 
 
 class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
-    _ma_policy_variables_cache = None
-
     def __init__(self, learner: Learner):
         self._get_actor_register_result = learner._get_actor_register_result
 
@@ -528,10 +525,6 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
             if res is not None:
                 actor_id = self._actor_id
 
-                self._peer_set.add_info(peer, {
-                    'ma_policy_variables_id_cache': None
-                })
-
                 self._logger.info(f'Actor {peer} registered')
 
                 self._actor_id += 1
@@ -542,6 +535,11 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
                  ma_nn_configs,
                  sac_config,
                  ma_sac_configs) = res
+
+                self._peer_set.add_info(peer, {
+                    'ma_policy_variables_id_cache': defaultdict(lambda: None)  # ma_name: id
+                })
+
                 return learner_pb2.RegisterActorResponse(model_abs_dir=str(model_abs_dir),
                                                          unique_id=actor_id,
                                                          reset_config_json=json.dumps(reset_config),
@@ -560,15 +558,17 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
         if len(ma_policy_variables) == 0:
             return ma_variables_to_proto(None)
 
-        self._ma_policy_variables_cache = ma_policy_variables
-
         actor_info = self._peer_set.get_info(peer)
 
-        if id(list(self._ma_policy_variables_cache.values())[0]) == actor_info['ma_policy_variables_id_cache']:
-            return ma_variables_to_proto(None)
+        _ma_policy_variables = {}
+        for n, vs in ma_policy_variables.items():
+            if id(vs) == actor_info['ma_policy_variables_id_cache'][n]:
+                _ma_policy_variables[n] = None
+            else:
+                actor_info['ma_policy_variables_id_cache'][n] = id(vs)
+                _ma_policy_variables[n] = vs
 
-        actor_info['ma_policy_variables_id_cache'] = id(list(self._ma_policy_variables_cache.values())[0])
-        return ma_variables_to_proto(self._ma_policy_variables_cache)
+        return ma_variables_to_proto(_ma_policy_variables)
 
     # From actor
     def Add(self, request, context):

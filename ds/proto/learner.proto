@@ -16,7 +16,7 @@ service LearnerService {
   rpc ForceClose(Empty) returns (Empty);
 }
 
-message RegisterActorResponse{
+message RegisterActorResponse {
   string model_abs_dir = 1;
   int32 unique_id = 2;
 

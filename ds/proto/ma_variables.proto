@@ -3,10 +3,10 @@ syntax = "proto3";
 import "ndarray.proto";
 
 message Variables {
-  repeated NDarray variables = 1;
+  bool succeeded = 1;
+  repeated NDarray variables = 2;
 }
 
 message MAVariables {
-  bool succeeded = 1;
-  map<string, Variables> ma_variables = 2;
+  map<string, Variables> ma_variables = 1;
 }

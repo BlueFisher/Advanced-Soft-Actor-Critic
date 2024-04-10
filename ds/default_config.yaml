@@ -17,19 +17,23 @@ base_config:
   max_step_each_iter: -1 # Max step in each iteration
   reset_on_iteration: true # Whether forcing reset agent if an episode terminated
 
-  update_sac_bak_per_step: 200 # Every N step update sac_bak for evaluation
+  update_sac_bak_per_step: 100 # Every N step update sac_bak for evaluation
 
   noise_increasing_rate: 0 # Noise = N * number of actors
   noise_max: 0.1 # Max noise for actors
 
   max_episode_length: 500
+
+  # ACTOR
   episode_queue_size: 5
   episode_sender_process_num: 5
+
+  # LEARNER
   batch_queue_size: 5
   batch_generator_process_num: 5
 
 net_config:
-  learner_host: null
+  learner_host: 127.0.0.1
   learner_port: 61001
 
 reset_config: null # Reset parameters sent to Unity

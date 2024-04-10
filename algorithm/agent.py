@@ -531,8 +531,7 @@ class AgentManager:
 
     def get_test_action(self,
                         agent_ids: np.ndarray,
-                        obs_list: List[np.ndarray],
-                        last_reward: np.ndarray) -> np.ndarray:
+                        obs_list: List[np.ndarray]) -> np.ndarray:
         assert len(agent_ids) == obs_list[0].shape[0]
 
         self._verify_agents(agent_ids)
@@ -540,7 +539,7 @@ class AgentManager:
         for i, agent_id in enumerate(agent_ids):
             agent = self.agents_dict[agent_id]
             agent.end_transition(
-                reward=last_reward[i],
+                reward=0,
                 done=False,
                 max_reached=False
             )
@@ -608,7 +607,6 @@ class AgentManager:
         # ep_seq_hidden_states
         for episode_trans in self._tmp_episode_trans_list:
             self.rl.put_episode(**episode_trans)
-        self._tmp_episode_trans_list.clear()
 
         trained_steps = self.rl.train()
 
@@ -620,6 +618,9 @@ class AgentManager:
         return self._tmp_episode_trans_list
 
     def clear_tmp_episode_trans_list(self) -> None:
+        """
+        Force clear temporary episode_trans_list to avoid memory leak
+        """
         self._tmp_episode_trans_list.clear()
 
     def log_episode(self) -> None:
@@ -728,16 +729,17 @@ class MultiAgentsManager:
 
     def get_test_ma_action(self,
                            ma_agent_ids: Dict[str, np.ndarray],
-                           ma_obs_list: Dict[str, List[np.ndarray]]) -> Tuple[Dict[str, np.ndarray],
-                                                                              Dict[str, np.ndarray]]:
+                           ma_obs_list: Dict[str, List[np.ndarray]],
+                           ma_last_reward=None,
+                           disable_sample=None) -> Tuple[Dict[str, np.ndarray],
+                                                         Dict[str, np.ndarray]]:
         ma_d_action = {}
         ma_c_action = {}
 
         for n, mgr in self:
             d_action, c_action = mgr.get_test_action(
                 agent_ids=ma_agent_ids[n],
-                obs_list=ma_obs_list[n],
-                last_reward=0
+                obs_list=ma_obs_list[n]
             )
 
             ma_d_action[n] = d_action
@@ -781,3 +783,10 @@ class MultiAgentsManager:
             if n in self._inference_ma_names or mgr.rl is None:
                 continue
             mgr.rl.save_model(save_replay_buffer)
+
+    def clear_tmp_episode_trans_list(self) -> None:
+        """
+        Force clear temporary episode_trans_list to avoid memory leak
+        """
+        for n, mgr in self:
+            mgr.clear_tmp_episode_trans_list()

@@ -190,7 +190,7 @@ def add_file_logger(logger_file: Path):
     logger = logging.getLogger()
 
     # Create file handler
-    fh = logging.handlers.RotatingFileHandler(logger_file, maxBytes=10 * 1024 * 1024, backupCount=20)
+    fh = logging.FileHandler(logger_file)
     fh.setLevel(logger.level)
 
     # Add handler and formatter to logger

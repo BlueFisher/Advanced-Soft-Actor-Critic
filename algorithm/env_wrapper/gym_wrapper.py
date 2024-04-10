@@ -29,17 +29,16 @@ class GymWrapper(EnvWrapper):
         self.render = render
 
         self._logger = logging.getLogger('GymWrapper')
-
-        self._logger.info(', '.join(gym.registry.keys()))
+        self._logger.info(', '.join(gym.envs.registry.keys()))
 
     def init(self) -> Tuple[Dict[str, List[str]],
                             Dict[str, List[Tuple[int]]],
                             Dict[str, List[int]],
                             Dict[str, int]]:
-        self.env = env = gym.vector.make(self.env_name,
-                                         render_mode='human' if self.render else None,
-                                         num_envs=self.n_envs,
-                                         **self.env_args)
+        self.env = env = gym.make_vec(self.env_name,
+                                      render_mode='human' if self.render else None,
+                                      num_envs=self.n_envs,
+                                      **self.env_args)
 
         self._logger.info(f'Observation shapes: {env.observation_space}')
         self._logger.info(f'Action size: {env.action_space}')
