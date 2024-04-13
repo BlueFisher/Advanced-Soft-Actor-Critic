@@ -242,9 +242,6 @@ class UnityWrapperProcess:
             ma_agent_ids[n] = decision_steps.agent_id
             ma_obs_list[n] = decision_steps.obs
 
-            if len(terminal_steps) != 0:
-                self._logger.warning(f'{n} terminal_steps in reset, {terminal_steps.agent_id}')
-
         return ma_agent_ids, ma_obs_list
 
     def step(self, ma_d_action, ma_c_action):
@@ -590,6 +587,7 @@ class UnityWrapper(EnvWrapper):
                         decision_ma_envs_agent_ids[n].append(self._map_agent_ids(decision_ma_agent_ids[n], i))
                         decision_ma_envs_obs_list[n].append(decision_ma_obs_list[n])
                         decision_ma_envs_last_reward[n].append(decision_ma_last_reward[n])
+
                         terminal_ma_envs_agent_ids[n].append(self._map_agent_ids(terminal_ma_agent_ids[n], i))
                         terminal_ma_envs_obs_list[n].append(terminal_ma_obs_list[n])
                         terminal_ma_envs_last_reward[n].append(terminal_ma_last_reward[n])

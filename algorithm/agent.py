@@ -364,6 +364,7 @@ class AgentManager:
         """
         self.agents_dict.clear()
         self.agents_liveness.clear()
+        self.clear_tmp_episode_trans_list()
 
     def reset_dead_agents(self) -> None:
         """
@@ -383,6 +384,8 @@ class AgentManager:
 
         for agent in self.agents:
             agent.reset()
+
+        self.clear_tmp_episode_trans_list()
 
     def _verify_agents(self,
                        agent_ids: np.ndarray):
@@ -607,6 +610,7 @@ class AgentManager:
         # ep_seq_hidden_states
         for episode_trans in self._tmp_episode_trans_list:
             self.rl.put_episode(**episode_trans)
+        self.clear_tmp_episode_trans_list()
 
         trained_steps = self.rl.train()
 

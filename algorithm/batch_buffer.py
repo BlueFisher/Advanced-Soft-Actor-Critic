@@ -18,7 +18,7 @@ class BatchBuffer:
         self.n_step = n_step
         self.padding_action = padding_action  # The discrete padding actions cannot be all zeros
         self.batch_size = batch_size
-        
+
         self._batch_list = []
 
     def put_episode(self,
