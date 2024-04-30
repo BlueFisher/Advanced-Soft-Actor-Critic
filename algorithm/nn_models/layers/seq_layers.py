@@ -1,6 +1,6 @@
 import math
 from enum import Enum
-from typing import List, Optional, Union
+from typing import List, Optional
 
 import torch
 from torch import nn
@@ -465,13 +465,13 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
 class EpisodeMultiheadAttention(nn.Module):
     def __init__(self, embed_dim: int,
                  num_layers: int = 2,
-                 num_heads: Union[int, List[int]] = 1,
-                 pe: Union[Optional[POSITIONAL_ENCODING], List[Optional[POSITIONAL_ENCODING]]] = False,
-                 qkv_dense_depth: Union[int, List[int]] = 0,
-                 out_dense_depth: Union[int, List[int]] = 1,
-                 dropout: Union[float, List[float]] = 0.,
-                 gate: Union[Optional[GATE], List[Optional[GATE]]] = None,
-                 use_layer_norm: Union[bool, List[bool]] = False):
+                 num_heads: int | List[int] = 1,
+                 pe: Optional[POSITIONAL_ENCODING] | List[Optional[POSITIONAL_ENCODING]] = False,
+                 qkv_dense_depth: int | List[int] = 0,
+                 out_dense_depth: int | List[int] = 1,
+                 dropout: float | List[float] = 0.,
+                 gate: Optional[GATE] | List[Optional[GATE]] = None,
+                 use_layer_norm: bool | List[bool] = False):
         super().__init__()
 
         self.num_layers = num_layers

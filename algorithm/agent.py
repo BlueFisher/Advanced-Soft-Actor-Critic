@@ -1,7 +1,7 @@
 from copy import deepcopy
 from os import name
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Set, Tuple, Union
+from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 import numpy as np
 
@@ -29,7 +29,7 @@ class Agent:
     _tmp_prob: Optional[np.ndarray] = None
     _tmp_seq_hidden_state: Optional[np.ndarray] = None
 
-    _tmp_episode_trans: Dict[str, Union[np.ndarray, List[np.ndarray]]]
+    _tmp_episode_trans: Dict[str, np.ndarray | List[np.ndarray]]
 
     def __init__(self,
                  agent_id: int,
@@ -55,7 +55,7 @@ class Agent:
 
         self._tmp_episode_trans = self._generate_empty_episode_trans()
 
-    def _generate_empty_episode_trans(self, episode_length: int = 0) -> Dict[str, Union[np.ndarray, List[np.ndarray]]]:
+    def _generate_empty_episode_trans(self, episode_length: int = 0) -> Dict[str, np.ndarray | List[np.ndarray]]:
         return {
             'index': -np.ones((episode_length, ), dtype=np.int32),
             'obs_list': [np.zeros((episode_length, *s), dtype=np.float32) for s in self.obs_shapes],
@@ -96,7 +96,7 @@ class Agent:
                        reward: float,
                        done: bool = False,
                        max_reached: bool = False,
-                       next_obs_list: Optional[List[np.ndarray]] = None) -> Optional[Dict[str, Union[np.ndarray, List[np.ndarray]]]]:
+                       next_obs_list: Optional[List[np.ndarray]] = None) -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
         if self._tmp_obs_list is None:
             return
 
@@ -126,7 +126,7 @@ class Agent:
 
     def _end_episode(self,
                      next_obs_list: List[np.ndarray]) \
-            -> Optional[Dict[str, Union[np.ndarray, List[np.ndarray]]]]:
+            -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
 
         self._add_transition(
             index=self._tmp_index + 1,
@@ -162,7 +162,7 @@ class Agent:
                         max_reached: bool,
                         prob: np.ndarray,
                         seq_hidden_state: Optional[np.ndarray] = None) \
-            -> Optional[Dict[str, Union[np.ndarray, List[np.ndarray]]]]:
+            -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
         """
         Args:
             index: int
@@ -225,7 +225,7 @@ class Agent:
         pass
 
     def get_episode_trans(self,
-                          force_length: int = None) -> Optional[Dict[str, Union[np.ndarray, List[np.ndarray]]]]:
+                          force_length: int = None) -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
         """
         Returns:
             ep_indexes (np.int32): [1, episode_len]
@@ -579,7 +579,7 @@ class AgentManager:
                     agent_ids: np.ndarray,
                     obs_list: List[np.ndarray],
                     last_reward: np.ndarray,
-                    max_reached: np.ndarray) -> Dict[str, Union[np.ndarray, List[np.ndarray]]]:
+                    max_reached: np.ndarray) -> Dict[str, np.ndarray | List[np.ndarray]]:
         for i, agent_id in enumerate(agent_ids):
             if agent_id not in self.agents_dict:
                 continue
@@ -617,7 +617,7 @@ class AgentManager:
         return trained_steps
 
     def get_tmp_episode_trans_list(self) -> List[
-        Dict[str, Union[np.ndarray, List[np.ndarray]]]
+        Dict[str, np.ndarray | List[np.ndarray]]
     ]:
         return self._tmp_episode_trans_list
 

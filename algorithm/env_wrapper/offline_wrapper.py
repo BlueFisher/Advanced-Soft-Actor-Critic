@@ -1,7 +1,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -15,7 +15,7 @@ class OfflineWrapper(EnvWrapper):
     # TODO
     def __init__(self,
                  env_name: str,
-                 env_args: Optional[Union[str, Dict]] = None,
+                 env_args: Optional[str | Dict] = None,
                  n_envs: int = 1):
         super().__init__(True, env_name, env_args, n_envs)
 

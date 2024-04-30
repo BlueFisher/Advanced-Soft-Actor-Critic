@@ -367,7 +367,7 @@ class OptionSelectorBase(SAC_Base):
     def get_initial_option_index(self, batch_size: int) -> np.ndarray:
         return np.full([batch_size, ], -1, dtype=np.int8)
 
-    def get_initial_low_seq_hidden_state(self, batch_size, get_numpy=True) -> Union[np.ndarray, torch.Tensor]:
+    def get_initial_low_seq_hidden_state(self, batch_size, get_numpy=True) -> np.ndarray | torch.Tensor:
         assert self.option_list[0].seq_encoder is not None
 
         return self.option_list[0].get_initial_seq_hidden_state(batch_size,
@@ -1511,9 +1511,9 @@ class OptionSelectorBase(SAC_Base):
                f_seq_hidden_states: torch.Tensor = None,
                f_low_seq_hidden_states: torch.Tensor = None,
                priority_is: torch.Tensor = None,
-               key_batch: Optional[Tuple[Union[torch.Tensor, List[torch.Tensor]], ...]] = None) -> Tuple[torch.Tensor,
-                                                                                                         List[torch.Tensor],
-                                                                                                         torch.Tensor]:
+               key_batch: Optional[Tuple[torch.Tensor | List[torch.Tensor], ...]] = None) -> Tuple[torch.Tensor,
+                                                                                                   List[torch.Tensor],
+                                                                                                   torch.Tensor]:
         """
         Args:
             bn_indexes (torch.int32): [batch, b + n]
@@ -1890,8 +1890,8 @@ class OptionSelectorBase(SAC_Base):
         self.replay_buffer.add(storage_data, ignore_size=1)
 
     def _sample_from_replay_buffer(self) -> Tuple[np.ndarray,
-                                                  Tuple[Union[np.ndarray, List[np.ndarray]], ...],
-                                                  Tuple[Union[np.ndarray, List[np.ndarray]], ...]]:
+                                                  Tuple[np.ndarray | List[np.ndarray], ...],
+                                                  Tuple[np.ndarray | List[np.ndarray], ...]]:
         """
         Sample from replay buffer
 

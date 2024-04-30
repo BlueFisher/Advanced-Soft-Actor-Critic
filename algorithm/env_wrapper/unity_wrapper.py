@@ -7,7 +7,7 @@ import os
 import random
 import time
 import uuid
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 from mlagents_envs.environment import ActionTuple, UnityEnvironment
@@ -329,7 +329,7 @@ class UnityWrapper(EnvWrapper):
                  time_scale: Optional[float] = None,
                  seed: Optional[int] = None,
                  scene: Optional[str] = None,
-                 env_args: Optional[Union[List[str], Dict]] = None,
+                 env_args: Optional[List[str] | Dict] = None,
                  force_seq: Optional[bool] = None):
         """
         Args:

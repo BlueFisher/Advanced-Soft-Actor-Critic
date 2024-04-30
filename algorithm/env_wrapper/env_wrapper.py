@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -29,7 +29,7 @@ class EnvWrapper:
     def __init__(self,
                  train_mode: bool = True,
                  env_name: str = None,
-                 env_args: Optional[Union[List[str], Dict]] = None,
+                 env_args: Optional[List[str] | Dict] = None,
                  n_envs: int = 1):
         self.train_mode = train_mode
         self.env_name = env_name
@@ -63,7 +63,7 @@ class EnvWrapper:
     def reset(self, reset_config: Optional[Dict] = None) -> Tuple[Dict[str, np.ndarray],
                                                                   Dict[str, List[np.ndarray]]]:
         """
-        return:
+        Returns:
             ma_agent_ids: dict[str, (NAgents, )]
             ma_obs_list: dict[str, list[(NAgents, o1), (NAgents, o2), (NAgents, o3_1, o3_2, o3_3)]]
         """

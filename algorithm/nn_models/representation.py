@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 import torch
 from torch import nn
@@ -39,12 +39,12 @@ class ModelBaseRep(nn.Module):
             return None
 
     def get_augmented_encoders(self,
-                               obs_list: List[torch.Tensor]) -> Union[torch.Tensor, Tuple[torch.Tensor]]:
+                               obs_list: List[torch.Tensor]) -> torch.Tensor | Tuple[torch.Tensor]:
         raise Exception("get_augmented_encoders not implemented")
 
     def get_state_from_encoders(self,
                                 obs_list: List[torch.Tensor],
-                                encoders: Union[torch.Tensor, Tuple[torch.Tensor]]) -> torch.Tensor:
+                                encoders: torch.Tensor | Tuple[torch.Tensor]) -> torch.Tensor:
         raise Exception("get_state_from_encoders not implemented")
 
 
@@ -96,7 +96,7 @@ class ModelBaseRNNRep(ModelBaseRep):
 
     def get_state_from_encoders(self,
                                 obs_list: List[torch.Tensor],
-                                encoders: Union[torch.Tensor, Tuple[torch.Tensor]],
+                                encoders: torch.Tensor | Tuple[torch.Tensor],
                                 pre_action: torch.Tensor,
                                 rnn_state: Optional[torch.Tensor] = None,
                                 padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
@@ -133,7 +133,7 @@ class ModelBaseAttentionRep(ModelBaseRep):
     def get_state_from_encoders(self,
                                 index: torch.Tensor,
                                 obs_list: List[torch.Tensor],
-                                encoders: Union[torch.Tensor, Tuple[torch.Tensor]],
+                                encoders: torch.Tensor | Tuple[torch.Tensor],
                                 pre_action: Optional[torch.Tensor] = None,
                                 seq_q_len=1,
                                 hidden_state: Optional[torch.Tensor] = None,

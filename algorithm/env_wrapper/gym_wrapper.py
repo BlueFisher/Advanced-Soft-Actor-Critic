@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import gymnasium as gym
 import numpy as np
@@ -20,7 +20,7 @@ class GymWrapper(EnvWrapper):
     def __init__(self,
                  train_mode: bool = True,
                  env_name: str = None,
-                 env_args: Optional[Union[str, Dict]] = None,
+                 env_args: Optional[str | Dict] = None,
                  n_envs: int = 1,
 
                  render=False):
