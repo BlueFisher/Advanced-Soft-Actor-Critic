@@ -1,5 +1,5 @@
 import math
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -21,8 +21,8 @@ def episode_to_batch(burn_in_step: int,
                      l_dones: np.ndarray,
                      l_probs: Optional[np.ndarray] = None,
                      l_seq_hidden_states: Optional[np.ndarray] = None,
-                     l_low_seq_hidden_states: np.ndarray = None) -> Tuple[List[Union[np.ndarray, List[np.ndarray]]],
-                                                                          List[Union[np.ndarray, List[np.ndarray]]]]:
+                     l_low_seq_hidden_states: np.ndarray = None) -> Tuple[List[np.ndarray | List[np.ndarray]],
+                                                                          List[np.ndarray | List[np.ndarray]]]:
     """
     Args:
         burn_in_step: int
@@ -230,8 +230,8 @@ class BatchBuffer(BatchBuffer):
                 self._batch_list.append(batch)
                 self._key_batch_list.append(key_batch)
 
-    def get_batch(self) -> Tuple[List[Union[np.ndarray, List[np.ndarray]]],
-                                 List[Union[np.ndarray, List[np.ndarray]]]]:
+    def get_batch(self) -> Tuple[List[np.ndarray | List[np.ndarray]],
+                                 List[np.ndarray | List[np.ndarray]]]:
         if len(self._batch_list) == 0 and self._rest_batch is not None:
             r = [self._rest_batch], [self._rest_key_batch]
             self._rest_batch, self._rest_key_batch = None, None

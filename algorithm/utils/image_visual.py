@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,7 +13,7 @@ class ImageVisual:
         self.fig = None
         self.idx = 0
 
-    def __call__(self, *images: Union[np.ndarray, torch.Tensor], max_batch=5, save_name=None):
+    def __call__(self, *images: np.ndarray | torch.Tensor, max_batch=5, save_name=None):
         """
         Supporting RGB and gray images
         Only supporting images with batch size less than 5

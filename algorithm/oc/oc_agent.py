@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Set, Tuple, Union
+from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 import numpy as np
 
@@ -41,7 +41,7 @@ class OC_Agent(Agent):
                          seq_hidden_state_shape,
                          max_return_episode_trans)
 
-    def _generate_empty_episode_trans(self, episode_length: int = 0) -> Dict[str, Union[np.ndarray, List[np.ndarray]]]:
+    def _generate_empty_episode_trans(self, episode_length: int = 0) -> Dict[str, np.ndarray | List[np.ndarray]]:
         empty_episode_trans = super()._generate_empty_episode_trans(episode_length)
         empty_episode_trans['option_index'] = np.full((episode_length, ), -1, dtype=np.int8)
         empty_episode_trans['option_changed_index'] = np.full((episode_length, ), -1, dtype=np.int32)
@@ -86,7 +86,7 @@ class OC_Agent(Agent):
                        reward: float,
                        done: bool = False,
                        max_reached: bool = False,
-                       next_obs_list: Optional[List[np.ndarray]] = None) -> Optional[Dict[str, Union[np.ndarray, List[np.ndarray]]]]:
+                       next_obs_list: Optional[List[np.ndarray]] = None) -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
         if self._tmp_obs_list is None:
             return
 
@@ -119,7 +119,7 @@ class OC_Agent(Agent):
 
     def _end_episode(self,
                      next_obs_list: List[np.ndarray]) \
-            -> Optional[Dict[str, Union[np.ndarray, List[np.ndarray]]]]:
+            -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
 
         self._add_transition(
             index=self._tmp_index + 1,
@@ -222,7 +222,7 @@ class OC_Agent(Agent):
                         prob)
 
     def get_episode_trans(self,
-                          force_length: int = None) -> Optional[Dict[str, Union[np.ndarray, List[np.ndarray]]]]:
+                          force_length: int = None) -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
         """
         Returns:
             ep_indexes (np.int32): [1, episode_len]
@@ -292,7 +292,7 @@ class OC_Agent(Agent):
         return len(self._tmp_option_changed_indexes)
 
     def get_key_trans(self,
-                      force_length: int) -> Dict[str, Union[np.ndarray, List[np.ndarray]]]:
+                      force_length: int) -> Dict[str, np.ndarray | List[np.ndarray]]:
         """
         Returns:
             key_indexes (np.int32): [1, key_len]

@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -34,8 +34,8 @@ def sum_entropy(entropy: torch.Tensor):
     return entropy.sum(-1)
 
 
-def gen_pre_n_actions(n_actions: Union[torch.Tensor, np.ndarray],
-                      keep_last_action=False) -> Union[torch.Tensor, np.ndarray]:
+def gen_pre_n_actions(n_actions: torch.Tensor | np.ndarray,
+                      keep_last_action=False) -> torch.Tensor | np.ndarray:
     if isinstance(n_actions, torch.Tensor):
         if n_actions.shape[1] == 0 and keep_last_action:
             return torch.zeros((n_actions.shape[0], 1, *n_actions.shape[2:]),
@@ -80,7 +80,7 @@ def format_global_step(num):
     return '%s%s' % (num, ['', 'k', 'm', 'g', 't', 'p'][magnitude])
 
 
-def traverse_lists(data: Union[Any, Tuple], process) -> List:
+def traverse_lists(data: Any | Tuple, process) -> List:
     if not isinstance(data, tuple):
         data = (data, )
 
@@ -106,7 +106,7 @@ def episode_to_batch(burn_in_step: int,
                      l_rewards: np.ndarray,
                      l_dones: np.ndarray,
                      l_probs: np.ndarray,
-                     l_seq_hidden_states: Optional[np.ndarray] = None) -> List[Union[np.ndarray, List[np.ndarray]]]:
+                     l_seq_hidden_states: Optional[np.ndarray] = None) -> List[np.ndarray | List[np.ndarray]]:
     """
     Args:
         burn_in_step: int

@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import torch
 from torch import nn
@@ -24,7 +24,7 @@ def conv1d_output_size(
 
 def conv2d_output_shape(
     h_w: Tuple[int, int],
-    kernel_size: Union[int, Tuple[int, int]] = 1,
+    kernel_size: int | Tuple[int, int] = 1,
     stride: int = 1,
     padding: int = 0,
     dilation: int = 1
@@ -67,7 +67,7 @@ def pool_out_shape(h_w: Tuple[int, int], kernel_size: int) -> Tuple[int, int]:
 
 def convtranspose_output_shape(
     h_w: Tuple[int, int],
-    kernel_size: Union[int, Tuple[int, int]] = 1,
+    kernel_size: int | Tuple[int, int] = 1,
     stride: int = 1,
     padding: int = 0,
     output_padding: int = 0,
@@ -100,7 +100,7 @@ def default_conv1d(l, channels) -> Tuple[nn.Module, int, int]:
 
 class Conv1dLayers(nn.Module):
     def __init__(self, in_l: int, in_channels: int,
-                 conv: Union[str, Tuple[nn.Module, int, int]],
+                 conv: str | Tuple[nn.Module, int, int],
                  out_dense_n: int = 64, out_dense_depth: int = 0, output_size: int = None):
         super().__init__()
 
@@ -177,7 +177,7 @@ def nature_visual(height, width, channels) -> Tuple[nn.Module, int, int]:
 
 class ConvLayers(nn.Module):
     def __init__(self, in_height: int, in_width: int, in_channels: int,
-                 conv: Union[str, Tuple[nn.Module, Tuple[int, int], int]],
+                 conv: str | Tuple[nn.Module, Tuple[int, int], int],
                  out_dense_n: int = 64, out_dense_depth: int = 0, output_size: int = None):
         super().__init__()
 

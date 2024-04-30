@@ -4,7 +4,7 @@ import random
 from collections import defaultdict
 from itertools import chain
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -651,7 +651,7 @@ class SAC_Base:
 
         return np.concatenate([d_action, c_action], axis=-1)
 
-    def get_initial_seq_hidden_state(self, batch_size, get_numpy=True) -> Union[np.ndarray, torch.Tensor]:
+    def get_initial_seq_hidden_state(self, batch_size, get_numpy=True) -> np.ndarray | torch.Tensor:
         assert self.seq_encoder is not None
 
         if get_numpy:
@@ -2296,7 +2296,7 @@ class SAC_Base:
         self.replay_buffer.add(storage_data, ignore_size=1)
 
     def _sample_from_replay_buffer(self) -> Tuple[np.ndarray,
-                                                  Tuple[Union[np.ndarray, List[np.ndarray]], ...]]:
+                                                  Tuple[np.ndarray | List[np.ndarray], ...]]:
         """
         Sample from replay buffer
 

@@ -1,5 +1,5 @@
 import math
-from typing import List, Optional, Union
+from typing import List, Optional
 
 import numpy as np
 
@@ -73,5 +73,5 @@ class BatchBuffer:
             else:
                 self._batch_list.append(batch)
 
-    def get_batch(self) -> List[Union[np.ndarray, List[np.ndarray]]]:
+    def get_batch(self) -> List[np.ndarray | List[np.ndarray]]:
         return self._batch_list
