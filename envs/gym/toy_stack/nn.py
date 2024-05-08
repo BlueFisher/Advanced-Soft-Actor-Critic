@@ -8,13 +8,13 @@ ModelTermination = m.ModelTermination
 
 class ModelRep(m.ModelBaseRNNRep):
     def _build_model(self):
-        assert self.obs_shapes[0] == (4, 3, 4)
+        assert self.obs_shapes[0] == (2, 3, 4)
 
-        self.rnn = m.GRU(4 * 3 * 4, 64, 1)
+        self.rnn = m.GRU(2 * 3 * 4, 64, 1)
 
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         vec_obs = obs_list[0]
-        vec_obs = vec_obs.reshape(*vec_obs.shape[:-3], 4 * 3 * 4)
+        vec_obs = vec_obs.reshape(*vec_obs.shape[:-3], 2 * 3 * 4)
 
         output, hn = self.rnn(vec_obs, rnn_state)
 
@@ -23,13 +23,13 @@ class ModelRep(m.ModelBaseRNNRep):
 
 class ModelOptionRep(m.ModelBaseRNNRep):
     def _build_model(self):
-        assert self.obs_shapes[1] == (4, 3, 4)
+        assert self.obs_shapes[1] == (2, 3, 4)
 
-        self.rnn = m.GRU(4 * 3 * 4, 64, 1)
+        self.rnn = m.GRU(2 * 3 * 4, 64, 1)
 
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         high_state, vec_obs = obs_list
-        vec_obs = vec_obs.reshape(*vec_obs.shape[:-3], 4 * 3 * 4)
+        vec_obs = vec_obs.reshape(*vec_obs.shape[:-3], 2 * 3 * 4)
 
         output, hn = self.rnn(vec_obs, rnn_state)
 

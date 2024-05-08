@@ -77,7 +77,8 @@ def initialize_config_from_yaml(default_config_path: Path,
             elif isinstance(tmp_config[last_k], float):
                 tmp_config[last_k] = float(v)
             else:
-                tmp_config[last_k] = v
+                assert isinstance(tmp_config[last_k], str)
+                tmp_config[last_k] = v if v != 'null' else None
 
     ma_configs = {}
     # Deal with multi-agents config

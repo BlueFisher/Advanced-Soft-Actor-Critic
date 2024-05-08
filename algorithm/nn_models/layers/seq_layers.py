@@ -36,9 +36,10 @@ class LSTM(nn.LSTM):
 
 
 class POSITIONAL_ENCODING(Enum):
-    ABSOLUATE = 1
-    ABSOLUATE_CAT = 2
+    ABSOLUTE = 1
+    ABSOLUTE_CAT = 2
     ROPE = 3
+    ROPE2 = 4
 
 
 class GATE(Enum):
@@ -68,13 +69,15 @@ class MultiheadAttention(nn.Module):
         self.pe = pe
 
         _ori_embed_dim = embed_dim
-        if pe == POSITIONAL_ENCODING.ABSOLUATE:
+        if pe == POSITIONAL_ENCODING.ABSOLUTE:
             self.abpe = AbsolutePositionalEncoding(embed_dim)
-        elif pe == POSITIONAL_ENCODING.ABSOLUATE_CAT:
+        elif pe == POSITIONAL_ENCODING.ABSOLUTE_CAT:
             self.abpe = AbsolutePositionalEncoding(embed_dim)
             _ori_embed_dim = embed_dim * 2
         elif pe == POSITIONAL_ENCODING.ROPE:
             self.rope = RotaryPositionalEncoding(embed_dim)
+        elif pe == POSITIONAL_ENCODING.ROPE2:
+            self.rope = RotaryPositionalEncoding2(embed_dim)
 
         self.dropout = dropout
 
@@ -82,7 +85,7 @@ class MultiheadAttention(nn.Module):
         self.k_proj = LinearLayers(_ori_embed_dim, dense_n=embed_dim, dense_depth=qkv_dense_depth, output_size=embed_dim, dropout=dropout)
         self.v_proj = LinearLayers(_ori_embed_dim, dense_n=embed_dim, dense_depth=qkv_dense_depth, output_size=embed_dim, dropout=dropout)
 
-        self.out_proj = LinearLayers(_ori_embed_dim, dense_n=embed_dim, dense_depth=out_dense_depth, dropout=dropout)
+        self.out_proj = LinearLayers(embed_dim, dense_n=embed_dim, dense_depth=out_dense_depth, dropout=dropout)
 
     def forward(self,
                 query: torch.Tensor,
@@ -118,22 +121,18 @@ class MultiheadAttention(nn.Module):
         if attn_mask is not None and len(attn_mask.shape) >= 3:
             attn_mask = attn_mask.reshape(-1, *attn_mask.shape[-2:])
 
-        # bsz, seq_q_len = query_index.shape
-        # bsz, seq_k_len = key_index.shape
+        if self.pe is not None and query_index is None:
+            query_index = torch.arange(query.shape[1], device=query.device)
+        if self.pe is not None and key_index is None:
+            key_index = torch.arange(key.shape[1], device=key.device)
 
-        # query_index = torch.arange(seq_q_len, dtype=query_index.dtype, device=query_index.device)
-        # query_index = query_index[None, :].repeat_interleave(bsz, dim=0)
-
-        # key_index = torch.arange(seq_k_len, dtype=key_index.dtype, device=key_index.device)
-        # key_index = key_index[None, :].repeat_interleave(bsz, dim=0)
-
-        if self.pe == POSITIONAL_ENCODING.ABSOLUATE:
+        if self.pe == POSITIONAL_ENCODING.ABSOLUTE:
             pe = self.abpe(query_index)
             query = pe + query
             pe = self.abpe(key_index)
             key = pe + key
             value = pe + value
-        elif self.pe == POSITIONAL_ENCODING.ABSOLUATE_CAT:
+        elif self.pe == POSITIONAL_ENCODING.ABSOLUTE_CAT:
             pe = self.abpe(query_index)
             query = torch.concat([query, pe], dim=-1)
             pe = self.abpe(key_index)
@@ -144,7 +143,7 @@ class MultiheadAttention(nn.Module):
         k = self.k_proj(key)  # [bsz, seq_k_len, embed_dim]
         v = self.v_proj(value)  # [bsz, seq_k_len, embed_dim]
 
-        if self.pe == POSITIONAL_ENCODING.ROPE:
+        if self.pe in (POSITIONAL_ENCODING.ROPE, POSITIONAL_ENCODING.ROPE2):
             q, k = self.rope(query_index, key_index, q, k)
 
         if self.num_heads > 1:
@@ -707,12 +706,69 @@ class RotaryPositionalEncoding(nn.Module):
         return xq_out.type_as(xq), xk_out.type_as(xk)
 
 
+class RotaryPositionalEncoding2(nn.Module):
+    def __init__(self,
+                 d_model: int,
+                 max_seq_len: int = 5000,
+                 base: int = 10_000):
+        """
+        * `d` is the number of features $d$
+        * `base` is the constant used for calculating $\Theta$
+        """
+        super().__init__()
+
+        self.d_model = d_model
+
+        # $\Theta = {\theta_i = 10000^{-\frac{2(i-1)}{d}}, i \in [1, 2, ..., \frac{d}{2}]}$
+        theta = 1. / (base ** (torch.arange(0, self.d_model, 2).float() / self.d_model))
+
+        # Create position indexes `[0, 1, ..., seq_len - 1]`
+        seq_idx = torch.arange(max_seq_len).float()
+
+        # Calculate the product of position index and $\theta_i$
+        idx_theta = torch.einsum('n,d->nd', seq_idx, theta)
+
+        # Concatenate so that for row $m$ we have
+        # $[m \theta_0, m \theta_1, ..., m \theta_{\frac{d}{2}}, m \theta_0, m \theta_1, ..., m \theta_{\frac{d}{2}}]$
+        idx_theta2 = torch.cat([idx_theta, idx_theta], dim=1)
+
+        self.register_buffer('cos_cached', idx_theta2.cos())
+        self.register_buffer('sin_cached', idx_theta2.sin())
+
+    def _neg_half(self, x: torch.Tensor):
+        # $\frac{d}{2}$
+        d_2 = self.d_model // 2
+
+        # Calculate $[-x^{(\frac{d}{2} + 1)}, -x^{(\frac{d}{2} + 2)}, ..., -x^{(d)}, x^{(1)}, x^{(2)}, ..., x^{(\frac{d}{2})}]$
+        return torch.cat([-x[:, :, d_2:], x[:, :, :d_2]], dim=-1)
+
+    def forward(self,
+                xq_indexes: torch.Tensor,
+                xk_indexes: torch.Tensor,
+                xq: torch.Tensor,
+                xk: torch.Tensor):
+        """
+        * `x` is the Tensor at the head of a key or a query with shape `[seq_len, batch_size, n_heads, d]`
+        """
+
+        xq_rope, xq_pass = xq[..., :self.d_model], xq[..., self.d_model:]
+        xk_rope, xk_pass = xk[..., :self.d_model], xk[..., self.d_model:]
+
+        neg_half_xq = self._neg_half(xq_rope)
+        neg_half_xk = self._neg_half(xk_rope)
+
+        xq_rope = (xq_rope * self.cos_cached[xq_indexes]) + (neg_half_xq * self.sin_cached[xq_indexes])
+        xk_rope = (xk_rope * self.cos_cached[xk_indexes]) + (neg_half_xk * self.sin_cached[xk_indexes])
+
+        return torch.cat((xq_rope, xq_pass), dim=-1), torch.cat((xk_rope, xk_pass), dim=-1)
+
+
 if __name__ == '__main__':
-    attn = MultiheadAttention(4, num_heads=2)
+    attn = MultiheadAttention(4, num_heads=2, pe=POSITIONAL_ENCODING.ROPE2)
     x = torch.rand(2, 3, 4)
     y, w = attn(x, x, x, key_padding_mask=torch.tensor([[True, True, True], [False, True, True]]))
-    # print(y)
-    # print(w)
-    y.mean().backward()
-    for p in attn.parameters():
-        print(p.grad)
+    print(y)
+    print(w)
+    # y.mean().backward()
+    # for p in attn.parameters():
+    #     print(p.grad)

@@ -18,12 +18,16 @@ default:
 
     n_envs: 50
     reset_on_iteration: true
-    
-    update_sac_bak_per_step: 50 # Every N step update sac_bak for evaluation
 
-  net_config:
-    evolver_host: 127.0.0.1
-    learner_host: 127.0.0.1
+    update_sac_bak_per_step: 100 # Every N step update sac_bak for evaluation
+
+    # ACTOR
+    episode_queue_size: 20
+    episode_sender_process_num: 2
+
+    # LEARNER
+    batch_queue_size: 20
+    batch_generator_process_num: 2
 
   reset_config:
     disable_after_dead: true
@@ -39,7 +43,10 @@ default:
     burn_in_step: 20
     seq_encoder: RNN
 
+    batch_size: 256 # Batch size for training
+
     target_c_alpha: 0.2 # Target continuous alpha ratio
+    v_lambda: 0.99 # Discount factor for V-trace
 
   ma_config:
     UAVSearchTracking?team=0:

@@ -5,7 +5,7 @@ from pathlib import Path
 from algorithm.config_helper import set_logger
 
 try:
-    import memory_corridor
+    import toy_memory
 except:
     pass
 
@@ -15,8 +15,7 @@ HITTED_ENVS = {'roller',
                'uav',
                'ugv', 'ugv/ugv_street_search', 'ugv/ugv_parking',
                'usv',
-               'gym/memory_corridor',
-               'gym/stack_corridor', 'gym/stack_unique_corridor'}
+               'gym/toy_stack', 'gym/toy_queue', 'gym/toy_hallway'}
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
