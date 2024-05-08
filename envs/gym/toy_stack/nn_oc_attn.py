@@ -5,32 +5,47 @@ import algorithm.nn_models as m
 from algorithm.nn_models.layers.seq_layers import GATE, POSITIONAL_ENCODING
 
 
+MAP_WIDTH = 3
+TARGET_TYPE_NUM = 3
+
+
 class ModelRep(m.ModelBaseAttentionRep):
-    def _build_model(self):
-        assert self.obs_shapes[0] == (3 + 1, )
-        assert self.obs_shapes[1] == (3, 4)
+    def _build_model(self, pe: str | None, gate: str | None):
+        assert self.obs_shapes[1] == (MAP_WIDTH, TARGET_TYPE_NUM + 1)
 
-        embed_size = 3 + 1 + 3 * 4  # 16
+        NUM_OPTIONS = self.obs_shapes[0][0] - 1
 
-        self.rnn = m.GRU(embed_size, embed_size, num_layers=1)
+        if pe is not None:
+            pe = POSITIONAL_ENCODING[pe]
+
+        if gate is not None:
+            gate = GATE[gate]
+
+        embed_size = NUM_OPTIONS + 1 + MAP_WIDTH * (TARGET_TYPE_NUM + 1)
+        if embed_size % 2 == 1:
+            embed_size += 1
+
+        self.embed_size = embed_size
 
         self.attn = m.EpisodeMultiheadAttention(embed_size, num_layers=1,
-                                                num_heads=8,
-                                                pe=POSITIONAL_ENCODING.ROPE,
+                                                num_heads=2,
+                                                pe=pe,
                                                 qkv_dense_depth=1,
                                                 out_dense_depth=1,
-                                                dropout=0.,
-                                                gate=GATE.RESIDUAL,
+                                                dropout=0.005,
+                                                gate=gate,
                                                 use_layer_norm=False)
 
+        embed_size = self.attn.output_dim
         self.rnn1 = m.GRU(embed_size, embed_size, num_layers=1)
+        self._rnn1_hidden_state_dim = self.rnn1.num_layers * self.rnn1.hidden_size
 
         self.attn1 = m.EpisodeMultiheadAttention(embed_size, num_layers=1,
-                                                 num_heads=8,
-                                                 pe=POSITIONAL_ENCODING.ROPE,
+                                                 num_heads=2,
+                                                 pe=None,
                                                  qkv_dense_depth=1,
                                                  out_dense_depth=1,
-                                                 dropout=0.,
+                                                 dropout=0.005,
                                                  gate=GATE.RESIDUAL,
                                                  use_layer_norm=False)
 
@@ -47,44 +62,25 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         batch = index.shape[0]
 
-        vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], 3 * 4)
+        vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], MAP_WIDTH * (TARGET_TYPE_NUM + 1))
         vec_obs = torch.concat([option_index, vec_obs], dim=-1)
+
+        if vec_obs.shape[-1] % 2 == 1:
+            vec_obs = torch.concat([vec_obs, torch.zeros_like(vec_obs[..., -1:])], dim=-1)
 
         if hidden_state is not None:
             assert hidden_state.shape[1] == 1
-            rnn_hidden_state = hidden_state[..., :16]
-            attn_hidden_state = hidden_state[..., 16:16 + 1]
-            rnn_1_hidden_state = hidden_state[..., 16 + 1:16 + 1 + 16]
-            attn1_hidden_state = hidden_state[..., 16 + 1 + 16:]
+            attn_hidden_state = hidden_state[..., :self.attn.output_hidden_state_dim]
+            rnn_1_hidden_state = hidden_state[..., self.attn.output_hidden_state_dim:self.attn.output_hidden_state_dim + self._rnn1_hidden_state_dim]
+            attn1_hidden_state = hidden_state[..., self.attn.output_hidden_state_dim + self._rnn1_hidden_state_dim:]
 
-            rnn_hidden_state = rnn_hidden_state.reshape(batch,
-                                                        self.rnn.num_layers,
-                                                        self.rnn.hidden_size)
             rnn1_hidden_state = rnn_1_hidden_state.reshape(batch,
                                                            self.rnn1.num_layers,
                                                            self.rnn1.hidden_size)
         else:
-            rnn_hidden_state = attn_hidden_state = rnn1_hidden_state = attn1_hidden_state = None
+            attn_hidden_state = rnn1_hidden_state = attn1_hidden_state = None
 
-        key_vec_obs = vec_obs[:, :-seq_q_len]
-        query_vec_obs = vec_obs[:, -seq_q_len:]
-
-        rnn_outputs = []
-        rnn_hidden_states = []
-
-        for i in range(key_vec_obs.shape[1]):
-            rnn_output, rnn_hidden_state = self.rnn(key_vec_obs[:, i:i + 1], rnn_hidden_state)
-            rnn_outputs.append(rnn_output)
-
-        for i in range(query_vec_obs.shape[1]):
-            rnn_output, _rnn_hidden_state = self.rnn(query_vec_obs[:, i:i + 1], rnn_hidden_state)
-            rnn_outputs.append(rnn_output)
-            rnn_hidden_states.append(_rnn_hidden_state)
-
-        rnn_output = torch.concat(rnn_outputs, dim=1)
-        rnn_output = rnn_output + vec_obs
-
-        output, hn, attn_weights_list = self.attn(rnn_output,
+        output, hn, attn_weights_list = self.attn(vec_obs,
                                                   seq_q_len=seq_q_len,
                                                   cut_query=False,
                                                   hidden_state=attn_hidden_state,
@@ -120,22 +116,19 @@ class ModelRep(m.ModelBaseAttentionRep):
                                                      key_index=index,
                                                      key_padding_mask=padding_mask)
 
-        new_rnn_hidden_state = torch.concat(rnn_hidden_states, dim=1)
-        new_rnn_hidden_state = new_rnn_hidden_state.reshape(batch, seq_q_len, self.rnn.hidden_size * self.rnn.num_layers)
-
         new_rnn1_hidden_state = torch.concat(rnn1_hidden_states, dim=1)
         new_rnn1_hidden_state = new_rnn1_hidden_state.reshape(batch, seq_q_len, self.rnn1.hidden_size * self.rnn1.num_layers)
 
-        return output, torch.concat([new_rnn_hidden_state, hn, new_rnn1_hidden_state, hn1], dim=-1), attn_weights_list + attn1_weights_list
+        return output, torch.concat([hn, new_rnn1_hidden_state, hn1], dim=-1), attn_weights_list + attn1_weights_list
 
 
 class ModelOptionRep(m.ModelBaseSimpleRep):
     def _build_model(self):
-        assert self.obs_shapes[1] == (3, 4)
+        assert self.obs_shapes[1] == (MAP_WIDTH, (TARGET_TYPE_NUM + 1))
 
-        embed_size = 3 * 4
+        embed_size = MAP_WIDTH * (TARGET_TYPE_NUM + 1)
 
-        # self.mlp = m.LinearLayers(embed_size, dense_n=embed_size, dense_depth=2, dropout=0.)
+        # self.mlp = m.LinearLayers(embed_size, dense_n=embed_size, dense_depth=2)
 
     def forward(self, obs_list):
         if self._offline_action_index != -1:
@@ -143,7 +136,7 @@ class ModelOptionRep(m.ModelBaseSimpleRep):
         else:
             high_state, vec_obs = obs_list
 
-        # vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], 3 * 4)
+        # vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], MAP_WIDTH * (TARGET_TYPE_NUM + 1))
 
         # output = torch.concat([high_state, self.mlp(vec_obs)], dim=-1)
 
@@ -152,17 +145,17 @@ class ModelOptionRep(m.ModelBaseSimpleRep):
 
 class ModelQ(m.ModelQ):
     def _build_model(self):
-        return super()._build_model(d_dense_n=128, d_dense_depth=2, dropout=0.)
+        return super()._build_model(d_dense_n=128, d_dense_depth=2)
 
 
 class ModelTermination(m.ModelTermination):
     def _build_model(self):
-        return super()._build_model(dense_n=128, dense_depth=2, dropout=0.)
+        return super()._build_model(dense_n=128, dense_depth=2)
 
     def forward(self, state, obs_list):
         high_state, vec_obs = obs_list
 
-        vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], 3 * 4)
+        vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], MAP_WIDTH * (TARGET_TYPE_NUM + 1))
 
         t = vec_obs.any(-1, keepdim=True)
         t = t.to(state.dtype)
@@ -171,9 +164,9 @@ class ModelTermination(m.ModelTermination):
 
 class ModelPolicy(m.ModelPolicy):
     def _build_model(self):
-        return super()._build_model(d_dense_n=32, d_dense_depth=1)
+        return super()._build_model(d_dense_n=128, d_dense_depth=1)
 
 
 class ModelRND(m.ModelRND):
     def _build_model(self):
-        return super()._build_model(dense_n=32, dense_depth=2, output_size=32)
+        return super()._build_model(dense_n=32, dense_depth=2)

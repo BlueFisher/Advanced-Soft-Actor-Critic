@@ -5,12 +5,13 @@ default:
       build_path:
         win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
-      no_graphics: false
-
-    noise_increasing_rate: 0.01
 
     n_envs: 10
     reset_on_iteration: false
+
+    update_sac_bak_per_step: 50 # Every N step update sac_bak for evaluation
+
+    noise_increasing_rate: 0.01
 
   reset_config:
     force_reset: true

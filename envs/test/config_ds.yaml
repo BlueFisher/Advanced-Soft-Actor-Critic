@@ -14,10 +14,6 @@ default:
     batch_queue_size: 2
     batch_generator_process_num: 2
 
-  net_config:
-    evolver_host: 127.0.0.1
-    learner_host: 127.0.0.1
-
   ma_config:
     test0:
       sac_config:

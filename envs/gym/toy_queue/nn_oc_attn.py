@@ -5,32 +5,42 @@ import algorithm.nn_models as m
 from algorithm.nn_models.layers.seq_layers import GATE, POSITIONAL_ENCODING
 
 
+MAP_WIDTH = 3
+TARGET_TYPE_NUM = 3
+
+
 class ModelRep(m.ModelBaseAttentionRep):
-    def _build_model(self):
-        # assert self.obs_shapes[0] == (NUM_OPTIONS + 1, )
-        assert self.obs_shapes[1] == (3, 4)
+    def _build_model(self, pe: str | None, gate: str | None):
+        assert self.obs_shapes[1] == (MAP_WIDTH, TARGET_TYPE_NUM + 1)
 
         NUM_OPTIONS = self.obs_shapes[0][0] - 1
 
-        embed_size = NUM_OPTIONS + 1 + 3 * 4  # NUM_OPTIONS + 13
+        if pe is not None:
+            pe = POSITIONAL_ENCODING[pe]
+
+        if gate is not None:
+            gate = GATE[gate]
+
+        embed_size = NUM_OPTIONS + 1 + MAP_WIDTH * (TARGET_TYPE_NUM + 1)
         if embed_size % 2 == 1:
             embed_size += 1
 
         self.embed_size = embed_size
 
-        self.attn = m.EpisodeMultiheadAttention(embed_size, num_layers=2,
+        self.attn = m.EpisodeMultiheadAttention(embed_size, num_layers=1,
                                                 num_heads=2,
-                                                pe=[POSITIONAL_ENCODING.ROPE, None],
+                                                pe=pe,
                                                 qkv_dense_depth=1,
                                                 out_dense_depth=1,
                                                 dropout=0.005,
-                                                gate=GATE.RESIDUAL,
+                                                gate=gate,
                                                 use_layer_norm=False)
 
+        embed_size = self.attn.output_dim
         self.rnn1 = m.GRU(embed_size, embed_size, num_layers=1)
         self._rnn1_hidden_state_dim = self.rnn1.num_layers * self.rnn1.hidden_size
 
-        self.attn1 = m.EpisodeMultiheadAttention(embed_size, num_layers=2,
+        self.attn1 = m.EpisodeMultiheadAttention(embed_size, num_layers=1,
                                                  num_heads=2,
                                                  pe=None,
                                                  qkv_dense_depth=1,
@@ -52,7 +62,7 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         batch = index.shape[0]
 
-        vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], 3 * 4)
+        vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], MAP_WIDTH * (TARGET_TYPE_NUM + 1))
         vec_obs = torch.concat([option_index, vec_obs], dim=-1)
 
         if vec_obs.shape[-1] % 2 == 1:
@@ -114,11 +124,11 @@ class ModelRep(m.ModelBaseAttentionRep):
 
 class ModelOptionRep(m.ModelBaseSimpleRep):
     def _build_model(self):
-        assert self.obs_shapes[1] == (3, 4)
+        assert self.obs_shapes[1] == (MAP_WIDTH, (TARGET_TYPE_NUM + 1))
 
-        embed_size = 3 * 4
+        embed_size = MAP_WIDTH * (TARGET_TYPE_NUM + 1)
 
-        # self.mlp = m.LinearLayers(embed_size, dense_n=embed_size, dense_depth=2, dropout=0.005)
+        # self.mlp = m.LinearLayers(embed_size, dense_n=embed_size, dense_depth=2)
 
     def forward(self, obs_list):
         if self._offline_action_index != -1:
@@ -126,7 +136,7 @@ class ModelOptionRep(m.ModelBaseSimpleRep):
         else:
             high_state, vec_obs = obs_list
 
-        # vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], 3 * 4)
+        # vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], MAP_WIDTH * (TARGET_TYPE_NUM + 1))
 
         # output = torch.concat([high_state, self.mlp(vec_obs)], dim=-1)
 
@@ -135,17 +145,17 @@ class ModelOptionRep(m.ModelBaseSimpleRep):
 
 class ModelQ(m.ModelQ):
     def _build_model(self):
-        return super()._build_model(d_dense_n=128, d_dense_depth=2, dropout=0.005)
+        return super()._build_model(d_dense_n=128, d_dense_depth=2)
 
 
 class ModelTermination(m.ModelTermination):
     def _build_model(self):
-        return super()._build_model(dense_n=128, dense_depth=2, dropout=0.005)
+        return super()._build_model(dense_n=128, dense_depth=2)
 
     def forward(self, state, obs_list):
         high_state, vec_obs = obs_list
 
-        vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], 3 * 4)
+        vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], MAP_WIDTH * (TARGET_TYPE_NUM + 1))
 
         t = vec_obs.any(-1, keepdim=True)
         t = t.to(state.dtype)
@@ -154,9 +164,9 @@ class ModelTermination(m.ModelTermination):
 
 class ModelPolicy(m.ModelPolicy):
     def _build_model(self):
-        return super()._build_model(d_dense_n=128, d_dense_depth=1, dropout=0.005)
+        return super()._build_model(d_dense_n=128, d_dense_depth=1)
 
 
 class ModelRND(m.ModelRND):
     def _build_model(self):
-        return super()._build_model(dense_n=32, dense_depth=2, output_size=32)
+        return super()._build_model(dense_n=32, dense_depth=2)

@@ -46,13 +46,13 @@ class ModelRep(m.ModelBaseRNNRep):
         #     attned_uavs[padding_mask] = 0.
         #     attned_bbox[padding_mask] = 0.
 
-        vis_obs = self.conv(vis_obs)
+        vis = self.conv(vis_obs)
 
         ray = self.ray_dense(torch.concat([ray_obs_1, ray_obs_2, ray_obs_3], dim=-1))
 
         state, hn = self.rnn(torch.concat([attned_uavs,
                                            attned_bbox,
-                                           vis_obs,
+                                           vis,
                                            ray,
                                            vec_obs,
                                            pre_action], dim=-1), rnn_state)

@@ -21,7 +21,7 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         self.attn = m.EpisodeMultiheadAttention(8, num_layers=2,
                                                 num_heads=1,
-                                                pe=POSITIONAL_ENCODING.ABSOLUATE_CAT,
+                                                pe=POSITIONAL_ENCODING.ABSOLUTE_CAT,
                                                 use_residual=True,
                                                 use_gated=True,
                                                 use_layer_norm=False)

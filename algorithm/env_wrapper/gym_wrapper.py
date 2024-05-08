@@ -11,9 +11,9 @@ else:
 
 
 try:
-    import memory_corridor
+    import toy_memory
 except Exception as e:
-    print('MemoryCorridor is not installed')
+    print('Toy Memory is not installed')
 
 
 class GymWrapper(EnvWrapper):
@@ -110,7 +110,7 @@ if __name__ == "__main__":
 
     N_ENVS = 2
 
-    env = GymWrapper(True, 'StackCorridor-v0', render=True, n_envs=N_ENVS)
+    env = GymWrapper(True, 'ToyStack-v0', render=True, n_envs=N_ENVS)
     ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size = env.init()
     ma_names = list(ma_obs_shapes.keys())
 

@@ -1,0 +1,149 @@
+default:
+  base_config:
+    env_type: GYM
+    env_name: ToyQueue-v0
+    env_args:
+      map_width: 3
+      target_type_num: 3
+
+    name: rnn_{time}
+
+    n_envs: 100
+
+  reset_config:
+    queue_len: 100
+    queue_nesting: 0.5
+    max_nesting_depth: 15
+    block_gap: 2
+    success_reward: 2.
+    failure_reward: -1.
+    max_episode_steps: 2000
+
+  nn_config:
+    rep:
+      pe: ROPE
+      gate: RESIDUAL
+
+  sac_config:
+    burn_in_step: 0
+    n_step: 5
+    seq_encoder: RNN
+
+    target_d_alpha: 0.2 # Target discrete alpha ratio
+
+    discrete_dqn_like: true
+    discrete_dqn_epsilon: 0.01
+    use_priority: true # Whether using PER importance ratio
+    # use_replay_buffer: false
+
+    batch_size: 1024
+
+    learning_rate: 0.0003 # Learning rate of all optimizers
+
+    use_rnd: true
+
+  oc_config:
+    option_eplison: 0.0 # Probability of switching options
+    option_seq_encoder: null
+    terminal_entropy: 0. # Tending not to terminate >0, tending to terminate <0
+    key_max_length: 100
+
+attn:
+  base_config:
+    name: attn_{time}
+  sac_config:
+    burn_in_step: 12
+    nn: nn_attn
+    seq_encoder: ATTN
+
+oc_2:
+  base_config:
+    name: oc_2_rnn_{time}
+  oc_config:
+    num_options: 2
+
+oc_3:
+  base_config:
+    name: oc_3_rnn_{time}
+  oc_config:
+    num_options: 3
+
+oc_4:
+  base_config:
+    name: oc_4_rnn_{time}
+  oc_config:
+    num_options: 4
+
+oc_2_dilated:
+  inherited: oc_2
+  base_config:
+    name: oc_2_dilated_rnn_{time}
+  oc_config:
+    use_dilation: true
+
+oc_3_dilated:
+  inherited: oc_3
+  base_config:
+    name: oc_3_dilated_rnn_{time}
+  oc_config:
+    use_dilation: true
+
+oc_4_dilated:
+  inherited: oc_4
+  base_config:
+    name: oc_4_dilated_rnn_{time}
+  oc_config:
+    use_dilation: true
+
+oc_2_attn:
+  inherited:
+    - oc_2
+    - attn
+  base_config:
+    name: oc_2_attn_{time}
+  sac_config:
+    nn: nn_oc_attn
+    burn_in_step: 0
+
+oc_3_attn:
+  inherited:
+    - oc_3
+    - attn
+  base_config:
+    name: oc_3_attn_{time}
+  sac_config:
+    nn: nn_oc_attn
+    burn_in_step: 0
+
+oc_4_attn:
+  inherited:
+    - oc_4
+    - attn
+  base_config:
+    name: oc_4_attn_{time}
+  sac_config:
+    nn: nn_oc_attn
+    burn_in_step: 0
+
+oc_2_attn_dilated:
+  inherited: oc_2_attn
+  base_config:
+    name: oc_2_attn_dilated_{time}
+  oc_config:
+    use_dilation: true
+
+oc_3_attn_dilated:
+  inherited: oc_3_attn
+  base_config:
+    name: oc_3_attn_dilated_{time}
+  oc_config:
+    use_dilation: true
+
+oc_3_attn_dilated_c:
+  inherited: oc_3_attn
+  base_config:
+    name: oc_3_attn_dilated_c_{time}
+  sac_config:
+    discrete_dqn_like: false
+  oc_config:
+    use_dilation: true
