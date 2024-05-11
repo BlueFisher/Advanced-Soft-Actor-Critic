@@ -1,11 +1,13 @@
+import logging
 from copy import deepcopy
-from os import name
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 import numpy as np
 
 from algorithm.sac_base import SAC_Base
+from algorithm.utils.elapse_timer import (UnifiedElapsedTimer,
+                                          unified_elapsed_timer)
 from algorithm.utils.enums import *
 from algorithm.utils.operators import gen_pre_n_actions
 
@@ -317,6 +319,9 @@ class AgentManager:
         self.rl: Optional[SAC_Base] = None
         self.seq_encoder = None
 
+        self._logger = logging.getLogger(f'agent_mgr.{name}')
+        self._profiler = UnifiedElapsedTimer(self._logger)
+
         self._tmp_episode_trans_list = []
 
         self._data = {}
@@ -440,6 +445,7 @@ class AgentManager:
         else:
             return np.stack(data_list, axis=0)
 
+    @unified_elapsed_timer('get_action', repeat=10)
     def get_action(self,
                    agent_ids: np.ndarray,
                    obs_list: List[np.ndarray],

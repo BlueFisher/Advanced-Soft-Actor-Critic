@@ -4,6 +4,7 @@ from typing import Dict, Iterator, List, Optional, Set, Tuple
 import numpy as np
 
 from algorithm.oc.option_selector_base import OptionSelectorBase
+from algorithm.utils.elapse_timer import unified_elapsed_timer
 from algorithm.utils.enums import *
 from algorithm.utils.operators import gen_pre_n_actions
 
@@ -413,6 +414,7 @@ class OC_AgentManager(AgentManager):
     def _get_merged_key_seq_hidden_state(self, agent_ids: np.ndarray) -> np.ndarray:
         return np.stack([self.agents_dict[_id].get_key_seq_hidden_state() for _id in agent_ids])
 
+    @unified_elapsed_timer('get_action', repeat=10)
     def get_action(self,
                    agent_ids: np.ndarray,
                    obs_list: List[np.ndarray],

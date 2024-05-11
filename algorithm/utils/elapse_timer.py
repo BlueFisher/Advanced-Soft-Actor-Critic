@@ -30,8 +30,8 @@ def unified_elapsed_timer(log: str, repeat: int = 1, force_report: bool = True,
                           profiler: str = '_profiler'):
     def profile(func):
         def wrapper(self, *args, **kwargs):
-            with getattr(self, profiler)(log, repeat, force_report) as p:
-                results = func(self, p, *args, **kwargs)
+            with getattr(self, profiler)(log, repeat, force_report):
+                results = func(self, *args, **kwargs)
             return results
         return wrapper
     return profile
