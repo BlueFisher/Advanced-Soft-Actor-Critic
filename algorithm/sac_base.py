@@ -520,6 +520,12 @@ class SAC_Base:
             ckpt_dict['model_rnd'] = self.model_rnd
             ckpt_dict['optimizer_rnd'] = self.optimizer_rnd
 
+        total_parameter_num = 0
+        for m in ckpt_dict.values():
+            if isinstance(m, nn.Module):
+                total_parameter_num += sum([p.numel() for p in m.parameters()])
+        self._logger.info(f'Parameters: {total_parameter_num}')
+
     def _init_or_restore(self, last_ckpt: int) -> None:
         """
         Initialize network weights from scratch or restore from model_abs_dir
@@ -2417,7 +2423,7 @@ class SAC_Base:
                           priority_is if self.use_priority else None)
 
     @unified_elapsed_timer('train_all', 10)
-    def train(self, train_all_profiler) -> int:
+    def train(self) -> int:
         step = self.get_global_step()
 
         if self.use_replay_buffer:
@@ -2425,7 +2431,7 @@ class SAC_Base:
                 train_data = self._sample_from_replay_buffer()
                 if train_data is None:
                     profiler.ignore()
-                    train_all_profiler.ignore()
+                    self._profiler('train_all').ignore()
                     return step
 
             pointers, batch = train_data

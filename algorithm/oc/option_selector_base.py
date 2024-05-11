@@ -352,6 +352,12 @@ class OptionSelectorBase(SAC_Base):
             ckpt_dict['model_target_rep'] = self.model_target_rep
             ckpt_dict['optimizer_rep'] = self.optimizer_rep
 
+        total_parameter_num = 0
+        for m in ckpt_dict.values():
+            if isinstance(m, nn.Module):
+                total_parameter_num += sum([p.numel() for p in m.parameters()])
+        self._logger.info(f'Parameters: {total_parameter_num}')
+
     def set_train_mode(self, train_mode=True):
         super().set_train_mode(train_mode)
 
@@ -1790,8 +1796,8 @@ class OptionSelectorBase(SAC_Base):
                     ep_seq_hidden_states: Optional[np.ndarray] = None,
                     ep_low_seq_hidden_states: Optional[np.ndarray] = None) -> None:
         # Ignore episodes which length is too short
-        if ep_indexes.shape[1] < self.n_step:
-            return
+        # if ep_indexes.shape[1] < self.n_step:
+        #     return
 
         assert ep_indexes.dtype == np.int32
         assert ep_option_indexes.dtype == np.int8
@@ -2081,7 +2087,7 @@ class OptionSelectorBase(SAC_Base):
                 key_batch)
 
     @unified_elapsed_timer('train_all', 10)
-    def train(self, train_all_profiler) -> int:
+    def train(self) -> int:
         step = self.get_global_step()
 
         if self.use_replay_buffer:
@@ -2089,7 +2095,7 @@ class OptionSelectorBase(SAC_Base):
                 train_data = self._sample_from_replay_buffer()
                 if train_data is None:
                     profiler.ignore()
-                    train_all_profiler.ignore()
+                    self._profiler('train_all').ignore()
                     return step
 
             pointers, batch, key_batch = train_data
