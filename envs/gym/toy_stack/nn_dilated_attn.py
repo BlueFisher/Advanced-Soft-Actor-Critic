@@ -29,7 +29,7 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         self.attn = m.EpisodeMultiheadAttention(embed_size, num_layers=1,
                                                 num_heads=2,
-                                                pe=pe,
+                                                pe=[pe],
                                                 qkv_dense_depth=1,
                                                 out_dense_depth=1,
                                                 dropout=0.005,
@@ -46,7 +46,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                                                  qkv_dense_depth=1,
                                                  out_dense_depth=1,
                                                  dropout=0.005,
-                                                 gate=GATE.RESIDUAL,
+                                                 gate=gate,
                                                  use_layer_norm=False)
 
     def forward(self, index, obs_list, pre_action=None,
@@ -68,12 +68,12 @@ class ModelRep(m.ModelBaseAttentionRep):
         if vec_obs.shape[-1] % 2 == 1:
             vec_obs = torch.concat([vec_obs, torch.zeros_like(vec_obs[..., -1:])], dim=-1)
 
-        if hidden_state is not None:
-            assert hidden_state.shape[1] == 1
+        if hidden_state is not None and hidden_state.shape[1] != 0:
             attn_hidden_state = hidden_state[..., :self.attn.output_hidden_state_dim]
             rnn_1_hidden_state = hidden_state[..., self.attn.output_hidden_state_dim:self.attn.output_hidden_state_dim + self._rnn1_hidden_state_dim]
             attn1_hidden_state = hidden_state[..., self.attn.output_hidden_state_dim + self._rnn1_hidden_state_dim:]
 
+            rnn_1_hidden_state = rnn_1_hidden_state[:, -1]
             rnn1_hidden_state = rnn_1_hidden_state.reshape(batch,
                                                            self.rnn1.num_layers,
                                                            self.rnn1.hidden_size)

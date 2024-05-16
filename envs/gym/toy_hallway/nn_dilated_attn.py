@@ -4,14 +4,13 @@ from torch import nn
 import algorithm.nn_models as m
 from algorithm.nn_models.layers.seq_layers import GATE, POSITIONAL_ENCODING
 
-
 MAP_WIDTH = 3
-TARGET_TYPE_NUM = 3
+TARGET_TYPE_NUM = 20
 
 
 class ModelRep(m.ModelBaseAttentionRep):
     def _build_model(self, pe: str | None, gate: str | None):
-        assert self.obs_shapes[1] == (MAP_WIDTH, TARGET_TYPE_NUM + 1)
+        assert self.obs_shapes[1] == (MAP_WIDTH, TARGET_TYPE_NUM)
 
         NUM_OPTIONS = self.obs_shapes[0][0] - 1
 
@@ -21,7 +20,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         if gate is not None:
             gate = GATE[gate]
 
-        embed_size = NUM_OPTIONS + 1 + MAP_WIDTH * (TARGET_TYPE_NUM + 1)
+        embed_size = NUM_OPTIONS + 1 + MAP_WIDTH * TARGET_TYPE_NUM
         if embed_size % 2 == 1:
             embed_size += 1
 
@@ -29,7 +28,7 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         self.attn = m.EpisodeMultiheadAttention(embed_size, num_layers=1,
                                                 num_heads=2,
-                                                pe=pe,
+                                                pe=[pe],
                                                 qkv_dense_depth=1,
                                                 out_dense_depth=1,
                                                 dropout=0.005,
@@ -46,7 +45,7 @@ class ModelRep(m.ModelBaseAttentionRep):
                                                  qkv_dense_depth=1,
                                                  out_dense_depth=1,
                                                  dropout=0.005,
-                                                 gate=GATE.RESIDUAL,
+                                                 gate=gate,
                                                  use_layer_norm=False)
 
     def forward(self, index, obs_list, pre_action=None,
@@ -62,18 +61,18 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         batch = index.shape[0]
 
-        vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], MAP_WIDTH * (TARGET_TYPE_NUM + 1))
+        vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], MAP_WIDTH * TARGET_TYPE_NUM)
         vec_obs = torch.concat([option_index, vec_obs], dim=-1)
 
         if vec_obs.shape[-1] % 2 == 1:
             vec_obs = torch.concat([vec_obs, torch.zeros_like(vec_obs[..., -1:])], dim=-1)
 
-        if hidden_state is not None:
-            assert hidden_state.shape[1] == 1
+        if hidden_state is not None and hidden_state.shape[1] != 0:
             attn_hidden_state = hidden_state[..., :self.attn.output_hidden_state_dim]
             rnn_1_hidden_state = hidden_state[..., self.attn.output_hidden_state_dim:self.attn.output_hidden_state_dim + self._rnn1_hidden_state_dim]
             attn1_hidden_state = hidden_state[..., self.attn.output_hidden_state_dim + self._rnn1_hidden_state_dim:]
 
+            rnn_1_hidden_state = rnn_1_hidden_state[:, -1]
             rnn1_hidden_state = rnn_1_hidden_state.reshape(batch,
                                                            self.rnn1.num_layers,
                                                            self.rnn1.hidden_size)
@@ -124,11 +123,11 @@ class ModelRep(m.ModelBaseAttentionRep):
 
 class ModelOptionRep(m.ModelBaseSimpleRep):
     def _build_model(self):
-        assert self.obs_shapes[1] == (MAP_WIDTH, (TARGET_TYPE_NUM + 1))
+        assert self.obs_shapes[1] == (MAP_WIDTH, TARGET_TYPE_NUM)
 
-        embed_size = MAP_WIDTH * (TARGET_TYPE_NUM + 1)
+        embed_size = MAP_WIDTH * TARGET_TYPE_NUM
 
-        # self.mlp = m.LinearLayers(embed_size, dense_n=embed_size, dense_depth=2)
+        # self.mlp = m.LinearLayers(embed_size, dense_n=embed_size, dense_depth=1)
 
     def forward(self, obs_list):
         if self._offline_action_index != -1:
@@ -136,7 +135,7 @@ class ModelOptionRep(m.ModelBaseSimpleRep):
         else:
             high_state, vec_obs = obs_list
 
-        # vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], MAP_WIDTH * (TARGET_TYPE_NUM + 1))
+        # vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], 3 * 16)
 
         # output = torch.concat([high_state, self.mlp(vec_obs)], dim=-1)
 
@@ -155,7 +154,7 @@ class ModelTermination(m.ModelTermination):
     def forward(self, state, obs_list):
         high_state, vec_obs = obs_list
 
-        vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], MAP_WIDTH * (TARGET_TYPE_NUM + 1))
+        vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], MAP_WIDTH * TARGET_TYPE_NUM)
 
         t = vec_obs.any(-1, keepdim=True)
         t = t.to(state.dtype)
