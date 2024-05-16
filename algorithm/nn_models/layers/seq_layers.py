@@ -577,6 +577,7 @@ class EpisodeMultiheadAttention(nn.Module):
 
         elif not is_prev_hidden_state:
             output, attn_weight = self._attn_list[0](key, seq_q_len,
+                                                     cut_query=False if self.num_layers > 1 else cut_query,
                                                      query_only_attend_to_rest_key=query_only_attend_to_rest_key,
                                                      key_index=key_index,
                                                      key_padding_mask=key_padding_mask)
@@ -586,11 +587,12 @@ class EpisodeMultiheadAttention(nn.Module):
                 hidden_state_list = hidden_state.split(self._output_dim_list[:-1], dim=-1)
 
             for i, attn in enumerate(self._attn_list[1:]):
-                next_hidden_state_list.append(output)
+                next_hidden_state_list.append(output[:, -seq_q_len:])
 
                 _k = torch.concat([hidden_state_list[i], output], dim=1)
 
-                output, attn_weight = attn(_k, seq_q_len,  # TODO
+                output, attn_weight = attn(_k, seq_q_len,
+                                           cut_query=False if i != self.num_layers - 2 else cut_query,
                                            query_only_attend_to_rest_key=query_only_attend_to_rest_key,
                                            key_index=key_index,
                                            key_padding_mask=key_padding_mask)
