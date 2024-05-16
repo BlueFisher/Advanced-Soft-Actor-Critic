@@ -71,8 +71,10 @@ def initialize_config_from_yaml(default_config_path: Path,
             tmp_config = config
             for k in k_list[:-1]:
                 tmp_config = tmp_config[k]
-            assert isinstance(tmp_config[last_k], (str, int, float)), f'{kv} not in type {type(tmp_config[last_k])}'
-            if isinstance(tmp_config[last_k], int):
+            assert isinstance(tmp_config[last_k], (bool, int, float, str)), f'{kv} not in type {type(tmp_config[last_k])}'
+            if isinstance(tmp_config[last_k], bool):
+                tmp_config[last_k] = v.lower() in ('true', '1')
+            elif isinstance(tmp_config[last_k], int):
                 tmp_config[last_k] = int(v)
             elif isinstance(tmp_config[last_k], float):
                 tmp_config[last_k] = float(v)
