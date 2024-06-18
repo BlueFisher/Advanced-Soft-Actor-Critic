@@ -10,7 +10,7 @@ except:
     pass
 
 
-HITTED_ENVS = {'roller',
+HIT_ENVS = {'roller',
                'square', 'square/obstacle', 'pyramid',
                'uav',
                'ugv', 'ugv/ugv_street_search', 'ugv/ugv_parking',
@@ -50,11 +50,11 @@ if __name__ == '__main__':
 
     set_logger(debug=args.debug)
 
-    if args.env in HITTED_ENVS:
+    if args.env in HIT_ENVS:
         if args.oc:
-            from algorithm.oc.oc_main_hitted import OC_MainHitted as Main
+            from algorithm.oc.oc_main_hit import OC_MainHit as Main
         else:
-            from algorithm.sac_main_hitted import MainHitted as Main
+            from algorithm.sac_main_hit import MainHit as Main
     else:
         if args.oc:
             from algorithm.oc.oc_main import OC_Main as Main
