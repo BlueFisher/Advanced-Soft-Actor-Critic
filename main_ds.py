@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from algorithm.config_helper import set_logger
-from main import HITTED_ENVS
+from main import HIT_ENVS
 
 # for correctly import protoc
 sys.path.append(str(Path(__file__).resolve().parent.joinpath('ds/proto')))
@@ -50,14 +50,14 @@ if __name__ == '__main__':
     config_dir = f'envs/{args.env}'
 
     if args.process_type in ['learner', 'l']:
-        if args.env in HITTED_ENVS:
-            from ds.main_hitted import LearnerHitted as Learner
+        if args.env in HIT_ENVS:
+            from ds.main_hit import LearnerHit as Learner
         else:
             from ds.learner import Learner
         Learner(root_dir, config_dir, args)
     elif args.process_type in ['actor', 'a']:
-        if args.env in HITTED_ENVS:
-            from ds.main_hitted import ActorHitted as Actor
+        if args.env in HIT_ENVS:
+            from ds.main_hit import ActorHit as Actor
         else:
             from ds.actor import Actor
         Actor(root_dir, config_dir, args)
