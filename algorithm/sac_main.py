@@ -167,7 +167,8 @@ class Main:
                                              ma_d_action_sizes,
                                              ma_c_action_size,
                                              self.inference_ma_names,
-                                             self.model_abs_dir)
+                                             self.model_abs_dir,
+                                             max_episode_length=self.base_config['max_step_each_iter'])
         for n, mgr in self.ma_manager:
             if n not in self.ma_configs:
                 self._logger.warning(f'{n} not in ma_configs')

@@ -1,18 +1,31 @@
 default:
   base_config:
     env_name: UGVParking
+    env_args:
+      # Parking = 0,
+      # ClockwiseRace = 1,
+      # AnticlockwiseRace = 2,
+      # ReachingPark = 3
+      task: 0
     unity_args:
+      no_graphics: false
+      force_vulkan:
+        win32: false
+        linux: true
       build_path:
         win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
-      no_graphics: false
 
     n_envs: 50
+
+  replay_config:
+    capacity: 524288 # 262144
 
   nn_config:
     rep:
       blur: 0
       brightness: 1
+      ray_random: 0
 
   sac_config:
     write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
@@ -22,47 +35,41 @@ default:
     burn_in_step: 30
     seq_encoder: RNN
 
-    use_rnd: true
-    rnd_n_sample: 20
+    # use_rnd: true
+    # rnd_n_sample: 20
 
-atc:
+parking:
   base_config:
-    name: "atc_{time}"
-  sac_config:
-    siamese: ATC
+    env_args:
+      task: 0
+    name: "parking_{time}"
 
-byol:
-  base_config:
-    name: "byol_{time}"
   sac_config:
-    siamese: BYOL
+    nn: nn_parking
 
-atc_q:
+clockwise_race:
   base_config:
-    name: "atc_q_{time}"
-  sac_config:
-    siamese: ATC
-    siamese_use_q: true
+    env_args:
+      task: 1
+    name: "clockwise_race_{time}"
 
-byol_q:
-  base_config:
-    name: "byol_q_{time}"
   sac_config:
-    siamese: BYOL
-    siamese_use_q: true
+    nn: nn_race
 
-atc_q_ada:
+anticlockwise_race:
   base_config:
-    name: "atc_q_ada_{time}"
-  sac_config:
-    siamese: ATC
-    siamese_use_q: true
-    siamese_use_adaptive: true
+    env_args:
+      task: 2
+    name: "anticlockwise_race_{time}"
 
-byol_q_ada:
-  base_config:
-    name: "byol_q_ada_{time}"
   sac_config:
-    siamese: BYOL
-    siamese_use_q: true
-    siamese_use_adaptive: true
+    nn: nn_race
+
+reaching_park:
+  base_config:
+    env_args:
+      task: 3
+    name: "reaching_park_{time}"
+
+  sac_config:
+    nn: nn_parking

@@ -26,7 +26,7 @@ nn_config:
   policy: null
 
 replay_config:
-  capacity: 524288
+  capacity: 524288 # 262144 131072 65536
   alpha: 0.9 # [0~1] convert the importance of TD error to priority. If 0, PER will reduce to vanilla replay buffer
   beta: 0.4 # Importance-sampling, from initial value increasing to 1
   beta_increment_per_sampling: 0.001 # Increment step
