@@ -13,6 +13,7 @@ from algorithm.utils.operators import gen_pre_n_actions
 
 AGENT_MAX_LIVENESS = 20
 NON_EMPTY_STEPS = 2
+DEFAULT_MAX_EPISODE_LENGTH = 2000
 
 
 class Agent:
@@ -39,14 +40,14 @@ class Agent:
                  d_action_sizes: List[int],
                  c_action_size: int,
                  seq_hidden_state_shape: Optional[Tuple[int, ...]] = None,
-                 max_return_episode_trans=-1):
+                 max_episode_length: int = -1):
         self.agent_id = agent_id
         self.obs_shapes = obs_shapes
         self.d_action_sizes = d_action_sizes
         self.d_action_summed_size = sum(d_action_sizes)
         self.c_action_size = c_action_size
         self.seq_hidden_state_shape = seq_hidden_state_shape
-        self.max_return_episode_trans = max_return_episode_trans
+        self.max_episode_length = max_episode_length if max_episode_length != -1 else DEFAULT_MAX_EPISODE_LENGTH
 
         self._padding_obs_list = [np.zeros(o).astype(np.float32) for o in self.obs_shapes]
         d_action_list = [np.eye(d_action_size, dtype=np.float32)[0]
@@ -55,7 +56,7 @@ class Agent:
         if self.seq_hidden_state_shape is not None:
             self._padding_seq_hidden_state = np.zeros(self.seq_hidden_state_shape, dtype=np.float32)
 
-        self._tmp_episode_trans = self._generate_empty_episode_trans()
+        self._tmp_episode_trans = self._generate_empty_episode_trans(self.max_episode_length)
 
     def _generate_empty_episode_trans(self, episode_length: int = 0) -> Dict[str, np.ndarray | List[np.ndarray]]:
         return {
@@ -151,7 +152,7 @@ class Agent:
         self._tmp_action = None
         self._tmp_prob = None
         self._tmp_seq_hidden_state = None
-        self._tmp_episode_trans = self._generate_empty_episode_trans()
+        self._tmp_episode_trans = self._generate_empty_episode_trans(self.max_episode_length)
 
         return episode_trans
 
@@ -163,8 +164,7 @@ class Agent:
                         done: bool,
                         max_reached: bool,
                         prob: np.ndarray,
-                        seq_hidden_state: Optional[np.ndarray] = None) \
-            -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
+                        seq_hidden_state: Optional[np.ndarray] = None) -> None:
         """
         Args:
             index: int
@@ -175,36 +175,27 @@ class Agent:
             max_reached: bool
             prob: [action_size, ]
             seq_hidden_state: [*seq_hidden_state_shape]
-
-        Returns:
-            ep_indexes (np.int32): [1, episode_len], int
-            ep_obses_list: List([1, episode_len, *obs_shapes_i], ...)
-            ep_actions: [1, episode_len, action_size]
-            ep_rewards: [1, episode_len]
-            ep_dones (np.bool): [1, episode_len], bool
-            ep_probs: [1, episode_len, action_size]
-            ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
-        expaned_transition = {
-            'index': np.expand_dims(index, 0).astype(np.int32),
-            'obs_list': [np.expand_dims(o, 0).astype(np.float32) for o in obs_list],
-            'action': np.expand_dims(action, 0).astype(np.float32),
-            'reward': np.expand_dims(reward, 0).astype(np.float32),
-            'done': np.expand_dims(done, 0).astype(bool),
-            'max_reached': np.expand_dims(max_reached, 0).astype(bool),
-            'prob': np.expand_dims(prob, 0).astype(np.float32),
-            'seq_hidden_state': np.expand_dims(seq_hidden_state, 0).astype(np.float32) if seq_hidden_state is not None else None,
-        }
+        if self.current_step == self.max_episode_length:
+            self._logger.warning(f'_tmp_episode_trans is full {self.max_episode_length}')
+            for k, v in self._tmp_episode_trans.items():
+                if k == 'obs_list':
+                    for o in self._tmp_episode_trans[k]:
+                        o[:-1] = o[1:]
+                else:
+                    v[:-1] = v[1:]
 
-        for k in self._tmp_episode_trans:
-            if k == 'obs_list':
-                self._tmp_episode_trans[k] = [
-                    np.concatenate([o, t_o]) for o, t_o in zip(self._tmp_episode_trans[k],
-                                                               expaned_transition[k])
-                ]
-            elif self._tmp_episode_trans[k] is not None:
-                self._tmp_episode_trans[k] = np.concatenate([self._tmp_episode_trans[k],
-                                                             expaned_transition[k]])
+            self.current_step -= 1
+
+        self._tmp_episode_trans['index'][self.current_step] = index
+        for tmp_obs, obs in zip(self._tmp_episode_trans['obs_list'], obs_list):
+            tmp_obs[self.current_step] = obs
+        self._tmp_episode_trans['action'][self.current_step] = action
+        self._tmp_episode_trans['reward'][self.current_step] = reward
+        self._tmp_episode_trans['done'][self.current_step] = done
+        self._tmp_episode_trans['max_reached'][self.current_step] = max_reached
+        self._tmp_episode_trans['prob'][self.current_step] = prob
+        self._tmp_episode_trans['seq_hidden_state'][self.current_step] = seq_hidden_state
 
         self._extra_log(obs_list,
                         action,
@@ -213,9 +204,11 @@ class Agent:
                         max_reached,
                         prob)
 
+        self.current_step += 1
+
     @property
     def episode_length(self) -> int:
-        return len(self._tmp_episode_trans['index'])
+        return self.current_step
 
     def _extra_log(self,
                    obs_list,
@@ -238,7 +231,12 @@ class Agent:
             ep_probs: [1, episode_len, action_size]
             ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
-        tmp = self._tmp_episode_trans.copy()
+        tmp = {}
+        for k, v in self._tmp_episode_trans.items():
+            if k == 'obs_list':
+                tmp[k] = [o[:self.episode_length] for o in v]
+            else:
+                tmp[k] = v[:self.episode_length]
 
         if force_length is not None:
             delta = force_length - self.episode_length
@@ -256,7 +254,7 @@ class Agent:
                     elif tmp[k] is not None:
                         tmp[k] = np.concatenate([tmp_empty[k], tmp[k]])
         else:
-            if tmp['index'].shape[0] <= 1:
+            if self.episode_length <= 1:
                 return None
 
         ep_indexes = np.expand_dims(tmp['index'], 0)  # [1, episode_len]
@@ -304,7 +302,8 @@ class AgentManager:
                  obs_names: List[str],
                  obs_shapes: List[Tuple[int]],
                  d_action_sizes: List[int],
-                 c_action_size: int):
+                 c_action_size: int,
+                 max_episode_length: int = -1):
         self.name = name
         self.obs_names = obs_names
         self.obs_shapes = obs_shapes
@@ -312,6 +311,7 @@ class AgentManager:
         self.d_action_summed_size = sum(d_action_sizes)
         self.c_action_size = c_action_size
         self.action_size = self.d_action_summed_size + self.c_action_size
+        self.max_episode_length = max_episode_length
 
         self.agents_dict: Dict[int, Agent] = {}  # {agent_id: Agent}
         self.agents_liveness: Dict[int, int] = {}  # {agent_id: int}
@@ -409,7 +409,8 @@ class AgentManager:
                     self.d_action_sizes,
                     self.c_action_size,
                     seq_hidden_state_shape=self.rl.seq_hidden_state_shape
-                    if self.seq_encoder is not None else None
+                    if self.seq_encoder is not None else None,
+                    max_episode_length=self.max_episode_length
                 )
             self.agents_liveness[agent_id] = AGENT_MAX_LIVENESS
 
@@ -650,14 +651,16 @@ class MultiAgentsManager:
                  ma_d_action_sizes: Dict[str, List[int]],
                  ma_c_action_size: Dict[str, int],
                  inference_ma_names: Set[str],
-                 model_abs_dir: Path):
+                 model_abs_dir: Path,
+                 max_episode_length: int = -1):
         self._inference_ma_names = inference_ma_names
         for n in ma_obs_shapes:
             self._ma_manager[n] = AgentManager(n,
                                                ma_obs_names[n],
                                                ma_obs_shapes[n],
                                                ma_d_action_sizes[n],
-                                               ma_c_action_size[n])
+                                               ma_c_action_size[n],
+                                               max_episode_length=max_episode_length)
 
             if len(ma_obs_shapes) == 1:
                 self._ma_manager[n].set_model_abs_dir(model_abs_dir)

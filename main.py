@@ -10,16 +10,10 @@ except:
     pass
 
 
-HIT_ENVS = {'roller',
-               'square', 'square/obstacle', 'pyramid',
-               'uav',
-               'ugv', 'ugv/ugv_street_search', 'ugv/ugv_parking',
-               'usv',
-               'gym/toy_stack', 'gym/toy_queue', 'gym/toy_hallway'}
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('env')
+    parser.add_argument('--hit', action='store_true', default=False)
     parser.add_argument('--oc', action='store_true', default=False)
 
     parser.add_argument('--config', '-c', help='config file')
@@ -50,7 +44,7 @@ if __name__ == '__main__':
 
     set_logger(debug=args.debug)
 
-    if args.env in HIT_ENVS:
+    if args.hit:
         if args.oc:
             from algorithm.oc.oc_main_hit import OC_MainHit as Main
         else:
