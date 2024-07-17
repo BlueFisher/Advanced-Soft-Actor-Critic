@@ -29,7 +29,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--u_port', '-p', type=int, default=5005, help='UNITY: communication port')
     parser.add_argument('--u_editor', action='store_true', help='UNITY: running in Unity Editor')
-    parser.add_argument('--u_quality_level', type=int, default=2, help='UNITY: Quality level')
+    parser.add_argument('--u_quality_level', type=int, default=2, help='UNITY: Quality level. \
+                                                                        0: URP-Performant-Renderer, \
+                                                                        1: URP-Balanced-Renderer, \
+                                                                        2: URP-HighFidelity-Renderer')
     parser.add_argument('--u_timescale', type=float, default=None, help='UNITY: Timescale')
 
     parser.add_argument('--name', '-n', help='training name')

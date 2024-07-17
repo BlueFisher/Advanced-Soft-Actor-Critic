@@ -363,7 +363,9 @@ class UnityWrapper(EnvWrapper):
         self.base_port = base_port
         self.max_n_envs_per_process = max_n_envs_per_process
         self.no_graphics = no_graphics
+        self.batchmode = batchmode
         self.force_vulkan = force_vulkan
+        self.quality_level = quality_level
         if time_scale is None:
             time_scale = 20 if train_mode else 1
         self.time_scale = time_scale
@@ -445,7 +447,9 @@ class UnityWrapper(EnvWrapper):
                                               self._process_id,
                                               self.base_port,
                                               self.no_graphics,
+                                              self.batchmode,
                                               self.force_vulkan,
+                                              self.quality_level,
                                               self.time_scale,
                                               self.seed,
                                               self.scene,
