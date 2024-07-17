@@ -10,7 +10,7 @@ class ModelRep(m.ModelBaseRNNRep):
         assert self.obs_shapes[0] == (6, 6)  # BoundingBoxSensor
         assert self.obs_shapes[1] == (84, 84, 3)  # CameraSensor
         assert self.obs_shapes[2] == (84, 84, 3)  # SegmentationSensor
-        assert self.obs_shapes[3] == (7,)
+        assert self.obs_shapes[3] == (9,)
 
         if blur != 0:
             self.blurrer = m.Transform(T.GaussianBlur(blur, sigma=blur))
@@ -25,7 +25,7 @@ class ModelRep(m.ModelBaseRNNRep):
                                  out_dense_n=64, out_dense_depth=1,
                                  output_size=16)
 
-        self.dense = m.LinearLayers(6 + self.conv.output_size + 7,
+        self.dense = m.LinearLayers(6 + self.conv.output_size + 9,
                                     dense_n=64, dense_depth=1)
 
         self.rnn = m.GRU(self.dense.output_size + self.c_action_size, 64, 1)
@@ -55,6 +55,7 @@ class ModelRep(m.ModelBaseRNNRep):
 
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         bbox, vis_camera, vis_segmentation, vec = obs_list
+        print(vec[..., -2])
 
         if self.blurrer:
             vis_camera = self.blurrer(vis_camera)

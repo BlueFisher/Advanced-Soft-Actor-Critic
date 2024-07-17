@@ -58,6 +58,8 @@ class Agent:
 
         self._tmp_episode_trans = self._generate_empty_episode_trans(self.max_episode_length)
 
+        self._logger = logging.getLogger(f'agent.{agent_id}')
+
     def _generate_empty_episode_trans(self, episode_length: int = 0) -> Dict[str, np.ndarray | List[np.ndarray]]:
         return {
             'index': -np.ones((episode_length, ), dtype=np.int32),
@@ -220,7 +222,7 @@ class Agent:
         pass
 
     def get_episode_trans(self,
-                          force_length: int = None) -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
+                          force_length: int | None = None) -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
         """
         Returns:
             ep_indexes (np.int32): [1, episode_len]
@@ -451,6 +453,7 @@ class AgentManager:
                    agent_ids: np.ndarray,
                    obs_list: List[np.ndarray],
                    last_reward: np.ndarray,
+                   offline_action: np.ndarray | None = None,
                    disable_sample: bool = False,
                    force_rnd_if_available: bool = False) -> np.ndarray:
         assert len(agent_ids) == obs_list[0].shape[0]
@@ -481,6 +484,7 @@ class AgentManager:
                 pre_action=pre_action,
                 rnn_state=seq_hidden_state,
 
+                offline_action=offline_action,
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
@@ -518,14 +522,18 @@ class AgentManager:
                 ep_pre_actions=ep_pre_actions,
                 ep_attn_states=ep_attn_states,
 
+                offline_action=offline_action,
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
 
         else:
-            action, prob = self.rl.choose_action(obs_list,
-                                                 disable_sample=disable_sample,
-                                                 force_rnd_if_available=force_rnd_if_available)
+            action, prob = self.rl.choose_action(
+                obs_list,
+                offline_action=offline_action,
+                disable_sample=disable_sample,
+                force_rnd_if_available=force_rnd_if_available
+            )
             next_seq_hidden_state = None
 
         for i, agent_id in enumerate(agent_ids):
@@ -716,12 +724,16 @@ class MultiAgentsManager:
                       ma_obs_list: Dict[str, List[np.ndarray]],
                       ma_last_reward: Dict[str, np.ndarray],
 
+                      ma_offline_action: Dict[str, np.ndarray] | None = None,
                       disable_sample: bool = False,
                       force_rnd_if_available: bool = False) -> Tuple[Dict[str, np.ndarray],
                                                                      Dict[str, np.ndarray]]:
 
         ma_d_action = {}
         ma_c_action = {}
+
+        if ma_offline_action is None:
+            ma_offline_action = {}
 
         for n, mgr in self:
             if len(ma_agent_ids[n]) == 0:
@@ -732,6 +744,7 @@ class MultiAgentsManager:
                 agent_ids=ma_agent_ids[n],
                 obs_list=ma_obs_list[n],
                 last_reward=ma_last_reward[n],
+                offline_action=ma_offline_action[n] if n in ma_offline_action else None,
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )

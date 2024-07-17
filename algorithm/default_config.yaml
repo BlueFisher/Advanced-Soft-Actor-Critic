@@ -1,14 +1,20 @@
 base_config:
-  env_type: UNITY # UNITY | GYM
+  env_type: UNITY # UNITY | GYM | TEST
   env_name: env_name # The environment name.
   env_args: null # The environment build arguments
   unity_args: # Specific for Unity Environments
     max_n_envs_per_process: 10 # The max env copies count in each process
     no_graphics: true # If an env does not need pixel input, set true
+    batchmode: false # -batchmode
     force_vulkan: false # -force-vulkan
     build_path: # Unity executable path
       win32: path_win32
       linux: path_linux
+  
+  offline_env_config:
+    enabled: false
+    env_name: env_name
+    env_args: null
 
   name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
 

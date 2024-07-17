@@ -33,7 +33,8 @@ class DataStorage:
                 # Store uint8 if data is image
                 self._data_key_is_image[k] = ('camera' in k.lower()
                                               or 'visual' in k.lower()
-                                              or 'image' in k.lower()) and v.shape[-1] == 3
+                                              or 'image' in k.lower()
+                                              or 'segmentation' in k.lower()) and v.shape[-1] == 3
 
                 dtype = np.uint8 if self._data_key_is_image[k] else v.dtype
 
