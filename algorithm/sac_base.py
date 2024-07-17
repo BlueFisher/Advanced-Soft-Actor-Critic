@@ -799,11 +799,14 @@ class SAC_Base:
     def _choose_action(self,
                        obs_list: List[torch.Tensor],
                        state: torch.Tensor,
+                       offline_action: torch.Tensor | None = None,
                        disable_sample: bool = False,
                        force_rnd_if_available: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
+            obs_list: list([batch, *obs_shapes_i], ...)
             state: [batch, state_size]
+            offline_action: [batch, action_size]
 
         Returns:
             action: [batch, action_size]
@@ -812,7 +815,6 @@ class SAC_Base:
         batch = state.shape[0]
         d_policy, c_policy = self.model_policy(state, obs_list)
 
-        offline_action = self.model_rep.get_offline_action(obs_list)
         if offline_action is None:
             if self.d_action_sizes:
                 if self.discrete_dqn_like:
@@ -880,11 +882,15 @@ class SAC_Base:
     @torch.no_grad()
     def choose_action(self,
                       obs_list: List[np.ndarray],
+
+                      offline_action: np.ndarray | None = None,
                       disable_sample: bool = False,
                       force_rnd_if_available: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         """
         Args:
             obs_list (np): list([batch, *obs_shapes_i], ...)
+
+            offline_action (np): [batch, action_size]
 
         Returns:
             action (np): [batch, action_size]
@@ -893,7 +899,12 @@ class SAC_Base:
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
         state = self.model_rep(obs_list)
 
-        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_available)
+        offline_action = torch.from_numpy(offline_action).to(self.device) if offline_action is not None else None
+        action, prob = self._choose_action(obs_list,
+                                           state,
+                                           offline_action,
+                                           disable_sample,
+                                           force_rnd_if_available)
         return action.detach().cpu().numpy(), prob.detach().cpu().numpy()
 
     @torch.no_grad()
@@ -901,6 +912,7 @@ class SAC_Base:
                           obs_list: List[np.ndarray],
                           pre_action: np.ndarray,
                           rnn_state: np.ndarray,
+                          offline_action: np.ndarray | None = None,
                           disable_sample: bool = False,
                           force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
                                                                          np.ndarray,
@@ -910,6 +922,9 @@ class SAC_Base:
             obs_list (np): list([batch, *obs_shapes_i], ...)
             pre_action (np): [batch, action_size]
             rnn_state (np): [batch, *seq_hidden_state_shape]
+
+            offline_action (np): [batch, action_size]
+
         Returns:
             action (np): [batch, action_size]
             prob (np): [batch, action_size]
@@ -926,7 +941,12 @@ class SAC_Base:
         state = state.squeeze(1)
         obs_list = [obs.squeeze(1) for obs in obs_list]
 
-        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_available)
+        offline_action = torch.from_numpy(offline_action).to(self.device) if offline_action is not None else None
+        action, prob = self._choose_action(obs_list,
+                                           state,
+                                           offline_action,
+                                           disable_sample,
+                                           force_rnd_if_available)
 
         return (action.detach().cpu().numpy(),
                 prob.detach().cpu().numpy(),
@@ -940,6 +960,8 @@ class SAC_Base:
                            ep_pre_actions: np.ndarray,
                            ep_attn_states: np.ndarray,
 
+                           offline_action: np.ndarray | None = None,
+
                            disable_sample: bool = False,
                            force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
                                                                           np.ndarray,
@@ -951,6 +973,8 @@ class SAC_Base:
             ep_obses_list (np): list([batch, ep_len, *obs_shapes_i], ...)
             ep_pre_actions (np): [batch, ep_len, action_size]
             ep_attn_states (np): [batch, ep_len, *seq_hidden_state_shape]
+
+            offline_action (np): [batch, action_size]
 
         Returns:
             action (np): [batch, action_size]
@@ -975,8 +999,10 @@ class SAC_Base:
         state = state.squeeze(1)
         next_attn_state = next_attn_state.squeeze(1)
 
+        offline_action = torch.from_numpy(offline_action).to(self.device) if offline_action is not None else None
         action, prob = self._choose_action([ep_obses[:, -1] for ep_obses in ep_obses_list],
                                            state,
+                                           offline_action,
                                            disable_sample,
                                            force_rnd_if_available)
 

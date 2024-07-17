@@ -60,6 +60,7 @@ class Main:
         self.inference_ma_names: Set[str] = set(args.run_a)
         self.render = args.render
         self.unity_run_in_editor = args.u_editor
+        self.unity_quality_level = args.u_quality_level
         self.unity_time_scale = args.u_timescale
 
         self.disable_sample = args.disable_sample
@@ -131,6 +132,7 @@ class Main:
                                         base_port=self.base_config['unity_args']['port'],
                                         max_n_envs_per_process=self.base_config['unity_args']['max_n_envs_per_process'],
                                         no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
+                                        batchmode=self.base_config['unity_args']['batchmode'],
                                         force_vulkan=self.base_config['unity_args']['force_vulkan'],
                                         time_scale=self.unity_time_scale,
                                         scene=self.base_config['env_name'],
@@ -145,13 +147,6 @@ class Main:
                                   n_envs=self.base_config['n_envs'],
                                   render=self.render)
 
-        elif self.base_config['env_type'] == 'OFFLINE':
-            from algorithm.env_wrapper.offline_wrapper import OfflineWrapper
-
-            self.env = OfflineWrapper(env_name=self.base_config['env_name'],
-                                      env_args=self.base_config['env_args'],
-                                      n_envs=self.base_config['n_envs'])
-
         elif self.base_config['env_type'] == 'TEST':
             from algorithm.env_wrapper.test_wrapper import TestWrapper
 
@@ -162,6 +157,17 @@ class Main:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
         ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size = self.env.init()
+        
+        if self.base_config['offline_env_config']['enabled']:
+            from algorithm.env_wrapper.offline_wrapper import OfflineWrapper
+
+            self.offline_env = OfflineWrapper(env_name=self.base_config['offline_env_config']['env_name'],
+                                              env_args=self.base_config['offline_env_config']['env_args'],
+                                              n_envs=self.base_config['n_envs'])
+            _ma_obs_names, _ma_obs_shapes, _ma_d_action_sizes, _ma_c_action_size =self.offline_env.init()
+        else:
+            self.offline_env = None
+
         self.ma_manager = MultiAgentsManager(ma_obs_names,
                                              ma_obs_shapes,
                                              ma_d_action_sizes,
@@ -237,12 +243,17 @@ class Main:
                         or self.ma_manager.max_reached \
                         or force_reset:
                     self.ma_manager.reset()
-                    ma_agent_ids, ma_obs_list = self.env.reset(reset_config=self.reset_config)
+                    if is_training and self.offline_env is not None:
+                        ma_agent_ids, ma_obs_list, ma_offline_action = self.offline_env.reset(reset_config=self.reset_config)
+                    else:
+                        ma_agent_ids, ma_obs_list = self.env.reset(reset_config=self.reset_config)
+                        ma_offline_action = None
                     ma_d_action, ma_c_action = self.ma_manager.get_ma_action(
                         ma_agent_ids=ma_agent_ids,
                         ma_obs_list=ma_obs_list,
                         ma_last_reward={n: np.zeros(len(agent_ids), dtype=bool)
                                         for n, agent_ids in ma_agent_ids.items()},
+                        ma_offline_action=ma_offline_action,
                         disable_sample=self.disable_sample
                     )
 
@@ -252,9 +263,14 @@ class Main:
 
                 while not self.ma_manager.done:
                     with self._profiler('env.step', repeat=10):
-                        (decision_step,
-                         terminal_step,
-                         all_envs_done) = self.env.step(ma_d_action, ma_c_action)
+                        if is_training and self.offline_env is not None:
+                            (decision_step,
+                             terminal_step,
+                             all_envs_done) = self.offline_env.step(ma_d_action, ma_c_action)
+                        else:
+                            (decision_step,
+                             terminal_step,
+                             all_envs_done) = self.env.step(ma_d_action, ma_c_action)
                         self._extra_step(ma_d_action, ma_c_action)
 
                     if decision_step is None:
@@ -268,6 +284,7 @@ class Main:
                             ma_agent_ids=decision_step.ma_agent_ids,
                             ma_obs_list=decision_step.ma_obs_list,
                             ma_last_reward=decision_step.ma_last_reward,
+                            ma_offline_action=decision_step.ma_offline_action,
                             disable_sample=self.disable_sample
                         )
 

@@ -7,7 +7,7 @@ import os
 import random
 import time
 import uuid
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Tuple
 
 import numpy as np
 from mlagents_envs.environment import ActionTuple, UnityEnvironment
@@ -63,17 +63,19 @@ class UnityWrapperProcess:
     _ma_u_group_id_counts: Dict[str, np.ndarray] = {}  # the agent count in each unique group
 
     def __init__(self,
-                 conn: Optional[multiprocessing.connection.Connection] = None,
+                 conn: multiprocessing.connection.Connection | None = None,
                  train_mode: bool = True,
-                 file_name: Optional[str] = None,
+                 file_name: str | None = None,
                  worker_id: int = 0,
                  base_port: int = 5005,
                  no_graphics: bool = True,
+                 batchmode: bool = False,
                  force_vulkan: bool = False,
-                 time_scale: Optional[float] = None,
-                 seed: Optional[int] = None,
-                 scene: Optional[str] = None,
-                 env_args: Dict = None,
+                 quality_level: int = 2,
+                 time_scale: float = 1,
+                 seed: int | None = None,
+                 scene: str | None = None,
+                 env_args: Dict | None = None,
                  n_envs: int = 1):
         """
         Args:
@@ -83,7 +85,11 @@ class UnityWrapperProcess:
             worker_id: Offset from base_port
             base_port: The port that communicate to Unity. It will be set to 5004 automatically if in editor.
             no_graphics: If Unity runs in no graphic mode. It must be set to False if Unity has camera sensor.
+            batchmode: -batchmode
             force_vulkan: -force-vulkan
+            quality_level: 0: URP-Performant-Renderer
+                           1: URP-Balanced-Renderer
+                           2: URP-HighFidelity-Renderer
             time_scale: Time scale of Unity. If None: time_scale = 20 if train_mode else 1
             seed: Random seed
             scene: The scene name
@@ -122,6 +128,8 @@ class UnityWrapperProcess:
             self._logger = logging.getLogger(f'UnityWrapper.Process_{worker_id}')
 
         additional_args = ['--scene', scene]
+        if batchmode and not no_graphics:  # if no_graphics==True, -batchmode auto added
+            additional_args.append('-batchmode')
         if force_vulkan:
             additional_args.append('-force-vulkan')
 
@@ -136,12 +144,10 @@ class UnityWrapperProcess:
                                                     self.env_done_channel,
                                                     self.option_channel])
 
-        if time_scale is None:
-            time_scale = 20 if train_mode else 1
         self.engine_configuration_channel.set_configuration_parameters(
             width=200 if train_mode else 1280,
             height=200 if train_mode else 720,
-            quality_level=0,
+            quality_level=quality_level,
             # 0: URP-Performant-Renderer
             # 1: URP-Balanced-Renderer
             # 2: URP-HighFidelity-Renderer
@@ -152,6 +158,7 @@ class UnityWrapperProcess:
                 while True:
                     cmd, data = conn.recv()
                     if cmd == INIT:
+                        self._logger.info('Received INIT')
                         conn.send(self.init())
                     elif cmd == RESET:
                         conn.send(self.reset(data))
@@ -320,17 +327,19 @@ class UnityWrapper(EnvWrapper):
     def __init__(self,
                  train_mode: bool = True,
                  env_name: str = None,
+                 env_args: List[str] | Dict | None = None,
                  n_envs: int = 1,
 
                  base_port: int = 5005,
                  max_n_envs_per_process: int = 10,
                  no_graphics: bool = True,
+                 batchmode: bool = False,
                  force_vulkan: bool = False,
-                 time_scale: Optional[float] = None,
-                 seed: Optional[int] = None,
-                 scene: Optional[str] = None,
-                 env_args: Optional[List[str] | Dict] = None,
-                 force_seq: Optional[bool] = None):
+                 quality_level: int = 2,
+                 time_scale: float | None = None,
+                 seed: int | None = None,
+                 scene: str | None = None,
+                 force_seq: bool | None = None):
         """
         Args:
             train_mode: If in train mode, Unity will run in the highest quality
@@ -340,7 +349,12 @@ class UnityWrapper(EnvWrapper):
             base_port: The port that communicate to Unity. It will be set to 5004 automatically if in editor.
             max_n_envs_per_process: The max env copies count in each process
             no_graphics: If Unity runs in no graphic mode. It must be set to False if Unity has camera sensor.
+            batchmode: -batchmode
             force_vulkan: -force-vulkan
+            quality_level: 0: URP-Performant-Renderer
+                           1: URP-Balanced-Renderer
+                           2: URP-HighFidelity-Renderer
+            time_scale: Time scale of Unity. If None: time_scale = 20 if train_mode else 1
             time_scale: Time scale of Unity. If None: time_scale = 20 if train_mode else 1
             seed: Random seed
             scene: The scene name
@@ -350,6 +364,8 @@ class UnityWrapper(EnvWrapper):
         self.max_n_envs_per_process = max_n_envs_per_process
         self.no_graphics = no_graphics
         self.force_vulkan = force_vulkan
+        if time_scale is None:
+            time_scale = 20 if train_mode else 1
         self.time_scale = time_scale
         self.seed = seed
         self.scene = scene
@@ -383,7 +399,9 @@ class UnityWrapper(EnvWrapper):
                                                                worker_id=i,
                                                                base_port=base_port,
                                                                no_graphics=no_graphics,
+                                                               batchmode=batchmode,
                                                                force_vulkan=force_vulkan,
+                                                               quality_level=quality_level,
                                                                time_scale=time_scale,
                                                                seed=seed,
                                                                scene=scene,
@@ -411,7 +429,10 @@ class UnityWrapper(EnvWrapper):
         if self._seq_processes:
             return
 
-        while None in self._conns:
+        num_none = len([c for c in self._conns if c is None])
+        num_try = 0
+
+        while None in self._conns or num_try > 2 * num_none:
             i = self._conns.index(None)
 
             self._logger.info(f'Starting environment {i} ...')
@@ -435,13 +456,30 @@ class UnityWrapper(EnvWrapper):
             self._processes[i] = p
 
             if force_init:
-                parent_conn.send((INIT, None))
-                self._process_conn_receiving(parent_conn, i)
-                parent_conn.send((RESET, None))
-                self._process_conn_receiving(parent_conn, i)
+                try:
+                    parent_conn.send((INIT, None))
+                    self._process_conn_receiving(parent_conn, i)
+                    parent_conn.send((RESET, None))
+                    self._process_conn_receiving(parent_conn, i)
+                except Exception as e:
+                    self._logger.error(f'Environment {i} error in INIT or RESET, {e.__class__.__name__} {e}')
+
+                    self._processes[i].terminate()
+                    while self._processes[i].is_alive():
+                        self._logger.warning(f'Environment {i} still running...')
+                        time.sleep(1)
+                    self._logger.warning(f'Environment {i} terminated by error')
+                    self._processes[i] = None
+                    self._conns[i].close()
+                    self._conns[i] = None
+
+                    continue
 
             self._logger.info(f'Environment {i} started with process {self._process_id}')
             self._process_id += 1
+
+        if None in self._conns:
+            raise RuntimeError("Environments cannot be started")
 
     def send_option(self, option: Dict[str, int]):
         # TODO multiple envs
@@ -596,7 +634,7 @@ class UnityWrapper(EnvWrapper):
                     self._all_env_processes_done[i] = envs_done
 
                 except Exception as e:
-                    self._logger.error(f'Environment {i} error, {e.__class__.__name__} {e}')
+                    self._logger.error(f'Environment {i} error in STEP, {e.__class__.__name__} {e}')
 
                     self._processes[i].terminate()
                     while self._processes[i].is_alive():

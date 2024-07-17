@@ -32,12 +32,6 @@ class ModelBaseRep(nn.Module):
     def forward(self, obs_list: List[torch.Tensor]):
         raise Exception("ModelRep not implemented")
 
-    def get_offline_action(self, obs_list: List[torch.Tensor]) -> torch.Tensor:
-        if self._offline_action_index != -1:
-            return obs_list[self._offline_action_index]
-        else:
-            return None
-
     def get_augmented_encoders(self,
                                obs_list: List[torch.Tensor]) -> torch.Tensor | Tuple[torch.Tensor]:
         raise Exception("get_augmented_encoders not implemented")
