@@ -61,16 +61,19 @@ class Agent:
         self._logger = logging.getLogger(f'agent.{agent_id}')
 
     def _generate_empty_episode_trans(self, episode_length: int = 0) -> Dict[str, np.ndarray | List[np.ndarray]]:
-        return {
+        empty_episode_trans = {
             'index': -np.ones((episode_length, ), dtype=np.int32),
             'obs_list': [np.zeros((episode_length, *s), dtype=np.float32) for s in self.obs_shapes],
             'action': np.zeros((episode_length, self.d_action_summed_size + self.c_action_size), dtype=np.float32),
             'reward': np.zeros((episode_length, ), dtype=np.float32),
             'done': np.zeros((episode_length, ), dtype=bool),
             'max_reached': np.zeros((episode_length, ), dtype=bool),
-            'prob': np.zeros((episode_length, self.d_action_summed_size + self.c_action_size), dtype=np.float32),
-            'seq_hidden_state': np.zeros((episode_length, *self.seq_hidden_state_shape), dtype=np.float32) if self.seq_hidden_state_shape is not None else None,
+            'prob': np.zeros((episode_length, self.d_action_summed_size + self.c_action_size), dtype=np.float32)
         }
+        if self.seq_hidden_state_shape is not None:
+            empty_episode_trans['seq_hidden_state'] = np.zeros((episode_length, *self.seq_hidden_state_shape), dtype=np.float32)
+
+        return empty_episode_trans
 
     def set_tmp_obs_action(self,
                            obs_list: List[np.ndarray],
@@ -197,7 +200,8 @@ class Agent:
         self._tmp_episode_trans['done'][self.current_step] = done
         self._tmp_episode_trans['max_reached'][self.current_step] = max_reached
         self._tmp_episode_trans['prob'][self.current_step] = prob
-        self._tmp_episode_trans['seq_hidden_state'][self.current_step] = seq_hidden_state
+        if self.seq_hidden_state_shape is not None:
+            self._tmp_episode_trans['seq_hidden_state'][self.current_step] = seq_hidden_state
 
         self._extra_log(obs_list,
                         action,
@@ -268,7 +272,7 @@ class Agent:
                                                  ~tmp['max_reached']),
                                   0)  # [1, episode_len]
         ep_probs = np.expand_dims(tmp['prob'], 0)  # [1, episode_len, action_size]
-        ep_seq_hidden_states = np.expand_dims(tmp['seq_hidden_state'], 0) if tmp['seq_hidden_state'] is not None else None
+        ep_seq_hidden_states = np.expand_dims(tmp['seq_hidden_state'], 0) if self.seq_hidden_state_shape is not None else None
         # [1, episode_len, *seq_hidden_state_shape]
 
         return {
