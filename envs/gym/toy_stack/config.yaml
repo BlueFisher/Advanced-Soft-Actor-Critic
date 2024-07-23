@@ -10,7 +10,7 @@ default:
 
   reset_config:
     stack_len: 100
-    stack_nesting: 0.75
+    stack_nesting: 1
     max_nesting_depth: 15
     block_gap: [3, 10]
     success_reward: 2.
@@ -42,7 +42,7 @@ default:
   oc_config:
     option_eplison: 0.0 # Probability of switching options
     option_seq_encoder: null
-    terminal_entropy: 0. # Tending not to terminate >0, tending to terminate <0
+    terminal_entropy: 0.01 # Tending not to terminate >0, tending to terminate <0
     key_max_length: 100
     num_options: 3
 

@@ -27,11 +27,11 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         self.embed_size = embed_size
 
-        self.attn = m.EpisodeMultiheadAttention(embed_size, num_layers=2,
+        self.attn = m.EpisodeMultiheadAttention(embed_size, num_layers=5,
                                                 num_heads=2,
-                                                pe=[pe, None],
+                                                pe=[pe] + [None] * 4,
                                                 qkv_dense_depth=1,
-                                                out_dense_depth=1,
+                                                out_dense_depth=2,
                                                 dropout=0.005,
                                                 gate=gate,
                                                 use_layer_norm=False)
@@ -40,11 +40,11 @@ class ModelRep(m.ModelBaseAttentionRep):
         self.rnn1 = m.GRU(embed_size, embed_size, num_layers=1)
         self._rnn1_hidden_state_dim = self.rnn1.num_layers * self.rnn1.hidden_size
 
-        self.attn1 = m.EpisodeMultiheadAttention(embed_size, num_layers=2,
-                                                 num_heads=2,
+        self.attn1 = m.EpisodeMultiheadAttention(embed_size, num_layers=5,
+                                                 num_heads=1,
                                                  pe=None,
                                                  qkv_dense_depth=1,
-                                                 out_dense_depth=1,
+                                                 out_dense_depth=2,
                                                  dropout=0.005,
                                                  gate=gate,
                                                  use_layer_norm=False)

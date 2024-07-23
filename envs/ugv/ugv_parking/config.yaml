@@ -7,6 +7,8 @@ default:
       # AnticlockwiseRace = 2,
       # ReachingPark = 3
       task: 0
+      domain_random: 1
+
     unity_args:
       no_graphics: false
       force_vulkan:
@@ -17,6 +19,7 @@ default:
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
     n_envs: 50
+    max_step_each_iter: 500 # Max step in each iteration
 
   replay_config:
     capacity: 524288 # 262144
@@ -32,11 +35,11 @@ default:
     save_model_per_step: 5000 # Save model every N steps
 
     n_step: 3
-    burn_in_step: 30
+    burn_in_step: 10
     seq_encoder: RNN
 
-    # use_rnd: true
-    # rnd_n_sample: 20
+    use_rnd: true
+    rnd_n_sample: 20
 
 parking:
   base_config:
@@ -54,7 +57,7 @@ clockwise_race:
     name: "clockwise_race_{time}"
 
   sac_config:
-    nn: nn_race
+    nn: nn_parking
 
 anticlockwise_race:
   base_config:
@@ -63,7 +66,7 @@ anticlockwise_race:
     name: "anticlockwise_race_{time}"
 
   sac_config:
-    nn: nn_race
+    nn: nn_parking
 
 reaching_park:
   base_config:

@@ -758,10 +758,10 @@ class OptionBase(SAC_Base):
         def _get_terminal_entropy():
             return terminal_entropy * 0.8 ** (self.global_step / 2000)
 
-        te = terminal_entropy
+        te = _get_terminal_entropy()
 
-        # loss_termination = next_termination * (next_v.squeeze(-1) - max_next_v_over_options + terminal_entropy) * ~done  # [batch, ]
         loss_termination = next_termination * (next_v.squeeze(-1) - mean_next_v_over_options + te) * ~done  # [batch, ]
+        # loss_termination = next_termination * (next_v.squeeze(-1) - mean_next_v_over_options + te) * ~done  # [batch, ]
         loss_termination = torch.mean(loss_termination)
 
         self.optimizer_termination.zero_grad()

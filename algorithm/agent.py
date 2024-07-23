@@ -414,8 +414,7 @@ class AgentManager:
                     self.obs_shapes,
                     self.d_action_sizes,
                     self.c_action_size,
-                    seq_hidden_state_shape=self.rl.seq_hidden_state_shape
-                    if self.seq_encoder is not None else None,
+                    seq_hidden_state_shape=self.rl.seq_hidden_state_shape if self.seq_encoder is not None else None,
                     max_episode_length=self.max_episode_length
                 )
             self.agents_liveness[agent_id] = AGENT_MAX_LIVENESS

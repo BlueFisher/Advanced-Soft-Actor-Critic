@@ -383,4 +383,4 @@ class Main:
             rewards = [a.reward for a in mgr.non_empty_agents]
             rewards = ", ".join([f"{i:6.1f}" for i in rewards])
             max_step = max([a.steps for a in mgr.non_empty_agents])
-            self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}')
+            self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards} [{len(mgr.non_empty_agents)}]')
