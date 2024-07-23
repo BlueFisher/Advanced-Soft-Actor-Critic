@@ -100,7 +100,7 @@ class OC_MainHit(OC_Main):
                         else:
                             mgr['evaluation_data']['failed_steps'] += agent.steps
 
-            self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}, hit {hit}')
+            self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}, hit {hit}/[{len(mgr.non_empty_agents)}]')
 
 
 oc_agent.OC_Agent = OC_AgentHit

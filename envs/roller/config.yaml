@@ -18,7 +18,7 @@ default:
     beta_increment_per_sampling: 0
 
   sac_config:
-    use_replay_buffer: false # Whether using prioritized replay buffer
+    use_replay_buffer: true # Whether using prioritized replay buffer
     write_summary_per_step: 10
 
     n_step: 5

@@ -27,12 +27,12 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         self.embed_size = embed_size
 
-        self.attn = m.EpisodeMultiheadAttention(embed_size, num_layers=1,
+        self.attn = m.EpisodeMultiheadAttention(embed_size, num_layers=2,
                                                 num_heads=2,
-                                                pe=[pe],
+                                                pe=[pe, None],
                                                 qkv_dense_depth=1,
                                                 out_dense_depth=1,
-                                                dropout=0.005,
+                                                dropout=0.01,
                                                 gate=gate,
                                                 use_layer_norm=False)
 
@@ -40,12 +40,12 @@ class ModelRep(m.ModelBaseAttentionRep):
         self.rnn1 = m.GRU(embed_size, embed_size, num_layers=1)
         self._rnn1_hidden_state_dim = self.rnn1.num_layers * self.rnn1.hidden_size
 
-        self.attn1 = m.EpisodeMultiheadAttention(embed_size, num_layers=1,
+        self.attn1 = m.EpisodeMultiheadAttention(embed_size, num_layers=2,
                                                  num_heads=2,
                                                  pe=None,
                                                  qkv_dense_depth=1,
                                                  out_dense_depth=1,
-                                                 dropout=0.005,
+                                                 dropout=0.01,
                                                  gate=gate,
                                                  use_layer_norm=False)
 
@@ -152,14 +152,14 @@ class ModelTermination(m.ModelTermination):
     def _build_model(self):
         return super()._build_model(dense_n=128, dense_depth=2)
 
-    def forward(self, state, obs_list):
-        high_state, vec_obs = obs_list
+    # def forward(self, state, obs_list):
+    #     high_state, vec_obs = obs_list
 
-        vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], MAP_WIDTH * (TARGET_TYPE_NUM + 1))
+    #     vec_obs = vec_obs.reshape(*vec_obs.shape[:-2], MAP_WIDTH * (TARGET_TYPE_NUM + 1))
 
-        t = vec_obs.any(-1, keepdim=True)
-        t = t.to(state.dtype)
-        return t
+    #     t = vec_obs.any(-1, keepdim=True)
+    #     t = t.to(state.dtype)
+    #     return t
 
 
 class ModelPolicy(m.ModelPolicy):

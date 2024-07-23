@@ -47,9 +47,9 @@ class ModelRep(m.ModelBaseRNNRep):
         self.ray_conv = m.Conv1dLayers(RAY_SIZE, 2, 'default',
                                        out_dense_n=64, out_dense_depth=2)
 
-        self.dense = m.LinearLayers(64 * 5, dense_n=128, dense_depth=1, output_size=128)
+        self.dense = m.LinearLayers(64 * 5, dense_n=128, dense_depth=1)
 
-        self.rnn = m.GRU(128 + 6 + sum(self.d_action_sizes) + self.c_action_size, 64, 1)
+        self.rnn = m.GRU(128 + sum(self.d_action_sizes) + self.c_action_size, 64, 1)
 
         cropper = torch.nn.Sequential(
             T.RandomCrop(size=(50, 50)),
@@ -84,9 +84,9 @@ class ModelRep(m.ModelBaseRNNRep):
 
         x = self.dense(torch.cat([vis_cam, vis_seg, vis_third_cam, vis_third_seg, ray], dim=-1))
 
-        state, hn = self.rnn(torch.cat([x, vec, pre_action], dim=-1), rnn_state)
+        state, hn = self.rnn(torch.cat([x, pre_action], dim=-1), rnn_state)
 
-        return state, hn
+        return torch.cat([state, vec], dim=-1), hn
 
 
 class ModelQ(m.ModelQ):

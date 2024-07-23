@@ -526,7 +526,7 @@ class SAC_Base:
                 total_parameter_num += sum([p.numel() for p in m.parameters()])
         self._logger.info(f'Parameters: {total_parameter_num}')
 
-    def _init_or_restore(self, last_ckpt: int) -> None:
+    def _init_or_restore(self, last_ckpt: int | None) -> None:
         """
         Initialize network weights from scratch or restore from model_abs_dir
         """
