@@ -488,6 +488,7 @@ class OptionSelectorBase(SAC_Base):
                               state: torch.Tensor,
                               pre_option_index: torch.Tensor,
 
+                              offline_action: torch.Tensor | None = None,
                               disable_sample: bool = False,
                               force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
                                                                              torch.Tensor,
@@ -497,6 +498,8 @@ class OptionSelectorBase(SAC_Base):
             obs_list: list([batch, 1, *obs_shapes_i], ...)
             state: [batch, 1, d_action_summed_size + c_action_size]
             pre_option_index (torch.int64): [batch, ]
+
+            offline_action: [batch, action_size]
 
         Returns:
             new_option_index (torch.int64): [batch, ]
@@ -529,6 +532,7 @@ class OptionSelectorBase(SAC_Base):
             o_low_obs_list = [low_obs[mask] for low_obs in low_obs_list]
 
             o_action, o_prob = option.choose_action(o_low_obs_list,
+                                                    offline_action=offline_action,
                                                     disable_sample=disable_sample,
                                                     force_rnd_if_available=force_rnd_if_available)
             action[mask] = o_action
@@ -543,6 +547,7 @@ class OptionSelectorBase(SAC_Base):
                                   pre_action: torch.Tensor,
                                   low_rnn_state: torch.Tensor,
 
+                                  offline_action: torch.Tensor | None = None,
                                   disable_sample: bool = False,
                                   force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
                                                                                  torch.Tensor,
@@ -555,6 +560,7 @@ class OptionSelectorBase(SAC_Base):
             pre_option_index (torch.int64): [batch, ]
             pre_action: [batch, action_size]
             low_rnn_state: [batch, *low_seq_hidden_state_shape]
+            offline_action: [batch, action_size]
 
         Returns:
             new_option_index (torch.int64): [batch, ]
@@ -594,6 +600,7 @@ class OptionSelectorBase(SAC_Base):
             o_action, o_prob, o_next_low_rnn_state = option.choose_rnn_action(o_low_obs_list,
                                                                               pre_action[mask],
                                                                               low_rnn_state[mask],
+                                                                              offline_action=offline_action,
                                                                               disable_sample=disable_sample,
                                                                               force_rnd_if_available=force_rnd_if_available)
             action[mask] = o_action
@@ -607,6 +614,7 @@ class OptionSelectorBase(SAC_Base):
                       obs_list: List[np.ndarray],
                       pre_option_index: np.ndarray,
 
+                      offline_action: torch.Tensor | None = None,
                       disable_sample: bool = False,
                       force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
                                                                      np.ndarray,
@@ -615,6 +623,8 @@ class OptionSelectorBase(SAC_Base):
         Args:
             obs_list (np): list([batch, *obs_shapes_i], ...)
             pre_option_index (np.int8): [batch, ]
+
+            offline_action: [batch, action_size]
 
         Returns:
             option_index (np.int8): [batch, ]
@@ -629,6 +639,7 @@ class OptionSelectorBase(SAC_Base):
         option_index, action, prob = self._choose_option_action(obs_list,
                                                                 state,
                                                                 pre_option_index,
+                                                                offline_action=offline_action,
                                                                 disable_sample=disable_sample,
                                                                 force_rnd_if_available=force_rnd_if_available)
 
@@ -644,6 +655,7 @@ class OptionSelectorBase(SAC_Base):
                           rnn_state: np.ndarray,
                           low_rnn_state: Optional[np.ndarray] = None,
 
+                          offline_action: torch.Tensor | None = None,
                           disable_sample: bool = False,
                           force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
                                                                          np.ndarray,
@@ -657,6 +669,8 @@ class OptionSelectorBase(SAC_Base):
             pre_action (np): [batch, d_action_summed_size + c_action_size]
             rnn_state (np): [batch, *seq_hidden_state_shape]
             low_rnn_state (np): [batch, *low_seq_hidden_state_shape]
+
+            offline_action (np): [batch, action_size]
 
         Returns:
             option_index (np.int8): [batch, ]
@@ -699,6 +713,7 @@ class OptionSelectorBase(SAC_Base):
                                                                   pre_option_index,
                                                                   pre_action,
                                                                   low_rnn_state,
+                                                                  offline_action=offline_action,
                                                                   disable_sample=disable_sample,
                                                                   force_rnd_if_available=force_rnd_if_available)
 
@@ -719,6 +734,7 @@ class OptionSelectorBase(SAC_Base):
                            pre_option_index: np.ndarray,
                            low_rnn_state: Optional[np.ndarray] = None,
 
+                           offline_action: np.ndarray | None = None,
                            disable_sample: bool = False,
                            force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
                                                                           np.ndarray,
@@ -735,6 +751,8 @@ class OptionSelectorBase(SAC_Base):
 
             pre_option_index (np.int8): [batch, ]
             low_rnn_state (np): [batch, *low_seq_hidden_state_shape]
+
+            offline_action (np): [batch, action_size]
 
         Returns:
             option_index (np.int8): [batch, ]
@@ -773,6 +791,7 @@ class OptionSelectorBase(SAC_Base):
              prob) = self._choose_option_action(obs_list,
                                                 state,
                                                 pre_option_index,
+                                                offline_action=offline_action,
                                                 disable_sample=disable_sample,
                                                 force_rnd_if_available=force_rnd_if_available)
         else:
@@ -784,6 +803,7 @@ class OptionSelectorBase(SAC_Base):
                                                                   pre_option_index,
                                                                   pre_action,
                                                                   low_rnn_state,
+                                                                  offline_action=offline_action,
                                                                   disable_sample=disable_sample,
                                                                   force_rnd_if_available=force_rnd_if_available)
 
@@ -805,6 +825,7 @@ class OptionSelectorBase(SAC_Base):
                                    pre_action: np.ndarray,
                                    low_rnn_state: Optional[np.ndarray] = None,
 
+                                   offline_action: np.ndarray | None = None,
                                    disable_sample: bool = False,
                                    force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
                                                                                   np.ndarray,
@@ -823,6 +844,8 @@ class OptionSelectorBase(SAC_Base):
             pre_option_index (np.int8): [batch, ]
             pre_action (np): [batch, action_size]
             low_rnn_state (np): [batch, *low_seq_hidden_state_shape]
+
+            offline_action (np): [batch, action_size]
 
         Returns:
             option_index (np.int8): [batch]
@@ -865,6 +888,7 @@ class OptionSelectorBase(SAC_Base):
              prob) = self._choose_option_action(obs_list,
                                                 state,
                                                 pre_option_index,
+                                                offline_action=offline_action,
                                                 disable_sample=disable_sample,
                                                 force_rnd_if_available=force_rnd_if_available)
         else:
@@ -876,6 +900,7 @@ class OptionSelectorBase(SAC_Base):
                                                                   pre_option_index,
                                                                   pre_action,
                                                                   low_rnn_state,
+                                                                  offline_action=offline_action,
                                                                   disable_sample=disable_sample,
                                                                   force_rnd_if_available=force_rnd_if_available)
 

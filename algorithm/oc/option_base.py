@@ -41,6 +41,8 @@ class OptionBase(SAC_Base):
     @torch.no_grad()
     def choose_action(self,
                       obs_list: List[torch.Tensor],
+
+                      offline_action: np.ndarray | None = None,
                       disable_sample: bool = False,
                       force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
                                                                      torch.Tensor]:
@@ -48,12 +50,15 @@ class OptionBase(SAC_Base):
         Args:
             obs_list: list([batch, *obs_shapes_i], ...)
 
+            offline_action (np): [batch, action_size]
+
         Returns:
             action: [batch, d_action_summed_size + c_action_size]
         """
         state = self.model_rep(obs_list)
 
-        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_available)
+        action, prob = self._choose_action(obs_list, state,
+                                           offline_action, disable_sample, force_rnd_if_available)
         return action, prob
 
     @torch.no_grad()
@@ -61,6 +66,7 @@ class OptionBase(SAC_Base):
                           obs_list: List[torch.Tensor],
                           pre_action: torch.Tensor,
                           rnn_state: torch.Tensor,
+                          offline_action: np.ndarray | None = None,
                           disable_sample: bool = False,
                           force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
                                                                          torch.Tensor,
@@ -70,6 +76,8 @@ class OptionBase(SAC_Base):
             obs_list: list([batch, *obs_shapes_i], ...)
             pre_action: [batch, d_action_summed_size + c_action_size]
             rnn_state: [batch, *seq_hidden_state_shape]
+
+            offline_action (np): [batch, action_size]
 
         Returns:
             action: [batch, d_action_summed_size + c_action_size]
@@ -81,7 +89,8 @@ class OptionBase(SAC_Base):
         state = state.squeeze(1)
         obs_list = [obs.squeeze(1) for obs in obs_list]
 
-        action, prob = self._choose_action(obs_list, state, disable_sample, force_rnd_if_available)
+        action, prob = self._choose_action(obs_list, state, 
+                                           offline_action, disable_sample, force_rnd_if_available)
 
         return action, prob, next_rnn_state
 
