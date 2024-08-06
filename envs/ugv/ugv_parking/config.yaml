@@ -24,19 +24,11 @@ default:
   replay_config:
     capacity: 524288 # 262144
 
-  nn_config:
-    rep:
-      blur: 0
-      brightness: 1
-      ray_random: 0
-
   sac_config:
     write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
     save_model_per_step: 5000 # Save model every N steps
 
     n_step: 3
-    burn_in_step: 10
-    seq_encoder: RNN
 
     use_rnd: true
     rnd_n_sample: 20

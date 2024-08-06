@@ -10,7 +10,7 @@ base_config:
     build_path: # Unity executable path
       win32: path_win32
       linux: path_linux
-  
+
   offline_env_config:
     enabled: false
     env_name: env_name
@@ -96,7 +96,6 @@ sac_config:
   action_noise: null # [noise_min, noise_max]
 
 oc_config:
-  num_options: 4
   use_dilation: false
   option_burn_in_step: -1
   option_seq_encoder: null # RNN
@@ -106,5 +105,11 @@ oc_config:
 
   option_nn_config:
     rep: null
+
+  option_configs:
+    - name: option_0
+      fix_policy: false
+    - name: option_1
+      fix_policy: false
 
 ma_config: null

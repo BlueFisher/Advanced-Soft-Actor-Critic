@@ -24,6 +24,7 @@ def initialize_config_from_yaml(default_config_path: Path,
     """
     config = dict()
 
+    # Initialize config from default_config_path
     with open(default_config_path) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
