@@ -13,9 +13,12 @@ from ..utils import *
 
 
 class OptionBase(SAC_Base):
-    def __init__(self, option: int,
+    def __init__(self,
+                 option: int,
+                 fix_policy: bool,
                  *args, **kwargs):
         self.option = option
+        self.fix_policy = fix_policy
         super().__init__(*args, **kwargs)
 
     def _set_logger(self):
@@ -29,6 +32,12 @@ class OptionBase(SAC_Base):
 
     def _build_model(self, nn, nn_config: Optional[dict], init_log_alpha: float, learning_rate: float) -> None:
         super()._build_model(nn, nn_config, init_log_alpha, learning_rate)
+
+        if self.fix_policy:
+            for param in self.model_rep.parameters():
+                param.requires_grad = False
+            for param in self.model_policy.parameters():
+                param.requires_grad = False
 
         self.model_termination = nn.ModelTermination(self.state_size).to(self.device)
         self.optimizer_termination = optim.Adam(self.model_termination.parameters(), lr=learning_rate)
@@ -89,7 +98,7 @@ class OptionBase(SAC_Base):
         state = state.squeeze(1)
         obs_list = [obs.squeeze(1) for obs in obs_list]
 
-        action, prob = self._choose_action(obs_list, state, 
+        action, prob = self._choose_action(obs_list, state,
                                            offline_action, disable_sample, force_rnd_if_available)
 
         return action, prob, next_rnn_state

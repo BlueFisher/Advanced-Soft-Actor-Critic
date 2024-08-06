@@ -76,7 +76,6 @@ class OptionSelectorBase(SAC_Base):
                  use_normalization: bool = False,
                  action_noise: Optional[List[float]] = None,
 
-                 num_options: int = 4,
                  use_dilation: bool = False,
                  option_burn_in_step: int = -1,
                  option_seq_encoder: Optional[SEQ_ENCODER] = None,
@@ -84,12 +83,12 @@ class OptionSelectorBase(SAC_Base):
                  terminal_entropy: float = 0.01,
                  key_max_length: int = 200,
                  option_nn_config: Optional[dict] = None,
+                 option_configs: List[dict] = [],
 
                  replay_config: Optional[dict] = None):
 
         sac_base.BatchBuffer = BatchBuffer
 
-        self.num_options = num_options
         self.use_dilation = use_dilation
         self.option_burn_in_step = option_burn_in_step
         self.option_seq_encoder = option_seq_encoder
@@ -97,6 +96,8 @@ class OptionSelectorBase(SAC_Base):
         self.terminal_entropy = terminal_entropy
         self.key_max_length = key_max_length
         self.option_nn_config = option_nn_config
+        self.option_configs = option_configs
+        self.num_options = len(option_configs)
 
         super().__init__(obs_names,
                          obs_shapes,
@@ -296,7 +297,7 @@ class OptionSelectorBase(SAC_Base):
 
         self.option_burn_in_from = self.burn_in_step - self.option_burn_in_step
 
-        option_kwargs = self._kwargs
+        option_kwargs = self._kwargs  # SAC_BASE's kwargs
         del option_kwargs['self']
         option_kwargs['obs_names'] = ['state', *self.obs_names]
         option_kwargs['obs_shapes'] = [(self.state_size, ), *self.obs_shapes]
@@ -318,16 +319,18 @@ class OptionSelectorBase(SAC_Base):
         _tmp_ModelRep, option_kwargs['nn'].ModelRep = option_kwargs['nn'].ModelRep, option_kwargs['nn'].ModelOptionRep
 
         self.option_list: List[OptionBase] = [None] * self.num_options
-        for i in range(self.num_options):
+        for i, option_config in enumerate(self.option_configs):
             if self.model_abs_dir is not None:
-                option_kwargs['model_abs_dir'] = self.model_abs_dir / f'option_{i}'
+                option_kwargs['model_abs_dir'] = self.model_abs_dir / option_config['name']
                 option_kwargs['model_abs_dir'].mkdir(parents=True, exist_ok=True)
             if self.ma_name is not None:
-                option_kwargs['ma_name'] = f'{self.ma_name}_option_{i}'
+                option_kwargs['ma_name'] = f'{self.ma_name}_{option_config["name"]}'
             else:
-                option_kwargs['ma_name'] = f'option_{i}'
+                option_kwargs['ma_name'] = option_config['name']
 
-            self.option_list[i] = OptionBase(option=i, **option_kwargs)
+            self.option_list[i] = OptionBase(option=i,
+                                             fix_policy=option_config['fix_policy'],
+                                             **option_kwargs)
 
         option_kwargs['nn'].ModelRep = _tmp_ModelRep
 
