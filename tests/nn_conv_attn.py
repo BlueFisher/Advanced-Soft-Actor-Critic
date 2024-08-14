@@ -3,9 +3,6 @@ from torch import nn
 
 import algorithm.nn_models as m
 
-from .nn_conv_rnn import ModelOptionRep
-from .nn_conv_vanilla import ModelOptionRep as ModelOptionVanillaRep
-
 EXTRA_SIZE = 3
 
 
@@ -13,10 +10,7 @@ class ModelRep(m.ModelBaseAttentionRep):
     def _build_model(self):
         self.conv = m.ConvLayers(30, 30, 3, 'simple', out_dense_depth=2, output_size=8)
 
-        if self.use_dilation:
-            embed_dim = self.conv.output_size
-        else:
-            embed_dim = self.conv.output_size + sum(self.d_action_sizes) + self.c_action_size
+        embed_dim = self.conv.output_size
 
         self.attn = m.EpisodeMultiheadAttention(embed_dim)
 
@@ -25,12 +19,15 @@ class ModelRep(m.ModelBaseAttentionRep):
             nn.Tanh()
         )
 
-    def forward(self, index, obs_list, pre_action=None,
-                seq_q_len=1,
-                hidden_state=None,
+    def forward(self,
+                seq_q_len: int,
+                index: torch.Tensor,
+                obs_list: list[torch.Tensor],
+                pre_action: torch.Tensor,
+                pre_seq_hidden_state: torch.Tensor | None,
                 is_prev_hidden_state=False,
                 query_only_attend_to_rest_key=False,
-                padding_mask=None):
+                padding_mask: torch.Tensor | None = None):
         if self.obs_names[0] == '_OPTION_INDEX':
             _, obs_vec, obs_vis = obs_list
         else:
@@ -40,54 +37,57 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         vis = self.conv(obs_vis)
 
-        if self.use_dilation:
-            state, hn, attn_weights_list = self.attn(vis,
-                                                     seq_q_len=seq_q_len,
-                                                     hidden_state=hidden_state,
-                                                     is_prev_hidden_state=is_prev_hidden_state,
+        state, hn, attn_weights_list = self.attn(vis,
+                                                 seq_q_len=seq_q_len,
+                                                 hidden_state=pre_seq_hidden_state,
+                                                 is_prev_hidden_state=is_prev_hidden_state,
 
-                                                     query_only_attend_to_rest_key=query_only_attend_to_rest_key,
-                                                     key_index=index,
-                                                     key_padding_mask=padding_mask)
-        else:
-            state, hn, attn_weights_list = self.attn(torch.cat([vis, pre_action], dim=-1),
-                                                     seq_q_len=seq_q_len,
-                                                     hidden_state=hidden_state,
-                                                     is_prev_hidden_state=is_prev_hidden_state,
-
-                                                     query_only_attend_to_rest_key=query_only_attend_to_rest_key,
-                                                     key_index=index,
-                                                     key_padding_mask=padding_mask)
+                                                 query_only_attend_to_rest_key=query_only_attend_to_rest_key,
+                                                 key_index=index,
+                                                 key_padding_mask=padding_mask)
 
         state = self.dense(state)
 
         return state, hn, attn_weights_list
 
+    def get_augmented_encoders(self, obs_list):
+        obs_vec, obs_vis = obs_list
 
-class ModelTransition(m.ModelTransition):
-    def _build_model(self):
-        return super()._build_model(extra_size=EXTRA_SIZE if self.use_extra_data else 0)
+        vis_encoder = self.conv(obs_vis)
 
-    def extra_obs(self, obs_list):
-        return obs_list[0][..., :EXTRA_SIZE]
+        return vis_encoder
 
+    def get_state_from_encoders(self,
+                                seq_q_len: int,
+                                encoders: torch.Tensor | tuple[torch.Tensor],
+                                index: torch.Tensor,
+                                obs_list: list[torch.Tensor],
+                                pre_action: torch.Tensor,
+                                pre_seq_hidden_state: torch.Tensor | None,
+                                is_prev_hidden_state=False,
+                                query_only_attend_to_rest_key=False,
+                                padding_mask: torch.Tensor | None = None):
+        if self.obs_names[0] == '_OPTION_INDEX':
+            _, obs_vec, obs_vis = obs_list
+        else:
+            obs_vec, obs_vis = obs_list
 
-ModelReward = m.ModelReward
+        obs_vec = obs_vec[..., EXTRA_SIZE:]
 
+        vis_encoder = encoders
 
-class ModelObservation(m.ModelBaseObservation):
-    def _build_model(self):
-        self.dense = m.LinearLayers(self.state_size,
-                                    8, 2,
-                                    self.obs_shapes[0][0] if self.use_extra_data else self.obs_shapes[0][0] - EXTRA_SIZE)
+        state, hn, attn_weights_list = self.attn(vis_encoder,
+                                                 seq_q_len=seq_q_len,
+                                                 hidden_state=pre_seq_hidden_state,
+                                                 is_prev_hidden_state=is_prev_hidden_state,
 
-    def forward(self, state):
-        return self.dense(state)
+                                                 query_only_attend_to_rest_key=query_only_attend_to_rest_key,
+                                                 key_index=index,
+                                                 key_padding_mask=padding_mask)
 
-    def get_loss(self, state, obs_list):
-        mse = torch.nn.MSELoss()
+        state = self.dense(state)
 
-        return mse(self(state), obs_list[0] if self.use_extra_data else obs_list[0][..., EXTRA_SIZE:])
+        return state
 
 
 ModelQ = m.ModelQ
@@ -96,5 +96,3 @@ ModelForwardDynamic = m.ModelForwardDynamic
 ModelRND = m.ModelRND
 ModelRepProjection = m.ModelRepProjection
 ModelRepPrediction = m.ModelRepPrediction
-ModelVOverOption = m.ModelVOverOption
-ModelTermination = m.ModelTermination

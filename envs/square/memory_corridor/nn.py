@@ -2,11 +2,11 @@ import torch
 
 import algorithm.nn_models as m
 
-ModelVOverOption = m.ModelVOverOption
+
 ModelTermination = m.ModelTermination
 
 
-class ModelRep(m.ModelBaseRNNRep):
+class ModelRep(m.ModelBaseRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (35,)
         assert self.obs_shapes[1] == (5,)
@@ -33,7 +33,7 @@ class ModelRep(m.ModelBaseRNNRep):
         return state, hn
 
 
-class ModelOptionRep(m.ModelBaseRNNRep):
+class ModelOptionRep(m.ModelBaseRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (64 + 5,)
         assert self.obs_shapes[1] == (35,)

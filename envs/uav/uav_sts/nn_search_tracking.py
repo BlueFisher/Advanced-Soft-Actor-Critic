@@ -8,7 +8,7 @@ OBS_NAMES = ['AgentsBufferSensor', 'BoundingBoxSensor', 'CameraSensor',
 OBS_SHAPES = [(8, 10), (8, 6), (84, 84, 1), (22,), (22,), (22,), (10,)]
 
 
-class ModelRep(m.ModelBaseRNNRep):
+class ModelRep(m.ModelBaseRep):
     def _build_model(self):
         for u_s, s in zip(self.obs_shapes, OBS_SHAPES):
             assert u_s == s, f'{u_s} {s}'

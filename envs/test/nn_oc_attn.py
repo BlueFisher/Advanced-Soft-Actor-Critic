@@ -3,12 +3,9 @@ import torch
 import algorithm.nn_models as m
 
 
-ModelTermination = m.ModelTermination
-
-
-class ModelRep(m.ModelBaseAttentionRep):
+class ModelRep(m.ModelBaseOptionSelectorAttentionRep):
     def _build_model(self):
-        embed_dim = self.obs_shapes[0][0] + self.c_action_size + sum(self.d_action_sizes)
+        embed_dim = self.obs_shapes[0][0]
 
         self.attn = m.EpisodeMultiheadAttention(embed_dim)
 
@@ -18,11 +15,15 @@ class ModelRep(m.ModelBaseAttentionRep):
                 obs_list: list[torch.Tensor],
                 pre_action: torch.Tensor,
                 pre_seq_hidden_state: torch.Tensor | None,
+                pre_termination_mask: torch.Tensor | None = None,
                 is_prev_hidden_state=False,
                 query_only_attend_to_rest_key=False,
                 padding_mask: torch.Tensor | None = None):
 
-        x = torch.concat([obs_list[0], pre_action], dim=-1)
+        if pre_action is not None:
+            assert index.shape[1] == obs_list[0].shape[1] == pre_action.shape[1]
+
+        x = obs_list[0]
 
         output, hn, attn_weights_list = self.attn(x,
                                                   seq_q_len=seq_q_len,
@@ -36,18 +37,10 @@ class ModelRep(m.ModelBaseAttentionRep):
         return output, hn, attn_weights_list
 
 
-class ModelOptionRep(m.ModelBaseRep):
-    def forward(self,
-                obs_list: list[torch.Tensor],
-                pre_action: torch.Tensor,
-                pre_seq_hidden_state: torch.Tensor | None,
-                padding_mask: torch.Tensor | None = None):
-        high_state, vec_obs = obs_list
-
-        output = torch.concat([high_state, vec_obs], dim=-1)
-
-        return output
+ModelOptionRep = m.ModelSimpleRep
 
 
 ModelQ = m.ModelQ
 ModelPolicy = m.ModelPolicy
+
+ModelTermination = m.ModelTermination

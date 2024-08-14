@@ -3,7 +3,7 @@ from torch import nn
 
 import algorithm.nn_models as m
 
-ModelVOverOption = m.ModelVOverOption
+
 ModelTermination = m.ModelTermination
 
 EXTRA_SIZE = 2

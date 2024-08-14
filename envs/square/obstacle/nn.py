@@ -4,7 +4,7 @@ from torch import nn
 import algorithm.nn_models as m
 
 
-class ModelRep(m.ModelBaseRNNRep):
+class ModelRep(m.ModelBaseRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (55,)
         assert self.obs_shapes[1] == (6,)
@@ -21,7 +21,7 @@ class ModelRep(m.ModelBaseRNNRep):
         return state, hn
 
 
-class ModelOptionRep(m.ModelBaseRNNRep):
+class ModelOptionRep(m.ModelBaseRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (6 + 8,)
         assert self.obs_shapes[1] == (55,)

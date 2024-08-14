@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 import torch
 from torch import nn
@@ -9,132 +8,159 @@ from algorithm.nn_models.layers import LinearLayers
 
 class ModelBaseRep(nn.Module):
     def __init__(self,
-                 obs_names: List[str],
-                 obs_shapes: List[Tuple],
+                 obs_names: list[str],
+                 obs_shapes: list[tuple],
+                 d_action_sizes: list[int], c_action_size: int,
                  is_target: bool,
-                 model_abs_dir: Optional[Path] = None, **kwargs):
+                 model_abs_dir: Path | None = None,
+                 **kwargs):
         super().__init__()
 
         self.obs_names = obs_names
         self.obs_shapes = obs_shapes
+        self.d_action_sizes = d_action_sizes
+        self.c_action_size = c_action_size
         self.is_target = is_target
         self.model_abs_dir = model_abs_dir
 
-        self._offline_action_index = -1
-        try:
-            self._offline_action_index = self.obs_names.index('_OFFLINE_ACTION')
-        except:
-            pass
+        self._build_model(**kwargs)
 
     def _build_model(self, **kwargs):
         pass
 
-    def forward(self, obs_list: List[torch.Tensor]):
-        raise Exception("ModelRep not implemented")
-
-    def get_augmented_encoders(self,
-                               obs_list: List[torch.Tensor]) -> torch.Tensor | Tuple[torch.Tensor]:
-        raise Exception("get_augmented_encoders not implemented")
-
-    def get_state_from_encoders(self,
-                                obs_list: List[torch.Tensor],
-                                encoders: torch.Tensor | Tuple[torch.Tensor]) -> torch.Tensor:
-        raise Exception("get_state_from_encoders not implemented")
-
-
-class ModelBaseSimpleRep(ModelBaseRep):
-    def __init__(self,
-                 obs_names: List[str],
-                 obs_shapes: List[Tuple],
-                 is_target: bool,
-                 model_abs_dir: Optional[Path] = None, **kwargs):
-        super().__init__(obs_names, obs_shapes, is_target, model_abs_dir)
-
-        self._build_model(**kwargs)
-
-
-class ModelSimpleRep(ModelBaseSimpleRep):
-    def forward(self, obs_list):
-        return torch.cat([o for o, os in zip(obs_list, self.obs_shapes) if len(os) == 1], dim=-1)
-
-
-class ModelBaseRNNRep(ModelBaseRep):
-    def __init__(self,
-                 obs_names: List[str],
-                 obs_shapes: List[Tuple],
-                 d_action_sizes: List[int], c_action_size: int,
-                 is_target: bool,
-                 model_abs_dir: Optional[Path] = None,
-                 use_dilation=False,  # For option critic
-                 **kwargs):
-        super().__init__(obs_names, obs_shapes, is_target, model_abs_dir)
-        self.d_action_sizes = d_action_sizes
-        self.c_action_size = c_action_size
-        self.use_dilation = use_dilation
-
-        self._build_model(**kwargs)
-
     def forward(self,
-                obs_list: List[torch.Tensor],
-                pre_action: Optional[torch.Tensor] = None,
-                rnn_state: Optional[torch.Tensor] = None,
-                padding_mask: Optional[torch.Tensor] = None):
+                obs_list: list[torch.Tensor],
+                pre_action: torch.Tensor,
+                pre_seq_hidden_state: torch.Tensor | None,
+                padding_mask: torch.Tensor | None = None):
         """
         Args:
             obs_list: list([batch, l, *obs_shapes_i], ...)
             pre_action: [batch, l, action_size]
-            rnn_state: [batch, l, *seq_hidden_state_shape]
+            pre_seq_hidden_state: [batch, *seq_hidden_state_shape]
             padding_mask (torch.bool): [batch, l]
         """
-        raise Exception("ModelRNNRep not implemented")
+
+        raise Exception("ModelRep not implemented")
+
+    def _get_empty_seq_hidden_state(self, state: torch.Tensor):
+        return torch.zeros((*state.shape[:-1], 0), dtype=state.dtype, device=state.device)
+
+    def get_augmented_encoders(self,
+                               obs_list: list[torch.Tensor]) -> torch.Tensor | tuple[torch.Tensor]:
+        raise Exception("get_augmented_encoders not implemented")
 
     def get_state_from_encoders(self,
-                                obs_list: List[torch.Tensor],
-                                encoders: torch.Tensor | Tuple[torch.Tensor],
+                                encoders: torch.Tensor | tuple[torch.Tensor],
+                                obs_list: list[torch.Tensor],
                                 pre_action: torch.Tensor,
-                                rnn_state: Optional[torch.Tensor] = None,
-                                padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+                                pre_seq_hidden_state: torch.Tensor | None,
+                                padding_mask: torch.Tensor | None = None) -> torch.Tensor:
         raise Exception("get_state_from_encoders not implemented")
+
+
+class ModelSimpleRep(ModelBaseRep):
+    def forward(self,
+                obs_list: list[torch.Tensor],
+                pre_action: torch.Tensor,
+                pre_seq_hidden_state: torch.Tensor | None,
+                padding_mask: torch.Tensor | None = None):
+
+        state = torch.cat([o for o, os in zip(obs_list, self.obs_shapes) if len(os) == 1], dim=-1)
+
+        return state, self._get_empty_seq_hidden_state(state)
 
 
 class ModelBaseAttentionRep(ModelBaseRep):
-    def __init__(self,
-                 obs_names: List[str],
-                 obs_shapes: List[Tuple],
-                 d_action_sizes: List[int], c_action_size: int,
-                 is_target: bool,
-                 model_abs_dir: Optional[Path] = None,
-                 use_dilation=False,  # For option critic
-                 **kwargs):
-        super().__init__(obs_names, obs_shapes, is_target, model_abs_dir)
-        self.d_action_sizes = d_action_sizes
-        self.c_action_size = c_action_size
-        self.use_dilation = use_dilation
-
-        self._build_model(**kwargs)
-
     def forward(self,
+                seq_q_len: int,
                 index: torch.Tensor,
-                obs_list: List[torch.Tensor],
-                pre_action: Optional[torch.Tensor] = None,
-                seq_q_len=1,
-                hidden_state: Optional[torch.Tensor] = None,
+                obs_list: list[torch.Tensor],
+                pre_action: torch.Tensor,
+                pre_seq_hidden_state: torch.Tensor | None,
                 is_prev_hidden_state=False,
                 query_only_attend_to_rest_key=False,
-                padding_mask: Optional[torch.Tensor] = None):
+                padding_mask: torch.Tensor | None = None):
+        """
+        Args:
+            seq_q_len: int
+            index: [batch, l]
+            obs_list: list([batch, l, *obs_shapes_i], ...)
+            pre_action: [batch, l, action_size]
+            pre_seq_hidden_state: [batch, ?, *seq_hidden_state_shape]
+            is_prev_hidden_state: bool
+            query_only_attend_to_rest_key: bool
+        """
+
         raise Exception('ModelAttentionRep not implemented')
 
     def get_state_from_encoders(self,
+                                seq_q_len: int,
+                                encoders: torch.Tensor | tuple[torch.Tensor],
                                 index: torch.Tensor,
-                                obs_list: List[torch.Tensor],
-                                encoders: torch.Tensor | Tuple[torch.Tensor],
-                                pre_action: Optional[torch.Tensor] = None,
-                                seq_q_len=1,
-                                hidden_state: Optional[torch.Tensor] = None,
+                                obs_list: list[torch.Tensor],
+                                pre_action: torch.Tensor,
+                                pre_seq_hidden_state: torch.Tensor | None,
                                 is_prev_hidden_state=False,
                                 query_only_attend_to_rest_key=False,
-                                padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+                                padding_mask: torch.Tensor | None = None):
+
         raise Exception("get_state_from_encoders not implemented")
+
+
+#################### ! OPTION SELECTOR ####################
+
+
+class ModelBaseOptionSelectorRep(ModelBaseRep):
+    def __init__(self,
+                 obs_names: list[str],
+                 obs_shapes: list[tuple],
+                 d_action_sizes: list[int], c_action_size: int,
+                 is_target: bool,
+                 use_dilation,  # For HRL
+                 model_abs_dir: Path | None = None,
+                 **kwargs):
+
+        self.use_dilation = use_dilation
+
+        super().__init__(obs_names,
+                         obs_shapes,
+                         d_action_sizes,
+                         c_action_size,
+                         is_target,
+                         model_abs_dir,
+                         **kwargs)
+
+    def forward(self,
+                obs_list: list[torch.Tensor],
+                pre_action: torch.Tensor,
+                pre_seq_hidden_state: torch.Tensor | None,
+                pre_termination_mask: torch.Tensor | None = None,
+                padding_mask: torch.Tensor | None = None):
+        """
+        Args:
+            obs_list: list([batch, l, *obs_shapes_i], ...)
+            pre_action: [batch, l, action_size]
+            pre_seq_hidden_state: [batch, *seq_hidden_state_shape]
+            pre_termination_mask (torch.bool): [batch, ]
+            padding_mask (torch.bool): [batch, l]
+        """
+
+        raise Exception("ModelOptionSelectorRep not implemented")
+
+
+class ModelBaseOptionSelectorAttentionRep(ModelBaseOptionSelectorRep, ModelBaseAttentionRep):
+    def forward(self,
+                seq_q_len: int,
+                index: torch.Tensor,
+                obs_list: list[torch.Tensor],
+                pre_action: torch.Tensor,
+                pre_seq_hidden_state: torch.Tensor | None,
+                pre_termination_mask: torch.Tensor | None = None,
+                is_prev_hidden_state=False,
+                query_only_attend_to_rest_key=False,
+                padding_mask: torch.Tensor | None = None):
+        raise Exception('ModelOptionSelectorAttentionRep not implemented')
 
 
 class ModelBaseRepProjection(nn.Module):

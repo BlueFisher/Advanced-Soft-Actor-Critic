@@ -5,7 +5,7 @@ import algorithm.nn_models as m
 EXTRA_SIZE = 3
 
 
-class ModelRep(m.ModelBaseSimpleRep):
+class ModelRep(m.ModelBaseRep):
     def forward(self, obs_list):
         obs = obs_list[0][..., :-EXTRA_SIZE]
         return obs

@@ -22,7 +22,7 @@ RAY_SIZE = 400
 AUG_RAY_RANDOM_SIZE = 250
 
 
-class ModelRep(m.ModelBaseSimpleRep):
+class ModelRep(m.ModelBaseRep):
     def _build_model(self):
         for u_s, s in zip(self.obs_shapes, OBS_SHAPES):
             assert u_s == s, f'{u_s} {s}'
@@ -42,7 +42,11 @@ class ModelRep(m.ModelBaseSimpleRep):
 
         self.dense = m.LinearLayers(64 * 3, dense_n=128, dense_depth=1)
 
-    def forward(self, obs_list):
+    def forward(self,
+                obs_list: list[torch.Tensor],
+                pre_action: torch.Tensor,
+                pre_seq_hidden_state: torch.Tensor | None,
+                padding_mask: torch.Tensor | None = None):
         ray, vis_seg, vis_third_seg, vec = obs_list
         ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
 
@@ -55,8 +59,9 @@ class ModelRep(m.ModelBaseSimpleRep):
         ray = self.ray_conv(ray)
 
         x = self.dense(torch.cat([vis_seg, vis_third_seg, ray], dim=-1))
+        x = torch.cat([x, vec], dim=-1)
 
-        return torch.cat([x, vec], dim=-1)
+        return x, self._get_empty_seq_hidden_state(x)
 
 
 class ModelQ(m.ModelQ):

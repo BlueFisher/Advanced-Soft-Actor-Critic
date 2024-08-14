@@ -50,68 +50,60 @@ class OptionBase(SAC_Base):
     @torch.no_grad()
     def choose_action(self,
                       obs_list: List[torch.Tensor],
+                      pre_action: torch.Tensor,
+                      pre_seq_hidden_state: torch.Tensor,
 
-                      offline_action: np.ndarray | None = None,
+                      offline_action: torch.Tensor | None = None,
                       disable_sample: bool = False,
                       force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
+                                                                     torch.Tensor,
                                                                      torch.Tensor]:
         """
         Args:
             obs_list: list([batch, *obs_shapes_i], ...)
+            pre_action: [batch, action_size]
+            pre_seq_hidden_state: [batch, *seq_hidden_state_shape]
 
-            offline_action (np): [batch, action_size]
-
-        Returns:
-            action: [batch, d_action_summed_size + c_action_size]
-        """
-        state = self.model_rep(obs_list)
-
-        action, prob = self._choose_action(obs_list, state,
-                                           offline_action, disable_sample, force_rnd_if_available)
-        return action, prob
-
-    @torch.no_grad()
-    def choose_rnn_action(self,
-                          obs_list: List[torch.Tensor],
-                          pre_action: torch.Tensor,
-                          rnn_state: torch.Tensor,
-                          offline_action: np.ndarray | None = None,
-                          disable_sample: bool = False,
-                          force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
-                                                                         torch.Tensor,
-                                                                         torch.Tensor]:
-        """
-        Args:
-            obs_list: list([batch, *obs_shapes_i], ...)
-            pre_action: [batch, d_action_summed_size + c_action_size]
-            rnn_state: [batch, *seq_hidden_state_shape]
-
-            offline_action (np): [batch, action_size]
+            offline_action: [batch, action_size]
 
         Returns:
-            action: [batch, d_action_summed_size + c_action_size]
-            rnn_state: [batch, *seq_hidden_state_shape]
+            action: [batch, action_size]
+            prob: [batch, action_size]
+            seq_hidden_state: [batch, *seq_hidden_state_shape]
+            termination (bool): [batch, ]
         """
         obs_list = [obs.unsqueeze(1) for obs in obs_list]
         pre_action = pre_action.unsqueeze(1)
-        state, next_rnn_state = self.model_rep(obs_list, pre_action, rnn_state)
+
+        state, seq_hidden_state = self.model_rep(obs_list, pre_action, pre_seq_hidden_state)
+        # state: [batch, 1, state_size]
+        # seq_hidden_state: [batch, 1, *seq_hidden_state_shape] | [batch, *seq_hidden_state_shape]
         state = state.squeeze(1)
         obs_list = [obs.squeeze(1) for obs in obs_list]
+        if self.seq_encoder is None:
+            seq_hidden_state = seq_hidden_state[:, 0]
 
-        action, prob = self._choose_action(obs_list, state,
-                                           offline_action, disable_sample, force_rnd_if_available)
+        action, prob = self._choose_action(obs_list,
+                                           state,
+                                           offline_action,
+                                           disable_sample,
+                                           force_rnd_if_available)
 
-        return action, prob, next_rnn_state
+        termination = self.model_termination(state, obs_list)
+
+        return action, prob, seq_hidden_state, termination.squeeze(-1)
 
     #################### ! GET STATES ####################
 
-    def get_l_states(self,
-                     l_indexes: torch.Tensor,
-                     l_padding_masks: torch.Tensor,
-                     l_obses_list: List[torch.Tensor],
-                     l_pre_actions: Optional[torch.Tensor] = None,
-                     f_seq_hidden_states: Optional[torch.Tensor] = None,
-                     is_target=False) -> Tuple[torch.Tensor, torch.Tensor]:
+    def get_l_states(
+        self,
+        l_indexes: torch.Tensor,
+        l_padding_masks: torch.Tensor,
+        l_obses_list: List[torch.Tensor],
+        l_pre_actions: torch.Tensor,
+        f_seq_hidden_states: torch.Tensor,
+        is_target=False
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             l_indexes: [batch, l]
@@ -122,16 +114,19 @@ class OptionBase(SAC_Base):
 
         Returns:
             l_states: [batch, l, state_size]
-            next_f_rnn_states (optional): [batch, 1, rnn_state_size]
-            next_l_attn_states (optional): [batch, l, attn_state_size]
+            next_l_seq_hidden_states (optional): [batch, l, *seq_hidden_state_shape]
+            next_f_rnn_states (optional): [batch, 1, *seq_hidden_state_shape]
         """
 
         model_rep = self.model_target_rep if is_target else self.model_rep
 
         if self.seq_encoder is None:
-            l_states = model_rep(l_obses_list)
+            l_states, l_hidden_states = model_rep(l_obses_list,
+                                                  l_pre_actions,
+                                                  f_seq_hidden_states[:, 0],
+                                                  padding_mask=l_padding_masks)
 
-            return l_states, None  # [batch, l, state_size]
+            return l_states, l_hidden_states  # [batch, l, state_size], [batch, l, *seq_hidden_state_shape]
 
         elif self.seq_encoder == SEQ_ENCODER.RNN:
             batch, l, *_ = l_indexes.shape
@@ -141,10 +136,10 @@ class OptionBase(SAC_Base):
 
             rnn_state = f_seq_hidden_states[:, 0]
             for t in range(l):
-                f_states, rnn_state = self.model_rep([l_obses[:, t:t + 1, ...] for l_obses in l_obses_list],
-                                                     l_pre_actions[:, t:t + 1, ...] if l_pre_actions is not None else None,
-                                                     rnn_state,
-                                                     padding_mask=l_padding_masks[:, t:t + 1])
+                f_states, rnn_state = model_rep([l_obses[:, t:t + 1, ...] for l_obses in l_obses_list],
+                                                l_pre_actions[:, t:t + 1, ...] if l_pre_actions is not None else None,
+                                                rnn_state,
+                                                padding_mask=l_padding_masks[:, t:t + 1])
 
                 if l_states is None:
                     l_states = torch.zeros((batch, l, *f_states.shape[2:]), device=self.device)
@@ -161,8 +156,8 @@ class OptionBase(SAC_Base):
         l_indexes: torch.Tensor,
         l_padding_masks: torch.Tensor,
         l_obses_list: List[torch.Tensor],
-        l_pre_actions: Optional[torch.Tensor] = None,
-        f_seq_hidden_states: Optional[torch.Tensor] = None
+        l_pre_actions: torch.Tensor,
+        f_seq_hidden_states: torch.Tensor
     ) -> Tuple[torch.Tensor,
                Optional[torch.Tensor]]:
         """
@@ -179,9 +174,12 @@ class OptionBase(SAC_Base):
         """
 
         if self.seq_encoder is None:
-            l_states = self.model_rep(l_obses_list)
-
-            return l_states, None  # [batch, l, state_size]
+            return self.get_l_states(l_indexes=l_indexes,
+                                     l_padding_masks=l_padding_masks,
+                                     l_obses_list=l_obses_list,
+                                     l_pre_actions=l_pre_actions,
+                                     f_seq_hidden_states=f_seq_hidden_states,
+                                     is_target=False)
 
         elif self.seq_encoder == SEQ_ENCODER.RNN:
             batch, l, *_ = l_indexes.shape

@@ -41,7 +41,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         return output, hn, attn_weights_list
 
 
-class ModelOptionRep(m.ModelBaseRNNRep):
+class ModelOptionRep(m.ModelBaseRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (64,)
         assert self.obs_shapes[1] == (55,)

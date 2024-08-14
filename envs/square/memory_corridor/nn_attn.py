@@ -3,7 +3,7 @@ from torch import nn
 
 import algorithm.nn_models as m
 
-ModelVOverOption = m.ModelVOverOption
+
 ModelTermination = m.ModelTermination
 
 
@@ -56,7 +56,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         return output, hn, attn_weights_list
 
 
-class ModelOptionRep(m.ModelBaseRNNRep):
+class ModelOptionRep(m.ModelBaseRep):
     def _build_model(self):
         # assert self.obs_shapes[0] == embed_size
         assert self.obs_shapes[1] == (35,)

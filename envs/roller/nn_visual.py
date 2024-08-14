@@ -4,7 +4,7 @@ import algorithm.nn_models as m
 from algorithm.utils.image_visual import ImageVisual
 
 
-class ModelRep(m.ModelBaseSimpleRep):
+class ModelRep(m.ModelBaseRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (30, 30, 3)
         assert self.obs_shapes[1] == (6,)

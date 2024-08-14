@@ -2,13 +2,13 @@ import torch
 
 import algorithm.nn_models as m
 
-ModelVOverOption = m.ModelVOverOption
+
 
 MAP_WIDTH = 3
 TARGET_TYPE_NUM = 20
 
 
-class ModelRep(m.ModelBaseRNNRep):
+class ModelRep(m.ModelBaseRep):
     def _build_model(self, pe: str | None, gate: str | None):
         assert self.obs_shapes[0] == (MAP_WIDTH, TARGET_TYPE_NUM)
 
@@ -23,7 +23,7 @@ class ModelRep(m.ModelBaseRNNRep):
         return output, hn
 
 
-class ModelOptionRep(m.ModelBaseSimpleRep):
+class ModelOptionRep(m.ModelBaseRep):
     def _build_model(self):
         assert self.obs_shapes[1] == (MAP_WIDTH, TARGET_TYPE_NUM)
 

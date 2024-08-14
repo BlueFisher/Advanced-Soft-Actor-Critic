@@ -5,7 +5,7 @@ import algorithm.nn_models as m
 from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
 
 
-class ModelRep(m.ModelBaseRNNRep):
+class ModelRep(m.ModelBaseRep):
     def _build_model(self, blur, brightness, need_speed):
         assert self.obs_shapes[0] == (6, 6)  # BoundingBoxSensor
         assert self.obs_shapes[1] == (84, 84, 3)  # CameraSensor

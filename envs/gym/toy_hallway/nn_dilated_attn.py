@@ -121,7 +121,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         return output, torch.concat([hn, new_rnn1_hidden_state, hn1], dim=-1), attn_weights_list + attn1_weights_list
 
 
-class ModelOptionRep(m.ModelBaseSimpleRep):
+class ModelOptionRep(m.ModelBaseRep):
     def _build_model(self):
         assert self.obs_shapes[1] == (MAP_WIDTH, TARGET_TYPE_NUM)
 

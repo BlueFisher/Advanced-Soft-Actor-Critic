@@ -5,8 +5,8 @@ default:
 
     n_envs: 2
 
-    max_iter: 3
-    max_step: 10
+    max_iter: 50
+    max_step: 50
     max_step_each_iter: 100
 
   sac_config:
@@ -14,7 +14,7 @@ default:
     nn: nn
 
   replay_config:
-    capacity: 65536
+    capacity: 8192
 
   ma_config:
     test0:
@@ -36,8 +36,19 @@ attn:
     seq_encoder: ATTN
     nn: nn_attn
 
+oc:
+  sac_config:
+    nn: nn_oc
+    seq_encoder: null
+
+  oc_config:
+    option_seq_encoder: null
+
 oc_rnn:
   inherited: rnn
+
+  sac_config:
+    nn: nn_oc
 
   oc_config:
     option_seq_encoder: null
@@ -46,41 +57,66 @@ oc_rnn_o_rnn:
   inherited: rnn
 
   sac_config:
-    nn: nn_rnn_o_rnn
+    nn: nn_oc
 
   oc_config:
     option_seq_encoder: RNN
+
+oc_attn:
+  inherited: attn
+
+  sac_config:
+    nn: nn_oc_attn
+
+  oc_config:
+    option_seq_encoder: null
+
+oc_attn_o_rnn:
+  inherited: attn
+
+  sac_config:
+    nn: nn_oc_attn
+
+  oc_config:
+    option_seq_encoder: RNN
+
+#################### ! DILATED ####################
 
 oc_dilated_rnn:
   inherited: rnn
 
+  sac_config:
+    nn: nn_oc
+
   oc_config:
     use_dilation: true
     option_seq_encoder: null
 
-oc_dilated_rnn_o_rnn:
-  inherited: rnn
+# oc_dilated_rnn_o_rnn:
+#   inherited: rnn
 
-  sac_config:
-    nn: nn_rnn_o_rnn
+#   sac_config:
+#     nn: nn_rnn_o_rnn
 
-  oc_config:
-    use_dilation: true
-    option_seq_encoder: RNN
+#   oc_config:
+#     use_dilation: true
+#     option_seq_encoder: RNN
 
 oc_dilated_attn:
   inherited: attn
 
+  sac_config:
+    nn: nn_oc_attn
+
   oc_config:
     use_dilation: true
     option_seq_encoder: null
+# oc_dilated_attn_o_rnn:
+#   inherited: attn
 
-oc_dilated_attn_o_rnn:
-  inherited: attn
+#   sac_config:
+#     nn: nn_attn_o_rnn
 
-  sac_config:
-    nn: nn_attn_o_rnn
-
-  oc_config:
-    use_dilation: true
-    option_seq_encoder: RNN
+#   oc_config:
+#     use_dilation: true
+#     option_seq_encoder: RNN
