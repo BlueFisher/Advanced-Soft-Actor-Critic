@@ -3,7 +3,7 @@ import torch
 import algorithm.nn_models as m
 
 
-class ModelRep(m.ModelBaseRNNRep):
+class ModelRep(m.ModelBaseRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (3, 9)  # AgentsBufferSensor
         assert self.obs_shapes[1] == (22,)  # ray1 (1 + 5 + 5) * 2

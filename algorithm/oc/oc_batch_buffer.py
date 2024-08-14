@@ -149,8 +149,9 @@ class BatchBuffer(BatchBuffer):
     def __init__(self,
                  burn_in_step: int,
                  n_step: int,
+                 padding_action: np.ndarray,
                  batch_size: int):
-        super().__init__(burn_in_step, n_step, batch_size)
+        super().__init__(burn_in_step, n_step, padding_action, batch_size)
 
         self._key_batch_list = []
 
@@ -185,7 +186,7 @@ class BatchBuffer(BatchBuffer):
 
         ori_batch, ori_key_trans = episode_to_batch(burn_in_step=self.burn_in_step,
                                                     n_step=self.n_step,
-                                                    episode_length=None,
+                                                    padding_action=self.padding_action,
                                                     l_indexes=ep_indexes,
                                                     l_padding_masks=ep_padding_masks,
                                                     l_obses_list=ep_obses_list,

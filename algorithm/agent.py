@@ -39,7 +39,7 @@ class Agent:
                  obs_shapes: List[Tuple[int, ...]],
                  d_action_sizes: List[int],
                  c_action_size: int,
-                 seq_hidden_state_shape: Optional[Tuple[int, ...]] = None,
+                 seq_hidden_state_shape: Tuple[int, ...],
                  max_episode_length: int = -1):
         self.agent_id = agent_id
         self.obs_shapes = obs_shapes
@@ -53,8 +53,7 @@ class Agent:
         d_action_list = [np.eye(d_action_size, dtype=np.float32)[0]
                          for d_action_size in self.d_action_sizes]
         self._padding_action = np.concatenate(d_action_list + [np.zeros(self.c_action_size, dtype=np.float32)], axis=-1)
-        if self.seq_hidden_state_shape is not None:
-            self._padding_seq_hidden_state = np.zeros(self.seq_hidden_state_shape, dtype=np.float32)
+        self._padding_seq_hidden_state = np.zeros(self.seq_hidden_state_shape, dtype=np.float32)
 
         self._tmp_episode_trans = self._generate_empty_episode_trans(self.max_episode_length)
 
@@ -68,10 +67,9 @@ class Agent:
             'reward': np.zeros((episode_length, ), dtype=np.float32),
             'done': np.zeros((episode_length, ), dtype=bool),
             'max_reached': np.zeros((episode_length, ), dtype=bool),
-            'prob': np.zeros((episode_length, self.d_action_summed_size + self.c_action_size), dtype=np.float32)
+            'prob': np.zeros((episode_length, self.d_action_summed_size + self.c_action_size), dtype=np.float32),
+            'seq_hidden_state': np.zeros((episode_length, *self.seq_hidden_state_shape), dtype=np.float32)
         }
-        if self.seq_hidden_state_shape is not None:
-            empty_episode_trans['seq_hidden_state'] = np.zeros((episode_length, *self.seq_hidden_state_shape), dtype=np.float32)
 
         return empty_episode_trans
 
@@ -79,7 +77,7 @@ class Agent:
                            obs_list: List[np.ndarray],
                            action: np.ndarray,
                            prob: np.ndarray,
-                           seq_hidden_state: Optional[np.ndarray] = None):
+                           seq_hidden_state: np.ndarray):
         self._tmp_index += 1
         self._tmp_obs_list = obs_list
         self._tmp_action = action
@@ -90,15 +88,19 @@ class Agent:
         return self._tmp_index
 
     def get_tmp_obs_list(self) -> List[np.ndarray]:
-        return self._tmp_obs_list if self._tmp_obs_list is not None else self._padding_obs_list
+        if self._tmp_obs_list is None:
+            return self._padding_obs_list
+        return self._tmp_obs_list
 
     def get_tmp_action(self) -> np.ndarray:
-        return self._tmp_action if self._tmp_action is not None else self._padding_action
+        if self._tmp_action is None:
+            return self._padding_action
+        return self._tmp_action
 
-    def get_tmp_seq_hidden_state(self) -> Optional[np.ndarray]:
-        if self.seq_hidden_state_shape is None:
-            return None
-        return self._tmp_seq_hidden_state if self._tmp_seq_hidden_state is not None else self._padding_seq_hidden_state
+    def get_tmp_seq_hidden_state(self) -> np.ndarray:
+        if self._tmp_seq_hidden_state is None:
+            return self._padding_seq_hidden_state
+        return self._tmp_seq_hidden_state
 
     def end_transition(self,
                        reward: float,
@@ -144,7 +146,7 @@ class Agent:
             done=True,
             max_reached=True,
             prob=np.ones_like(self._padding_action),
-            seq_hidden_state=self._padding_seq_hidden_state if self.seq_hidden_state_shape is not None else None
+            seq_hidden_state=self._padding_seq_hidden_state
         )
 
         episode_trans = self.get_episode_trans()
@@ -169,7 +171,7 @@ class Agent:
                         done: bool,
                         max_reached: bool,
                         prob: np.ndarray,
-                        seq_hidden_state: Optional[np.ndarray] = None) -> None:
+                        seq_hidden_state: np.ndarray) -> None:
         """
         Args:
             index: int
@@ -200,8 +202,7 @@ class Agent:
         self._tmp_episode_trans['done'][self.current_step] = done
         self._tmp_episode_trans['max_reached'][self.current_step] = max_reached
         self._tmp_episode_trans['prob'][self.current_step] = prob
-        if self.seq_hidden_state_shape is not None:
-            self._tmp_episode_trans['seq_hidden_state'][self.current_step] = seq_hidden_state
+        self._tmp_episode_trans['seq_hidden_state'][self.current_step] = seq_hidden_state
 
         self._extra_log(obs_list,
                         action,
@@ -272,7 +273,7 @@ class Agent:
                                                  ~tmp['max_reached']),
                                   0)  # [1, episode_len]
         ep_probs = np.expand_dims(tmp['prob'], 0)  # [1, episode_len, action_size]
-        ep_seq_hidden_states = np.expand_dims(tmp['seq_hidden_state'], 0) if self.seq_hidden_state_shape is not None else None
+        ep_seq_hidden_states = np.expand_dims(tmp['seq_hidden_state'], 0)
         # [1, episode_len, *seq_hidden_state_shape]
 
         return {
@@ -414,7 +415,7 @@ class AgentManager:
                     self.obs_shapes,
                     self.d_action_sizes,
                     self.c_action_size,
-                    seq_hidden_state_shape=self.rl.seq_hidden_state_shape if self.seq_encoder is not None else None,
+                    seq_hidden_state_shape=self.rl.seq_hidden_state_shape,
                     max_episode_length=self.max_episode_length
                 )
             self.agents_liveness[agent_id] = AGENT_MAX_LIVENESS
@@ -441,16 +442,6 @@ class AgentManager:
     def _get_merged_seq_hidden_state(self, agent_ids: np.ndarray) -> np.ndarray:
         return np.stack([self.agents_dict[_id].get_tmp_seq_hidden_state() for _id in agent_ids])
 
-    def _merge_agents_data(self,
-                           agent_ids: np.ndarray,
-                           key: int):
-        agents = [self.agents_dict[_id] for _id in agent_ids]
-        data_list = [a.get_tmp_data(key) for a in agents]
-        if isinstance(data_list[0], list):
-            return [np.stack(data, axis=0) for data in zip(*data_list)]
-        else:
-            return np.stack(data_list, axis=0)
-
     @unified_elapsed_timer('get_action', repeat=10)
     def get_action(self,
                    agent_ids: np.ndarray,
@@ -464,8 +455,7 @@ class AgentManager:
         if self.rl is None:
             return self.get_test_action(
                 agent_ids=agent_ids,
-                obs_list=obs_list,
-                last_reward=last_reward
+                obs_list=obs_list
             )
 
         self._verify_agents(agent_ids)
@@ -478,14 +468,14 @@ class AgentManager:
                 max_reached=False
             )
 
-        if self.seq_encoder == SEQ_ENCODER.RNN:
+        if self.seq_encoder in (None, SEQ_ENCODER.RNN):
             pre_action = self._get_merged_action(agent_ids)
-            seq_hidden_state = self._get_merged_seq_hidden_state(agent_ids)
+            pre_seq_hidden_state = self._get_merged_seq_hidden_state(agent_ids)
 
-            action, prob, next_seq_hidden_state = self.rl.choose_rnn_action(
+            action, prob, seq_hidden_state = self.rl.choose_action(
                 obs_list=obs_list,
                 pre_action=pre_action,
-                rnn_state=seq_hidden_state,
+                pre_seq_hidden_state=pre_seq_hidden_state,
 
                 offline_action=offline_action,
                 disable_sample=disable_sample,
@@ -507,7 +497,7 @@ class AgentManager:
             ep_indexes = np.concatenate(all_ep_indexes)
             ep_obses_list = [np.concatenate(o) for o in zip(*all_ep_obses_list)]
             ep_actions = np.concatenate(all_ep_actions)
-            ep_attn_states = np.concatenate(all_ep_attn_states)
+            ep_pre_attn_states = np.concatenate(all_ep_attn_states)
 
             if ep_indexes.shape[1] == 0:
                 ep_indexes = np.zeros((ep_indexes.shape[0], 1), dtype=ep_indexes.dtype)
@@ -518,26 +508,17 @@ class AgentManager:
                              for o, t_o in zip(ep_obses_list, obs_list)]
             ep_pre_actions = gen_pre_n_actions(ep_actions, True)
 
-            action, prob, next_seq_hidden_state = self.rl.choose_attn_action(
+            action, prob, seq_hidden_state = self.rl.choose_attn_action(
                 ep_indexes=ep_indexes,
                 ep_padding_masks=ep_padding_masks,
                 ep_obses_list=ep_obses_list,
                 ep_pre_actions=ep_pre_actions,
-                ep_attn_states=ep_attn_states,
+                ep_pre_attn_states=ep_pre_attn_states,
 
                 offline_action=offline_action,
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
-
-        else:
-            action, prob = self.rl.choose_action(
-                obs_list,
-                offline_action=offline_action,
-                disable_sample=disable_sample,
-                force_rnd_if_available=force_rnd_if_available
-            )
-            next_seq_hidden_state = None
 
         for i, agent_id in enumerate(agent_ids):
             agent = self.agents_dict[agent_id]
@@ -545,7 +526,7 @@ class AgentManager:
                 obs_list=[o[i] for o in obs_list],
                 action=action[i],
                 prob=prob[i],
-                seq_hidden_state=next_seq_hidden_state[i] if self.seq_encoder is not None else None
+                seq_hidden_state=seq_hidden_state[i]
             )
 
         return action[..., :self.d_action_summed_size], action[..., self.d_action_summed_size:]
@@ -579,7 +560,7 @@ class AgentManager:
             action[:, :self.d_action_summed_size] = d_action
 
         if self.c_action_size:
-            c_action = np.random.randn(n_agents, self.c_action_size)
+            c_action = np.tanh(np.random.randn(n_agents, self.c_action_size))
             # c_action = np.ones((n_agents, self.c_action_size), dtype=np.float32)
             action[:, self.d_action_summed_size:] = c_action
 
@@ -588,7 +569,8 @@ class AgentManager:
             agent.set_tmp_obs_action(
                 obs_list=[o[i] for o in obs_list],
                 action=action[i],
-                prob=prob[i]
+                prob=prob[i],
+                seq_hidden_state=None  # Could be None
             )
 
         return action[..., :self.d_action_summed_size], action[..., self.d_action_summed_size:]

@@ -4,7 +4,7 @@ from torch import nn
 import algorithm.nn_models as m
 
 
-class ModelRep(m.ModelBaseSimpleRep):
+class ModelRep(m.ModelBaseRep):
     def _build_model(self):
         self.conv = m.ConvLayers(30, 30, 3, 'simple', out_dense_depth=2, output_size=8)
 
@@ -13,14 +13,18 @@ class ModelRep(m.ModelBaseSimpleRep):
             nn.Tanh()
         )
 
-    def forward(self, obs_list):
+    def forward(self,
+                obs_list: list[torch.Tensor],
+                pre_action: torch.Tensor,
+                pre_seq_hidden_state: torch.Tensor | None,
+                padding_mask: torch.Tensor | None = None):
         obs_vec, obs_vis = obs_list
 
         vis = self.conv(obs_vis)
 
         state = self.dense(torch.cat([obs_vec, vis], dim=-1))
 
-        return state
+        return state, self._get_empty_seq_hidden_state(state)
 
     def get_augmented_encoders(self, obs_list):
         obs_vec, obs_vis = obs_list
@@ -29,43 +33,13 @@ class ModelRep(m.ModelBaseSimpleRep):
 
         return vis_encoder
 
-    def get_state_from_encoders(self, obs_list, encoders):
+    def get_state_from_encoders(self,
+                                encoders: torch.Tensor | tuple[torch.Tensor],
+                                obs_list: list[torch.Tensor],
+                                pre_action: torch.Tensor,
+                                pre_seq_hidden_state: torch.Tensor | None,
+                                padding_mask: torch.Tensor | None = None) -> torch.Tensor:
         obs_vec, obs_vis = obs_list
-
-        vis_encoder = encoders
-
-        state = self.dense(torch.cat([obs_vec, vis_encoder], dim=-1))
-
-        return state
-
-
-class ModelOptionRep(m.ModelBaseSimpleRep):
-    def _build_model(self):
-        self.conv = m.ConvLayers(30, 30, 3, 'simple', out_dense_depth=2, output_size=8)
-
-        self.dense = nn.Sequential(
-            nn.Linear(self.conv.output_size + self.obs_shapes[1][0], 8),
-            nn.Tanh()
-        )
-
-    def forward(self, obs_list):
-        high_state, obs_vec, obs_vis = obs_list
-
-        vis = self.conv(obs_vis)
-
-        state = self.dense(torch.cat([obs_vec, vis], dim=-1))
-
-        return state
-
-    def get_augmented_encoders(self, obs_list):
-        high_state, obs_vec, obs_vis = obs_list
-
-        vis_encoder = self.conv(obs_vis)
-
-        return vis_encoder
-
-    def get_state_from_encoders(self, obs_list, encoders):
-        high_state, obs_vec, obs_vis = obs_list
 
         vis_encoder = encoders
 
@@ -80,5 +54,3 @@ ModelForwardDynamic = m.ModelForwardDynamic
 ModelRND = m.ModelRND
 ModelRepProjection = m.ModelRepProjection
 ModelRepPrediction = m.ModelRepPrediction
-ModelVOverOption = m.ModelVOverOption
-ModelTermination = m.ModelTermination

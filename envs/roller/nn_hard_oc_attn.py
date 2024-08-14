@@ -4,7 +4,7 @@ from torch import nn
 import algorithm.nn_models as m
 from algorithm.nn_models.layers.seq_layers import POSITIONAL_ENCODING
 
-ModelVOverOption = m.ModelVOverOption
+
 ModelTermination = m.ModelTermination
 
 EXTRA_SIZE = 2
@@ -50,7 +50,7 @@ class ModelRep(m.ModelBaseAttentionRep):
         return output, hn, attn_weights_list
 
 
-class ModelOptionRep(m.ModelBaseSimpleRep):
+class ModelOptionRep(m.ModelBaseRep):
     def _build_model(self):
         assert self.obs_shapes[1] == (6, )
 

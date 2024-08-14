@@ -5,7 +5,7 @@ import algorithm.nn_models as m
 EXTRA_SIZE = 6
 
 
-class ModelRep(m.ModelBaseRNNRep):
+class ModelRep(m.ModelBaseRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (55,)
         assert self.obs_shapes[1] == (11,)

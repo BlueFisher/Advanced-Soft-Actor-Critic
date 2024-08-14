@@ -6,7 +6,7 @@ import algorithm.nn_models as m
 EXTRA_SIZE = 4
 
 
-class ModelRep(m.ModelBaseSimpleRep):
+class ModelRep(m.ModelBaseRep):
     def forward(self, obs_list):
         ray_obs, vec_obs = obs_list
         vec_obs = vec_obs[..., :-EXTRA_SIZE]
