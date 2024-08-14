@@ -542,7 +542,7 @@ class SAC_Base:
                     assert last_ckpt in ckpts
 
                 ckpt_restore_path = ckpt_dir.joinpath(f'{last_ckpt}.pth')
-                ckpt_restore = torch.load(ckpt_restore_path, map_location=self.device)
+                ckpt_restore = torch.load(ckpt_restore_path, map_location=self.device, weights_only=True)
                 for name, model in self.ckpt_dict.items():
                     if name not in ckpt_restore:
                         self._logger.warning(f'{name} not in {last_ckpt}.pth')
