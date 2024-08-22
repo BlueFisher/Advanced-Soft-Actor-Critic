@@ -20,6 +20,9 @@ class ModelRep(m.ModelBaseRep):
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         obs = obs_list[0][..., :-EXTRA_SIZE]
 
+        if rnn_state is not None:
+            rnn_state = rnn_state[:, 0]
+
         output, hn = self.rnn(torch.cat([obs, pre_action], dim=-1), rnn_state)
 
         if padding_mask is not None:
@@ -45,6 +48,9 @@ class ModelOptionRep(ModelRep):
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         high_rep, obs = obs_list
         obs = obs[..., :-EXTRA_SIZE]
+
+        if rnn_state is not None:
+            rnn_state = rnn_state[:, 0]
 
         output, hn = self.rnn(torch.cat([obs, pre_action], dim=-1), rnn_state)
 

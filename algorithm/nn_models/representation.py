@@ -37,7 +37,7 @@ class ModelBaseRep(nn.Module):
         Args:
             obs_list: list([batch, l, *obs_shapes_i], ...)
             pre_action: [batch, l, action_size]
-            pre_seq_hidden_state: [batch, *seq_hidden_state_shape]
+            pre_seq_hidden_state: [batch, l, *seq_hidden_state_shape]
             padding_mask (torch.bool): [batch, l]
         """
 
@@ -141,7 +141,7 @@ class ModelBaseOptionSelectorRep(ModelBaseRep):
         Args:
             obs_list: list([batch, l, *obs_shapes_i], ...)
             pre_action: [batch, l, action_size]
-            pre_seq_hidden_state: [batch, *seq_hidden_state_shape]
+            pre_seq_hidden_state: [batch, l, *seq_hidden_state_shape]
             pre_termination_mask (torch.bool): [batch, ]
             padding_mask (torch.bool): [batch, l]
         """

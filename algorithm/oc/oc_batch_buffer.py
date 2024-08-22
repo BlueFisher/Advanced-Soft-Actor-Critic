@@ -20,9 +20,9 @@ def episode_to_batch(burn_in_step: int,
                      l_rewards: np.ndarray,
                      l_dones: np.ndarray,
                      l_probs: Optional[np.ndarray] = None,
-                     l_seq_hidden_states: Optional[np.ndarray] = None,
-                     l_low_seq_hidden_states: np.ndarray = None) -> Tuple[List[np.ndarray | List[np.ndarray]],
-                                                                          List[np.ndarray | List[np.ndarray]]]:
+                     l_pre_seq_hidden_states: Optional[np.ndarray] = None,
+                     l_pre_low_seq_hidden_states: np.ndarray = None) -> Tuple[List[np.ndarray | List[np.ndarray]],
+                                                                              List[np.ndarray | List[np.ndarray]]]:
     """
     Args:
         burn_in_step: int
@@ -37,21 +37,20 @@ def episode_to_batch(burn_in_step: int,
         l_rewards: [1, ep_len]
         l_dones (bool): [1, ep_len]
         l_probs: [1, ep_len, action_size]
-        l_seq_hidden_states: [1, ep_len, *seq_hidden_state_shape]
-        l_low_seq_hidden_states: [1, ep_len, *low_seq_hidden_state_shape]
+        l_pre_seq_hidden_states: [1, ep_len, *seq_hidden_state_shape]
+        l_pre_low_seq_hidden_states: [1, ep_len, *low_seq_hidden_state_shape]
 
     Returns:
         bn_indexes (np.int32): [ep_len - bn + 1, bn]
         bn_padding_masks (bool): [ep_len - bn + 1, bn]
-        bn_obses_list: list([ep_len - bn + 1, bn, *obs_shapes_i], ...)
+        m_obses_list: list([ep_len - bn + 1 + 1, bn, *obs_shapes_i], ...)
         bn_option_indexes (np.int8): [ep_len - bn + 1, bn]
         bn_actions: [ep_len - bn + 1, bn, action_size]
         bn_rewards: [ep_len - bn + 1, bn]
-        next_obs_list: list([ep_len - bn + 1, *obs_shapes_i], ...)
         bn_dones (bool): [ep_len - bn + 1, bn]
         bn_probs: [ep_len - bn + 1, bn, action_size]
-        f_seq_hidden_states: [ep_len - bn + 1, 1, *seq_hidden_state_shape]
-        f_low_seq_hidden_states: [ep_len - bn + 1, 1, *low_seq_hidden_state_shape]
+        m_pre_seq_hidden_states: [ep_len - bn + 1 + 1, 1, *seq_hidden_state_shape]
+        m_pre_low_seq_hidden_states: [ep_len - bn + 1 + 1, 1, *low_seq_hidden_state_shape]
 
         key_indexes (np.int32): [1, key_len]
         key_padding_masks (bool): [1, key_len]
@@ -61,23 +60,22 @@ def episode_to_batch(burn_in_step: int,
     """
     (bn_indexes,
      bn_padding_masks,
-     bn_obses_list,
+     m_obses_list,
      bn_actions,
      bn_rewards,
-     next_obs_list,
      bn_dones,
      bn_probs,
-     bn_seq_hidden_states) = vanilla_episode_to_batch(burn_in_step=burn_in_step,
-                                                      n_step=n_step,
-                                                      padding_action=padding_action,
-                                                      l_indexes=l_indexes,
-                                                      l_padding_masks=l_padding_masks,
-                                                      l_obses_list=l_obses_list,
-                                                      l_actions=l_actions,
-                                                      l_rewards=l_rewards,
-                                                      l_dones=l_dones,
-                                                      l_probs=l_probs,
-                                                      l_seq_hidden_states=l_seq_hidden_states)
+     m_pre_seq_hidden_states) = vanilla_episode_to_batch(burn_in_step=burn_in_step,
+                                                         n_step=n_step,
+                                                         padding_action=padding_action,
+                                                         l_indexes=l_indexes,
+                                                         l_padding_masks=l_padding_masks,
+                                                         l_obses_list=l_obses_list,
+                                                         l_actions=l_actions,
+                                                         l_rewards=l_rewards,
+                                                         l_dones=l_dones,
+                                                         l_probs=l_probs,
+                                                         l_pre_seq_hidden_states=l_pre_seq_hidden_states)
 
     bn = burn_in_step + n_step
     ep_len = l_indexes.shape[1]
@@ -86,17 +84,15 @@ def episode_to_batch(burn_in_step: int,
     l_option_indexes = np.concatenate([np.full((1, burn_in_step), 0, dtype=l_option_indexes.dtype),
                                        l_option_indexes,
                                        np.full((1, n_step - 1), 0, dtype=l_option_indexes.dtype)], axis=1)
-    if l_low_seq_hidden_states is not None:
-        l_low_seq_hidden_states = np.concatenate([np.zeros((1, burn_in_step, *l_low_seq_hidden_states.shape[2:]), dtype=l_low_seq_hidden_states.dtype),
-                                                  l_low_seq_hidden_states,
-                                                  np.zeros((1, n_step - 1, *l_low_seq_hidden_states.shape[2:]), dtype=l_low_seq_hidden_states.dtype)], axis=1)
+    l_pre_low_seq_hidden_states = np.concatenate([np.zeros((1, burn_in_step, *l_pre_low_seq_hidden_states.shape[2:]), dtype=l_pre_low_seq_hidden_states.dtype),
+                                                  l_pre_low_seq_hidden_states,
+                                                  np.zeros((1, n_step - 1, *l_pre_low_seq_hidden_states.shape[2:]), dtype=l_pre_low_seq_hidden_states.dtype)], axis=1)
 
     # Generate batch
     bn_option_indexes = np.concatenate([l_option_indexes[:, i:i + bn]
                                         for i in range(ep_len - 1)], axis=0)
 
-    if l_low_seq_hidden_states is not None:
-        bn_low_seq_hidden_states = np.concatenate([l_low_seq_hidden_states[:, i:i + bn]
+    m_pre_low_seq_hidden_states = np.concatenate([l_pre_low_seq_hidden_states[:, i:i + bn + 1]
                                                   for i in range(ep_len - 1)], axis=0)
 
     # Generate key
@@ -105,20 +101,18 @@ def episode_to_batch(burn_in_step: int,
     key_obses_list = [o.squeeze(0)[key_indexes] for o in l_obses_list]  # list([1, key_len, *obs_shapes_i], ...)
     key_option_index = l_option_indexes.squeeze(0)[key_indexes]  # [1, key_len]
     key_seq_hidden_state = None
-    if l_seq_hidden_states is not None:
-        key_seq_hidden_state = l_seq_hidden_states.squeeze(0)[key_indexes]  # [1, key_len, *seq_hidden_state_shape]
+    key_seq_hidden_state = l_pre_seq_hidden_states.squeeze(0)[key_indexes]  # [1, key_len, *seq_hidden_state_shape]
 
     return [bn_indexes,
             bn_padding_masks,
-            bn_obses_list,
+            m_obses_list,
             bn_option_indexes,
             bn_actions,
             bn_rewards,
-            next_obs_list,
             bn_dones,
             bn_probs,
-            bn_seq_hidden_states if l_seq_hidden_states is not None else None,
-            bn_low_seq_hidden_states if l_low_seq_hidden_states is not None else None], \
+            m_pre_seq_hidden_states,
+            m_pre_low_seq_hidden_states], \
         [key_indexes,
          key_padding_masks,
          key_obses_list,
@@ -165,8 +159,8 @@ class BatchBuffer(BatchBuffer):
                     ep_rewards: np.ndarray,
                     ep_dones: np.ndarray,
                     ep_probs: List[np.ndarray],
-                    ep_seq_hidden_states: np.ndarray = None,
-                    ep_low_seq_hidden_states: np.ndarray = None) -> None:
+                    ep_pre_seq_hidden_states: np.ndarray,
+                    ep_pre_low_seq_hidden_states: np.ndarray) -> None:
         """
         Args:
             ep_indexes (np.int32): [1, ep_len]
@@ -178,8 +172,8 @@ class BatchBuffer(BatchBuffer):
             ep_rewards: [1, ep_len]
             ep_dones (bool): [1, ep_len]
             ep_probs: [1, ep_len, action_size]
-            ep_seq_hidden_states: [1, ep_len, *seq_hidden_state_shape]
-            ep_low_seq_hidden_states: [1, ep_len, *low_seq_hidden_state_shape]
+            ep_pre_seq_hidden_states: [1, ep_len, *seq_hidden_state_shape]
+            ep_pre_low_seq_hidden_states: [1, ep_len, *low_seq_hidden_state_shape]
         """
         self._batch_list.clear()
         self._key_batch_list.clear()
@@ -196,8 +190,8 @@ class BatchBuffer(BatchBuffer):
                                                     l_rewards=ep_rewards,
                                                     l_dones=ep_dones,
                                                     l_probs=ep_probs,
-                                                    l_seq_hidden_states=ep_seq_hidden_states,
-                                                    l_low_seq_hidden_states=ep_low_seq_hidden_states)
+                                                    l_pre_seq_hidden_states=ep_pre_seq_hidden_states,
+                                                    l_pre_low_seq_hidden_states=ep_pre_low_seq_hidden_states)
 
         ori_key_batch = traverse_lists(ori_key_trans, lambda k: k.repeat(ori_batch[0].shape[0], axis=0))
 

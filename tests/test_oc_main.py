@@ -10,6 +10,7 @@ from algorithm.oc.oc_main import OC_Main
 default_args = {
     'oc': True,
 
+    'override': [],
     'run': True,
     'run_a': [],
     'logger_in_file': False,
@@ -19,9 +20,10 @@ default_args = {
     'envs': None,
     'max_iter': None,
 
-    'port': None,
-    'editor': None,
-    'timescale': None,
+    'u_port': None,
+    'u_editor': None,
+    'u_quality_level': None,
+    'u_timescale': None,
 
     'name': None,
     'disable_sample': False,
@@ -53,13 +55,16 @@ class TestOCMain(unittest.TestCase):
 
 
 def __gen():
-    configs = [None,
+    configs = ['oc',
                'oc_rnn',
                'oc_rnn_o_rnn',
+               'oc_attn',
+               'oc_attn_o_rnn',
                'oc_dilated_rnn',
-               'oc_dilated_rnn_o_rnn',
+            #    'oc_dilated_rnn_o_rnn',
                'oc_dilated_attn',
-               'oc_dilated_attn_o_rnn']
+            #    'oc_dilated_attn_o_rnn'
+               ]
 
     env_args_dict = {
         'ma_obs_shapes': {

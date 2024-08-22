@@ -129,6 +129,8 @@ class ModelRNNOptionRep(m.ModelBaseRep):
 
         vis = self.conv(obs_vis)
 
+        if pre_seq_hidden_state is not None:
+            pre_seq_hidden_state = pre_seq_hidden_state[:, 0]
         state, hn = self.rnn(torch.cat([vis, pre_action], dim=-1), pre_seq_hidden_state)
 
         state = self.dense(torch.cat([obs_vec, state, high_state], dim=-1))

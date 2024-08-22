@@ -9,6 +9,7 @@ from algorithm.sac_main import Main
 
 
 default_args = {
+    'override': [],
     'run': True,
     'run_a': [],
     'logger_in_file': False,
@@ -18,9 +19,10 @@ default_args = {
     'envs': None,
     'max_iter': None,
 
-    'port': None,
-    'editor': None,
-    'timescale': None,
+    'u_port': None,
+    'u_editor': None,
+    'u_quality_level': None,
+    'u_timescale': None,
 
     'name': None,
     'disable_sample': False,
@@ -40,6 +42,7 @@ class TestSACMain(unittest.TestCase):
             env_args=env_args_dict,
             **default_args
         )
+        print(args)
 
         root_dir = Path(__file__).resolve().parent.parent
         Main(root_dir, f'envs/test', args)

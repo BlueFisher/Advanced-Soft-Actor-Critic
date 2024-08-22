@@ -123,7 +123,7 @@ def gen_episode_trans(obs_shapes, d_action_sizes, c_action_size, seq_hidden_stat
         'ep_rewards': np.random.randn(1, episode_len).astype(np.float32),
         'ep_dones': np.random.randint(0, 2, size=(1, episode_len), dtype=bool),
         'ep_probs': np.random.rand(1, episode_len, sum(d_action_sizes) + c_action_size).astype(np.float32),
-        'ep_seq_hidden_states': np.random.randn(1, episode_len, *seq_hidden_state_shape).astype(np.float32)
+        'ep_pre_seq_hidden_states': np.random.randn(1, episode_len, *seq_hidden_state_shape).astype(np.float32)
     }
 
 
@@ -152,5 +152,5 @@ def gen_episode_oc_trans(obs_shapes, d_action_sizes, c_action_size,
         **vanilla_episode_trans,
         'ep_option_indexes': l_option_indexes,
         'ep_option_changed_indexes': l_option_changed_indexes,
-        'ep_low_seq_hidden_states': np.random.randn(1, episode_len, *low_seq_hidden_state_shape).astype(np.float32)
+        'ep_pre_low_seq_hidden_states': np.random.randn(1, episode_len, *low_seq_hidden_state_shape).astype(np.float32)
     }

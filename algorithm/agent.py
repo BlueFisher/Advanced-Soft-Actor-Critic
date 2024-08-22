@@ -30,6 +30,7 @@ class Agent:
     _tmp_obs_list: Optional[List[np.ndarray]] = None
     _tmp_action: Optional[np.ndarray] = None
     _tmp_prob: Optional[np.ndarray] = None
+    _tmp_pre_seq_hidden_state: Optional[np.ndarray] = None
     _tmp_seq_hidden_state: Optional[np.ndarray] = None
 
     _tmp_episode_trans: Dict[str, np.ndarray | List[np.ndarray]]
@@ -68,7 +69,7 @@ class Agent:
             'done': np.zeros((episode_length, ), dtype=bool),
             'max_reached': np.zeros((episode_length, ), dtype=bool),
             'prob': np.zeros((episode_length, self.d_action_summed_size + self.c_action_size), dtype=np.float32),
-            'seq_hidden_state': np.zeros((episode_length, *self.seq_hidden_state_shape), dtype=np.float32)
+            'pre_seq_hidden_state': np.zeros((episode_length, *self.seq_hidden_state_shape), dtype=np.float32)
         }
 
         return empty_episode_trans
@@ -82,6 +83,7 @@ class Agent:
         self._tmp_obs_list = obs_list
         self._tmp_action = action
         self._tmp_prob = prob
+        self._tmp_pre_seq_hidden_state = self._tmp_seq_hidden_state
         self._tmp_seq_hidden_state = seq_hidden_state
 
     def get_tmp_index(self) -> int:
@@ -118,7 +120,7 @@ class Agent:
             done=done,
             max_reached=max_reached,
             prob=self._tmp_prob,
-            seq_hidden_state=self._tmp_seq_hidden_state
+            pre_seq_hidden_state=self._tmp_pre_seq_hidden_state
         )
 
         self.current_reward += reward
@@ -146,7 +148,7 @@ class Agent:
             done=True,
             max_reached=True,
             prob=np.ones_like(self._padding_action),
-            seq_hidden_state=self._padding_seq_hidden_state
+            pre_seq_hidden_state=self._tmp_pre_seq_hidden_state
         )
 
         episode_trans = self.get_episode_trans()
@@ -158,6 +160,7 @@ class Agent:
         self._tmp_obs_list = None
         self._tmp_action = None
         self._tmp_prob = None
+        self._tmp_pre_seq_hidden_state = None
         self._tmp_seq_hidden_state = None
         self._tmp_episode_trans = self._generate_empty_episode_trans(self.max_episode_length)
 
@@ -171,7 +174,7 @@ class Agent:
                         done: bool,
                         max_reached: bool,
                         prob: np.ndarray,
-                        seq_hidden_state: np.ndarray) -> None:
+                        pre_seq_hidden_state: np.ndarray | None) -> None:
         """
         Args:
             index: int
@@ -181,7 +184,7 @@ class Agent:
             done: bool
             max_reached: bool
             prob: [action_size, ]
-            seq_hidden_state: [*seq_hidden_state_shape]
+            pre_seq_hidden_state: [*seq_hidden_state_shape]
         """
         if self.current_step == self.max_episode_length:
             self._logger.warning(f'_tmp_episode_trans is full {self.max_episode_length}')
@@ -202,7 +205,9 @@ class Agent:
         self._tmp_episode_trans['done'][self.current_step] = done
         self._tmp_episode_trans['max_reached'][self.current_step] = max_reached
         self._tmp_episode_trans['prob'][self.current_step] = prob
-        self._tmp_episode_trans['seq_hidden_state'][self.current_step] = seq_hidden_state
+        if pre_seq_hidden_state is None:
+            pre_seq_hidden_state = self._padding_seq_hidden_state
+        self._tmp_episode_trans['pre_seq_hidden_state'][self.current_step] = pre_seq_hidden_state
 
         self._extra_log(obs_list,
                         action,
@@ -236,7 +241,7 @@ class Agent:
             ep_rewards: [1, episode_len]
             ep_dones (np.bool): [1, episode_len]
             ep_probs: [1, episode_len, action_size]
-            ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
+            ep_pre_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
         tmp = {}
         for k, v in self._tmp_episode_trans.items():
@@ -273,7 +278,7 @@ class Agent:
                                                  ~tmp['max_reached']),
                                   0)  # [1, episode_len]
         ep_probs = np.expand_dims(tmp['prob'], 0)  # [1, episode_len, action_size]
-        ep_seq_hidden_states = np.expand_dims(tmp['seq_hidden_state'], 0)
+        ep_pre_seq_hidden_states = np.expand_dims(tmp['pre_seq_hidden_state'], 0)
         # [1, episode_len, *seq_hidden_state_shape]
 
         return {
@@ -283,7 +288,7 @@ class Agent:
             'ep_rewards': ep_rewards,
             'ep_dones': ep_dones,
             'ep_probs': ep_probs,
-            'ep_seq_hidden_states': ep_seq_hidden_states
+            'ep_pre_seq_hidden_states': ep_pre_seq_hidden_states
         }
 
     def is_empty(self) -> bool:
@@ -636,7 +641,7 @@ class AgentManager:
 
 
 class MultiAgentsManager:
-    _ma_manager: Dict[str, AgentManager] = {}
+    _ma_manager: Dict[str, AgentManager]
 
     def __init__(self,
                  ma_obs_names: Dict[str, List[str]],
@@ -647,6 +652,7 @@ class MultiAgentsManager:
                  model_abs_dir: Path,
                  max_episode_length: int = -1):
         self._inference_ma_names = inference_ma_names
+        self._ma_manager = {}
         for n in ma_obs_shapes:
             self._ma_manager[n] = AgentManager(n,
                                                ma_obs_names[n],
