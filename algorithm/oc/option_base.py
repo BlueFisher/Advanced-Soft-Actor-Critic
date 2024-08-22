@@ -74,6 +74,7 @@ class OptionBase(SAC_Base):
         """
         obs_list = [obs.unsqueeze(1) for obs in obs_list]
         pre_action = pre_action.unsqueeze(1)
+        pre_seq_hidden_state = pre_seq_hidden_state.unsqueeze(1)
 
         state, seq_hidden_state = self.model_rep(obs_list, pre_action, pre_seq_hidden_state)
         # state: [batch, 1, state_size]
@@ -81,7 +82,7 @@ class OptionBase(SAC_Base):
         state = state.squeeze(1)
         obs_list = [obs.squeeze(1) for obs in obs_list]
         if self.seq_encoder is None:
-            seq_hidden_state = seq_hidden_state[:, 0]
+            seq_hidden_state = seq_hidden_state.squeeze(1)
 
         action, prob = self._choose_action(obs_list,
                                            state,
@@ -101,7 +102,7 @@ class OptionBase(SAC_Base):
         l_padding_masks: torch.Tensor,
         l_obses_list: List[torch.Tensor],
         l_pre_actions: torch.Tensor,
-        f_seq_hidden_states: torch.Tensor,
+        l_pre_seq_hidden_states: torch.Tensor,
         is_target=False
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -110,12 +111,12 @@ class OptionBase(SAC_Base):
             l_padding_masks: [batch, l]
             l_obses_list: list([batch, l, *obs_shapes_i], ...)
             l_pre_actions: [batch, l, action_size]
-            f_seq_hidden_states: [batch, 1, *seq_hidden_state_shape]
+            l_pre_seq_hidden_states: [batch, l, *seq_hidden_state_shape]
 
         Returns:
             l_states: [batch, l, state_size]
-            next_l_seq_hidden_states (optional): [batch, l, *seq_hidden_state_shape]
-            next_f_rnn_states (optional): [batch, 1, *seq_hidden_state_shape]
+            l_seq_hidden_states (optional): [batch, l, *seq_hidden_state_shape]
+            f_rnn_states (optional): [batch, 1, *seq_hidden_state_shape]
         """
 
         model_rep = self.model_target_rep if is_target else self.model_rep
@@ -123,7 +124,7 @@ class OptionBase(SAC_Base):
         if self.seq_encoder is None:
             l_states, l_hidden_states = model_rep(l_obses_list,
                                                   l_pre_actions,
-                                                  f_seq_hidden_states[:, 0],
+                                                  l_pre_seq_hidden_states,
                                                   padding_mask=l_padding_masks)
 
             return l_states, l_hidden_states  # [batch, l, state_size], [batch, l, *seq_hidden_state_shape]
@@ -134,11 +135,11 @@ class OptionBase(SAC_Base):
             l_states = None
             initial_rnn_state = self.get_initial_seq_hidden_state(batch, get_numpy=False)
 
-            rnn_state = f_seq_hidden_states[:, 0]
+            rnn_state = l_pre_seq_hidden_states[:, 0]
             for t in range(l):
                 f_states, rnn_state = model_rep([l_obses[:, t:t + 1, ...] for l_obses in l_obses_list],
                                                 l_pre_actions[:, t:t + 1, ...] if l_pre_actions is not None else None,
-                                                rnn_state,
+                                                rnn_state.unsqueeze(1),
                                                 padding_mask=l_padding_masks[:, t:t + 1])
 
                 if l_states is None:
@@ -157,7 +158,7 @@ class OptionBase(SAC_Base):
         l_padding_masks: torch.Tensor,
         l_obses_list: List[torch.Tensor],
         l_pre_actions: torch.Tensor,
-        f_seq_hidden_states: torch.Tensor
+        l_pre_seq_hidden_states: torch.Tensor
     ) -> Tuple[torch.Tensor,
                Optional[torch.Tensor]]:
         """
@@ -166,7 +167,7 @@ class OptionBase(SAC_Base):
             l_padding_masks (torch.bool): [batch, l]
             l_obses_list: list([batch, l, *obs_shapes_i], ...)
             l_pre_actions: [batch, l, action_size]
-            f_seq_hidden_states: [batch, 1, *seq_hidden_state_shape]
+            l_pre_seq_hidden_states: [batch, l, *seq_hidden_state_shape]
 
         Returns:
             l_states: [batch, l, state_size]
@@ -178,21 +179,21 @@ class OptionBase(SAC_Base):
                                      l_padding_masks=l_padding_masks,
                                      l_obses_list=l_obses_list,
                                      l_pre_actions=l_pre_actions,
-                                     f_seq_hidden_states=f_seq_hidden_states,
+                                     l_pre_seq_hidden_states=l_pre_seq_hidden_states,
                                      is_target=False)
 
         elif self.seq_encoder == SEQ_ENCODER.RNN:
             batch, l, *_ = l_indexes.shape
 
             l_states = None
-            next_l_rnn_states = torch.zeros((batch, l, *f_seq_hidden_states.shape[2:]), device=self.device)
+            l_rnn_states = torch.zeros_like(l_pre_seq_hidden_states)
             initial_rnn_state = self.get_initial_seq_hidden_state(batch, get_numpy=False)
 
-            rnn_state = f_seq_hidden_states[:, 0]
+            rnn_state = l_pre_seq_hidden_states[:, 0]
             for t in range(l):
                 f_states, rnn_state = self.model_rep([l_obses[:, t:t + 1, ...] for l_obses in l_obses_list],
                                                      l_pre_actions[:, t:t + 1, ...] if l_pre_actions is not None else None,
-                                                     rnn_state,
+                                                     rnn_state.unsqueeze(1),
                                                      padding_mask=l_padding_masks[:, t:t + 1])
 
                 if l_states is None:
@@ -200,9 +201,9 @@ class OptionBase(SAC_Base):
                 l_states[:, t:t + 1] = f_states
                 rnn_state[l_padding_masks[:, t]] = initial_rnn_state[l_padding_masks[:, t]]
 
-                next_l_rnn_states[:, t] = rnn_state
+                l_rnn_states[:, t] = rnn_state
 
-            return l_states, next_l_rnn_states
+            return l_states, l_rnn_states
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN:
             raise Exception('seq_encoder in option cannot be ATTN')

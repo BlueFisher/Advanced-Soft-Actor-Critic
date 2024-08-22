@@ -15,6 +15,8 @@ class ModelRep(m.ModelBaseRep):
                 padding_mask: torch.Tensor | None = None):
         obs = obs_list[0]
 
+        if pre_seq_hidden_state is not None:
+            pre_seq_hidden_state = pre_seq_hidden_state[:, 0]
         state, hn = self.rnn(torch.cat([obs, pre_action], dim=-1), pre_seq_hidden_state)
 
         return state, hn

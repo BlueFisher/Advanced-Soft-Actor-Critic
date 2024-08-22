@@ -29,7 +29,7 @@ class BatchBuffer:
                     ep_rewards: np.ndarray,
                     ep_dones: np.ndarray,
                     ep_probs: np.ndarray,
-                    ep_seq_hidden_states: Optional[np.ndarray] = None) -> None:
+                    ep_pre_seq_hidden_states: Optional[np.ndarray] = None) -> None:
         """
         Args:
             ep_indexes (np.int32): [1, ep_len]
@@ -39,7 +39,7 @@ class BatchBuffer:
             ep_rewards (np): [1, ep_len]
             ep_dones (bool): [1, ep_len]
             ep_probs (np): [1, ep_len, action_size]
-            ep_seq_hidden_states (np): [1, ep_len, *seq_hidden_state_shape]
+            ep_pre_seq_hidden_states (np): [1, ep_len, *seq_hidden_state_shape]
         """
         self._batch_list.clear()
 
@@ -53,7 +53,7 @@ class BatchBuffer:
                                      l_rewards=ep_rewards,
                                      l_dones=ep_dones,
                                      l_probs=ep_probs,
-                                     l_seq_hidden_states=ep_seq_hidden_states)
+                                     l_pre_seq_hidden_states=ep_pre_seq_hidden_states)
 
         if self._rest_batch is not None:
             ori_batch = traverse_lists((self._rest_batch, ori_batch), lambda rb, b: np.concatenate([rb, b]))
