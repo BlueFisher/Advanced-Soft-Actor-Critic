@@ -157,14 +157,14 @@ class Main:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
         ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size = self.env.init()
-        
+
         if self.base_config['offline_env_config']['enabled']:
             from algorithm.env_wrapper.offline_wrapper import OfflineWrapper
 
             self.offline_env = OfflineWrapper(env_name=self.base_config['offline_env_config']['env_name'],
                                               env_args=self.base_config['offline_env_config']['env_args'],
                                               n_envs=self.base_config['n_envs'])
-            _ma_obs_names, _ma_obs_shapes, _ma_d_action_sizes, _ma_c_action_size =self.offline_env.init()
+            _ma_obs_names, _ma_obs_shapes, _ma_d_action_sizes, _ma_c_action_size = self.offline_env.init()
         else:
             self.offline_env = None
 
@@ -228,7 +228,7 @@ class Main:
         inference_iteration = 0  # The inference iteration count
         trained_steps = 0  # The steps that RL trained
 
-        self.ma_manager.set_train_mode(False)  # The first iteration is inference
+        self.ma_manager.set_train_mode(is_training)  # The first iteration is inference
 
         try:
             while inference_iteration != self.base_config['max_iter']:
@@ -304,14 +304,18 @@ class Main:
                         )
                         self.ma_manager.force_end_all_episode()
 
-                    if self.train_mode and is_training:
-                        with self._profiler('train', repeat=10) as profiler:
-                            next_trained_steps = self.ma_manager.train(trained_steps)
-                            if next_trained_steps == trained_steps:
-                                profiler.ignore()
-                            trained_steps = next_trained_steps
-                    elif self.train_mode and not is_training:
-                        self.ma_manager.log_episode()
+                    if self.train_mode:
+                        if not is_training:
+                            self.ma_manager.log_episode()
+
+                        self.ma_manager.put_episode()
+
+                        if is_training:
+                            with self._profiler('train', repeat=10) as profiler:
+                                next_trained_steps = self.ma_manager.train(trained_steps)
+                                if next_trained_steps == trained_steps:
+                                    profiler.ignore()
+                                trained_steps = next_trained_steps
 
                     step += 1
 

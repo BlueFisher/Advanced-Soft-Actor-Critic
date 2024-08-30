@@ -1,5 +1,4 @@
 from collections import defaultdict
-from itertools import chain
 from typing import List, Optional
 
 import numpy as np
@@ -22,6 +21,8 @@ class OptionSelectorBase(SAC_Base):
                  d_action_sizes: List[int],
                  c_action_size: int,
                  model_abs_dir: Optional[Path],
+                 nn,
+
                  device: Optional[str] = None,
                  ma_name: Optional[str] = None,
                  summary_path: Optional[str] = 'log',
@@ -30,7 +31,6 @@ class OptionSelectorBase(SAC_Base):
 
                  nn_config: Optional[dict] = None,
 
-                 nn=None,
                  seed: Optional[float] = None,
                  write_summary_per_step: float = 1e3,
                  save_model_per_step: float = 1e5,
@@ -98,10 +98,12 @@ class OptionSelectorBase(SAC_Base):
         self.option_nn_config = option_nn_config
 
         if len(option_configs) == 0:
+            # Default option configs
             for i in range(2):
                 option_configs.append({
                     'name': f'option_{i}',
-                    'fix_policy': False
+                    'fix_policy': False,
+                    'random_q': False
                 })
         self.option_configs = option_configs
         self.num_options = len(option_configs)
@@ -111,12 +113,12 @@ class OptionSelectorBase(SAC_Base):
                          d_action_sizes,
                          c_action_size,
                          model_abs_dir,
+                         nn,
                          device, ma_name,
                          summary_path,
                          train_mode,
                          last_ckpt,
                          nn_config,
-                         nn,
                          seed,
                          write_summary_per_step,
                          save_model_per_step,
@@ -329,6 +331,7 @@ class OptionSelectorBase(SAC_Base):
 
             self.option_list[i] = OptionBase(option=i,
                                              fix_policy=option_config['fix_policy'],
+                                             random_q=option_config['random_q'],
                                              **option_kwargs)
 
         option_kwargs['nn'].ModelRep = _tmp_ModelRep
@@ -406,6 +409,8 @@ class OptionSelectorBase(SAC_Base):
             termination_mask = termination_dist.sample() == 0
 
         return termination_mask
+
+    #################### ! GET ACTION ####################
 
     def _choose_option_index(self,
                              pre_option_index: torch.Tensor,
@@ -969,9 +974,9 @@ class OptionSelectorBase(SAC_Base):
             key_padding_masks = key_padding_masks[:, :-1]
             key_obses_list = [key_obses[:, :-1] for key_obses in key_obses_list]
             _, key_rnn_state = self.model_rep(key_obses_list,
-                                                   None,
-                                                   key_pre_seq_hidden_states[:, 0],
-                                                   padding_mask=key_padding_masks)
+                                              None,
+                                              key_pre_seq_hidden_states[:, 0],
+                                              padding_mask=key_padding_masks)
 
             batch, l, *_ = l_indexes.shape
 

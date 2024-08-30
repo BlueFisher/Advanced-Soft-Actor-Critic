@@ -36,6 +36,9 @@ class ModelRep(m.ModelBaseRep):
                                               key_padding_mask=feat_targets_mask)
         attned_targets = attned_targets.mean(-2)
 
+        if rnn_state is not None:
+            rnn_state = rnn_state[:, 0]
+
         state, hn = self.rnn(torch.concat([attned_usvs,
                                            attned_enemies,
                                            attned_targets,

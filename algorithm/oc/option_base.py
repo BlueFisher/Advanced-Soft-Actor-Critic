@@ -16,9 +16,11 @@ class OptionBase(SAC_Base):
     def __init__(self,
                  option: int,
                  fix_policy: bool,
+                 random_q: bool,
                  *args, **kwargs):
         self.option = option
         self.fix_policy = fix_policy
+        self.random_q = random_q
         super().__init__(*args, **kwargs)
 
     def _set_logger(self):
@@ -41,6 +43,17 @@ class OptionBase(SAC_Base):
 
         self.model_termination = nn.ModelTermination(self.state_size).to(self.device)
         self.optimizer_termination = optim.Adam(self.model_termination.parameters(), lr=learning_rate)
+
+    def _init_or_restore(self, last_ckpt: int | None) -> None:
+        super()._init_or_restore(last_ckpt)
+
+        if self.random_q:
+            for model_q in self.model_q_list + self.model_target_q_list:
+                for p in model_q.parameters():
+                    if p.dim() > 1:
+                        torch.nn.init.kaiming_normal_(p)
+                    else:
+                        torch.nn.init.normal_(p)
 
     def _build_ckpt(self) -> None:
         super()._build_ckpt()
@@ -680,7 +693,7 @@ class OptionBase(SAC_Base):
                 if not isinstance(approx_obs_list, (list, tuple)):
                     approx_obs_list = [approx_obs_list]
                 for approx_obs in approx_obs_list:
-                    if len(approx_obs.shape) > 3:
+                    if approx_obs.dim() > 3:
                         self.summary_writer.add_images('observation',
                                                        approx_obs.permute([0, 3, 1, 2]),
                                                        self.global_step)
@@ -707,6 +720,9 @@ class OptionBase(SAC_Base):
             bn_actions: [batch, b + n, action_size]
             bn_mu_probs: [batch, b + n, action_size]
         """
+
+        if self.fix_policy:
+            return
 
         obs_list = [bn_obses[:, self.burn_in_step, ...] for bn_obses in bn_obses_list]
         bn_states = m_states[:, :-1, ...]
