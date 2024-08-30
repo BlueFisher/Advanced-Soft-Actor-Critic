@@ -1,9 +1,11 @@
+import io
 import logging
 import math
 from pathlib import Path
 from typing import Dict, Tuple
 
 import numpy as np
+from tqdm import tqdm
 
 from .utils import ReadWriteLock
 
@@ -251,6 +253,9 @@ class PrioritizedReplayBuffer:
 
         self._lock = ReadWriteLock(None, 1, 1, True, self._logger)
 
+        tqdm_out = TqdmToLogger(self._logger, level=logging.INFO)
+        self._fill_bar = tqdm(total=self.batch_size, desc='Filling the buffer...', file=tqdm_out)
+
     def add(self, transitions: Dict[str, np.ndarray], ignore_size=0) -> None:
         with self._lock.write():
             if self._trans_storage.size == 0:
@@ -266,6 +271,13 @@ class PrioritizedReplayBuffer:
                 probs[np.isin(data_pointers, np.arange(self.capacity - ignore_size, self.capacity))] = 0
                 probs[-ignore_size:] = 0
             self._sum_tree.add(data_pointers, probs)
+
+            if not self._fill_bar.disable:
+                self._fill_bar.n = self._trans_storage.size
+                self._fill_bar.refresh()
+
+                if self._trans_storage.size >= self.batch_size:
+                    self._fill_bar.close()
 
     def add_with_td_error(self, td_error: np.ndarray,
                           transitions: Dict[str, np.ndarray],
@@ -412,3 +424,24 @@ if __name__ == "__main__":
             # replay_buffer.update(points, np.random.random(len(points)).astype(np.float32))
 
         # input()
+
+
+class TqdmToLogger(io.StringIO):
+    """
+        Output stream for TQDM which will output to logger module instead of
+        the StdOut.
+    """
+    logger = None
+    level = None
+    buf = ''
+
+    def __init__(self, logger, level=None):
+        super(TqdmToLogger, self).__init__()
+        self.logger = logger
+        self.level = level or logging.INFO
+
+    def write(self, buf):
+        self.buf = buf.strip('\r\n\t ')
+
+    def flush(self):
+        self.logger.log(self.level, self.buf)

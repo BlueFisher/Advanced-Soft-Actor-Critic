@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 import torch
 from torch import nn
@@ -46,7 +45,7 @@ class NormalWithPadding(torch.distributions.Normal):
 
 
 class JointOneHotCategorical(torch.distributions.Distribution):
-    def __init__(self, dists: List[torch.distributions.OneHotCategorical]):
+    def __init__(self, dists: list[torch.distributions.OneHotCategorical]):
         self._dists = dists
         self.logits_size_list = [dist.logits.shape[-1] for dist in dists]
 
@@ -88,8 +87,8 @@ class JointOneHotCategorical(torch.distributions.Distribution):
 class ModelBasePolicy(nn.Module):
     def __init__(self,
                  state_size: int,
-                 d_action_sizes: List[int], c_action_size: int,
-                 model_abs_dir: Optional[Path] = None, **kwargs):
+                 d_action_sizes: list[int], c_action_size: int,
+                 model_abs_dir: Path | None = None, **kwargs):
         super().__init__()
         self.state_size = state_size
         self.d_action_sizes = d_action_sizes
@@ -101,7 +100,7 @@ class ModelBasePolicy(nn.Module):
     def _build_model(self, **kwargs):
         pass
 
-    def forward(self, state, obs_list) -> Tuple[torch.distributions.OneHotCategorical, torch.distributions.Normal]:
+    def forward(self, state, obs_list) -> tuple[torch.distributions.OneHotCategorical, torch.distributions.Normal]:
         raise Exception("ModelPolicy not implemented")
 
 

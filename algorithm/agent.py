@@ -609,7 +609,7 @@ class AgentManager:
                 max_reached=True
             )
 
-    def train(self) -> int:
+    def put_episode(self):
         # ep_indexes,
         # ep_obses_list, ep_actions, ep_rewards, ep_dones, ep_probs,
         # ep_seq_hidden_states
@@ -617,6 +617,7 @@ class AgentManager:
             self.rl.put_episode(**episode_trans)
         self.clear_tmp_episode_trans_list()
 
+    def train(self) -> int:
         trained_steps = self.rl.train()
 
         return trained_steps
@@ -780,6 +781,10 @@ class MultiAgentsManager:
     def force_end_all_episode(self):
         for n, mgr in self:
             mgr.force_end_all_episodes()
+
+    def put_episode(self):
+        for n, mgr in self:
+            mgr.put_episode()
 
     def train(self, trained_steps: int) -> int:
         for n, mgr in self:

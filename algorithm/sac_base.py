@@ -25,6 +25,8 @@ class SAC_Base:
                  d_action_sizes: List[int],
                  c_action_size: int,
                  model_abs_dir: Optional[Path],
+                 nn,
+
                  device: Optional[str] = None,
                  ma_name: Optional[str] = None,
                  summary_path: Optional[str] = 'log',
@@ -33,7 +35,6 @@ class SAC_Base:
 
                  nn_config: Optional[dict] = None,
 
-                 nn=None,
                  seed: Optional[float] = None,
                  write_summary_per_step: float = 1e3,
                  save_model_per_step: float = 1e5,
@@ -88,6 +89,8 @@ class SAC_Base:
         d_action_sizes: Dimensions of discrete actions
         c_action_size: Dimension of continuous actions
         model_abs_dir: The directory that saves summary, checkpoints, config etc.
+        nn: nn # Neural network models file
+
         device: Training in CPU or GPU
         ma_name: Multi-agent name
         train_mode: Is training or inference
@@ -95,7 +98,6 @@ class SAC_Base:
 
         nn_config: nn model config
 
-        nn: nn # Neural network models file
         seed: null # Random seed
         write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
         save_model_per_step: 5000 # Save model every N steps
@@ -478,6 +480,7 @@ class SAC_Base:
         if self.siamese == SIAMESE.ATC:
             for i, weight in enumerate(self.contrastive_weight_list):
                 ckpt_dict[f'contrastive_weights_{i}'] = weight
+            ckpt_dict['optimizer_siamese'] = self.optimizer_siamese
         elif self.siamese == SIAMESE.BYOL:
             for i, model_rep_projection in enumerate(self.model_rep_projection_list):
                 ckpt_dict[f'model_rep_projection_{i}'] = model_rep_projection
@@ -543,6 +546,7 @@ class SAC_Base:
 
                 ckpt_restore_path = ckpt_dir.joinpath(f'{last_ckpt}.pth')
                 ckpt_restore = torch.load(ckpt_restore_path, map_location=self.device, weights_only=True)
+                error_occurred = False
                 for name, model in self.ckpt_dict.items():
                     if name not in ckpt_restore:
                         self._logger.warning(f'{name} not in {last_ckpt}.pth')
@@ -552,8 +556,12 @@ class SAC_Base:
                         model.data = ckpt_restore[name]
                     else:
                         try:
+                            if error_occurred and name.startswith('optimizer'):
+                                # If state_dict mismatch occurred, optimizer should not be restored
+                                continue
                             model.load_state_dict(ckpt_restore[name])
                         except RuntimeError as e:
+                            error_occurred = True
                             self._logger.error(e)
                         if isinstance(model, nn.Module):
                             if self.train_mode:
@@ -1042,9 +1050,9 @@ class SAC_Base:
 
         elif self.seq_encoder == SEQ_ENCODER.RNN:
             l_states, rnn_state = model_rep(l_obses_list,
-                                                 l_pre_actions,
-                                                 l_pre_seq_hidden_states,
-                                                 padding_mask=l_padding_masks)
+                                            l_pre_actions,
+                                            l_pre_seq_hidden_states,
+                                            padding_mask=l_padding_masks)
             f_rnn_states = rnn_state.unsqueeze(dim=1)
 
             return l_states, f_rnn_states  # [batch, l, state_size], [batch, 1, *seq_hidden_state_shape]
@@ -2092,7 +2100,7 @@ class SAC_Base:
                     if not isinstance(approx_obs_list, (list, tuple)):
                         approx_obs_list = [approx_obs_list]
                     for approx_obs in approx_obs_list:
-                        if len(approx_obs.shape) > 3:
+                        if approx_obs.dim() > 3:
                             self.summary_writer.add_images('observation',
                                                            approx_obs.permute([0, 3, 1, 2]),
                                                            self.global_step)
@@ -2399,6 +2407,8 @@ class SAC_Base:
     @unified_elapsed_timer('train_all', 10)
     def train(self) -> int:
         step = self.get_global_step()
+        self.replay_buffer.size
+        self.replay_buffer.capacity
 
         if self.use_replay_buffer:
             with self._profiler('sample_from_replay_buffer', repeat=10) as profiler:

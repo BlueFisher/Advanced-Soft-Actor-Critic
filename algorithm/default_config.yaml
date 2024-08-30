@@ -109,7 +109,9 @@ oc_config:
   option_configs:
     - name: option_0
       fix_policy: false
+      random_q: false
     - name: option_1
       fix_policy: false
+      random_q: false
 
 ma_config: null

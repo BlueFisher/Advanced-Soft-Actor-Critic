@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import List, Optional
 
 import torch
 from torch import nn
@@ -10,9 +9,9 @@ from .layers import LinearLayers
 class ModelBaseQ(nn.Module):
     def __init__(self,
                  state_size: int,
-                 d_action_sizes: List[int], c_action_size: int,
+                 d_action_sizes: list[int], c_action_size: int,
                  is_target: bool,
-                 model_abs_dir: Optional[Path] = None):
+                 model_abs_dir: Path | None = None):
         super().__init__()
         self.state_size = state_size
         self.d_action_sizes = d_action_sizes

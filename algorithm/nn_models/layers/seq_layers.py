@@ -118,7 +118,7 @@ class MultiheadAttention(nn.Module):
         value = value.reshape(-1, *value.shape[-2:])
         if key_padding_mask is not None:
             key_padding_mask = key_padding_mask.reshape(-1, key_padding_mask.shape[-1])
-        if attn_mask is not None and len(attn_mask.shape) >= 3:
+        if attn_mask is not None and attn_mask.dim() >= 3:
             attn_mask = attn_mask.reshape(-1, *attn_mask.shape[-2:])
 
         if self.pe is not None and query_index is None:
@@ -165,7 +165,7 @@ class MultiheadAttention(nn.Module):
             attn_mask = torch.zeros_like(attn_mask, dtype=query.dtype,
                                          device=query.device).masked_fill_(attn_mask, float("-inf"))
 
-            if len(attn_mask.shape) == 3:
+            if attn_mask.dim() == 3:
                 # [bsz, seq_q_len, seq_k_len] -> [bsz * num_heads, seq_q_len, seq_k_len]
                 attn_mask = attn_mask.repeat(self.num_heads, 1, 1)
 
@@ -360,7 +360,7 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
         if key_padding_mask is not None:
             batch = key_padding_mask.shape[0]
 
-            if len(attn_mask.shape) < 3:
+            if attn_mask.dim() < 3:
                 attn_mask = attn_mask.repeat(batch, 1, 1)  # [batch, seq_k_len, seq_k_len]
 
             key_padding_mask = key_padding_mask.unsqueeze(1)  # [batch, 1, seq_k_len]
@@ -440,7 +440,7 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
             query = key[:, -seq_q_len:]
             if query_index is not None:
                 query_index = query_index[:, -seq_q_len:]
-            if len(attn_mask.shape) == 2:
+            if attn_mask.dim() == 2:
                 attn_mask = attn_mask[-seq_q_len:]
             else:
                 attn_mask = attn_mask[:, -seq_q_len:]

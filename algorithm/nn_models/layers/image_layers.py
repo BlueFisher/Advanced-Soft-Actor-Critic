@@ -125,7 +125,7 @@ class Conv1dLayers(nn.Module):
         self.output_size = self.dense.output_size
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if len(x.shape) >= 3:
+        if x.dim() >= 3:
             batch = x.shape[:-2]
             x = x.reshape(-1, *x.shape[-2:])
             x = x.permute([0, 2, 1])
@@ -206,7 +206,7 @@ class ConvLayers(nn.Module):
         self.output_size = self.dense.output_size
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if len(x.shape) >= 4:
+        if x.dim() >= 4:
             batch = x.shape[:-3]
             x = x.reshape(-1, *x.shape[-3:])
             x = x.permute([0, 3, 1, 2])
@@ -235,7 +235,7 @@ class ConvTransposeLayers(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.dense(x)
 
-        if len(x.shape) >= 2:
+        if x.dim() >= 2:
             batch = x.shape[:-1]
             x = x.reshape(-1, self._channels, self._height, self._width)
             vis = self.conv_transpose(x)
@@ -252,7 +252,7 @@ class Transform(nn.Module):
         self.transform = transform
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if len(x.shape) >= 4:
+        if x.dim() >= 4:
             batch = x.shape[:-3]
             x = x.reshape(-1, *x.shape[-3:])
             x = x.permute([0, 3, 1, 2])
