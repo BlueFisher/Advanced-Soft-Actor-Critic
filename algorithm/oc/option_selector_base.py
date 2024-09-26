@@ -334,6 +334,9 @@ class OptionSelectorBase(SAC_Base):
                                              random_q=option_config['random_q'],
                                              **option_kwargs)
 
+        for i, option in enumerate(self.option_list):
+            self._logger.info(f'[{i}] - {option.ma_name}')
+
         option_kwargs['nn'].ModelRep = _tmp_ModelRep
 
         self.low_seq_hidden_state_shape = self.option_list[0].seq_hidden_state_shape
@@ -398,7 +401,7 @@ class OptionSelectorBase(SAC_Base):
         for option in self.option_list:
             option._update_target_variables(tau)
 
-    def get_termination_mask(self,
+    def _get_termination_mask(self,
                              termination: torch.Tensor,
                              disable_sample: bool = False) -> torch.Tensor:
         if disable_sample:
@@ -601,7 +604,7 @@ class OptionSelectorBase(SAC_Base):
         obs_list = [obs.unsqueeze(1) for obs in obs_list]
         pre_action = pre_action.unsqueeze(1)
         pre_seq_hidden_state = pre_seq_hidden_state.unsqueeze(1)
-        pre_termination_mask = self.get_termination_mask(pre_termination, disable_sample)
+        pre_termination_mask = self._get_termination_mask(pre_termination, disable_sample)
 
         state, seq_hidden_state = self.model_rep(obs_list,
                                                  pre_action,

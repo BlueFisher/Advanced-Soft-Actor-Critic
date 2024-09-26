@@ -527,60 +527,62 @@ class SAC_Base:
         Initialize network weights from scratch or restore from model_abs_dir
         """
         self.ckpt_dir = None
-        if self.model_abs_dir:
-            self.ckpt_dir = ckpt_dir = self.model_abs_dir.joinpath('model')
+        if not self.model_abs_dir:
+            return
 
-            ckpts = []
-            if ckpt_dir.exists():
-                for ckpt_path in ckpt_dir.glob('*.pth'):
-                    ckpts.append(int(ckpt_path.stem))
-                ckpts.sort()
+        self.ckpt_dir = ckpt_dir = self.model_abs_dir.joinpath('model')
+
+        ckpts = []
+        if ckpt_dir.exists():
+            for ckpt_path in ckpt_dir.glob('*.pth'):
+                ckpts.append(int(ckpt_path.stem))
+            ckpts.sort()
+        else:
+            ckpt_dir.mkdir()
+
+        if ckpts:
+            if last_ckpt is None:
+                last_ckpt = ckpts[-1]
             else:
-                ckpt_dir.mkdir()
+                assert last_ckpt in ckpts
 
-            if ckpts:
-                if last_ckpt is None:
-                    last_ckpt = ckpts[-1]
+            ckpt_restore_path = ckpt_dir.joinpath(f'{last_ckpt}.pth')
+            ckpt_restore = torch.load(ckpt_restore_path, map_location=self.device, weights_only=True)
+            error_occurred = False
+            for name, model in self.ckpt_dict.items():
+                if name not in ckpt_restore:
+                    self._logger.warning(f'{name} not in {last_ckpt}.pth')
+                    continue
+
+                if isinstance(model, torch.Tensor):
+                    model.data = ckpt_restore[name]
                 else:
-                    assert last_ckpt in ckpts
+                    try:
+                        if error_occurred and name.startswith('optimizer'):
+                            # If state_dict mismatch occurred, optimizer should not be restored
+                            continue
+                        model.load_state_dict(ckpt_restore[name])
+                    except RuntimeError as e:
+                        error_occurred = True
+                        self._logger.error(e)
+                    if isinstance(model, nn.Module):
+                        if self.train_mode:
+                            model.train()
+                        else:
+                            model.eval()
 
-                ckpt_restore_path = ckpt_dir.joinpath(f'{last_ckpt}.pth')
-                ckpt_restore = torch.load(ckpt_restore_path, map_location=self.device, weights_only=True)
-                error_occurred = False
-                for name, model in self.ckpt_dict.items():
-                    if name not in ckpt_restore:
-                        self._logger.warning(f'{name} not in {last_ckpt}.pth')
-                        continue
+            self.global_step = self.global_step.to('cpu')
+            self.ckpt_dict['global_step'] = self.global_step
 
-                    if isinstance(model, torch.Tensor):
-                        model.data = ckpt_restore[name]
-                    else:
-                        try:
-                            if error_occurred and name.startswith('optimizer'):
-                                # If state_dict mismatch occurred, optimizer should not be restored
-                                continue
-                            model.load_state_dict(ckpt_restore[name])
-                        except RuntimeError as e:
-                            error_occurred = True
-                            self._logger.error(e)
-                        if isinstance(model, nn.Module):
-                            if self.train_mode:
-                                model.train()
-                            else:
-                                model.eval()
+            self._logger.info(f'Restored from {ckpt_restore_path}')
 
-                self.global_step = self.global_step.to('cpu')
-                self.ckpt_dict['global_step'] = self.global_step
+            if self.train_mode and self.use_replay_buffer:
+                self.replay_buffer.load(ckpt_dir, last_ckpt)
 
-                self._logger.info(f'Restored from {ckpt_restore_path}')
-
-                if self.train_mode and self.use_replay_buffer:
-                    self.replay_buffer.load(ckpt_dir, last_ckpt)
-
-                    self._logger.info(f'Replay buffer restored')
-            else:
-                self._logger.info('Initializing from scratch')
-                self._update_target_variables()
+                self._logger.info(f'Replay buffer restored')
+        else:
+            self._logger.info('Initializing from scratch')
+            self._update_target_variables()
 
     def _init_replay_buffer(self, replay_config: Optional[dict] = None) -> None:
         if self.train_mode:
@@ -600,18 +602,20 @@ class SAC_Base:
                 m.train(mode=self.train_mode)
 
     def save_model(self, save_replay_buffer=False) -> None:
-        if self.ckpt_dir:
-            global_step = self.get_global_step()
-            ckpt_path = self.ckpt_dir.joinpath(f'{global_step}.pth')
+        if self.ckpt_dir is None:
+            return
 
-            torch.save({
-                k: v if isinstance(v, torch.Tensor) else v.state_dict()
-                for k, v in self.ckpt_dict.items()
-            }, ckpt_path)
-            self._logger.info(f"Model saved at {ckpt_path}")
+        global_step = self.get_global_step()
+        ckpt_path = self.ckpt_dir.joinpath(f'{global_step}.pth')
 
-            if self.use_replay_buffer and save_replay_buffer:
-                self.replay_buffer.save(self.ckpt_dir, global_step)
+        torch.save({
+            k: v if isinstance(v, torch.Tensor) else v.state_dict()
+            for k, v in self.ckpt_dict.items()
+        }, ckpt_path)
+        self._logger.info(f"Model saved at {ckpt_path}")
+
+        if self.use_replay_buffer and save_replay_buffer:
+            self.replay_buffer.save(self.ckpt_dir, global_step)
 
     def write_constant_summaries(self, constant_summaries, iteration=None) -> None:
         """
