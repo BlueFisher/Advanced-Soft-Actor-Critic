@@ -21,16 +21,16 @@ class TestOCModel(unittest.TestCase):
         importlib.reload(nn_oc_combined)
 
         if param_dict['seq_encoder'] is None:
-            nn_oc_combined.ModelRep = nn_oc_combined.ModelOptionSelectorVanillaRep
+            nn_oc_combined.ModelOptionSelectorRep = nn_oc_combined.ModelOptionSelectorVanillaRep
         elif param_dict['seq_encoder'] == SEQ_ENCODER.RNN:
-            nn_oc_combined.ModelRep = nn_oc_combined.ModelOptionSelectorRNNRep
+            nn_oc_combined.ModelOptionSelectorRep = nn_oc_combined.ModelOptionSelectorRNNRep
         elif param_dict['seq_encoder'] == SEQ_ENCODER.ATTN:
-            nn_oc_combined.ModelRep = nn_oc_combined.ModelOptionSelectorAttentionRep
+            nn_oc_combined.ModelOptionSelectorRep = nn_oc_combined.ModelOptionSelectorAttentionRep
 
         if param_dict['option_seq_encoder'] is None:
-            nn_oc_combined.ModelOptionRep = nn_oc_combined.ModelVanillaOptionRep
+            nn_oc_combined.ModelRep = nn_oc_combined.ModelVanillaOptionRep
         elif param_dict['option_seq_encoder'] == SEQ_ENCODER.RNN:
-            nn_oc_combined.ModelOptionRep = nn_oc_combined.ModelRNNOptionRep
+            nn_oc_combined.ModelRep = nn_oc_combined.ModelRNNOptionRep
 
         sac = OptionSelectorBase(
             option_nn_config=None,
@@ -95,6 +95,7 @@ def __gen_test(test_from: int):
         'burn_in_step': [5],
         'n_step': [3],
         'discrete_dqn_like': [True, False],
+        'use_rnd': [True, False],
     }
 
     possible_param_dicts = get_product(param_dict_candidates)

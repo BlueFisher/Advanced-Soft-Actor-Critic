@@ -1,4 +1,5 @@
 from collections import defaultdict
+from itertools import chain
 from typing import List, Optional
 
 import numpy as np
@@ -204,7 +205,7 @@ class OptionSelectorBase(SAC_Base):
 
             p_self = self
 
-            class ModelRep(nn.ModelRep):
+            class ModelRep(nn.ModelOptionSelectorRep):
                 def forward(self, obs_list, *args, **kwargs):
                     obs_list = [
                         torch.clamp(
@@ -217,7 +218,7 @@ class OptionSelectorBase(SAC_Base):
 
                     return super().forward(obs_list, *args, **kwargs)
         else:
-            ModelRep = nn.ModelRep
+            ModelRep = nn.ModelOptionSelectorRep
 
         """ REPRESENTATION """
         if self.seq_encoder in (None, SEQ_ENCODER.RNN):
@@ -292,6 +293,25 @@ class OptionSelectorBase(SAC_Base):
         else:
             self.optimizer_rep = None
 
+        """ RANDOM NETWORK DISTILLATION """
+        if self.use_rnd:
+            self.model_rnd: ModelOptionSelectorRND = nn.ModelOptionSelectorRND(state_size, self.num_options).to(self.device)
+            self.model_target_rnd: ModelOptionSelectorRND = nn.ModelOptionSelectorRND(state_size, self.num_options).to(self.device)
+            for param in self.model_target_rnd.parameters():
+                param.requires_grad = False
+            self.optimizer_rnd = adam_optimizer(self.model_rnd.parameters())
+
+        """ V OVER OPTIONS """
+        self.model_v_over_options_list = [nn.ModelVOverOptions(state_size,
+                                                               self.num_options,
+                                                               False).to(self.device)
+                                          for _ in range(self.ensemble_q_num)]
+        self.model_target_v_over_options_list = [nn.ModelVOverOptions(state_size,
+                                                                      self.num_options,
+                                                                      True).to(self.device)
+                                                 for _ in range(self.ensemble_q_num)]
+        self.optimizer_v_list = [adam_optimizer(self.model_v_over_options_list[i].parameters()) for i in range(self.ensemble_q_num)]
+
         """
         Initialize each option
         """
@@ -317,8 +337,6 @@ class OptionSelectorBase(SAC_Base):
         self.option_nn_config = defaultdict(dict, self.option_nn_config)
         option_kwargs['nn_config'] = self.option_nn_config
 
-        _tmp_ModelRep, option_kwargs['nn'].ModelRep = option_kwargs['nn'].ModelRep, option_kwargs['nn'].ModelOptionRep
-
         self.option_list: List[OptionBase] = [None] * self.num_options
         for i, option_config in enumerate(self.option_configs):
             if self.model_abs_dir is not None:
@@ -336,8 +354,6 @@ class OptionSelectorBase(SAC_Base):
 
         for i, option in enumerate(self.option_list):
             self._logger.info(f'[{i}] - {option.ma_name}')
-
-        option_kwargs['nn'].ModelRep = _tmp_ModelRep
 
         self.low_seq_hidden_state_shape = self.option_list[0].seq_hidden_state_shape
 
@@ -358,6 +374,18 @@ class OptionSelectorBase(SAC_Base):
             ckpt_dict['model_rep'] = self.model_rep
             ckpt_dict['model_target_rep'] = self.model_target_rep
             ckpt_dict['optimizer_rep'] = self.optimizer_rep
+
+        """ RANDOM NETWORK DISTILLATION """
+        if self.use_rnd:
+            ckpt_dict['model_rnd'] = self.model_rnd
+            ckpt_dict['model_target_rnd'] = self.model_target_rnd
+            ckpt_dict['optimizer_rnd'] = self.optimizer_rnd
+
+        """ V OVER OPTIONS """
+        for i in range(self.ensemble_q_num):
+            ckpt_dict[f'model_v_over_options_{i}'] = self.model_v_over_options_list[i]
+            ckpt_dict[f'model_target_v_over_options_{i}'] = self.model_target_v_over_options_list[i]
+            ckpt_dict[f'optimizer_v_over_options_{i}'] = self.optimizer_v_list[i]
 
         total_parameter_num = 0
         for m in ckpt_dict.values():
@@ -393,6 +421,10 @@ class OptionSelectorBase(SAC_Base):
         target = self.model_target_rep.parameters()
         source = self.model_rep.parameters()
 
+        for i in range(self.ensemble_q_num):
+            target = chain(target, self.model_target_v_over_options_list[i].parameters())
+            source = chain(source, self.model_v_over_options_list[i].parameters())
+
         for target_param, param in zip(target, source):
             target_param.data.copy_(
                 target_param.data * (1. - tau) + param.data * tau
@@ -402,8 +434,8 @@ class OptionSelectorBase(SAC_Base):
             option._update_target_variables(tau)
 
     def _get_termination_mask(self,
-                             termination: torch.Tensor,
-                             disable_sample: bool = False) -> torch.Tensor:
+                              termination: torch.Tensor,
+                              disable_sample: bool = False) -> torch.Tensor:
         if disable_sample:
             termination_mask = termination > 0.5
         else:
@@ -417,17 +449,13 @@ class OptionSelectorBase(SAC_Base):
 
     def _choose_option_index(self,
                              pre_option_index: torch.Tensor,
-                             low_obs_list: List[torch.Tensor],
-                             pre_action: torch.Tensor,
-                             pre_low_seq_hidden_state: torch.Tensor,
+                             state: torch.Tensor,
                              pre_termination_mask: torch.Tensor) -> Tuple[torch.Tensor,
                                                                           torch.Tensor]:
         """
         Args:
             pre_option_index (torch.int64): [batch, ]
-            low_obs_list: list([batch, *low_obs_shapes_i], ...)
-            pre_action: [batch, action_size]
-            pre_low_seq_hidden_state: [batch, *low_seq_state_shape]
+            state: [batch, state_size]
             pre_termination_mask (bool): [batch, ]
 
         Returns:
@@ -438,44 +466,28 @@ class OptionSelectorBase(SAC_Base):
 
         option_index = pre_option_index.clone()
 
-        low_state_all_options = [None] * self.num_options  # list([batch, low_state_size], ...)
-        v_all_options = [None] * self.num_options  # list([batch, 1], ...)
-
-        for i, option in enumerate(self.option_list):
-            o_low_f_state, _ = option.get_l_states(l_indexes=torch.zeros((batch, 1),
-                                                                         dtype=torch.int32,
-                                                                         device=self.device),  # option is not ATTN
-                                                   l_padding_masks=torch.zeros((batch, 1),
-                                                                               dtype=bool,
-                                                                               device=self.device),
-                                                   l_obses_list=[low_obs.unsqueeze(1) for low_obs in low_obs_list],
-                                                   l_pre_actions=pre_action.unsqueeze(1),
-                                                   l_pre_seq_hidden_states=pre_low_seq_hidden_state.unsqueeze(1))
-            o_low_state = o_low_f_state.squeeze(1)  # [batch, low_state_size]
-            low_state_all_options[i] = o_low_state
-
-            o_v = option.get_v(low_obs_list, o_low_state)  # [batch, 1]
-            v_all_options[i] = o_v
+        v_over_options_list = [v(state) for v in self.model_v_over_options_list]  # list([batch, num_options], ...)
+        stacked_v_over_options = torch.stack(v_over_options_list)  # [ensemble, batch, num_options]
+        v_over_options, _ = stacked_v_over_options.min(dim=0)  # [batch, num_options]
 
         none_option_mask = option_index == -1
-
-        v_over_options = torch.concat(v_all_options, dim=-1)  # [batch, num_options]
-
-        v_over_options = v_over_options - v_over_options.min(-1, keepdim=True)[0]  # [batch, num_options]  # ! FORCE T
-        option_index_one_hot = nn.functional.one_hot(option_index[~none_option_mask], self.num_options)  # ! FORCE T
-        v_over_options[~none_option_mask] = v_over_options[~none_option_mask] * (1. - option_index_one_hot)  # ! FORCE T
 
         new_option_index = v_over_options.argmax(dim=-1)  # [batch, ]
 
         option_index[none_option_mask] = new_option_index[none_option_mask]
-
         option_index[pre_termination_mask] = new_option_index[pre_termination_mask]
 
         if self.train_mode:
             random_mask = torch.rand_like(option_index, dtype=torch.float32) < self.option_eplison
-            dist = distributions.Categorical(logits=torch.ones((batch, self.num_options),
-                                                               device=self.device))
-            random_option_index = dist.sample()  # [batch, ]
+            if self.use_rnd:
+                rnd = self.model_rnd.cal_rnd(state)  # [batch, num_options, f]
+                t_rnd = self.model_target_rnd.cal_rnd(state)  # [batch, num_options, f]
+                loss = torch.sum(torch.abs(rnd - t_rnd), dim=-1)  # [batch, num_options]
+                random_option_index = loss.argmax(dim=-1)  # [batch, ]
+            else:
+                dist = distributions.Categorical(logits=torch.ones((batch, self.num_options),
+                                                                   device=self.device))
+                random_option_index = dist.sample()  # [batch, ]
 
             option_index[random_mask] = random_option_index[random_mask]
 
@@ -517,9 +529,7 @@ class OptionSelectorBase(SAC_Base):
         low_obs_list = self.get_l_low_obses_list(obs_list, state)
 
         option_index = self._choose_option_index(pre_option_index=pre_option_index,
-                                                 low_obs_list=low_obs_list,
-                                                 pre_action=pre_action,
-                                                 pre_low_seq_hidden_state=pre_low_seq_hidden_state,
+                                                 state=state,
                                                  pre_termination_mask=pre_termination_mask)
 
         batch = state.shape[0]
@@ -692,7 +702,7 @@ class OptionSelectorBase(SAC_Base):
         pre_low_seq_hidden_state = torch.from_numpy(pre_low_seq_hidden_state).to(self.device)
         pre_termination = torch.from_numpy(pre_termination).to(self.device)
 
-        pre_termination_mask = self.get_termination_mask(pre_termination, disable_sample)
+        pre_termination_mask = self._get_termination_mask(pre_termination, disable_sample)
 
         state, attn_state, _ = self.model_rep(1,
                                               ep_indexes,
@@ -1247,22 +1257,29 @@ class OptionSelectorBase(SAC_Base):
 
         return td_error
 
-    def _train_rep_q(self,
-                     bn_indexes: torch.Tensor,
-                     bn_padding_masks: torch.Tensor,
-                     bn_option_indexes: torch.Tensor,
-                     om_low_obses_list: List[torch.Tensor],
-                     om_low_target_obses_list: List[torch.Tensor],
-                     bn_actions: torch.Tensor,
-                     bn_rewards: torch.Tensor,
-                     bn_dones: torch.Tensor,
-                     bn_mu_probs: torch.Tensor,
-                     om_pre_low_seq_hidden_states: Optional[torch.Tensor] = None,
-                     priority_is: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _train_q(self,
+                 bn_indexes: torch.Tensor,
+                 bn_padding_masks: torch.Tensor,
+                 m_states: torch.Tensor,
+                 bn_option_indexes: torch.Tensor,
+                 om_low_obses_list: List[torch.Tensor],
+                 om_low_target_obses_list: List[torch.Tensor],
+                 bn_actions: torch.Tensor,
+                 bn_rewards: torch.Tensor,
+                 bn_dones: torch.Tensor,
+                 bn_mu_probs: torch.Tensor,
+                 om_pre_low_seq_hidden_states: Optional[torch.Tensor] = None,
+                 priority_is: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor,
+                                                                      torch.Tensor,
+                                                                      list[torch.Tensor],
+                                                                      list[torch.Tensor],
+                                                                      torch.Tensor,
+                                                                      torch.Tensor]:
         """
         Args:
             bn_indexes (torch.int32): [batch, b + n],
             bn_padding_masks (torch.bool): [batch, b + n],
+            m_states: [batch, b + n + 1]
             bn_option_indexes (torch.int64): [batch, b + n],
             om_low_obses_list: list([batch, ob + n + 1, *low_obs_shapes_i], ...)
             om_low_target_obses_list: list([batch, ob + n + 1, *low_obs_shapes_i], ...)
@@ -1279,12 +1296,12 @@ class OptionSelectorBase(SAC_Base):
             om_low_states_all_options: list([batch, ob + n + 1, low_state_size], ...)
             om_low_target_states_all_options: list([batch, ob + n + 1, low_state_size], ...)
             next_n_vs_over_options: [batch, n, num_options]
+            y: [batch, 1]
         """
 
-        if self.optimizer_rep:
-            self.optimizer_rep.zero_grad()
-
+        batch = bn_indexes.shape[0]
         obn_option_indexes = bn_option_indexes[:, self.option_burn_in_from:]
+        option_index = bn_option_indexes[:, self.burn_in_step]
 
         om_low_states_all_options = [None] * self.num_options  # list([batch, ob + n + 1, low_state_size], ...)
         om_low_target_states_all_options = [None] * self.num_options  # list([batch, ob + n + 1, low_state_size], ...)
@@ -1293,11 +1310,6 @@ class OptionSelectorBase(SAC_Base):
 
         # Get all states of all options, then replace them according to option_indexes
         for i, option in enumerate(self.option_list):
-            # om_low_obses_list = [torch.cat([obn_low_obses, next_low_obs.unsqueeze(1)], dim=1)
-            #                      for obn_low_obses, next_low_obs in zip(obn_low_obses_list, next_low_obs_list)]
-            # om_low_target_obses_list = [torch.cat([obn_low_obses, next_low_obs.unsqueeze(1)], dim=1)
-            #                             for obn_low_obses, next_low_obs in zip(obn_low_target_obses_list, next_low_target_obs_list)]
-
             (om_indexes,
              om_padding_masks,
              om_pre_actions) = option.get_m_data(
@@ -1346,89 +1358,174 @@ class OptionSelectorBase(SAC_Base):
             mg_om_low_states = mg_om_low_states * ~mask + om_low_states_all_options[i] * mask
             mg_om_low_target_states = mg_om_low_target_states * ~mask + om_low_target_states_all_options[i] * mask
 
-        om_vs_over_options = torch.concat(om_vs_all_options, dim=-1)
-        next_n_vs_over_options = om_vs_over_options[:, self.option_burn_in_step + 1:]
+        next_n_states = m_states[:, self.burn_in_step + 1:]
+        next_n_vs_over_options_list = [v(next_n_states) for v in self.model_target_v_over_options_list]  # list([batch, n, num_options], ...)
+        next_n_vs_over_options, _ = torch.min(torch.stack(next_n_vs_over_options_list, -1), dim=-1)
+
+        d_y = torch.zeros((batch, 1), device=self.device)
+        c_y = torch.zeros((batch, 1), device=self.device)
 
         for i, option in enumerate(self.option_list):
-            option.compute_rep_q_grads(
-                next_n_vs_over_options=next_n_vs_over_options,
+            mask = (option_index == i)
+            if not torch.any(mask):
+                continue
 
-                bn_indexes=bn_indexes[:, self.option_burn_in_from:],
-                bn_padding_masks=bn_padding_masks[:, self.option_burn_in_from:],
-                bn_obses_list=[om_low_obses[:, :-1, ...]
+            o_d_y, o_c_y = option.compute_rep_q_grads(
+                next_n_vs_over_options=next_n_vs_over_options[mask],
+
+                bn_indexes=bn_indexes[mask, self.option_burn_in_from:],
+                bn_padding_masks=bn_padding_masks[mask, self.option_burn_in_from:],
+                bn_obses_list=[om_low_obses[mask, :-1, ...]
                                for om_low_obses in om_low_obses_list],
-                bn_target_obses_list=[om_low_target_obses[:, :-1, ...]
+                bn_target_obses_list=[om_low_target_obses[mask, :-1, ...]
                                       for om_low_target_obses in om_low_target_obses_list],
-                bn_states=om_low_states_all_options[i][:, :-1, ...],
-                bn_target_states=mg_om_low_target_states[:, :-1, ...],
-                bn_actions=bn_actions[:, self.option_burn_in_from:],
-                bn_rewards=bn_rewards[:, self.option_burn_in_from:],
-                next_obs_list=[om_low_obses[:, -1, ...]
+                bn_states=om_low_states_all_options[i][mask, :-1, ...],
+                bn_target_states=mg_om_low_target_states[mask, :-1, ...],
+                bn_actions=bn_actions[mask, self.option_burn_in_from:],
+                bn_rewards=bn_rewards[mask, self.option_burn_in_from:],
+                next_obs_list=[om_low_obses[mask, -1, ...]
                                for om_low_obses in om_low_obses_list],
-                next_target_obs_list=[om_low_target_obses[:, -1, ...]
+                next_target_obs_list=[om_low_target_obses[mask, -1, ...]
                                       for om_low_target_obses in om_low_target_obses_list],
-                next_state=om_low_states_all_options[i][:, -1, ...],
-                next_target_state=mg_om_low_target_states[:, -1, ...],
-                bn_dones=bn_dones[:, self.option_burn_in_from:],
-                bn_mu_probs=bn_mu_probs[:, self.option_burn_in_from:],
-                priority_is=priority_is if self.use_replay_buffer and self.use_priority else None
+                next_state=om_low_states_all_options[i][mask, -1, ...],
+                next_target_state=mg_om_low_target_states[mask, -1, ...],
+                bn_dones=bn_dones[mask, self.option_burn_in_from:],
+                bn_mu_probs=bn_mu_probs[mask, self.option_burn_in_from:],
+                priority_is=priority_is[mask] if self.use_replay_buffer and self.use_priority else None
             )
+
+            if o_d_y is not None:
+                d_y[mask] = o_d_y
+
+            if o_c_y is not None:
+                c_y[mask] = o_c_y
 
         for i, option in enumerate(self.option_list):
             option.train_rep_q()
 
-        if self.optimizer_rep:
-            self.optimizer_rep.step()
-
         return (mg_om_low_states, mg_om_low_target_states,
                 om_low_states_all_options, om_low_target_states_all_options,
-                next_n_vs_over_options)
+                next_n_vs_over_options,
+                d_y + c_y)
 
     def _train_v_terminations(self,
-                              bn_padding_masks: torch.Tensor,
+                              y: torch.Tensor,
+
+                              m_states: torch.Tensor,
                               bn_option_indexes: torch.Tensor,
-                              om_low_obses_list: List[torch.Tensor],
-                              om_low_states_all_options: List[torch.Tensor],
-                              bn_dones: torch.Tensor) -> Tuple[torch.Tensor,
-                                                               torch.Tensor]:
+                              om_low_target_obses_list: List[torch.Tensor],
+                              om_low_target_states_all_options: List[torch.Tensor],
+                              bn_dones: torch.Tensor,
+                              priority_is: torch.Tensor) -> list[torch.Tensor]:
         """
         Args:
-            bn_padding_masks (torch.bool): [batch, b + n]
+            y: [batch, 1]
+
+            m_states: [batch, b + n + 1, state_size]
             bn_option_indexes (torch.int64): [batch, b + n]
             om_low_target_obses_list: list([batch, ob + n + 1, *low_obs_shapes_i], ...)
             om_low_target_states_all_options: list([batch, ob + n + 1, low_state_size], ...)
             bn_dones (torch.bool): [batch, b + n]
+            priority_is: [batch, 1]
 
         Returns:
-            loss_v: torch.float32
+            loss_v_list: list(torch.float32, ...)
         """
 
-        next_low_obs_list = [om_low_obses[:, self.option_burn_in_step + 1]
-                             for om_low_obses in om_low_obses_list]
-        done = bn_dones[:, self.burn_in_step]
+        state = m_states[:, self.burn_in_step, ...]
+        next_state = m_states[:, self.burn_in_step + 1, ...]
+        option_index = bn_option_indexes[:, self.burn_in_step]
 
-        v_all_options = [None] * self.num_options  # list([batch, 1], ...)
+        option_index_one_hot = nn.functional.one_hot(option_index, self.num_options)  # [batch, num_options]
+
+        loss_v_list: list[torch.Tensor] = []
+        loss_none_mse = nn.MSELoss(reduction='none')
+
+        for i, model_v_over_options in enumerate(self.model_v_over_options_list):
+            v_over_options = model_v_over_options(state)  # [batch, num_options]
+            v = (v_over_options * option_index_one_hot).sum(-1, keepdim=True)  # [batch, 1]
+
+            if self.clip_epsilon > 0:
+                target_v_over_options = self.model_target_v_over_options_list[i](state.detach())  # [batch, num_options]
+                target_v = (target_v_over_options * option_index_one_hot).sum(-1, keepdim=True)  # [batch, 1]
+
+                clipped_v = target_v + torch.clamp(
+                    v - target_v,
+                    -self.clip_epsilon,
+                    self.clip_epsilon,
+                )
+
+                loss_v_a = loss_none_mse(clipped_v, y)  # [batch, 1]
+                loss_v_b = loss_none_mse(v, y)  # [batch, 1]
+
+                loss_v = torch.maximum(loss_v_a, loss_v_b)
+            else:
+                loss_v = loss_none_mse(v, y)
+
+            if priority_is is not None:
+                loss_v = loss_v * priority_is  # [batch, 1]
+
+            loss_v = torch.mean(loss_v)
+            loss_v_list.append(loss_v)
+
+            optimizer = self.optimizer_v_list[i]
+
+            optimizer.zero_grad()
+            loss_v.backward(retain_graph=True)
+            optimizer.step()
+
+        with torch.no_grad():
+            next_v_over_options_list = [v(next_state) for v in self.model_target_v_over_options_list]  # list([batch, num_options], ...)
+            stacked_next_v_over_options = torch.stack(next_v_over_options_list)  # [ensemble, batch, num_options]
+            next_v_over_options, _ = stacked_next_v_over_options.min(dim=0)  # [batch, num_options]
+
         for i, option in enumerate(self.option_list):
-            next_low_state = om_low_states_all_options[i][:, self.option_burn_in_step + 1]
-
-            v_all_options[i] = option.get_v(next_low_obs_list,
-                                            next_low_state,
-                                            is_target=False)
-        v_over_options = torch.concat(v_all_options, dim=-1)  # [batch, num_options]
-
-        for i, option in enumerate(self.option_list):
-            next_low_state = om_low_states_all_options[i][:, self.option_burn_in_step + 1]
+            next_low_obs_list = [om_low_obses[:, self.option_burn_in_step + 1]
+                                 for om_low_obses in om_low_target_obses_list]
+            next_low_state = om_low_target_states_all_options[i][:, self.option_burn_in_step + 1]
+            done = bn_dones[:, self.burn_in_step]
 
             option.compute_termination_grads(
                 terminal_entropy=self.terminal_entropy,
                 next_obs_list=next_low_obs_list,
                 next_state=next_low_state,
-                next_v_over_options=v_over_options,
+                next_v_over_options=next_v_over_options,
                 done=done
             )
 
         for i, option in enumerate(self.option_list):
             option.train_termination()
+
+        return loss_v_list
+
+    def _train_rnd(self,
+                   bn_padding_masks: torch.Tensor,
+                   bn_option_indexes: torch.Tensor,
+                   bn_states: torch.Tensor) -> torch.Tensor:
+        n_padding_masks = bn_padding_masks[:, self.burn_in_step:]  # [batch, n]
+        n_option_indexes = bn_option_indexes[:, self.burn_in_step:]  # [batch, n]
+        n_states = bn_states[:, self.burn_in_step:]  # [batch, n, state_size]
+
+        rnd = self.model_rnd.cal_rnd(n_states)  # [batch, n, num_options, f]
+        with torch.no_grad():
+            t_rnd = self.model_target_rnd.cal_rnd(n_states)  # [batch, n, num_options, f]
+
+        n_option_indexes = n_option_indexes * ~n_padding_masks  # preventing -1 error in onehot
+        _i = nn.functional.one_hot(n_option_indexes, self.num_options).float().unsqueeze(-1)  # [batch, n, num_options, 1]
+        rnd = (_i * rnd).sum(-2)
+        # [batch, n, d_action_summed_size, f] -> [batch, n, f]
+        t_rnd = (_i * t_rnd).sum(-2)
+        # [batch, n, d_action_summed_size, f] -> [batch, n, f]
+
+        _loss = nn.functional.mse_loss(rnd, t_rnd, reduction='none')
+        _loss = _loss * ~n_padding_masks.unsqueeze(-1)
+        loss = torch.mean(_loss)
+
+        self.optimizer_rnd.zero_grad()
+        loss.backward(inputs=list(self.model_rnd.parameters()))
+        self.optimizer_rnd.step()
+
+        return loss
 
     def _train(self,
                bn_indexes: torch.Tensor,
@@ -1518,17 +1615,19 @@ class OptionSelectorBase(SAC_Base):
          mg_om_low_target_states,
          om_low_states_all_options,
          om_low_target_states_all_options,
-         next_n_vs_over_options) = self._train_rep_q(bn_indexes=bn_indexes,
-                                                     bn_padding_masks=bn_padding_masks,
-                                                     bn_option_indexes=bn_option_indexes,
-                                                     om_low_obses_list=om_low_obses_list,
-                                                     om_low_target_obses_list=om_low_target_obses_list,
-                                                     bn_actions=bn_actions,
-                                                     bn_rewards=bn_rewards,
-                                                     bn_dones=bn_dones,
-                                                     bn_mu_probs=bn_mu_probs,
-                                                     om_pre_low_seq_hidden_states=m_pre_low_seq_hidden_states[:, self.option_burn_in_from:],
-                                                     priority_is=priority_is)
+         next_n_vs_over_options,
+         y) = self._train_q(bn_indexes=bn_indexes,
+                            bn_padding_masks=bn_padding_masks,
+                            m_states=m_states,
+                            bn_option_indexes=bn_option_indexes,
+                            om_low_obses_list=om_low_obses_list,
+                            om_low_target_obses_list=om_low_target_obses_list,
+                            bn_actions=bn_actions,
+                            bn_rewards=bn_rewards,
+                            bn_dones=bn_dones,
+                            bn_mu_probs=bn_mu_probs,
+                            om_pre_low_seq_hidden_states=m_pre_low_seq_hidden_states[:, self.option_burn_in_from:],
+                            priority_is=priority_is)
         mg_om_low_states = mg_om_low_states.detach()  # [batch, ob + n + 1, low_state_size]
         mg_om_low_target_states = mg_om_low_target_states.detach()  # [batch, ob + n + 1, low_state_size]
         om_low_states_all_options = [om_low_states.detach()
@@ -1537,6 +1636,21 @@ class OptionSelectorBase(SAC_Base):
                                             for om_low_target_states in om_low_target_states_all_options]
         next_n_vs_over_options = next_n_vs_over_options.detach()
         # [batch, n, num_options]
+
+        if self.optimizer_rep:
+            self.optimizer_rep.zero_grad()
+
+        loss_v_list = self._train_v_terminations(y=y,
+
+                                                 m_states=m_states,
+                                                 bn_option_indexes=bn_option_indexes,
+                                                 om_low_target_obses_list=om_low_target_obses_list,
+                                                 om_low_target_states_all_options=om_low_target_states_all_options,
+                                                 bn_dones=bn_dones,
+                                                 priority_is=priority_is)
+
+        if self.optimizer_rep:
+            self.optimizer_rep.step()
 
         with torch.no_grad():
             m_states, _ = self.get_l_states(l_indexes=m_indexes,
@@ -1591,22 +1705,12 @@ class OptionSelectorBase(SAC_Base):
                                       bn_actions=bn_actions[:, self.option_burn_in_from:],
                                       bn_mu_probs=bn_mu_probs[:, self.option_burn_in_from:])
 
-        self._train_v_terminations(bn_padding_masks=bn_padding_masks,
-                                   bn_option_indexes=bn_option_indexes,
-                                   om_low_obses_list=om_low_obses_list,
-                                   om_low_states_all_options=om_low_states_all_options,
-                                   bn_dones=bn_dones)
-
         if self.use_rnd:
-            for i, option in enumerate(self.option_list):
-                mask = (bn_option_indexes == i)
-                if not torch.any(mask):
-                    continue
-
-                _bn_padding_masks = torch.logical_or(bn_padding_masks, bn_option_indexes != i)
-                option._train_rnd(bn_padding_masks=_bn_padding_masks,
-                                  bn_states=mg_om_low_states[:, :-1],
-                                  bn_actions=bn_actions)
+            loss_rnd = self._train_rnd(
+                bn_padding_masks=bn_padding_masks,
+                bn_option_indexes=bn_option_indexes,
+                bn_states=m_states[:, :-1]
+            )
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             self.summary_available = True
@@ -1614,6 +1718,11 @@ class OptionSelectorBase(SAC_Base):
             if self.use_replay_buffer:
                 curr_rb_id = self.replay_buffer.get_curr_id()
                 self.summary_writer.add_scalar('metric/replay_id', curr_rb_id, self.global_step)
+
+            self.summary_writer.add_scalar('loss/v', loss_v_list[0], self.global_step)
+
+            if self.use_rnd:
+                self.summary_writer.add_scalar('loss/rnd', loss_rnd, self.global_step)
 
             self.summary_writer.flush()
 

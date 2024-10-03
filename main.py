@@ -13,13 +13,14 @@ except:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('env')
-    parser.add_argument('--hit', action='store_true', default=False)
+    parser.add_argument('--hit', type=int, default=None, nargs='?', const=1)
     parser.add_argument('--oc', action='store_true', default=False)
 
     parser.add_argument('--config', '-c', help='config file')
     parser.add_argument('--override', '-o', default=[], nargs='+', help='override config')
     parser.add_argument('--run', action='store_true', help='inference mode for all agents, ignore run_a')
     parser.add_argument('--run_a', action='append', default=[], help='inference mode for specific agents')
+    parser.add_argument('--copy_model', default=None, help='copy existed model directory to current model directory')
     parser.add_argument('--logger_in_file', action='store_true', help='logging into a file')
 
     parser.add_argument('--render', action='store_true', help='render')
@@ -48,10 +49,16 @@ if __name__ == '__main__':
 
     set_logger(debug=args.debug)
 
-    if args.hit:
+    if args.hit is not None:
         if args.oc:
+            import algorithm.oc.oc_main_hit
+            algorithm.oc.oc_main_hit.HIT_REWARD = args.hit
+            
             from algorithm.oc.oc_main_hit import OC_MainHit as Main
         else:
+            import algorithm.sac_main_hit
+            algorithm.sac_main_hit.HIT_REWARD = args.hit
+
             from algorithm.sac_main_hit import MainHit as Main
     else:
         if args.oc:

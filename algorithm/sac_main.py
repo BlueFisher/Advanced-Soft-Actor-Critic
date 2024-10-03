@@ -89,8 +89,14 @@ class Main:
         model_abs_dir = Path(root_dir).joinpath('models',
                                                 config['base_config']['env_name'],
                                                 config['base_config']['name'])
-        model_abs_dir.mkdir(parents=True, exist_ok=True)
         self.model_abs_dir = model_abs_dir
+        if args.copy_model:
+            src_model_abs_dir = Path(root_dir).joinpath('models',
+                                                        config['base_config']['env_name'],
+                                                        args.copy_model)
+            shutil.copytree(src_model_abs_dir, model_abs_dir)
+        else:
+            model_abs_dir.mkdir(parents=True, exist_ok=True)
 
         if args.logger_in_file:
             config_helper.add_file_logger(model_abs_dir.joinpath(f'log.log'))

@@ -165,7 +165,9 @@ class ModelRNNOptionRep(m.ModelBaseRep):
 ModelQ = m.ModelQ
 ModelPolicy = m.ModelPolicy
 ModelForwardDynamic = m.ModelForwardDynamic
+ModelOptionSelectorRND = m.ModelOptionSelectorRND
 ModelRND = m.ModelRND
 ModelRepProjection = m.ModelRepProjection
 ModelRepPrediction = m.ModelRepPrediction
 ModelTermination = m.ModelTermination
+ModelVOverOptions = m.ModelVOverOptions

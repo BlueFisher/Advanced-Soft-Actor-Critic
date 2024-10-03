@@ -327,9 +327,6 @@ class OptionBase(SAC_Base):
                              for n_obses, next_obs in zip(n_obses_list, next_obs_list)]  # list([batch, n, *obs_shapes_i], ...)
         next_n_states = torch.cat([n_states[:, 1:, ...], next_state.unsqueeze(1)], dim=1)  # [batch, n, state_size]
 
-        next_n_vs_over_options = next_n_vs_over_options.clone()  # ! FORCE T
-        next_n_vs_over_options[..., self.option] = -1000.  # ! FORCE T
-
         next_n_vs, _ = next_n_vs_over_options.max(-1)  # [batch, n]
 
         d_policy, c_policy = self.model_policy(n_states, n_obses_list)
@@ -540,7 +537,7 @@ class OptionBase(SAC_Base):
                             next_target_state: torch.Tensor,
                             bn_dones: torch.Tensor,
                             bn_mu_probs: torch.Tensor,
-                            priority_is: Optional[torch.Tensor] = None) -> None:
+                            priority_is: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             next_n_vs_over_options: [batch, n, num_options]
@@ -698,6 +695,8 @@ class OptionBase(SAC_Base):
                                                        approx_obs.permute([0, 3, 1, 2]),
                                                        self.global_step)
             self.summary_writer.flush()
+
+        return d_y, c_y
 
     def train_rep_q(self):
         for opt_q in self.optimizer_q_list:

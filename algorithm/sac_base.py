@@ -442,8 +442,8 @@ class SAC_Base:
 
         """ RANDOM NETWORK DISTILLATION """
         if self.use_rnd:
-            self.model_rnd: ModelBaseRND = nn.ModelRND(state_size, self.d_action_summed_size, self.c_action_size).to(self.device)
-            self.model_target_rnd: ModelBaseRND = nn.ModelRND(state_size, self.d_action_summed_size, self.c_action_size).to(self.device)
+            self.model_rnd: ModelRND = nn.ModelRND(state_size, self.d_action_summed_size, self.c_action_size).to(self.device)
+            self.model_target_rnd: ModelRND = nn.ModelRND(state_size, self.d_action_summed_size, self.c_action_size).to(self.device)
             for param in self.model_target_rnd.parameters():
                 param.requires_grad = False
             self.optimizer_rnd = adam_optimizer(self.model_rnd.parameters())
@@ -514,6 +514,7 @@ class SAC_Base:
         """ RANDOM NETWORK DISTILLATION """
         if self.use_rnd:
             ckpt_dict['model_rnd'] = self.model_rnd
+            ckpt_dict['model_target_rnd'] = self.model_target_rnd
             ckpt_dict['optimizer_rnd'] = self.optimizer_rnd
 
         total_parameter_num = 0
@@ -831,9 +832,10 @@ class SAC_Base:
                         if self.use_rnd and (self.train_mode or force_rnd_if_available):
                             s_rnd = self.model_rnd.cal_s_rnd(state)  # [batch, f]
                             t_s_rnd = self.model_target_rnd.cal_s_rnd(state)  # [batch, f]
+                            s_rnd, t_s_rnd = torch.sigmoid(s_rnd), torch.sigmoid(t_s_rnd)
 
                             s_loss = torch.mean(torch.abs(s_rnd - t_s_rnd), dim=-1)  # [batch, ]
-                            s_loss = torch.clip(s_loss - 0.1, 0., 0.2)
+                            # s_loss = torch.clip(s_loss - 0.1, 0., 0.2)
                             mask = torch.rand(batch).to(self.device) < s_loss
                         else:
                             mask = torch.rand(batch) < self.discrete_dqn_epsilon
@@ -1490,23 +1492,23 @@ class SAC_Base:
                 loss_q_list[i] = loss_q_list[i] + loss_none_mse(q_single, d_y)
 
         if self.c_action_size:
-            if self.clip_epsilon > 0:
-                target_c_q_list = [q(state.detach(), c_action, obs_list)[1] for q in self.model_target_q_list]
+            for i in range(self.ensemble_q_num):
+                if self.clip_epsilon > 0:
+                    target_c_q = self.model_target_q_list[i](state.detach(), c_action, obs_list)[1]
 
-                clipped_q_list = [target_c_q_list[i] + torch.clamp(
-                    c_q_list[i] - target_c_q_list[i],
-                    -self.clip_epsilon,
-                    self.clip_epsilon,
-                ) for i in range(self.ensemble_q_num)]
+                    clipped_q = target_c_q + torch.clamp(
+                        c_q_list[i] - target_c_q,
+                        -self.clip_epsilon,
+                        self.clip_epsilon,
+                    )
 
-                loss_q_a_list = [loss_none_mse(clipped_q, c_y) for clipped_q in clipped_q_list]  # [batch, 1]
-                loss_q_b_list = [loss_none_mse(q, c_y) for q in c_q_list]  # [batch, 1]
+                    loss_q_a = loss_none_mse(clipped_q, c_y)
+                    loss_q_b = loss_none_mse(c_q_list[i], c_y)
 
-                for i in range(self.ensemble_q_num):
-                    loss_q_list[i] = loss_q_list[i] + torch.maximum(loss_q_a_list[i], loss_q_b_list[i])  # [batch, 1]
-            else:
-                for i in range(self.ensemble_q_num):
-                    loss_q_list[i] = loss_q_list[i] + loss_none_mse(c_q_list[i], c_y)  # [batch, 1]
+                    loss_q_list[i] = loss_q_list[i] + torch.maximum(loss_q_a, loss_q_b)  # [batch, 1]
+
+                else:
+                    loss_q_list[i] += loss_q_list[i] + loss_none_mse(c_q_list[i], c_y)  # [batch, 1]
 
         if priority_is is not None:
             loss_q_list = [loss_q * priority_is for loss_q in loss_q_list]
@@ -1933,27 +1935,32 @@ class SAC_Base:
         d_n_actions = n_actions[..., :self.d_action_summed_size]  # [batch, n, d_action_summed_size]
         c_n_actions = n_actions[..., self.d_action_summed_size:]  # [batch, n, c_action_size]
 
-        s_rnd = self.model_rnd.cal_s_rnd(n_states)  # [batch, n, f]
-        with torch.no_grad():
-            t_s_rnd = self.model_target_rnd.cal_s_rnd(n_states)  # [batch, n, f]
-        _loss = functional.mse_loss(s_rnd, t_s_rnd, reduction='none')
-        _loss = _loss * ~n_padding_masks.unsqueeze(-1)
-        loss = torch.mean(_loss)
+        loss = torch.scalar_tensor(0., device=self.device)
 
         if self.d_action_sizes:
-            d_rnd = self.model_rnd.cal_d_rnd(n_states)  # [batch, n, d_action_summed_size, f]
-            with torch.no_grad():
-                t_d_rnd = self.model_target_rnd.cal_d_rnd(n_states)  # [batch, n, d_action_summed_size, f]
+            if self.discrete_dqn_like:
+                s_rnd = self.model_rnd.cal_s_rnd(n_states)  # [batch, n, f]
+                with torch.no_grad():
+                    t_s_rnd = self.model_target_rnd.cal_s_rnd(n_states)  # [batch, n, f]
+                s_rnd, t_s_rnd = torch.sigmoid(s_rnd), torch.sigmoid(t_s_rnd)
 
-            _i = d_n_actions.unsqueeze(-1)  # [batch, n, d_action_summed_size, 1]
-            d_rnd = (torch.repeat_interleave(_i, d_rnd.shape[-1], dim=-1) * d_rnd).sum(-2)
-            # [batch, n, d_action_summed_size, f] -> [batch, n, f]
-            t_d_rnd = (torch.repeat_interleave(_i, t_d_rnd.shape[-1], dim=-1) * t_d_rnd).sum(-2)
-            # [batch, n, d_action_summed_size, f] -> [batch, n, f]
+                _loss = functional.mse_loss(s_rnd, t_s_rnd, reduction='none')
+                _loss = _loss * ~n_padding_masks.unsqueeze(-1)
+                loss = loss + torch.mean(_loss)
+            else:
+                d_rnd = self.model_rnd.cal_d_rnd(n_states)  # [batch, n, d_action_summed_size, f]
+                with torch.no_grad():
+                    t_d_rnd = self.model_target_rnd.cal_d_rnd(n_states)  # [batch, n, d_action_summed_size, f]
 
-            _loss = functional.mse_loss(d_rnd, t_d_rnd, reduction='none')
-            _loss = _loss * ~n_padding_masks.unsqueeze(-1)
-            loss = loss + torch.mean(_loss)
+                _i = d_n_actions.unsqueeze(-1)  # [batch, n, d_action_summed_size, 1]
+                d_rnd = (_i * d_rnd).sum(-2)
+                # [batch, n, d_action_summed_size, f] -> [batch, n, f]
+                t_d_rnd = (_i * t_d_rnd).sum(-2)
+                # [batch, n, d_action_summed_size, f] -> [batch, n, f]
+
+                _loss = functional.mse_loss(d_rnd, t_d_rnd, reduction='none')
+                _loss = _loss * ~n_padding_masks.unsqueeze(-1)
+                loss = loss + torch.mean(_loss)
 
         if self.c_action_size:
             c_rnd = self.model_rnd.cal_c_rnd(n_states, c_n_actions)  # [batch, n, f]
@@ -2411,8 +2418,6 @@ class SAC_Base:
     @unified_elapsed_timer('train_all', 10)
     def train(self) -> int:
         step = self.get_global_step()
-        self.replay_buffer.size
-        self.replay_buffer.capacity
 
         if self.use_replay_buffer:
             with self._profiler('sample_from_replay_buffer', repeat=10) as profiler:
