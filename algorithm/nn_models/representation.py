@@ -163,6 +163,26 @@ class ModelBaseOptionSelectorAttentionRep(ModelBaseOptionSelectorRep, ModelBaseA
         raise Exception('ModelOptionSelectorAttentionRep not implemented')
 
 
+class ModelVOverOptions(nn.Module):
+    def __init__(self,
+                 state_size: int,
+                 num_options: int,
+                 is_target: bool):
+        super().__init__()
+        self.state_size = state_size
+        self.num_options = num_options
+        self.is_target = is_target
+
+        self._build_model()
+
+    def _build_model(self, dense_n=64, dense_depth=2):
+        self.dense = LinearLayers(self.state_size, dense_n, dense_depth,
+                                  self.num_options)
+
+    def forward(self, state):
+        return self.dense(state)
+
+
 class ModelBaseRepProjection(nn.Module):
     def __init__(self, encoder_size):
         super().__init__()

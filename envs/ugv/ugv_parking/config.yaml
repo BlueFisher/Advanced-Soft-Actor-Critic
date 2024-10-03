@@ -2,12 +2,13 @@ default:
   base_config:
     env_name: UGVParking
     env_args:
-      # Parking = 0,
-      # ClockwiseRace = 1,
-      # AnticlockwiseRace = 2,
+      # Parking = 0
+      # ClockwiseRace = 1
+      # AnticlockwiseRace = 2
       # ReachingPark = 3
+      # Combined = 4
       task: 0
-      domain_random: 1
+      domain_random: 0
 
     unity_args:
       no_graphics: false
@@ -20,6 +21,11 @@ default:
 
     n_envs: 50
     max_step_each_iter: 500 # Max step in each iteration
+
+  reset_config:
+    disabled_wall_piece_reached_reward: 1
+    parking_entry_reached_reward: 2
+    parking_spot_reached_reward: 5
 
   replay_config:
     capacity: 524288 # 262144
@@ -40,7 +46,7 @@ parking:
     name: "parking_{time}"
 
   sac_config:
-    nn: nn_parking
+    nn: nn_low
 
 clockwise_race:
   base_config:
@@ -49,7 +55,7 @@ clockwise_race:
     name: "clockwise_race_{time}"
 
   sac_config:
-    nn: nn_parking
+    nn: nn_low
 
 anticlockwise_race:
   base_config:
@@ -58,7 +64,7 @@ anticlockwise_race:
     name: "anticlockwise_race_{time}"
 
   sac_config:
-    nn: nn_parking
+    nn: nn_low
 
 reaching_park:
   base_config:
@@ -67,4 +73,40 @@ reaching_park:
     name: "reaching_park_{time}"
 
   sac_config:
+    nn: nn_low
+
+combined:
+  base_config:
+    env_args:
+      task: 4
+    name: "combined_{time}"
+    max_step_each_iter: 650 # Max step in each iteration
+
+  sac_config:
     nn: nn_parking
+    use_rnd: true
+
+  oc_config:
+    option_configs:
+      - name: parking_20240729222106VaOG
+        fix_policy: true
+        random_q: true
+      - name: clockwise_race_20240729222106DuSY
+        fix_policy: true
+        random_q: true
+      - name: anticlockwise_race_20240729222105pLgE
+        fix_policy: true
+        random_q: true
+      - name: reaching_park_20240901142509rnFA
+        fix_policy: true
+        random_q: true
+
+combined_llm:
+  inherited: combined
+
+  base_config:
+    name: "combined_llm_{time}"
+
+  sac_config:
+    nn: nn_parking_llm
+    use_rnd: true

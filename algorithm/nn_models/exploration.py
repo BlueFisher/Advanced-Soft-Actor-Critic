@@ -4,8 +4,11 @@ from torch import nn
 from .layers import LinearLayers
 
 
-class ModelBaseRND(nn.Module):
-    def __init__(self, state_size, d_action_summed_size, c_action_size):
+class ModelRND(nn.Module):
+    def __init__(self,
+                 state_size: int,
+                 d_action_summed_size: int,
+                 c_action_size: int):
         super().__init__()
         self.state_size = state_size
         self.d_action_summed_size = d_action_summed_size
@@ -13,20 +16,6 @@ class ModelBaseRND(nn.Module):
 
         self._build_model()
 
-    def _build_model(self):
-        pass
-
-    def cal_s_rnd(self, state) -> torch.Tensor:
-        raise Exception("ModelBaseRND not implemented")
-
-    def cal_d_rnd(self, state) -> torch.Tensor:
-        raise Exception("ModelBaseRND not implemented")
-
-    def cal_c_rnd(self, state, c_action) -> torch.Tensor:
-        raise Exception("ModelBaseRND not implemented")
-
-
-class ModelRND(ModelBaseRND):
     def _build_model(self, dense_n=64, dense_depth=2, output_size=None):
         self.s_dense = LinearLayers(self.state_size,
                                     dense_n, dense_depth, output_size)
@@ -48,7 +37,6 @@ class ModelRND(ModelBaseRND):
             s_rnd: [*batch, f]
         """
         s_rnd = self.s_dense(state)
-        s_rnd = torch.sigmoid(s_rnd)
 
         return s_rnd
 
@@ -69,6 +57,31 @@ class ModelRND(ModelBaseRND):
         c_rnd = self.c_dense(torch.cat([state, c_action], dim=-1))
 
         return c_rnd
+
+
+class ModelOptionSelectorRND(nn.Module):
+    def __init__(self, state_size, num_options: int):
+        super().__init__()
+        self.state_size = state_size
+        self.num_options = num_options
+
+        self._build_model()
+
+    def _build_model(self, dense_n=64, dense_depth=2, output_size=None):
+        self.dense_list = nn.ModuleList([
+            LinearLayers(self.state_size,
+                         dense_n, dense_depth, output_size)
+            for _ in range(self.num_options)
+        ])
+
+    def cal_rnd(self, state) -> torch.Tensor:
+        """
+        Returns:
+            d_rnd: [*batch, num_options, f]
+        """
+        rnd_list = [d(state).unsqueeze(-2) for d in self.dense_list]
+
+        return torch.concat(rnd_list, dim=-2)
 
 
 class ModelBaseForwardDynamic(nn.Module):

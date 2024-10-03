@@ -9,6 +9,9 @@ from .agent import Agent
 from .sac_main import Main
 
 
+HIT_REWARD = 1
+
+
 class AgentHit(Agent):
     hit = 0
 
@@ -20,7 +23,7 @@ class AgentHit(Agent):
                    max_reached,
                    prob):
 
-        if not self.done and reward >= 1:
+        if not self.done and reward >= HIT_REWARD:
             self.hit += 1
 
     def reset(self):

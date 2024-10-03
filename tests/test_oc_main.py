@@ -13,6 +13,7 @@ default_args = {
     'override': [],
     'run': True,
     'run_a': [],
+    'copy_model': None,
     'logger_in_file': False,
 
     'render': False,

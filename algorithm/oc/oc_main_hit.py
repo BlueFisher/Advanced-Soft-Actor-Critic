@@ -9,6 +9,9 @@ from .oc_agent import OC_Agent
 from .oc_main import OC_Main
 
 
+HIT_REWARD = 1
+
+
 class OC_AgentHit(OC_Agent):
     hit = 0
 
@@ -20,7 +23,7 @@ class OC_AgentHit(OC_Agent):
                    max_reached,
                    prob):
 
-        if not self.done and reward >= 1:
+        if not self.done and reward >= HIT_REWARD:
             self.hit += 1
 
     def reset(self):
