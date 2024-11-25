@@ -36,14 +36,18 @@ default:
 
     n_step: 3
 
-    use_rnd: true
+    use_rnd: false
     rnd_n_sample: 20
+
+  oc_config:
+    option_eplison: 0.1
+    terminal_entropy: -0.001 # Tending not to terminate >0, tending to terminate <0
 
 parking:
   base_config:
     env_args:
       task: 0
-    name: "parking_{time}"
+    name: "parking-{time}-{hostname}"
 
   sac_config:
     nn: nn_low
@@ -52,7 +56,7 @@ clockwise_race:
   base_config:
     env_args:
       task: 1
-    name: "clockwise_race_{time}"
+    name: "clockwise_race-{time}-{hostname}"
 
   sac_config:
     nn: nn_low
@@ -61,7 +65,7 @@ anticlockwise_race:
   base_config:
     env_args:
       task: 2
-    name: "anticlockwise_race_{time}"
+    name: "anticlockwise_race-{time}-{hostname}"
 
   sac_config:
     nn: nn_low
@@ -70,7 +74,7 @@ reaching_park:
   base_config:
     env_args:
       task: 3
-    name: "reaching_park_{time}"
+    name: "reaching_park-{time}-{hostname}"
 
   sac_config:
     nn: nn_low
@@ -79,34 +83,44 @@ combined:
   base_config:
     env_args:
       task: 4
-    name: "combined_{time}"
+    name: "combined-{time}-{hostname}"
     max_step_each_iter: 650 # Max step in each iteration
 
   sac_config:
     nn: nn_parking
-    use_rnd: true
+    use_rnd: false
 
   oc_config:
     option_configs:
-      - name: parking_20240729222106VaOG
+      - name: parking-20240729222106VaOG
         fix_policy: true
         random_q: true
-      - name: clockwise_race_20240729222106DuSY
+      - name: clockwise_race-20240729222106DuSY
         fix_policy: true
         random_q: true
-      - name: anticlockwise_race_20240729222105pLgE
+      - name: anticlockwise_race-20240729222105pLgE
         fix_policy: true
         random_q: true
-      - name: reaching_park_20240901142509rnFA
+      - name: reaching_park-20240901142509rnFA
         fix_policy: true
         random_q: true
+
+combined_vis:
+  inherited: combined
+
+  base_config:
+    name: "combined_vis-{time}-{hostname}"
+
+  sac_config:
+    nn: nn_parking_vis
+    use_rnd: false
 
 combined_llm:
   inherited: combined
 
   base_config:
-    name: "combined_llm_{time}"
+    name: "combined_llm-{time}-{hostname}"
 
   sac_config:
     nn: nn_parking_llm
-    use_rnd: true
+    use_rnd: false

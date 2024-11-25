@@ -42,7 +42,14 @@ class OptionBase(SAC_Base):
                 param.requires_grad = False
 
         self.model_termination = nn.ModelTermination(self.state_size).to(self.device)
+        self.model_target_termination = nn.ModelTermination(self.state_size).to(self.device)
         self.optimizer_termination = optim.Adam(self.model_termination.parameters(), lr=learning_rate)
+
+    def _build_ckpt(self) -> None:
+        super()._build_ckpt()
+
+        self.ckpt_dict['model_termination'] = self.model_termination
+        self.ckpt_dict['model_target_termination'] = self.model_target_termination
 
     def _init_or_restore(self, last_ckpt: int | None) -> None:
         super()._init_or_restore(last_ckpt)
@@ -54,11 +61,33 @@ class OptionBase(SAC_Base):
                         torch.nn.init.kaiming_normal_(p)
                     else:
                         torch.nn.init.normal_(p)
+            self._logger.warning('Model Q randomized')
 
-    def _build_ckpt(self) -> None:
-        super()._build_ckpt()
+    @torch.no_grad()
+    def _update_target_variables(self, tau=1.) -> None:
+        target = self.model_target_termination.parameters()
+        source = self.model_termination.parameters()
 
-        self.ckpt_dict['model_termination'] = self.model_termination
+        for target_param, param in zip(target, source):
+            target_param.data.copy_(
+                target_param.data * (1. - tau) + param.data * tau
+            )
+
+        super()._update_target_variables(tau)
+
+    def remove_models(self, gt: int):
+        if self.ckpt_dir is None:
+            return
+
+        for ckpt_file in self.ckpt_dir.glob("*.pth"):
+            if int(ckpt_file.stem) <= gt:
+                continue
+
+            try:
+                ckpt_file.unlink()
+                self._logger.warning(f"{ckpt_file.name} deleted")
+            except Exception as e:
+                self._logger.error(f"Failed to delete {ckpt_file}: {e}")
 
     @torch.no_grad()
     def choose_action(self,
@@ -561,8 +590,8 @@ class OptionBase(SAC_Base):
         next_n_target_obses_list = [torch.concat([bn_target_obses[:, self.burn_in_step + 1:, ...],
                                                   next_target_obs.unsqueeze(1)], dim=1)
                                     for bn_target_obses, next_target_obs, in zip(bn_target_obses_list, next_target_obs_list)]
-        next_n_terminations = self.model_termination(next_n_target_states, next_n_target_obses_list)  # [batch, n, 1]
-        next_n_terminations = next_n_terminations.squeeze(-1)  # [batch, n]
+        next_n_target_terminations = self.model_target_termination(next_n_target_states, next_n_target_obses_list)  # [batch, n, 1]
+        next_n_target_terminations = next_n_target_terminations.squeeze(-1)  # [batch, n]
 
         obs_list = [bn_obses[:, self.burn_in_step, ...] for bn_obses in bn_obses_list]
         state = bn_states[:, self.burn_in_step, ...]
@@ -580,7 +609,7 @@ class OptionBase(SAC_Base):
 
         d_y, c_y = self._get_y(next_n_vs_over_options=next_n_vs_over_options,
 
-                               next_n_terminations=next_n_terminations,
+                               next_n_terminations=next_n_target_terminations,
 
                                n_padding_masks=bn_padding_masks[:, self.burn_in_step:, ...],
                                n_obses_list=[bn_target_obses[:, self.burn_in_step:, ...] for bn_target_obses in bn_target_obses_list],
@@ -767,43 +796,45 @@ class OptionBase(SAC_Base):
 
     def compute_termination_grads(self,
                                   terminal_entropy: float,
-                                  next_obs_list: List[torch.Tensor],
-                                  next_state: torch.Tensor,
-                                  next_v_over_options: torch.Tensor,
-                                  done: torch.Tensor):
+                                  obs_list: List[torch.Tensor],
+                                  state: torch.Tensor,
+                                  y: torch.Tensor,
+                                  v_over_options: torch.Tensor,
+                                  done: torch.Tensor,
+                                  priority_is: torch.Tensor):
         """
         Args:
             terminal_entropy: float, tending not to terminate >0, tending to terminate <0
-            next_obs_list: list([batch, *obs_shapes_i], ...)
-            next_state: [batch, state_size]
-            next_v_over_options: [batch, num_options]
+            obs_list: list([batch, *obs_shapes_i], ...)
+            state: [batch, state_size]
+            y: [batch, 1]
+            v_over_options: [batch, num_options]
             done (torch.bool): [batch, ]
+            priority_is: [batch, 1]
         """
-        next_termination = self.model_termination(next_state, next_obs_list).squeeze(-1)  # [batch, ]
+        termination = self.model_termination(state, obs_list).squeeze(-1)  # [batch, ]
 
-        # next_v = self.get_v(next_obs_list, next_state)  # [batch, 1]
-        next_v = next_v_over_options[:, self.option].unsqueeze(-1)  # [batch, 1]
+        # y = v_over_options[:, self.option].unsqueeze(-1)  # [batch, 1]
 
-        # max_next_v_over_options, _ = next_v_over_options.max(-1)  # [batch, ]
-        mean_next_v_over_options = next_v_over_options.mean(-1)
+        # max_v_over_options, _ = v_over_options.max(-1)  # [batch, ]
+        mean_v_over_options = v_over_options.mean(-1)  # [batch, ]
 
-        def _get_terminal_entropy():
-            return terminal_entropy * 0.8 ** (self.global_step / 2000)
+        # adv = y.squeeze(-1)
+        adv = y.squeeze(-1) - mean_v_over_options + terminal_entropy
+        # adv = functional.normalize(adv, dim=0)
 
-        te = _get_terminal_entropy()
+        loss_termination = termination * adv * ~done * priority_is  # [batch, ]
 
-        loss_termination = next_termination * (next_v.squeeze(-1) - mean_next_v_over_options + te) * ~done  # [batch, ]
-        # loss_termination = next_termination * (next_v.squeeze(-1) - mean_next_v_over_options + te) * ~done  # [batch, ]
         loss_termination = torch.mean(loss_termination)
 
         self.optimizer_termination.zero_grad()
-        # loss_termination.backward(retain_graph=True)
+        loss_termination.backward(retain_graph=True)
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             self.summary_available = True
 
             self.summary_writer.add_scalar('loss/termination', loss_termination, self.global_step)
-            self.summary_writer.add_scalar('metric/termination', torch.mean(next_termination), self.global_step)
+            self.summary_writer.add_scalar('metric/termination', torch.mean(termination), self.global_step)
 
             self.summary_writer.flush()
 
@@ -851,8 +882,8 @@ class OptionBase(SAC_Base):
         next_n_target_obses_list = [torch.concat([bn_target_obses[:, self.burn_in_step + 1:, ...],
                                                   next_obs.unsqueeze(1)], dim=1)
                                     for bn_target_obses, next_obs, in zip(bn_target_obses_list, next_obs_list)]
-        next_n_terminations = self.model_termination(next_n_target_states, next_n_target_obses_list)  # [batch, n, 1]
-        next_n_terminations = next_n_terminations.squeeze(-1)  # [batch, n]
+        next_n_target_terminations = self.model_target_termination(next_n_target_states, next_n_target_obses_list)  # [batch, n, 1]
+        next_n_target_terminations = next_n_target_terminations.squeeze(-1)  # [batch, n]
 
         obs_list = [bn_obses[:, self.burn_in_step, ...] for bn_obses in bn_obses_list]
         state = bn_states[:, self.burn_in_step, ...]
@@ -874,7 +905,7 @@ class OptionBase(SAC_Base):
 
         d_y, c_y = self._get_y(next_n_vs_over_options=next_n_vs_over_options,
 
-                               next_n_terminations=next_n_terminations,
+                               next_n_terminations=next_n_target_terminations,
 
                                n_padding_masks=bn_padding_masks[:, self.burn_in_step:, ...],
                                n_obses_list=[bn_obses[:, self.burn_in_step:, ...] for bn_obses in bn_obses_list],

@@ -357,12 +357,20 @@ class AgentManager:
         return [a for a in self.agents if a.steps > NON_EMPTY_STEPS]
 
     @property
+    def empty_agents(self) -> List[Agent]:
+        """
+        Get agents which steps <= NON_EMPTY_STEPS.
+        Agents in Unity enabled after disable may contain useless `next_step`
+        """
+        return [a for a in self.agents if a.steps <= NON_EMPTY_STEPS]
+
+    @property
     def done(self) -> bool:
         return all([a.done for a in self.agents])
 
     @property
     def max_reached(self) -> bool:
-        return any([a.max_reached for a in self.agents])
+        return any([a.max_reached for a in self.non_empty_agents])
 
     def set_config(self, config) -> None:
         self.config = deepcopy(config)
@@ -385,10 +393,11 @@ class AgentManager:
 
     def reset_dead_agents(self) -> None:
         """
-        Remove agents where liveness <= 0
+        Remove agents where liveness <= 0 or empty
         """
-        dead_agent_ids = [agent_id
-                          for agent_id, liveness in self.agents_liveness.items() if liveness <= 0]
+        dead_agent_ids = {agent_id
+                          for agent_id, liveness in self.agents_liveness.items() if liveness <= 0}
+        dead_agent_ids.union({agent.agent_id for agent in self.empty_agents})
         for agent_id in dead_agent_ids:
             del self.agents_dict[agent_id]
             del self.agents_liveness[agent_id]
@@ -640,6 +649,28 @@ class AgentManager:
         for episode_trans in self._tmp_episode_trans_list:
             self.rl.log_episode(**episode_trans)
 
+    def save_episode(self) -> None:
+        eps_dir = self.model_abs_dir / 'episodes'
+
+        for episode_trans in self._tmp_episode_trans_list:
+            ep_indexes = episode_trans['ep_indexes']
+            ep_obses_list = episode_trans['ep_obses_list']
+            eps = []
+            if eps_dir.exists():
+                for eps_path in eps_dir.glob('*.npz'):
+                    eps.append(int(eps_path.stem))
+                eps.sort()
+            else:
+                eps_dir.mkdir()
+
+            if len(eps) == 0:
+                eps = [-1]
+            last_ep = eps[-1]
+
+            np.savez(eps_dir / f'{last_ep+1}.npz',
+                     **{f'ep_obs_{i}': ep_obs for i, ep_obs in enumerate(ep_obses_list)},
+                     ep_indexes=ep_indexes)
+
 
 class MultiAgentsManager:
     _ma_manager: Dict[str, AgentManager]
@@ -812,3 +843,7 @@ class MultiAgentsManager:
         """
         for n, mgr in self:
             mgr.clear_tmp_episode_trans_list()
+
+    def save_tmp_episode_trans_list(self) -> None:
+        for n, mgr in self:
+            mgr.save_episode()

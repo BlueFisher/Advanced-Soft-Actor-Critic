@@ -1,0 +1,27 @@
+default:
+  base_config:
+    env_name: UAVCT
+    unity_args:
+      build_path:
+        win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe
+        linux: /data/linux-RL-Envs/RLEnvironments.x86_64
+      no_graphics: false
+
+    n_envs: 50
+    max_step: 500000
+    max_step_each_iter: 500
+    reset_on_iteration: false
+
+  reset_config:
+    force_reset: true
+
+  sac_config:
+    write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
+    save_model_per_step: 10000 # Save model every N steps
+
+    n_step: 3
+    burn_in_step: 10
+    seq_encoder: RNN
+
+    use_rnd: true
+    rnd_n_sample: 50

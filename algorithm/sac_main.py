@@ -94,7 +94,12 @@ class Main:
             src_model_abs_dir = Path(root_dir).joinpath('models',
                                                         config['base_config']['env_name'],
                                                         args.copy_model)
-            shutil.copytree(src_model_abs_dir, model_abs_dir)
+            if not model_abs_dir.exists():
+                self._logger.info(f'Copying {src_model_abs_dir} -> {model_abs_dir}')
+                shutil.copytree(src_model_abs_dir, model_abs_dir)
+            else:
+                self._logger.warning(f'{model_abs_dir} exists, stop copying')
+
         else:
             model_abs_dir.mkdir(parents=True, exist_ok=True)
 

@@ -80,7 +80,12 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
 
 class ModelVOverOptions(m.ModelVOverOptions):
     def _build_model(self):
-        super()._build_model(dense_n=64, dense_depth=2)
+        pass
+
+    def forward(self, state):
+        state = state[..., :NUM_OPTIONS]
+        state = state * 2. - 1.
+        return state
 
 
 class ModelOptionSelectorRND(m.ModelOptionSelectorRND):

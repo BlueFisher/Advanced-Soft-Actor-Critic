@@ -70,11 +70,7 @@ class OC_MainHit(OC_Main):
                 {'tag': 'reward/mean', 'simple_value': rewards.mean()},
                 {'tag': 'reward/max', 'simple_value': rewards.max()},
                 {'tag': 'reward/min', 'simple_value': rewards.min()},
-                {'tag': 'reward/hit', 'simple_value': hit}
-            ])
-
-            mgr.rl.write_histogram_summaries([
-                {'tag': 'reward', 'histogram': rewards}
+                {'tag': 'reward/hit', 'simple_value': hit / len(mgr.non_empty_agents)}
             ])
 
             steps = np.array([a.steps for a in mgr.non_empty_agents])

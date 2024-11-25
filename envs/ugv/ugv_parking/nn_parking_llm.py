@@ -1,5 +1,5 @@
-import sys
-import numpy as np
+import base64
+import requests
 import torch
 from torchvision import transforms as T
 
@@ -23,8 +23,6 @@ OBS_SHAPES = [(1,), (802,), (84, 84, 3), (84, 84, 3), (6,)]
 RAY_SIZE = 400
 AUG_RAY_RANDOM_SIZE = 250
 
-STR_EMBED = None
-
 NUM_OPTIONS = 4
 
 
@@ -33,16 +31,7 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
         for u_s, s in zip(self.obs_shapes, OBS_SHAPES):
             assert u_s == s, f'{u_s} {s}'
 
-        if sys.platform == 'win32':
-            state_strs = np.load('C:/Users/fisher/Nextcloud/Documents/Python/Advanced-SAC/envs/ugv/ugv_parking/state.npy')
-        elif sys.platform == 'linux':
-            state_strs = np.load('/data/asac/envs/ugv/ugv_parking/state.npy')
-
-        self.state_strs = torch.from_numpy(state_strs)  # [state_size, candi_size, STR_EMBED]
         self.option_eye = torch.eye(NUM_OPTIONS, dtype=torch.float32)
-
-        global STR_EMBED
-        STR_EMBED = self.state_strs.shape[-1]
 
     def forward(self,
                 obs_list: list[torch.Tensor],
@@ -52,14 +41,44 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
                 padding_mask: torch.Tensor | None = None):
         llm_state, ray, vis_seg, vis_third_seg, vec = obs_list
 
-        if llm_state.device != self.state_strs.device:
-            self.state_strs = self.state_strs.to(llm_state.device)
+        if llm_state.shape[0] > 1:  # _build_model
+            return (torch.zeros((*llm_state.shape[:-1], NUM_OPTIONS),
+                                device=llm_state.device),
+                    torch.zeros((*llm_state.shape[:-1], NUM_OPTIONS),
+                                device=llm_state.device))
+
+        if llm_state.device != self.option_eye.device:
             self.option_eye = self.option_eye.to(llm_state.device)
 
-        llm_state = llm_state.to(torch.long)
-        state = self.option_eye[llm_state.squeeze(-1)]
+        state = pre_seq_hidden_state.clone()
 
-        return state, self._get_empty_seq_hidden_state(state)
+        if pre_termination_mask is not None:
+            assert llm_state.shape[0] == 1 and llm_state.shape[1] == 1
+
+            vis_seg = vis_seg[0, 0]  # [H, W, C]
+
+            vis_seg = vis_seg.permute([2, 0, 1])  # [C, H, W]
+            vis_seg_pil = T.ToPILImage()(vis_seg)
+            vis_seg_image_bytes = vis_seg_pil.tobytes()
+            vis_seg_base64_string = base64.b64encode(vis_seg_image_bytes).decode()
+            print(vis_seg_base64_string)
+
+            r = requests.post('https://ollama.n705.work/api/generate',
+                              json={
+                                  'model': 'llava-llama3',
+                                  'prompt': 'What\'s in this image',
+                                  'images': [vis_seg_base64_string],
+                                  'stream': False
+                              },
+                              auth=('n705', 'TamWccLw2GVyHbEr'))
+            print(r.text)
+
+            new_llm_state = llm_state.to(torch.long)
+            new_state = self.option_eye[new_llm_state.squeeze(-1)]
+
+            state[pre_termination_mask, 0] = new_state[pre_termination_mask, 0]
+
+        return state, state
 
 
 class ModelVOverOptions(m.ModelVOverOptions):

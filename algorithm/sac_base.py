@@ -258,7 +258,10 @@ class SAC_Base:
                          for d_action_size in self.d_action_sizes]
         self._padding_action = np.concatenate(d_action_list + [np.zeros(self.c_action_size, dtype=np.float32)], axis=-1)
 
-        def adam_optimizer(params):
+        def adam_optimizer(params) -> optim.Adam | None:
+            params = list(params)
+            if len(params) == 0:
+                return
             return optim.Adam(params, lr=learning_rate)
 
         """ NORMALIZATION """
@@ -345,10 +348,7 @@ class SAC_Base:
         self._logger.info(f'State size: {state_size}')
         self._logger.info(f'Seq hidden state shape: {tuple(seq_hidden_state_shape)}')
 
-        if len(list(self.model_rep.parameters())) > 0:
-            self.optimizer_rep = adam_optimizer(self.model_rep.parameters())
-        else:
-            self.optimizer_rep = None
+        self.optimizer_rep = adam_optimizer(self.model_rep.parameters())
 
         """ Q """
         self.model_q_list: List[ModelBaseQ] = [nn.ModelQ(state_size,
@@ -461,7 +461,7 @@ class SAC_Base:
             for i, v in enumerate(self.running_variances):
                 ckpt_dict[f'running_variances_{i}'] = v
 
-        if len(list(self.model_rep.parameters())) > 0:
+        if self.optimizer_rep is not None:
             ckpt_dict['model_rep'] = self.model_rep
             ckpt_dict['model_target_rep'] = self.model_target_rep
             ckpt_dict['optimizer_rep'] = self.optimizer_rep
@@ -544,8 +544,9 @@ class SAC_Base:
         if ckpts:
             if last_ckpt is None:
                 last_ckpt = ckpts[-1]
-            else:
-                assert last_ckpt in ckpts
+            elif last_ckpt not in ckpts:
+                self._logger.warning(f'{last_ckpt} NOT IN {ckpts}, using {ckpts[-1]}')
+                last_ckpt = ckpts[-1]
 
             ckpt_restore_path = ckpt_dir.joinpath(f'{last_ckpt}.pth')
             ckpt_restore = torch.load(ckpt_restore_path, map_location=self.device, weights_only=True)
@@ -598,9 +599,10 @@ class SAC_Base:
 
     def set_train_mode(self, train_mode=True):
         self.train_mode = train_mode
-        for m in self.ckpt_dict.values():
-            if isinstance(m, nn.Module):
-                m.train(mode=self.train_mode)
+        # NO DROP OUT
+        # for m in self.ckpt_dict.values():
+        #     if isinstance(m, nn.Module):
+        #         m.train(mode=self.train_mode)
 
     def save_model(self, save_replay_buffer=False) -> None:
         if self.ckpt_dir is None:
@@ -635,16 +637,26 @@ class SAC_Base:
         if self.summary_writer is None:
             return
 
-        # for s in histograms:
-        #     self.summary_writer.add_histogram(s['tag'], s['histogram'],
-        #                                       self.get_global_step() if iteration is None else iteration)
+        for s in histograms:
+            self.summary_writer.add_histogram(s['tag'], s['histogram'],
+                                              self.get_global_step() if iteration is None else iteration)
 
-        # self.summary_writer.flush()
+        self.summary_writer.flush()
 
     def _increase_global_step(self) -> int:
         self.global_step.add_(1)
 
         return self.global_step.item()
+
+    def set_global_step(self, global_step: int | torch.Tensor):
+        if global_step == self.get_global_step():
+            return
+
+        if isinstance(global_step, torch.Tensor):
+            global_step = global_step.item()
+
+        self._logger.warning(f'Global step {self.get_global_step()} -> {global_step}')
+        self.global_step.copy_(global_step)
 
     def get_global_step(self) -> int:
         return self.global_step.item()

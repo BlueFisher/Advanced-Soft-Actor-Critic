@@ -628,8 +628,6 @@ class OC_AgentManager(AgentManager):
                 force_rnd_if_available=force_rnd_if_available
             )
 
-        # print([self.rl.option_list[i].ma_name for i in option_index])
-
         for i, agent_id in enumerate(agent_ids):
             agent = self.agents_dict[agent_id]
             agent.set_tmp_obs_action(
