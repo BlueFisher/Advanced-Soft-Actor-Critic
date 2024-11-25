@@ -1,5 +1,6 @@
 import logging
 import logging.handlers
+import platform
 import random
 import string
 import sys
@@ -120,7 +121,7 @@ def initialize_config_from_yaml(default_config_path: Path,
     return config, ma_configs
 
 
-def save_config(config, model_root_dir: Path, config_name):
+def save_config(config: dict, model_root_dir: Path, config_name: str):
     model_root_dir.mkdir(parents=True, exist_ok=True)
 
     with open(model_root_dir.joinpath(config_name), 'w') as f:
@@ -131,18 +132,17 @@ def display_config(config, logger, name=''):
     logger.info(f'Config {name}:\n' + yaml.dump(config, default_flow_style=False))
 
 
-def generate_base_name(name, prefix=None):
+def generate_base_name(name: str):
     """
     Replace {time} from current time and random letters
     """
     now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
     rand = ''.join(random.sample(string.ascii_letters, 4))
+    name = name.replace('{time}', now + rand)
 
-    replaced = now + rand
-    if prefix:
-        replaced = prefix + '_' + replaced
+    name = name.replace('{hostname}', platform.node().replace('-', '_'))
 
-    return name.replace('{time}', replaced)
+    return name
 
 
 ############# CONFIG LOGGING #############

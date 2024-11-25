@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 import torch
 from torch import nn
@@ -246,7 +246,7 @@ class ConvTransposeLayers(nn.Module):
 
 
 class Transform(nn.Module):
-    def __init__(self, transform):
+    def __init__(self, transform: Callable[[torch.Tensor], torch.Tensor] | None = None):
         super().__init__()
 
         self.transform = transform

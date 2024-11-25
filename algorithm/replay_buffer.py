@@ -274,9 +274,10 @@ class PrioritizedReplayBuffer:
 
             if not self._fill_bar.disable:
                 self._fill_bar.n = self._trans_storage.size
-                self._fill_bar.refresh()
 
-                if self._trans_storage.size >= self.batch_size:
+                if self._trans_storage.size < self.batch_size:
+                    self._fill_bar.refresh()
+                else:
                     self._fill_bar.close()
 
     def add_with_td_error(self, td_error: np.ndarray,
