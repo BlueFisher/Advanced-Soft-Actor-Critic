@@ -235,26 +235,26 @@ class Main:
 
     def _run(self):
         force_reset = False
-        is_training = False  # Is current iteration training
-        inference_iteration = 0  # The inference iteration count
+        is_training_iteration = False  # Is current iteration training
+        inference_iterations = 0  # The inference iteration count
         trained_steps = 0  # The steps that RL trained
 
-        self.ma_manager.set_train_mode(is_training)  # The first iteration is inference
+        self.ma_manager.set_train_mode(is_training_iteration)  # The first iteration is inference
 
         try:
-            while inference_iteration != self.base_config['max_iter']:
+            while inference_iterations != self.base_config['max_iter']:
                 if self.base_config['max_step'] != -1 and trained_steps >= self.base_config['max_step']:
                     break
 
                 step = 0
                 iter_time = time.time()
 
-                if inference_iteration == 0 \
+                if inference_iterations == 0 \
                         or self.base_config['reset_on_iteration'] \
                         or self.ma_manager.max_reached \
                         or force_reset:
                     self.ma_manager.reset()
-                    if is_training and self.offline_env is not None:
+                    if is_training_iteration and self.offline_env is not None:
                         ma_agent_ids, ma_obs_list, ma_offline_action = self.offline_env.reset(reset_config=self.reset_config)
                     else:
                         ma_agent_ids, ma_obs_list = self.env.reset(reset_config=self.reset_config)
@@ -274,7 +274,7 @@ class Main:
 
                 while not self.ma_manager.done:
                     with self._profiler('env.step', repeat=10):
-                        if is_training and self.offline_env is not None:
+                        if is_training_iteration and self.offline_env is not None:
                             (decision_step,
                              terminal_step,
                              all_envs_done) = self.offline_env.step(ma_d_action, ma_c_action)
@@ -316,29 +316,29 @@ class Main:
                         self.ma_manager.force_end_all_episode()
 
                     if self.train_mode:
-                        if not is_training:
+                        if not is_training_iteration:
                             self.ma_manager.log_episode()
 
                         self.ma_manager.put_episode()
 
-                        if is_training:
-                            with self._profiler('train', repeat=10) as profiler:
-                                next_trained_steps = self.ma_manager.train(trained_steps)
-                                if next_trained_steps == trained_steps:
-                                    profiler.ignore()
-                                trained_steps = next_trained_steps
+                        # Always training even if the current iteration is inference
+                        with self._profiler('train', repeat=10) as profiler:
+                            next_trained_steps = self.ma_manager.train(trained_steps)
+                            if next_trained_steps == trained_steps:
+                                profiler.ignore()
+                            trained_steps = next_trained_steps
 
                     step += 1
 
-                if self.train_mode and not is_training:
+                if self.train_mode and not is_training_iteration:
                     self._log_episode_summaries()
 
-                if not is_training:
-                    self._log_episode_info(inference_iteration, time.time() - iter_time)
+                if not is_training_iteration:
+                    self._log_episode_info(inference_iterations, time.time() - iter_time)
 
                 if self.train_mode:
-                    is_training = not is_training
-                    self.ma_manager.set_train_mode(is_training)
+                    is_training_iteration = not is_training_iteration
+                    self.ma_manager.set_train_mode(is_training_iteration)
 
                 self.ma_manager.reset_dead_agents()
                 self.ma_manager.clear_tmp_episode_trans_list()
@@ -354,8 +354,8 @@ class Main:
 
                     p_model.unlink()
 
-                if not is_training:
-                    inference_iteration += 1
+                if not is_training_iteration:
+                    inference_iterations += 1
 
         except KeyboardInterrupt:
             self._logger.warning('KeyboardInterrupt')

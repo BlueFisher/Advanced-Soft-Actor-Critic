@@ -599,10 +599,9 @@ class SAC_Base:
 
     def set_train_mode(self, train_mode=True):
         self.train_mode = train_mode
-        # NO DROP OUT
-        # for m in self.ckpt_dict.values():
-        #     if isinstance(m, nn.Module):
-        #         m.train(mode=self.train_mode)
+        for m in self.ckpt_dict.values():
+            if isinstance(m, nn.Module):
+                m.train(mode=self.train_mode)
 
     def save_model(self, save_replay_buffer=False) -> None:
         if self.ckpt_dir is None:
