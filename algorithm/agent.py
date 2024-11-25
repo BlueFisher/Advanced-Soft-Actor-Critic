@@ -20,7 +20,9 @@ class Agent:
     reward = 0  # The reward of the *first* completed episode (done == True)
     steps = 0  # The step count of the *first* completed episode (done == True)
     done = False  # If has one completed episode
-    max_reached = False  # If has one completed episode that reaches max step
+    max_reached = False  # If has one completed episode that reaches max step (done == True)
+    force_terminated = False  # If has one completed episode that is terminated by force
+    # (done == True and max_reached == True)
 
     current_reward = 0  # The reward of the current episode
     current_step = 0  # The step count of the current episode
@@ -108,6 +110,7 @@ class Agent:
                        reward: float,
                        done: bool = False,
                        max_reached: bool = False,
+                       force_terminated: bool = False,
                        next_obs_list: Optional[List[np.ndarray]] = None) -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
         if self._tmp_obs_list is None:
             return
@@ -133,6 +136,7 @@ class Agent:
             if not self.done:
                 self.done = True
                 self.max_reached = max_reached
+                self.force_terminated = force_terminated
 
             return self._end_episode(next_obs_list if next_obs_list is not None else self._padding_obs_list)
 
@@ -220,7 +224,16 @@ class Agent:
 
     @property
     def episode_length(self) -> int:
+        """The steps of the current episode"""
         return self.current_step
+
+    @property
+    def is_empty(self) -> bool:
+        """
+        Whether steps <= NON_EMPTY_STEPS or is terminated by force
+        Agents in Unity enabled after disable may contain useless `next_step`
+        """
+        return self.steps <= NON_EMPTY_STEPS or self.force_terminated
 
     def _extra_log(self,
                    obs_list,
@@ -291,12 +304,10 @@ class Agent:
             'ep_pre_seq_hidden_states': ep_pre_seq_hidden_states
         }
 
-    def is_empty(self) -> bool:
-        return self.episode_length == 0
-
     def force_done(self) -> None:
         self.done = True
         self.max_reached = True
+        self.force_terminated = True
 
     def reset(self) -> None:
         """
@@ -350,19 +361,11 @@ class AgentManager:
 
     @property
     def non_empty_agents(self) -> List[Agent]:
-        """
-        Get agents which steps > NON_EMPTY_STEPS.
-        Agents in Unity enabled after disable may contain useless `next_step`
-        """
-        return [a for a in self.agents if a.steps > NON_EMPTY_STEPS]
+        return [a for a in self.agents if not a.is_empty]
 
     @property
     def empty_agents(self) -> List[Agent]:
-        """
-        Get agents which steps <= NON_EMPTY_STEPS.
-        Agents in Unity enabled after disable may contain useless `next_step`
-        """
-        return [a for a in self.agents if a.steps <= NON_EMPTY_STEPS]
+        return [a for a in self.agents if a.is_empty]
 
     @property
     def done(self) -> bool:
@@ -593,7 +596,8 @@ class AgentManager:
                     agent_ids: np.ndarray,
                     obs_list: List[np.ndarray],
                     last_reward: np.ndarray,
-                    max_reached: np.ndarray) -> Dict[str, np.ndarray | List[np.ndarray]]:
+                    max_reached: np.ndarray,
+                    force_terminated: bool = False) -> Dict[str, np.ndarray | List[np.ndarray]]:
         for i, agent_id in enumerate(agent_ids):
             if agent_id not in self.agents_dict:
                 continue
@@ -602,6 +606,7 @@ class AgentManager:
                 reward=last_reward[i],
                 done=True,
                 max_reached=max_reached[i],
+                force_terminated=force_terminated,
                 next_obs_list=[o[i] for o in obs_list]
             )
             if ep_trans is not None:
@@ -615,7 +620,8 @@ class AgentManager:
             agent.end_transition(
                 reward=0,
                 done=True,
-                max_reached=True
+                max_reached=True,
+                force_terminated=True
             )
 
     def put_episode(self):
@@ -803,13 +809,15 @@ class MultiAgentsManager:
                     ma_agent_ids: Dict[str, np.ndarray],
                     ma_obs_list: Dict[str, List[np.ndarray]],
                     ma_last_reward: Dict[str, float],
-                    ma_max_reached: Dict[str, bool]) -> None:
+                    ma_max_reached: Dict[str, bool],
+                    force_terminated: bool = False) -> None:
         for n, mgr in self:
             mgr.end_episode(
                 agent_ids=ma_agent_ids[n],
                 obs_list=ma_obs_list[n],
                 last_reward=ma_last_reward[n],
-                max_reached=ma_max_reached[n]
+                max_reached=ma_max_reached[n],
+                force_terminated=force_terminated
             )
 
     def force_end_all_episode(self):
