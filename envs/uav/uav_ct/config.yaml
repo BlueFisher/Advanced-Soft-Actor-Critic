@@ -10,7 +10,7 @@ default:
     n_envs: 50
     max_step: 500000
     max_step_each_iter: 500
-    reset_on_iteration: false
+    reset_on_iteration: true
 
   reset_config:
     force_reset: true

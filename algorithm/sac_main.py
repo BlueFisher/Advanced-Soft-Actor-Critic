@@ -311,7 +311,8 @@ class Main:
                             ma_obs_list=decision_step.ma_obs_list,
                             ma_last_reward=decision_step.ma_last_reward,
                             ma_max_reached={n: np.ones_like(agent_ids, dtype=bool)
-                                            for n, agent_ids in decision_step.ma_agent_ids.items()}
+                                            for n, agent_ids in decision_step.ma_agent_ids.items()},
+                            force_terminated=True
                         )
                         self.ma_manager.force_end_all_episode()
 
