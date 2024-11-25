@@ -627,6 +627,9 @@ class AgentManager:
         self.clear_tmp_episode_trans_list()
 
     def train(self) -> int:
+        # May called in an inference iteration.
+        # cudnn RNN backward can only be called in training mode.
+        self.rl.set_train_mode(True)
         trained_steps = self.rl.train()
 
         return trained_steps
