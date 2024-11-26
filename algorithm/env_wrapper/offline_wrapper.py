@@ -58,6 +58,7 @@ class OfflineWrapper(EnvWrapper):
 
         # Load dataset
         with np.load(self._dataset_dir / 'dataset.npz') as f:
+            self._logger.info('Loading...')
             self._dataset = {k: v for k, v in f.items()}
         for n, obs_names in self.ma_obs_names.items():
             for obs_name in obs_names:
@@ -110,8 +111,6 @@ class OfflineWrapper(EnvWrapper):
         # Get previous reward and done
         for n in self.ma_names:
             ep_index, step_index = self._ma_ep_index[n], self._ma_step_index[n]
-            if n == 'USVGuard':
-                print(ep_index, step_index)
 
             ma_last_reward[n] = self._dataset[f'reward-{n}'][ep_index, step_index]
             ma_done[n] = self._dataset[f'done-{n}'][ep_index, step_index]

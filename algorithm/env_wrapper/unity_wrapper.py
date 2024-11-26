@@ -69,7 +69,6 @@ class UnityWrapperProcess:
                  worker_id: int = 0,
                  base_port: int = 5005,
                  no_graphics: bool = True,
-                 batchmode: bool = False,
                  force_vulkan: bool = False,
                  quality_level: int = 2,
                  time_scale: float = 1,
@@ -85,7 +84,6 @@ class UnityWrapperProcess:
             worker_id: Offset from base_port
             base_port: The port that communicate to Unity. It will be set to 5004 automatically if in editor.
             no_graphics: If Unity runs in no graphic mode. It must be set to False if Unity has camera sensor.
-            batchmode: -batchmode
             force_vulkan: -force-vulkan
             quality_level: 0: URP-Performant-Renderer
                            1: URP-Balanced-Renderer
@@ -128,8 +126,6 @@ class UnityWrapperProcess:
             self._logger = logging.getLogger(f'UnityWrapper.Process_{worker_id}')
 
         additional_args = ['--scene', scene]
-        if batchmode and not no_graphics:  # if no_graphics==True, -batchmode auto added
-            additional_args.append('-batchmode')
         if force_vulkan:
             additional_args.append('-force-vulkan')
 
@@ -333,7 +329,6 @@ class UnityWrapper(EnvWrapper):
                  base_port: int = 5005,
                  max_n_envs_per_process: int = 10,
                  no_graphics: bool = True,
-                 batchmode: bool = False,
                  force_vulkan: bool = False,
                  quality_level: int = 2,
                  time_scale: float | None = None,
@@ -349,7 +344,6 @@ class UnityWrapper(EnvWrapper):
             base_port: The port that communicate to Unity. It will be set to 5004 automatically if in editor.
             max_n_envs_per_process: The max env copies count in each process
             no_graphics: If Unity runs in no graphic mode. It must be set to False if Unity has camera sensor.
-            batchmode: -batchmode
             force_vulkan: -force-vulkan
             quality_level: 0: URP-Performant-Renderer
                            1: URP-Balanced-Renderer
@@ -363,7 +357,6 @@ class UnityWrapper(EnvWrapper):
         self.base_port = base_port
         self.max_n_envs_per_process = max_n_envs_per_process
         self.no_graphics = no_graphics
-        self.batchmode = batchmode
         self.force_vulkan = force_vulkan
         self.quality_level = quality_level
         if time_scale is None:
@@ -401,7 +394,6 @@ class UnityWrapper(EnvWrapper):
                                                                worker_id=i,
                                                                base_port=base_port,
                                                                no_graphics=no_graphics,
-                                                               batchmode=batchmode,
                                                                force_vulkan=force_vulkan,
                                                                quality_level=quality_level,
                                                                time_scale=time_scale,
@@ -448,7 +440,6 @@ class UnityWrapper(EnvWrapper):
                                               self._process_id,
                                               self.base_port,
                                               self.no_graphics,
-                                              self.batchmode,
                                               self.force_vulkan,
                                               self.quality_level,
                                               self.time_scale,

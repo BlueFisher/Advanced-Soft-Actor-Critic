@@ -143,7 +143,6 @@ class Main:
                                         base_port=self.base_config['unity_args']['port'],
                                         max_n_envs_per_process=self.base_config['unity_args']['max_n_envs_per_process'],
                                         no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
-                                        batchmode=self.base_config['unity_args']['batchmode'],
                                         force_vulkan=self.base_config['unity_args']['force_vulkan'],
                                         time_scale=self.unity_time_scale,
                                         scene=self.base_config['env_name'],

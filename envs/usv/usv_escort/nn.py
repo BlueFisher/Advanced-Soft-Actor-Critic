@@ -6,7 +6,8 @@ class ModelRep(m.ModelBaseRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (10, 9)  # AgentsBufferSensor
         assert self.obs_shapes[1] == (3, 6)  # EnemiesBufferSensor
-        assert self.obs_shapes[2] == (6, )  # VectorSensor_size6
+        assert self.obs_shapes[2] == (122, )  # RayPerceptionSensor
+        assert self.obs_shapes[3] == (6, )  # VectorSensor_size6
 
         self.attn_usvs = m.MultiheadAttention(9, 1)
         self.attn_enemies = m.MultiheadAttention(6, 1)
@@ -14,7 +15,7 @@ class ModelRep(m.ModelBaseRep):
         self.rnn = m.GRU(9 + 6 + self.c_action_size, 64, 1)
 
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
-        feat_usvs, feat_enemeis, vec_obs = obs_list
+        feat_usvs, feat_enemeis, ray_obs, vec_obs = obs_list
 
         feat_uavs_mask = ~feat_usvs.any(dim=-1)
         feat_uavs_mask[..., 0] = False
