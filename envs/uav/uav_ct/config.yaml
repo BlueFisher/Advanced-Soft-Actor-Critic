@@ -13,7 +13,8 @@ default:
     reset_on_iteration: true
 
   reset_config:
-    force_reset: true
+    window_count: 6
+    disable_agent_collision: false
 
   sac_config:
     write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
