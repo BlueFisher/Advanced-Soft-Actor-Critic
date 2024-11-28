@@ -349,7 +349,6 @@ class UnityWrapper(EnvWrapper):
                            1: URP-Balanced-Renderer
                            2: URP-HighFidelity-Renderer
             time_scale: Time scale of Unity. If None: time_scale = 20 if train_mode else 1
-            time_scale: Time scale of Unity. If None: time_scale = 20 if train_mode else 1
             seed: Random seed
             scene: The scene name
         """

@@ -95,6 +95,7 @@ class OC_Agent(Agent):
                        reward: float,
                        done: bool = False,
                        max_reached: bool = False,
+                       force_terminated: bool = False,
                        next_obs_list: Optional[List[np.ndarray]] = None) -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
         if self._tmp_obs_list is None:
             return
@@ -123,6 +124,7 @@ class OC_Agent(Agent):
             if not self.done:
                 self.done = True
                 self.max_reached = max_reached
+                self.force_terminated = force_terminated
 
             return self._end_episode(next_obs_list if next_obs_list is not None else self._padding_obs_list)
 
@@ -462,7 +464,7 @@ class OC_AgentManager(AgentManager):
             agent.end_transition(
                 reward=last_reward[i],
                 done=False,
-                max_reached=False
+                max_reached=False,
             )
 
         pre_option_index = self._get_merged_option_index(agent_ids)
