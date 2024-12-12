@@ -32,14 +32,14 @@ class OC_Main(Main):
 
         self._profiler = UnifiedElapsedTimer(self._logger)
 
-        config_abs_dir = self._init_config(root_dir, config_dir, args)
+        self._config_abs_dir = self._init_config(root_dir, config_dir, args)
 
         self._init_env()
-        self._init_oc(config_abs_dir)
+        self._init_oc()
 
         self._run()
 
-    def _init_oc(self, config_abs_dir: Path):
+    def _init_oc(self):
         for n, mgr in self.ma_manager:
             # If nn models exists, load saved model, or copy a new one
             saved_nn_abs_path = mgr.model_abs_dir / 'saved_nn.py'
@@ -47,7 +47,7 @@ class OC_Main(Main):
                 spec = importlib.util.spec_from_file_location('nn', str(saved_nn_abs_path))
                 self._logger.info(f'Loaded nn from existed {saved_nn_abs_path}')
             else:
-                nn_abs_path = config_abs_dir / f'{mgr.config["sac_config"]["nn"]}.py'
+                nn_abs_path = self._config_abs_dir / f'{mgr.config["sac_config"]["nn"]}.py'
 
                 spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
                 self._logger.info(f'Loaded nn in env dir: {nn_abs_path}')

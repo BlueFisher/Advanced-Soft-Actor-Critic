@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import gymnasium as gym
@@ -22,9 +23,10 @@ class GymWrapper(EnvWrapper):
                  env_name: str = None,
                  env_args: Optional[str | Dict] = None,
                  n_envs: int = 1,
+                 model_abs_dir: Path | None = None,
 
                  render=False):
-        super().__init__(train_mode, env_name, env_args, n_envs)
+        super().__init__(train_mode, env_name, env_args, n_envs, model_abs_dir)
 
         self.render = render
 

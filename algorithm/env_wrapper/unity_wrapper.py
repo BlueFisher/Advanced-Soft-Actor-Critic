@@ -7,6 +7,7 @@ import os
 import random
 import time
 import uuid
+from pathlib import Path
 from typing import Callable, Dict, List, Tuple
 
 import numpy as np
@@ -19,7 +20,10 @@ from mlagents_envs.side_channel.side_channel import (IncomingMessage,
                                                      OutgoingMessage,
                                                      SideChannel)
 
-from .env_wrapper import DecisionStep, EnvWrapper, TerminalStep
+if __name__ in ('__main__', '__mp_main__'):
+    from env_wrapper import DecisionStep, EnvWrapper, TerminalStep
+else:
+    from .env_wrapper import DecisionStep, EnvWrapper, TerminalStep
 
 INIT = 0
 RESET = 1
@@ -325,6 +329,7 @@ class UnityWrapper(EnvWrapper):
                  env_name: str = None,
                  env_args: List[str] | Dict | None = None,
                  n_envs: int = 1,
+                 model_abs_dir: Path | None = None,
 
                  base_port: int = 5005,
                  max_n_envs_per_process: int = 10,
@@ -352,7 +357,7 @@ class UnityWrapper(EnvWrapper):
             seed: Random seed
             scene: The scene name
         """
-        super().__init__(train_mode, env_name, env_args, n_envs)
+        super().__init__(train_mode, env_name, env_args, n_envs, model_abs_dir)
         self.base_port = base_port
         self.max_n_envs_per_process = max_n_envs_per_process
         self.no_graphics = no_graphics

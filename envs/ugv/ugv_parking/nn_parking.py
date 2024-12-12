@@ -1,4 +1,3 @@
-from turtle import forward
 import torch
 from torchvision import transforms as T
 
@@ -6,11 +5,6 @@ import algorithm.nn_models as m
 from algorithm.utils.image_visual import ImageVisual
 from algorithm.utils.ray import RayVisual
 from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
-
-# OBS_NAMES = ['CameraSensor', 'RayPerceptionSensor', 'SegmentationSensor',
-#              'ThirdPersonCameraSensor', 'ThirdPersonSegmentationSensor',
-#              'VectorSensor_size6']
-# OBS_SHAPES = [(84, 84, 3), (802,), (84, 84, 3), (84, 84, 3), (84, 84, 3), (6,)]
 
 OBS_NAMES = ['LLMStateSensor',
              'RayPerceptionSensor',
@@ -24,8 +18,6 @@ AUG_RAY_RANDOM_SIZE = 250
 
 NUM_OPTIONS = 4
 
-HIGH_STATE_SIZE = NUM_OPTIONS + 64
-
 
 class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
     def _build_model(self):
@@ -34,8 +26,16 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
 
         self.option_eye = torch.eye(NUM_OPTIONS, dtype=torch.float32)
 
+        self.conv_cam_seg = m.ConvLayers(84, 84, 3, 'simple',
+                                         out_dense_n=64, out_dense_depth=2)
+
+        self.conv_third_cam_seg = m.ConvLayers(84, 84, 3, 'simple',
+                                               out_dense_n=64, out_dense_depth=2)
+
         self.ray_conv = m.Conv1dLayers(RAY_SIZE, 2, 'default',
                                        out_dense_n=64, out_dense_depth=2)
+
+        self.dense = m.LinearLayers(64 * 3, dense_n=128, dense_depth=1)
 
     def to(self, *args, **kwargs):
         super().to(*args, **kwargs)
@@ -56,26 +56,21 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
 
         ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
 
-        # if pre_seq_hidden_state is None:
-        #     llm_state = torch.zeros((*llm_obs.shape[:-1], NUM_OPTIONS),
-        #                             device=llm_obs.device)
-        # else:
-        #     llm_state = pre_seq_hidden_state.clone()
+        llm_state = llm_obs.to(torch.long)
+        llm_state = self.option_eye[llm_state.squeeze(-1)]
 
-        # if pre_termination_mask is not None:
-        #     assert llm_obs.shape[1] == 1
-
-        #     llm_state[pre_termination_mask, 0] = cheat_llm_state[pre_termination_mask, 0]
-
-        cheat_llm_state = llm_obs.to(torch.long)
-        cheat_llm_state = self.option_eye[cheat_llm_state.squeeze(-1)]
+        vis_seg = self.conv_cam_seg(vis_seg)
+        vis_third_seg = self.conv_third_cam_seg(vis_third_seg)
 
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
         ray = self.ray_conv(ray)
 
-        state = torch.concat([cheat_llm_state, ray], dim=-1)
+        x = self.dense(torch.cat([vis_seg, vis_third_seg, ray], dim=-1))
+        x = torch.cat([x, vec], dim=-1)
 
-        return state, cheat_llm_state
+        state = torch.concat([llm_state, x], dim=-1)
+
+        return state, self._get_empty_seq_hidden_state(state)
 
 
 class ModelVOverOptions(m.ModelVOverOptions):
@@ -107,7 +102,7 @@ class ModelRep(m.ModelBaseRep):
                 pre_seq_hidden_state: torch.Tensor | None,
                 padding_mask: torch.Tensor | None = None):
         high_state, llm_obs, ray, vis_seg, vis_third_seg, vec = obs_list
-        # high_state = high_state[..., -NUM_OPTIONS:]
+        high_state = high_state[..., NUM_OPTIONS:]
 
         ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
 
@@ -121,6 +116,9 @@ class ModelRep(m.ModelBaseRep):
         x = torch.cat([high_state, x, vec], dim=-1)
 
         return x, self._get_empty_seq_hidden_state(x)
+
+
+HIGH_STATE_SIZE = 128 + 6
 
 
 class ModelQ(m.ModelQ):

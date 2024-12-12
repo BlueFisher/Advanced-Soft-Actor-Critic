@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -34,7 +35,8 @@ class EnvWrapper:
                  train_mode: bool = True,
                  env_name: str = None,
                  env_args: Optional[List[str] | Dict] = None,
-                 n_envs: int = 1):
+                 n_envs: int = 1,
+                 model_abs_dir: Path | None = None):
         self.train_mode = train_mode
         self.env_name = env_name
         self.env_args = {}
@@ -49,6 +51,7 @@ class EnvWrapper:
                         k, v = kv, 1.
                     self.env_args[k] = v
         self.n_envs = n_envs
+        self.model_abs_dir = model_abs_dir
 
     def init(self) -> Tuple[Dict[str, List[str]],
                             Dict[str, List[Tuple[int]]],
