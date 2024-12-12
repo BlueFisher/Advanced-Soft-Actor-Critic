@@ -814,14 +814,15 @@ class OptionBase(SAC_Base):
         """
         termination = self.model_termination(state, obs_list).squeeze(-1)  # [batch, ]
 
-        # y = v_over_options[:, self.option].unsqueeze(-1)  # [batch, 1]
-
         # max_v_over_options, _ = v_over_options.max(-1)  # [batch, ]
         mean_v_over_options = v_over_options.mean(-1)  # [batch, ]
 
-        # adv = y.squeeze(-1)
         adv = y.squeeze(-1) - mean_v_over_options + terminal_entropy
         # adv = functional.normalize(adv, dim=0)
+
+        # CHEAT
+        # y = v_over_options[:, self.option].unsqueeze(-1)  # [batch, 1]
+        # adv = y.squeeze(-1)
 
         loss_termination = termination * adv * ~done * priority_is  # [batch, ]
 

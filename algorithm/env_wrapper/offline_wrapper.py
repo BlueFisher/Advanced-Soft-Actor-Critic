@@ -17,8 +17,9 @@ class OfflineWrapper(EnvWrapper):
     def __init__(self,
                  env_name: str,
                  env_args: Optional[str | Dict] = None,
-                 n_envs: int = 1):
-        super().__init__(True, env_name, env_args, n_envs)
+                 n_envs: int = 1,
+                 model_abs_dir: Path | None = None):
+        super().__init__(True, env_name, env_args, n_envs, model_abs_dir)
 
         self._logger = logging.getLogger('OfflineWrapper')
 
@@ -36,15 +37,15 @@ class OfflineWrapper(EnvWrapper):
                             Dict[str, int]]:
         # Load dataset info
         with open(self._dataset_dir / 'info.json') as f:
-            dataset_info = json.load(f)
+            ma_dataset_info = json.load(f)
 
-        ma_names: List[str] = dataset_info['ma_names']
-        ma_obs_names: Dict[str, List[str]] = dataset_info['ma_obs_names']
-        ma_obs_shapes: Dict[str, List[Tuple]] = {n: [tuple(s) for s in obs_shapes] for n, obs_shapes in dataset_info['ma_obs_shapes'].items()}
-        ma_d_action_sizes: Dict[str, List[int]] = dataset_info['ma_d_action_sizes']
-        ma_c_action_size: Dict[str, int] = dataset_info['ma_c_action_size']
-        ma_ep_count: Dict[str, int] = dataset_info['ma_ep_count']
-        ma_max_step: Dict[str, int] = dataset_info['ma_max_step']
+        ma_names: List[str] = list(ma_dataset_info.keys())
+        ma_obs_names: Dict[str, List[str]] = {n: ma_dataset_info[n]['obs_names'] for n in ma_names}
+        ma_obs_shapes: Dict[str, List[Tuple]] = {n: [tuple(s) for s in ma_dataset_info[n]['obs_shapes']] for n in ma_names}
+        ma_d_action_sizes: Dict[str, List[int]] = {n: ma_dataset_info[n]['d_action_sizes'] for n in ma_names}
+        ma_c_action_size: Dict[str, int] = {n: ma_dataset_info[n]['c_action_size'] for n in ma_names}
+        ma_ep_count: Dict[str, int] = {n: ma_dataset_info[n]['ep_count'] for n in ma_names}
+        ma_max_step: Dict[str, int] = {n: ma_dataset_info[n]['max_step'] for n in ma_names}
 
         self.ma_names = ma_names
         self.ma_obs_names = ma_obs_names
@@ -53,22 +54,26 @@ class OfflineWrapper(EnvWrapper):
         self.ma_c_action_size = ma_c_action_size
         self.ma_ep_count = ma_ep_count
         self.ma_max_step = ma_max_step  # not include the last next_obs
+
+        self._ma_dataset = {}
         for n in ma_names:
-            self._logger.info(f'Dataset {n} episode count: {ma_ep_count[n]}, max step (not include the last next_obs): {ma_max_step[n]}')
+            # Load dataset
+            with np.load(self._dataset_dir / f'dataset-{ma_dataset_info[n]["path_name"]}.npz') as f:
+                self._logger.info(f'Loading dataset {n}...')
+                self._ma_dataset[n] = {k: v for k, v in f.items()}
 
-        # Load dataset
-        with np.load(self._dataset_dir / 'dataset.npz') as f:
-            self._logger.info('Loading...')
-            self._dataset = {k: v for k, v in f.items()}
+            self._logger.info(f'Dataset {n} episode count: {ma_ep_count[n]}, max step (except the last next_obs): {ma_max_step[n]}')
+
         for n, obs_names in self.ma_obs_names.items():
+            dataset = self._ma_dataset[n]
             for obs_name in obs_names:
-                assert self.ma_ep_count[n] == self._dataset[f'obs-{n}-{obs_name}'].shape[0]
-                assert self.ma_max_step[n] + 1 == self._dataset[f'obs-{n}-{obs_name}'].shape[1]
-                self._dataset[f'obs-{n}-{obs_name}'] = self._dataset[f'obs-{n}-{obs_name}'].astype(np.float32)
+                assert self.ma_ep_count[n] == dataset[f'obs-{obs_name}'].shape[0]
+                assert self.ma_max_step[n] + 1 == dataset[f'obs-{obs_name}'].shape[1]
+                dataset[f'obs-{obs_name}'] = dataset[f'obs-{obs_name}'].astype(np.float32)
 
-            assert self.ma_max_step[n] + 1 == self._dataset[f'action-{n}'].shape[1]
-            self._dataset[f'action-{n}'] = self._dataset[f'action-{n}'].astype(np.float32)
-            self._dataset[f'reward-{n}'] = self._dataset[f'reward-{n}'].astype(np.float32)
+            assert self.ma_max_step[n] + 1 == dataset[f'action'].shape[1]
+            dataset[f'action'] = dataset[f'action'].astype(np.float32)
+            dataset[f'reward'] = dataset[f'reward'].astype(np.float32)
 
         self._ma_next_ep_index: Dict[str, int] = {n: 0 for n in self.ma_names}
 
@@ -91,10 +96,11 @@ class OfflineWrapper(EnvWrapper):
         ma_obs_list = {}
         ma_offline_action = {}
         for n, obs_names in self.ma_obs_names.items():
+            dataset = self._ma_dataset[n]
             ep_index, step_index = self._ma_ep_index[n], self._ma_step_index[n]
 
-            ma_obs_list[n] = [self._dataset[f'obs-{n}-{obs_name}'][ep_index, step_index] for obs_name in obs_names]
-            ma_offline_action[n] = self._dataset[f'action-{n}'][ep_index, step_index]
+            ma_obs_list[n] = [dataset[f'obs-{obs_name}'][ep_index, step_index] for obs_name in obs_names]
+            ma_offline_action[n] = dataset[f'action'][ep_index, step_index]
 
         return ma_agent_ids, ma_obs_list, ma_offline_action
 
@@ -110,12 +116,13 @@ class OfflineWrapper(EnvWrapper):
 
         # Get previous reward and done
         for n in self.ma_names:
+            dataset = self._ma_dataset[n]
             ep_index, step_index = self._ma_ep_index[n], self._ma_step_index[n]
 
-            ma_last_reward[n] = self._dataset[f'reward-{n}'][ep_index, step_index]
-            ma_done[n] = self._dataset[f'done-{n}'][ep_index, step_index]
-            ma_max_reached[n] = self._dataset[f'max_reached-{n}'][ep_index, step_index]
-            ma_padding_mask[n] = self._dataset[f'padding_mask-{n}'][ep_index, step_index]
+            ma_last_reward[n] = dataset[f'reward'][ep_index, step_index]
+            ma_done[n] = dataset[f'done'][ep_index, step_index]
+            ma_max_reached[n] = dataset[f'max_reached'][ep_index, step_index]
+            ma_padding_mask[n] = dataset[f'padding_mask'][ep_index, step_index]
 
         # Step forward
         for n in self.ma_names:
@@ -143,13 +150,14 @@ class OfflineWrapper(EnvWrapper):
 
         # Get current observations
         for n in self.ma_names:
+            dataset = self._ma_dataset[n]
             ep_index, step_index = self._ma_ep_index[n], self._ma_step_index[n]
 
             obs_names = self.ma_obs_names[n]
             mask = ma_switch_ep_mask[n]
 
-            ma_obs_list[n] = [self._dataset[f'obs-{n}-{obs_name}'][ep_index, step_index] for obs_name in obs_names]
-            ma_offline_action[n] = self._dataset[f'action-{n}'][ep_index, step_index]
+            ma_obs_list[n] = [dataset[f'obs-{obs_name}'][ep_index, step_index] for obs_name in obs_names]
+            ma_offline_action[n] = dataset[f'action'][ep_index, step_index]
 
         decisionStep = DecisionStep(
             {n: agent_ids[~ma_switch_ep_mask[n]] for n, agent_ids in ma_agent_ids.items()},

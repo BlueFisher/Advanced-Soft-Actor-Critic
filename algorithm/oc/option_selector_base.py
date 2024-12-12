@@ -654,11 +654,8 @@ class OptionSelectorBase(SAC_Base):
                                                    disable_sample=disable_sample,
                                                    force_rnd_if_available=force_rnd_if_available)
 
-        debug_str = '=' * 10 + '\n'
-        debug_str += '\tshould ' + self.option_list[int(obs_list[0].cpu().numpy().flatten()[0])].ma_name.split('-')[0] + '\n'
-        debug_str += f'\t{pre_termination.cpu().numpy().flatten()[0]:.2f} {pre_termination_mask.cpu().numpy().flatten()[0]}\n'
-        debug_str += '\tcurr ' + self.option_list[option_index[0]].ma_name.split('-')[0]
-        self._logger.debug(debug_str)
+        self._logger.debug(self.option_list[option_index[0]].ma_name.split('-')[0])
+        self._logger.debug(f'{termination.cpu().numpy()[0]*100:.2f}%')
 
         return (option_index.detach().cpu().numpy().astype(np.int8),
                 action.detach().cpu().numpy(),

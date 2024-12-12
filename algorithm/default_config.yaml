@@ -19,6 +19,8 @@ base_config:
 
   n_envs: 1 # N agents running in parallel
 
+  obs_preprocessor: null
+
   max_iter: -1 # Max iteration
   max_step: -1 # Max step. Training will be terminated if max_iter or max_step encounters
   max_step_each_iter: -1 # Max step in each iteration

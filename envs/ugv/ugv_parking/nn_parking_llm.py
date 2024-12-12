@@ -1,6 +1,10 @@
 import base64
+from io import BytesIO
+
+import numpy as np
 import requests
 import torch
+from PIL import Image
 from torchvision import transforms as T
 
 import algorithm.nn_models as m
@@ -8,10 +12,6 @@ from algorithm.utils.image_visual import ImageVisual
 from algorithm.utils.ray import RayVisual
 from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
 
-# OBS_NAMES = ['CameraSensor', 'RayPerceptionSensor', 'SegmentationSensor',
-#              'ThirdPersonCameraSensor', 'ThirdPersonSegmentationSensor',
-#              'VectorSensor_size6']
-# OBS_SHAPES = [(84, 84, 3), (802,), (84, 84, 3), (84, 84, 3), (84, 84, 3), (6,)]
 
 OBS_NAMES = ['LLMStateSensor',
              'RayPerceptionSensor',
@@ -25,6 +25,55 @@ AUG_RAY_RANDOM_SIZE = 250
 
 NUM_OPTIONS = 4
 
+PROMPT_MAP = """
+This is a top-down map that has been processed using a semantic segmentation algorithm. You are currently guiding an autonomous vehicle to park in a parking space.
+Green represents randomly generated obstacles, white represents walls, yellow represents non-passable areas on the ground, pink represents passable areas on the ground, blue represents the parking space, which is the only final destination of the autonomous vehicle, and black represents unrecognized areas.
+The map consists of an outer circular track that is passable and an inner square area with streets. There are some randomly placed green obstacles on the outer circular track. The outer circular track is separated from the inner area by walls, but there is a random gap connecting the outer circular track to the inner area, where a small section of the white wall is missing (in this example, it's in the upper right corner), allowing access from the outer area to the inner area.
+The autonomous vehicle has learned four subtasks, and can only execute one subtask at a time. Once a subtask is completed, it will automatically stop. The subtasks are numbered and described as follows:
+1: Park in the parking space from the southern area of the parking lot.
+2: Drive clockwise along the outer circular track, avoiding obstacles, to reach near the gap.
+3: Drive counterclockwise along the outer circular track, avoiding obstacles, to reach near the gap.
+4: Drive from the gap between the outer and inner areas to the area in front of the parking space.
+"""
+
+PROMPT_VIS_THIRD = """
+This is a partial top-down view captured by a drone above the autonomous vehicle, which has been processed using a semantic segmentation algorithm.
+Red represents the autonomous vehicle, which is currently facing {direction}.
+Based on this semantic segmentation map, choose which subtask should be executed next.
+Output the number of subtask only.
+"""
+
+
+def np2base64(image_array: np.ndarray):
+    image_array = (image_array * 255.).astype(np.uint8)
+    image = Image.fromarray(image_array)
+    buffered = BytesIO()
+    image.save(buffered, format="PNG")
+    image_bytes = buffered.getvalue()
+    return base64.b64encode(image_bytes).decode('utf-8')
+
+
+def get_direction(angle):
+    # 确定方向
+    if 337.5 <= angle or angle < 22.5:
+        return "north"
+    elif 22.5 <= angle < 67.5:
+        return "northeast"
+    elif 67.5 <= angle < 112.5:
+        return "east"
+    elif 112.5 <= angle < 157.5:
+        return "southeast"
+    elif 157.5 <= angle < 202.5:
+        return "south"
+    elif 202.5 <= angle < 247.5:
+        return "southwest"
+    elif 247.5 <= angle < 292.5:
+        return "west"
+    elif 292.5 <= angle < 337.5:
+        return "northwest"
+    else:
+        return "unknown direction"  # 不应该到达这里
+
 
 class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
     def _build_model(self):
@@ -33,57 +82,110 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
 
         self.option_eye = torch.eye(NUM_OPTIONS, dtype=torch.float32)
 
+        self.conv_cam_seg = m.ConvLayers(84, 84, 3, 'simple',
+                                         out_dense_n=64, out_dense_depth=2)
+
+        self.conv_third_cam_seg = m.ConvLayers(84, 84, 3, 'simple',
+                                               out_dense_n=64, out_dense_depth=2)
+
+        self.ray_conv = m.Conv1dLayers(RAY_SIZE, 2, 'default',
+                                       out_dense_n=64, out_dense_depth=2)
+
+        self.dense = m.LinearLayers(64 * 3, dense_n=128, dense_depth=1)
+
+        image_map_array = np.load(self.model_abs_dir / 'map.npy')
+        self.image_map_base64 = np2base64(image_map_array)
+        image_example_array = np.load(self.model_abs_dir / 'example.npy')
+        self.image_example_base64 = np2base64(image_example_array)
+
+    def to(self, *args, **kwargs):
+        super().to(*args, **kwargs)
+        self.option_eye = self.option_eye.to(*args, **kwargs).detach()
+        return self
+
     def forward(self,
                 obs_list: list[torch.Tensor],
                 pre_action: torch.Tensor,
                 pre_seq_hidden_state: torch.Tensor | None,
                 pre_termination_mask: torch.Tensor | None = None,
                 padding_mask: torch.Tensor | None = None):
-        llm_state, ray, vis_seg, vis_third_seg, vec = obs_list
+        llm_obs, ray, vis_seg, vis_third_seg, vec = obs_list
+        # parking
+        # clockwise_race
+        # anticlockwise_race
+        # reaching_park
 
-        if llm_state.shape[0] > 1:  # _build_model
-            return (torch.zeros((*llm_state.shape[:-1], NUM_OPTIONS),
-                                device=llm_state.device),
-                    torch.zeros((*llm_state.shape[:-1], NUM_OPTIONS),
-                                device=llm_state.device))
+        ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
 
-        if llm_state.device != self.option_eye.device:
-            self.option_eye = self.option_eye.to(llm_state.device)
-
-        state = pre_seq_hidden_state.clone()
+        if pre_seq_hidden_state is None:
+            llm_state = torch.zeros((*llm_obs.shape[:-1], NUM_OPTIONS),
+                                    device=llm_obs.device)
+        else:
+            llm_state = pre_seq_hidden_state.clone()
 
         if pre_termination_mask is not None:
-            assert llm_state.shape[0] == 1 and llm_state.shape[1] == 1
+            assert llm_obs.shape[1] == 1
 
-            vis_seg = vis_seg[0, 0]  # [H, W, C]
+            angle = (torch.atan2(vec[:, 0, 2], vec[:, 0, 3]) * 180 / torch.pi + 360) % 360  # [B, ]
+            llm_obs = torch.zeros_like(llm_obs)  # [B, 1, 1]
 
-            vis_seg = vis_seg.permute([2, 0, 1])  # [C, H, W]
-            vis_seg_pil = T.ToPILImage()(vis_seg)
-            vis_seg_image_bytes = vis_seg_pil.tobytes()
-            vis_seg_base64_string = base64.b64encode(vis_seg_image_bytes).decode()
-            print(vis_seg_base64_string)
+            m_angle = angle[pre_termination_mask]  # [mB, ]
+            m_llm_obs = llm_obs[pre_termination_mask]  # [mB, 1, 1]
+            m_vis_third_seg = vis_third_seg[pre_termination_mask]  # [mB, 1, 84, 84, 3]
 
-            r = requests.post('https://ollama.n705.work/api/generate',
-                              json={
-                                  'model': 'llava-llama3',
-                                  'prompt': 'What\'s in this image',
-                                  'images': [vis_seg_base64_string],
-                                  'stream': False
-                              },
-                              auth=('n705', 'TamWccLw2GVyHbEr'))
-            print(r.text)
+            for i in range(m_angle.shape[0]):
+                r = requests.post('http://127.0.0.1:11434/api/chat',
+                                  json={
+                                      'model': 'llama3.2-vision',
+                                      "messages": [
+                                          {
+                                              "role": "user",
+                                              "content": PROMPT_MAP,
+                                              'images': [self.image_map_base64],
+                                          },
+                                          {
+                                              "role": "user",
+                                              "content": PROMPT_VIS_THIRD.replace('{direction}', 'east'),
+                                              'images': [self.image_example_base64],
+                                          }, {
+                                              "role": "assistant",
+                                              "content": "2"
+                                          }, {
+                                              "role": "user",
+                                              "content": PROMPT_VIS_THIRD.replace('{direction}', get_direction(m_angle[i])),
+                                              'images': [np2base64(m_vis_third_seg[i, 0].cpu().numpy())],
+                                          }
+                                      ],
+                                      'stream': False
+                                  },
+                                  auth=('n705', 'TamWccLw2GVyHbEr'))
 
-            new_llm_state = llm_state.to(torch.long)
-            new_state = self.option_eye[new_llm_state.squeeze(-1)]
+                print(r.json()['message']['content'])
+                if len(r.json()['message']['content']) == 1:
+                    m_llm_obs[i, 0] = int(r.json()['message']['content']) - 1
 
-            state[pre_termination_mask, 0] = new_state[pre_termination_mask, 0]
+            llm_obs[pre_termination_mask, 0] = m_llm_obs[:, 0]
 
-        return state, state
+        llm_state = llm_obs.to(torch.long)
+        llm_state = self.option_eye[llm_state.squeeze(-1)]
+
+        vis_seg = self.conv_cam_seg(vis_seg)
+        vis_third_seg = self.conv_third_cam_seg(vis_third_seg)
+
+        ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
+        ray = self.ray_conv(ray)
+
+        x = self.dense(torch.cat([vis_seg, vis_third_seg, ray], dim=-1))
+        x = torch.cat([x, vec], dim=-1)
+
+        state = torch.concat([llm_state, x], dim=-1)
+
+        return state, self._get_empty_seq_hidden_state(state)
 
 
 class ModelVOverOptions(m.ModelVOverOptions):
     def _build_model(self):
-        super()._build_model(dense_n=8, dense_depth=2)
+        super()._build_model(dense_n=64, dense_depth=2)
 
 
 class ModelOptionSelectorRND(m.ModelOptionSelectorRND):
@@ -93,10 +195,6 @@ class ModelOptionSelectorRND(m.ModelOptionSelectorRND):
 
 class ModelRep(m.ModelBaseRep):
     def _build_model(self):
-        self._ray_visual = RayVisual()
-
-        self._image_visual = ImageVisual()
-
         self.conv_cam_seg = m.ConvLayers(84, 84, 3, 'simple',
                                          out_dense_n=64, out_dense_depth=2)
 
@@ -113,21 +211,24 @@ class ModelRep(m.ModelBaseRep):
                 pre_action: torch.Tensor,
                 pre_seq_hidden_state: torch.Tensor | None,
                 padding_mask: torch.Tensor | None = None):
-        high_state, llm_state, ray, vis_seg, vis_third_seg, vec = obs_list
+        high_state, llm_obs, ray, vis_seg, vis_third_seg, vec = obs_list
+        high_state = high_state[..., NUM_OPTIONS:]
+
         ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
 
-        # self._image_visual(vis_cam, vis_seg, vis_third_cam, vis_third_seg, max_batch=3)
         vis_seg = self.conv_cam_seg(vis_seg)
         vis_third_seg = self.conv_third_cam_seg(vis_third_seg)
 
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
-        # self._ray_visual(ray, max_batch=3)
         ray = self.ray_conv(ray)
 
         x = self.dense(torch.cat([vis_seg, vis_third_seg, ray], dim=-1))
-        x = torch.cat([x, vec, high_state], dim=-1)
+        x = torch.cat([high_state, x, vec], dim=-1)
 
         return x, self._get_empty_seq_hidden_state(x)
+
+
+HIGH_STATE_SIZE = 128 + 6
 
 
 class ModelQ(m.ModelQ):
@@ -137,22 +238,12 @@ class ModelQ(m.ModelQ):
 
 class ModelPolicy(m.ModelPolicy):
     def _build_model(self):
-        self.state_size -= NUM_OPTIONS
+        self.state_size -= HIGH_STATE_SIZE
         return super()._build_model(c_dense_n=128, c_dense_depth=2)
 
     def forward(self, state, obs_list):
-        state = state[..., :-NUM_OPTIONS]
-        state = self.dense(state)
-
-        if self.c_action_size:
-            l = self.c_dense(state)
-            mean = self.mean_dense(l)
-            logstd = self.logstd_dense(l)
-            c_policy = torch.distributions.Normal(torch.tanh(mean / 5.) * 5., torch.exp(torch.clamp(logstd, -20, 0.5)))
-        else:
-            c_policy = None
-
-        return None, c_policy
+        state = state[..., HIGH_STATE_SIZE:]
+        return super().forward(state, obs_list)
 
 
 class ModelRND(m.ModelRND):
@@ -162,4 +253,4 @@ class ModelRND(m.ModelRND):
 
 class ModelTermination(m.ModelTermination):
     def _build_model(self):
-        super()._build_model(dense_n=128, dense_depth=2)
+        super()._build_model(dense_n=128, dense_depth=1)

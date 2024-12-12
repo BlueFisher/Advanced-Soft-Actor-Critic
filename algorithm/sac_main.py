@@ -35,10 +35,10 @@ class Main:
 
         self._profiler = UnifiedElapsedTimer(self._logger)
 
-        config_abs_dir = self._init_config(root_dir, config_dir, args)
+        self._config_abs_dir = self._init_config(root_dir, config_dir, args)
 
         self._init_env()
-        self._init_sac(config_abs_dir)
+        self._init_sac()
 
         self._run()
 
@@ -133,6 +133,7 @@ class Main:
             if self.unity_run_in_editor:
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         n_envs=self.base_config['n_envs'],
+                                        model_abs_dir=self.model_abs_dir,
                                         max_n_envs_per_process=self.base_config['unity_args']['max_n_envs_per_process'],
                                         time_scale=self.unity_time_scale,
                                         env_args=self.base_config['env_args'])
@@ -140,6 +141,7 @@ class Main:
                 self.env = UnityWrapper(train_mode=self.train_mode,
                                         env_name=self.base_config['unity_args']['build_path'],
                                         n_envs=self.base_config['n_envs'],
+                                        model_abs_dir=self.model_abs_dir,
                                         base_port=self.base_config['unity_args']['port'],
                                         max_n_envs_per_process=self.base_config['unity_args']['max_n_envs_per_process'],
                                         no_graphics=self.base_config['unity_args']['no_graphics'] and not self.render,
@@ -155,16 +157,27 @@ class Main:
                                   env_name=self.base_config['env_name'],
                                   env_args=self.base_config['env_args'],
                                   n_envs=self.base_config['n_envs'],
+                                  model_abs_dir=self.model_abs_dir,
                                   render=self.render)
 
         elif self.base_config['env_type'] == 'TEST':
             from algorithm.env_wrapper.test_wrapper import TestWrapper
 
             self.env = TestWrapper(env_args=self.base_config['env_args'],
-                                   n_envs=self.base_config['n_envs'])
+                                   n_envs=self.base_config['n_envs'],
+                                   model_abs_dir=self.model_abs_dir)
 
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
+
+        if self.base_config['obs_preprocessor']:
+            obs_preprocessor_abs_path = self._config_abs_dir / f'{self.base_config["obs_preprocessor"]}.py'
+
+            spec = importlib.util.spec_from_file_location('obs_preprocessor', str(obs_preprocessor_abs_path))
+            self._logger.info(f'Loaded obs preprocessor in env dir: {obs_preprocessor_abs_path}')
+            obs_preprocessor = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(obs_preprocessor)
+            self.env = obs_preprocessor.ObsPreprocessor(self.env)
 
         ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size = self.env.init()
 
@@ -173,7 +186,8 @@ class Main:
 
             self.offline_env = OfflineWrapper(env_name=self.base_config['offline_env_config']['env_name'],
                                               env_args=self.base_config['offline_env_config']['env_args'],
-                                              n_envs=self.base_config['n_envs'])
+                                              n_envs=self.base_config['n_envs'],
+                                              model_abs_dir=self.model_abs_dir)
             _ma_obs_names, _ma_obs_shapes, _ma_d_action_sizes, _ma_c_action_size = self.offline_env.init()
         else:
             self.offline_env = None
@@ -198,7 +212,7 @@ class Main:
 
         self._logger.info(f'{self.base_config["env_name"]} initialized')
 
-    def _init_sac(self, config_abs_dir: Path):
+    def _init_sac(self):
         for n, mgr in self.ma_manager:
             # If nn models exists, load saved model, or copy a new one
             saved_nn_abs_path = mgr.model_abs_dir / 'saved_nn.py'
@@ -206,7 +220,7 @@ class Main:
                 spec = importlib.util.spec_from_file_location('nn', str(saved_nn_abs_path))
                 self._logger.info(f'Loaded nn from existed {saved_nn_abs_path}')
             else:
-                nn_abs_path = config_abs_dir / f'{mgr.config["sac_config"]["nn"]}.py'
+                nn_abs_path = self._config_abs_dir / f'{mgr.config["sac_config"]["nn"]}.py'
 
                 spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
                 self._logger.info(f'Loaded nn in env dir: {nn_abs_path}')
@@ -339,6 +353,8 @@ class Main:
                 if self.train_mode:
                     is_training_iteration = not is_training_iteration
                     self.ma_manager.set_train_mode(is_training_iteration)
+                else:
+                    self.ma_manager.save_tmp_episode_trans_list()
 
                 self.ma_manager.reset_dead_agents()
                 self.ma_manager.clear_tmp_episode_trans_list()

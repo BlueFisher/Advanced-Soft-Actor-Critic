@@ -105,22 +105,8 @@ combined:
         fix_policy: true
         random_q: true
 
-combined_vis:
-  inherited: combined
-
-  base_config:
-    name: "combined_vis-{time}-{hostname}"
-
-  sac_config:
-    nn: nn_parking_vis
-    use_rnd: false
-
 combined_llm:
   inherited: combined
 
-  base_config:
-    name: "combined_llm-{time}-{hostname}"
-
   sac_config:
     nn: nn_parking_llm
-    use_rnd: false

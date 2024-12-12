@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -23,8 +24,11 @@ def get_ma_obs_list(n_envs, ma_obs_shapes):
 
 
 class TestWrapper(EnvWrapper):
-    def __init__(self, env_args, n_envs=1):
-        super().__init__(True, 'TEST', env_args=env_args, n_envs=n_envs)
+    def __init__(self, env_args, n_envs=1, model_abs_dir: Path | None = None):
+        super().__init__(True, 'TEST', 
+                         env_args=env_args, 
+                         n_envs=n_envs, 
+                         model_abs_dir=model_abs_dir)
 
         self.env_args = {} if env_args is None else env_args
 
