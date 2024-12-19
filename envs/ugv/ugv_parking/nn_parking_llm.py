@@ -5,25 +5,10 @@ import numpy as np
 import requests
 import torch
 from PIL import Image
-from torchvision import transforms as T
 
 import algorithm.nn_models as m
-from algorithm.utils.image_visual import ImageVisual
-from algorithm.utils.ray import RayVisual
-from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
 
-
-OBS_NAMES = ['LLMStateSensor',
-             'RayPerceptionSensor',
-             'SegmentationSensor',
-             'ThirdPersonSegmentationSensor',
-             'VectorSensor_size6']
-OBS_SHAPES = [(1,), (802,), (84, 84, 3), (84, 84, 3), (6,)]
-
-RAY_SIZE = 400
-AUG_RAY_RANDOM_SIZE = 250
-
-NUM_OPTIONS = 4
+from .nn_parking import *
 
 PROMPT_MAP = """
 This is a top-down map that has been processed using a semantic segmentation algorithm. You are currently guiding an autonomous vehicle to park in a parking space.
@@ -54,7 +39,6 @@ def np2base64(image_array: np.ndarray):
 
 
 def get_direction(angle):
-    # 确定方向
     if 337.5 <= angle or angle < 22.5:
         return "north"
     elif 22.5 <= angle < 67.5:
@@ -72,7 +56,7 @@ def get_direction(angle):
     elif 292.5 <= angle < 337.5:
         return "northwest"
     else:
-        return "unknown direction"  # 不应该到达这里
+        return "unknown direction"
 
 
 class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
@@ -181,76 +165,3 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
         state = torch.concat([llm_state, x], dim=-1)
 
         return state, self._get_empty_seq_hidden_state(state)
-
-
-class ModelVOverOptions(m.ModelVOverOptions):
-    def _build_model(self):
-        super()._build_model(dense_n=64, dense_depth=2)
-
-
-class ModelOptionSelectorRND(m.ModelOptionSelectorRND):
-    def _build_model(self):
-        super()._build_model(dense_n=8, dense_depth=2, output_size=8)
-
-
-class ModelRep(m.ModelBaseRep):
-    def _build_model(self):
-        self.conv_cam_seg = m.ConvLayers(84, 84, 3, 'simple',
-                                         out_dense_n=64, out_dense_depth=2)
-
-        self.conv_third_cam_seg = m.ConvLayers(84, 84, 3, 'simple',
-                                               out_dense_n=64, out_dense_depth=2)
-
-        self.ray_conv = m.Conv1dLayers(RAY_SIZE, 2, 'default',
-                                       out_dense_n=64, out_dense_depth=2)
-
-        self.dense = m.LinearLayers(64 * 3, dense_n=128, dense_depth=1)
-
-    def forward(self,
-                obs_list: list[torch.Tensor],
-                pre_action: torch.Tensor,
-                pre_seq_hidden_state: torch.Tensor | None,
-                padding_mask: torch.Tensor | None = None):
-        high_state, llm_obs, ray, vis_seg, vis_third_seg, vec = obs_list
-        high_state = high_state[..., NUM_OPTIONS:]
-
-        ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
-
-        vis_seg = self.conv_cam_seg(vis_seg)
-        vis_third_seg = self.conv_third_cam_seg(vis_third_seg)
-
-        ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
-        ray = self.ray_conv(ray)
-
-        x = self.dense(torch.cat([vis_seg, vis_third_seg, ray], dim=-1))
-        x = torch.cat([high_state, x, vec], dim=-1)
-
-        return x, self._get_empty_seq_hidden_state(x)
-
-
-HIGH_STATE_SIZE = 128 + 6
-
-
-class ModelQ(m.ModelQ):
-    def _build_model(self):
-        return super()._build_model(c_dense_n=128, c_dense_depth=2)
-
-
-class ModelPolicy(m.ModelPolicy):
-    def _build_model(self):
-        self.state_size -= HIGH_STATE_SIZE
-        return super()._build_model(c_dense_n=128, c_dense_depth=2)
-
-    def forward(self, state, obs_list):
-        state = state[..., HIGH_STATE_SIZE:]
-        return super().forward(state, obs_list)
-
-
-class ModelRND(m.ModelRND):
-    def _build_model(self):
-        super()._build_model(dense_n=128, dense_depth=2, output_size=128)
-
-
-class ModelTermination(m.ModelTermination):
-    def _build_model(self):
-        super()._build_model(dense_n=128, dense_depth=1)

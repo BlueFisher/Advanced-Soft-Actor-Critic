@@ -28,6 +28,8 @@ class OC_Main(Main):
         """
         sac_main.MultiAgentsManager = OC_MultiAgentsManager
 
+        self.root_dir = root_dir
+
         self._logger = logging.getLogger('oc')
 
         self._profiler = UnifiedElapsedTimer(self._logger)
@@ -42,17 +44,22 @@ class OC_Main(Main):
     def _init_oc(self):
         for n, mgr in self.ma_manager:
             # If nn models exists, load saved model, or copy a new one
-            saved_nn_abs_path = mgr.model_abs_dir / 'saved_nn.py'
-            if not self.alway_use_env_nn and saved_nn_abs_path.exists():
-                spec = importlib.util.spec_from_file_location('nn', str(saved_nn_abs_path))
-                self._logger.info(f'Loaded nn from existed {saved_nn_abs_path}')
+            saved_nn_abs_dir = mgr.model_abs_dir / 'nn'
+            if not self.force_env_nn and saved_nn_abs_dir.exists():
+                nn_abs_path = saved_nn_abs_dir / f'{mgr.config["sac_config"]["nn"]}.py'
+                spec = importlib.util.spec_from_file_location(f'{self._get_relative_package(nn_abs_path)}.{mgr.config["sac_config"]["nn"]}',
+                                                              nn_abs_path)
+                self._logger.info(f'Loaded nn from existed {nn_abs_path}')
             else:
                 nn_abs_path = self._config_abs_dir / f'{mgr.config["sac_config"]["nn"]}.py'
 
-                spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
+                spec = importlib.util.spec_from_file_location(f'{self._get_relative_package(nn_abs_path)}.{mgr.config["sac_config"]["nn"]}',
+                                                              nn_abs_path)
                 self._logger.info(f'Loaded nn in env dir: {nn_abs_path}')
-                if not self.alway_use_env_nn:
-                    shutil.copyfile(nn_abs_path, saved_nn_abs_path)
+                if not self.force_env_nn:
+                    shutil.copytree(self._config_abs_dir, saved_nn_abs_dir,
+                                    ignore=lambda _, names: [name for name in names
+                                                             if name == '__pycache__'])
 
             nn = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(nn)
