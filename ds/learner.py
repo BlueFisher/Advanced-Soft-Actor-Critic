@@ -95,7 +95,7 @@ class Learner(Main):
         self.unity_run_in_editor = args.u_editor
         self.unity_time_scale = args.u_timescale
 
-        self.alway_use_env_nn = args.use_env_nn
+        self.force_env_nn = args.use_env_nn
         self.device = args.device
         self.last_ckpt = args.ckpt
 
@@ -152,7 +152,7 @@ class Learner(Main):
         for n, mgr in self.ma_manager:
             # If nn models exists, load saved model, or copy a new one
             saved_nn_abs_path = mgr.model_abs_dir / 'saved_nn.py'
-            if not self.alway_use_env_nn and saved_nn_abs_path.exists():
+            if not self.force_env_nn and saved_nn_abs_path.exists():
                 spec = importlib.util.spec_from_file_location('nn', str(saved_nn_abs_path))
                 self._logger.info(f'Loaded nn from existed {saved_nn_abs_path}')
             else:
@@ -160,7 +160,7 @@ class Learner(Main):
 
                 spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
                 self._logger.info(f'Loaded nn in env dir: {nn_abs_path}')
-                if not self.alway_use_env_nn:
+                if not self.force_env_nn:
                     shutil.copyfile(nn_abs_path, saved_nn_abs_path)
 
             nn = importlib.util.module_from_spec(spec)
