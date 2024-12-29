@@ -1635,14 +1635,17 @@ class OptionSelectorBase(SAC_Base):
         om_low_target_obses_list = self.get_l_low_obses_list(l_obses_list=[m_obses[:, self.option_burn_in_from:] for m_obses in m_obses_list],
                                                              l_states=m_target_states[:, self.option_burn_in_from:])
 
+        if self.optimizer_rep:
+            self.optimizer_rep.zero_grad()
+
         (om_low_states,
          om_low_target_states,
          next_n_vs_over_options,
          y) = self._train_q(bn_indexes=bn_indexes,
                             bn_padding_masks=bn_padding_masks,
-                            m_states=m_states.detach(),
+                            m_states=m_states,
                             bn_option_indexes=bn_option_indexes,
-                            om_low_obses_list=[o.detach() for o in om_low_obses_list],
+                            om_low_obses_list=[o for o in om_low_obses_list],
                             om_low_target_obses_list=om_low_target_obses_list,
                             bn_actions=bn_actions,
                             bn_rewards=bn_rewards,
@@ -1654,9 +1657,6 @@ class OptionSelectorBase(SAC_Base):
         om_low_target_states = om_low_target_states.detach()  # [batch, ob + n + 1, low_state_size]
         next_n_vs_over_options = next_n_vs_over_options.detach()
         # [batch, n, num_options]
-
-        if self.optimizer_rep:
-            self.optimizer_rep.zero_grad()
 
         loss_v_list = self._train_v(y=y,
 
