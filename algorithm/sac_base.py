@@ -590,7 +590,9 @@ class SAC_Base:
         if self.train_mode:
             if self.use_replay_buffer:
                 replay_config = {} if replay_config is None else replay_config
-                self.replay_buffer = PrioritizedReplayBuffer(batch_size=self.batch_size, **replay_config)
+                self.replay_buffer = PrioritizedReplayBuffer(batch_size=self.batch_size,
+                                                             logger_parent_name=self._logger.name,
+                                                             **replay_config)
             else:
                 self.batch_buffer = BatchBuffer(self.burn_in_step,
                                                 self.n_step,
