@@ -73,16 +73,8 @@ def initialize_config_from_yaml(default_config_path: Path,
             tmp_config = config
             for k in k_list[:-1]:
                 tmp_config = tmp_config[k]
-            assert isinstance(tmp_config[last_k], (bool, int, float, str)), f'{kv} not in type {type(tmp_config[last_k])}'
-            if isinstance(tmp_config[last_k], bool):
-                tmp_config[last_k] = v.lower() in ('true', '1')
-            elif isinstance(tmp_config[last_k], int):
-                tmp_config[last_k] = int(v)
-            elif isinstance(tmp_config[last_k], float):
-                tmp_config[last_k] = float(v)
-            else:
-                assert isinstance(tmp_config[last_k], str)
-                tmp_config[last_k] = v if v != 'null' else None
+
+            tmp_config[last_k] = convert_config_value_by_src(v, tmp_config[last_k])
 
     ma_configs = {}
     # Deal with multi-agents config
@@ -119,6 +111,39 @@ def initialize_config_from_yaml(default_config_path: Path,
                         v[param] = np.random.random() * (opt['truncated'][1] - opt['truncated'][0]) + opt['truncated'][0]
 
     return config, ma_configs
+
+
+def convert_config_value(value: str):
+    value = value.strip()
+
+    if value.lower() in ['true', 'false']:
+        return value.lower() == 'true'
+
+    try:
+        return int(value)
+    except ValueError:
+        pass
+
+    try:
+        return float(value)
+    except ValueError:
+        pass
+
+    return value if value != 'null' else None
+
+
+def convert_config_value_by_src(value: str, src: bool | int | float | str):
+    assert isinstance(src, (bool, int, float, str)), f'{src} not in type {type(src)}'
+
+    if isinstance(src, bool):
+        return value.lower() in ('true', '1')
+    elif isinstance(src, int):
+        return int(value)
+    elif isinstance(src, float):
+        return float(value)
+    else:
+        assert isinstance(src, str)
+        return value if value != 'null' else None
 
 
 def save_config(config: dict, model_root_dir: Path, config_name: str):

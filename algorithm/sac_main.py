@@ -71,8 +71,12 @@ class Main:
         self.device = args.device
         self.last_ckpt = args.ckpt
 
-        if len(args.env_args) > 0:
-            config['base_config']['env_args'] = args.env_args
+        for env_arg in args.env_args:
+            k, v = env_arg.split('=')
+            if k in config['base_config']['env_args']:
+                config['base_config']['env_args'][k] = config_helper.convert_config_value_by_src(v, config['base_config']['env_args'][k])
+            else:
+                config['base_config']['env_args'][k] = config_helper.convert_config_value(v)
         if args.u_port is not None:
             config['base_config']['unity_args']['port'] = args.u_port
         if args.envs is not None:
@@ -129,6 +133,10 @@ class Main:
 
         return config_abs_dir
 
+    def _get_relative_package(self, abs_path: Path):
+        r = abs_path.parent.relative_to(self.root_dir)
+        return r.as_posix().replace("/", ".")
+
     def _init_env(self):
         if self.base_config['env_type'] == 'UNITY':
             from algorithm.env_wrapper.unity_wrapper import UnityWrapper
@@ -176,7 +184,8 @@ class Main:
         if self.base_config['obs_preprocessor']:
             obs_preprocessor_abs_path = self._config_abs_dir / f'{self.base_config["obs_preprocessor"]}.py'
 
-            spec = importlib.util.spec_from_file_location('obs_preprocessor', str(obs_preprocessor_abs_path))
+            spec = importlib.util.spec_from_file_location(f'{self._get_relative_package(obs_preprocessor_abs_path)}.{self.base_config["obs_preprocessor"]}',
+                                                          obs_preprocessor_abs_path)
             self._logger.info(f'Loaded obs preprocessor in env dir: {obs_preprocessor_abs_path}')
             obs_preprocessor = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(obs_preprocessor)
@@ -209,15 +218,12 @@ class Main:
             else:
                 mgr.set_config(self.ma_configs[n])
 
+            self._logger.info(f'{n} observation names: {mgr.obs_names}')
             self._logger.info(f'{n} observation shapes: {mgr.obs_shapes}')
             self._logger.info(f'{n} discrete action sizes: {mgr.d_action_sizes}')
             self._logger.info(f'{n} continuous action size: {mgr.c_action_size}')
 
         self._logger.info(f'{self.base_config["env_name"]} initialized')
-
-    def _get_relative_package(self, nn_abs_path: Path):
-        r = nn_abs_path.parent.relative_to(self.root_dir)
-        return r.as_posix().replace("/", ".")
 
     def _init_sac(self):
         for n, mgr in self.ma_manager:
@@ -287,7 +293,7 @@ class Main:
                     ma_d_action, ma_c_action = self.ma_manager.get_ma_action(
                         ma_agent_ids=ma_agent_ids,
                         ma_obs_list=ma_obs_list,
-                        ma_last_reward={n: np.zeros(len(agent_ids), dtype=bool)
+                        ma_last_reward={n: np.zeros(len(agent_ids))
                                         for n, agent_ids in ma_agent_ids.items()},
                         ma_offline_action=ma_offline_action,
                         disable_sample=self.disable_sample
