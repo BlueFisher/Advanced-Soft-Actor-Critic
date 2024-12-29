@@ -70,5 +70,5 @@ if __name__ == '__main__':
     image_visual = ImageVisual()
     while True:
         images = [np.random.rand(2, 84, 84, 3), np.random.rand(2, 84, 84, 3)]
-        image_visual(*images)
+        image_visual(*images, max_batch=2)
         time.sleep(0.1)

@@ -252,6 +252,9 @@ class Transform(nn.Module):
         self.transform = transform
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.transform is None:
+            return x
+
         if x.dim() >= 4:
             batch = x.shape[:-3]
             x = x.reshape(-1, *x.shape[-3:])
