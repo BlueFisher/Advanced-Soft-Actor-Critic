@@ -20,12 +20,17 @@ default:
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
     n_envs: 50
+    obs_preprocessor: only_seg_preprocessor
     max_step_each_iter: 500 # Max step in each iteration
 
   reset_config:
     disabled_wall_piece_reached_reward: 1
     parking_entry_reached_reward: 2
     parking_spot_reached_reward: 5
+
+  nn_config:
+    rep:
+      ray_random: 250
 
   replay_config:
     capacity: 524288 # 262144
@@ -47,7 +52,7 @@ parking:
   base_config:
     env_args:
       task: 0
-    name: "parking-{time}-{hostname}"
+    name: "parking-{time}"
 
   sac_config:
     nn: nn_low
@@ -56,7 +61,7 @@ clockwise_race:
   base_config:
     env_args:
       task: 1
-    name: "clockwise_race-{time}-{hostname}"
+    name: "clockwise_race-{time}"
 
   sac_config:
     nn: nn_low
@@ -65,7 +70,7 @@ anticlockwise_race:
   base_config:
     env_args:
       task: 2
-    name: "anticlockwise_race-{time}-{hostname}"
+    name: "anticlockwise_race-{time}"
 
   sac_config:
     nn: nn_low
@@ -74,7 +79,7 @@ reaching_park:
   base_config:
     env_args:
       task: 3
-    name: "reaching_park-{time}-{hostname}"
+    name: "reaching_park-{time}"
 
   sac_config:
     nn: nn_low
@@ -83,7 +88,7 @@ combined:
   base_config:
     env_args:
       task: 4
-    name: "combined-{time}-{hostname}"
+    name: "combined-{time}"
     max_step_each_iter: 650 # Max step in each iteration
 
   sac_config:
@@ -95,6 +100,32 @@ combined:
       - name: parking-20240729222106VaOG
         fix_policy: true
         random_q: true
+      - name: clockwise_race-20240729222106DuSY
+        fix_policy: true
+        random_q: true
+      - name: anticlockwise_race-20240729222105pLgE
+        fix_policy: true
+        random_q: true
+      - name: reaching_park-20240901142509rnFA
+        fix_policy: true
+        random_q: true
+
+combined_wo_parking:
+  base_config:
+    env_args:
+      task: 4
+    name: "combined_wo_parking-{time}"
+    max_step_each_iter: 650 # Max step in each iteration
+
+  sac_config:
+    nn: nn_parking
+    use_rnd: false
+
+  oc_config:
+    option_configs:
+      - name: parking-new
+        fix_policy: false
+        random_q: false
       - name: clockwise_race-20240729222106DuSY
         fix_policy: true
         random_q: true

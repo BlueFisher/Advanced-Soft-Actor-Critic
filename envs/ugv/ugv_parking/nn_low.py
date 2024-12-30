@@ -7,30 +7,21 @@ from algorithm.utils.ray import RayVisual
 from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
 
 
-# OBS_NAMES = ['CameraSensor', 'RayPerceptionSensor', 'SegmentationSensor',
-#              'ThirdPersonCameraSensor', 'ThirdPersonSegmentationSensor',
-#              'VectorSensor_size6']
-# OBS_SHAPES = [(84, 84, 3), (802,), (84, 84, 3), (84, 84, 3), (84, 84, 3), (6,)]
-
-OBS_NAMES = ['LLMStateSensor',
-             'RayPerceptionSensor',
-             'SegmentationSensor',
-             'ThirdPersonSegmentationSensor',
-             'VectorSensor_size6']
-OBS_SHAPES = [(1,), (802,), (84, 84, 3), (84, 84, 3), (6,)]
+OBS_SHAPES = [(1,), (84, 84, 3), (84, 84, 3), (802,), (6,)]
 
 RAY_SIZE = 400
 AUG_RAY_RANDOM_SIZE = 250
 
 
 class ModelRep(m.ModelBaseRep):
-    def _build_model(self):
+    def _build_model(self, ray_random):
         for u_s, s in zip(self.obs_shapes, OBS_SHAPES):
             assert u_s == s, f'{u_s} {s}'
 
+        self._image_visual = ImageVisual()
         self._ray_visual = RayVisual()
 
-        self._image_visual = ImageVisual()
+        self.ray_random = ray_random
 
         self.conv_cam_seg = m.ConvLayers(84, 84, 3, 'simple',
                                          out_dense_n=64, out_dense_depth=2)
@@ -43,26 +34,80 @@ class ModelRep(m.ModelBaseRep):
 
         self.dense = m.LinearLayers(64 * 3, dense_n=128, dense_depth=1)
 
+        cropper = torch.nn.Sequential(
+            T.RandomCrop(size=(50, 50)),
+            T.Resize(size=(84, 84))
+        )
+        self._vis_random_transformers = T.RandomChoice([
+            m.Transform(SaltAndPepperNoise(0.2, 0.5)),
+            m.Transform(GaussianNoise()),
+            m.Transform(T.GaussianBlur(9, sigma=9)),
+            m.Transform(cropper)
+        ])
+
     def forward(self,
                 obs_list: list[torch.Tensor],
                 pre_action: torch.Tensor,
                 pre_seq_hidden_state: torch.Tensor | None,
                 padding_mask: torch.Tensor | None = None):
-        llm_state, ray, vis_seg, vis_third_seg, vec = obs_list
+        llm_state, vis, vis_third, ray, vec = obs_list
+
+        """ PREPROCESSING """
+        # remove the center ray
         ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
-
-        # self._image_visual(vis_cam, vis_seg, vis_third_cam, vis_third_seg, max_batch=3)
-        vis_seg = self.conv_cam_seg(vis_seg)
-        vis_third_seg = self.conv_third_cam_seg(vis_third_seg)
-
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
-        # self._ray_visual(ray, max_batch=3)
-        ray = self.ray_conv(ray)
 
-        x = self.dense(torch.cat([vis_seg, vis_third_seg, ray], dim=-1))
+        """ DOMAIN RANDOMIZATION """
+        random_index = torch.randperm(RAY_SIZE)[:self.ray_random]
+        ray[..., random_index, 0] = 1.
+        ray[..., random_index, 1] = 1.
+
+        """ ENCODE """
+        # self._image_visual(vis, vis_third, max_batch=3)
+        vis_encoder = self.conv_cam_seg(vis)
+        vis_third_encoder = self.conv_third_cam_seg(vis_third)
+
+        # self._ray_visual(ray, max_batch=3)
+        ray_encoder = self.ray_conv(ray)
+
+        x = self.dense(torch.cat([vis_encoder, vis_third_encoder, ray_encoder], dim=-1))
         x = torch.cat([x, vec], dim=-1)
 
         return x, self._get_empty_seq_hidden_state(x)
+
+    def get_state_from_encoders(self, obs_list, encoders):
+        llm_state, vis, vis_third, ray, vec = obs_list
+
+        vis_encoder, vis_third_encoder, ray_encoder = encoders
+
+        x = self.dense(torch.cat([vis_encoder, vis_third_encoder, ray_encoder], dim=-1))
+        x = torch.cat([x, vec], dim=-1)
+
+        return x
+
+    def get_augmented_encoders(self, obs_list):
+        llm_state, vis, vis_third, ray, vec = obs_list
+
+        """ PREPROCESSING """
+        # remove the center ray
+        ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
+        ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
+
+        """ AUGMENTATION """
+        vis_aug = self._vis_random_transformers(vis)
+        vis_third_aug = self._vis_random_transformers(vis_third)
+        ray_random = (torch.rand(1) * AUG_RAY_RANDOM_SIZE).int()
+        random_index = torch.randperm(RAY_SIZE)[:ray_random]
+        ray[..., random_index, 0] = 1.
+        ray[..., random_index, 1] = 1.
+
+        """ ENCODE """
+        vis_encoder = self.conv_cam_seg(vis_aug)
+        vis_third_encoder = self.conv_third_cam_seg(vis_third_aug)
+
+        ray_encoder = self.ray_conv(ray)
+
+        return vis_encoder, vis_third_encoder, ray_encoder
 
 
 class ModelQ(m.ModelQ):

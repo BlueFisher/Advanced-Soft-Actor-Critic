@@ -16,17 +16,18 @@ if __name__ == '__main__':
     parser.add_argument('--hit', type=int, default=None, nargs='?', const=1)
     parser.add_argument('--oc', action='store_true', default=False)
 
-    parser.add_argument('--config', '-c', help='config file')
-    parser.add_argument('--override', '-o', default=[], nargs='+', help='override config')
-    parser.add_argument('--run', action='store_true', help='inference mode for all agents, ignore run_a')
-    parser.add_argument('--run_a', action='append', default=[], help='inference mode for specific agents')
-    parser.add_argument('--copy_model', default=None, help='copy existed model directory to current model directory')
-    parser.add_argument('--logger_in_file', action='store_true', help='logging into a file')
+    parser.add_argument('--config', '-c', help='Config file')
+    parser.add_argument('--override', '-o', default=[], nargs='+', help='Override config')
+    parser.add_argument('--run', action='store_true', help='Inference mode for all agents, ignore run_a')
+    parser.add_argument('--run_a', action='append', default=[], help='Inference mode for specific agents')
+    parser.add_argument('--copy_model', default=None, help='Copy existed model directory to current model directory')
+    parser.add_argument('--logger_in_file', action='store_true', help='Logging into a file')
 
-    parser.add_argument('--render', action='store_true', help='render')
-    parser.add_argument('--env_args', default=[], nargs='+', help='additional arguments for environments')
-    parser.add_argument('--envs', type=int, help='number of env copies')
-    parser.add_argument('--max_iter', type=int, help='max iteration')
+    parser.add_argument('--render', action='store_true', help='Render')
+    parser.add_argument('--env_args', default=[], nargs='+', help='Additional arguments for environments. \
+                                                                    Eqvilent to --override base_config.env_args')    
+    parser.add_argument('--envs', type=int, help='Number of env copies. Eqvilent to --override base_config.n_envs')
+    parser.add_argument('--max_iter', type=int, help='Maximum iteration. Eqvilent to --override base_config.max_iter')
 
     parser.add_argument('--u_port', '-p', type=int, default=5005, help='UNITY: communication port')
     parser.add_argument('--u_editor', action='store_true', help='UNITY: running in Unity Editor')
@@ -36,13 +37,13 @@ if __name__ == '__main__':
                                                                         2: URP-HighFidelity-Renderer')
     parser.add_argument('--u_timescale', type=float, default=None, help='UNITY: Timescale')
 
-    parser.add_argument('--name', '-n', help='training name')
-    parser.add_argument('--disable_sample', action='store_true', help='disable sampling when choosing actions')
-    parser.add_argument('--use_env_nn', action='store_true', help='always use nn.py in env, or use saved nn_models.py if existed')
-    parser.add_argument('--device', help='cpu or gpu')
-    parser.add_argument('--ckpt', help='ckeckpoint to restore')
-    parser.add_argument('--nn', help='neural network model')
-    parser.add_argument('--repeat', type=int, default=1, help='number of repeated experiments')
+    parser.add_argument('--name', '-n', help='Training name. Eqvilent to --override base_config.name')
+    parser.add_argument('--disable_sample', action='store_true', help='Disable sampling when choosing actions')
+    parser.add_argument('--use_env_nn', action='store_true', help='Always use nn.py in env, or use saved nn_models.py if existed')
+    parser.add_argument('--device', help='CPU or GPU')
+    parser.add_argument('--ckpt', help='Ckeckpoint to restore')
+    parser.add_argument('--nn', help='Neural network model. Eqvilent to --override sac_config.nn')
+    parser.add_argument('--repeat', type=int, default=1, help='Number of repeated experiments')
 
     parser.add_argument('--debug', action='store_true')
     args = parser.parse_args()
@@ -53,7 +54,7 @@ if __name__ == '__main__':
         if args.oc:
             import algorithm.oc.oc_main_hit
             algorithm.oc.oc_main_hit.HIT_REWARD = args.hit
-            
+
             from algorithm.oc.oc_main_hit import OC_MainHit as Main
         else:
             import algorithm.sac_main_hit
