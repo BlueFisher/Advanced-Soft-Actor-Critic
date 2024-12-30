@@ -104,8 +104,12 @@ class Learner(Main):
         if args.learner_port is not None:
             config['net_config']['learner_port'] = args.learner_port
 
-        if len(args.env_args) > 0:
-            config['base_config']['env_args'] = args.env_args
+        for env_arg in args.env_args:
+            k, v = env_arg.split('=')
+            if k in config['base_config']['env_args']:
+                config['base_config']['env_args'][k] = config_helper.convert_config_value_by_src(v, config['base_config']['env_args'][k])
+            else:
+                config['base_config']['env_args'][k] = config_helper.convert_config_value(v)
         if args.u_port is not None:
             config['base_config']['unity_args']['port'] = args.u_port
         if args.envs is not None:

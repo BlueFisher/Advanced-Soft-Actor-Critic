@@ -132,8 +132,8 @@ def convert_config_value(value: str):
     return value if value != 'null' else None
 
 
-def convert_config_value_by_src(value: str, src: bool | int | float | str):
-    assert isinstance(src, (bool, int, float, str)), f'{src} not in type {type(src)}'
+def convert_config_value_by_src(value: str, src: bool | int | float | str | None):
+    assert src is None or isinstance(src, (bool, int, float, str)), f'{src} not in type {type(src)}'
 
     if isinstance(src, bool):
         return value.lower() in ('true', '1')
@@ -142,7 +142,7 @@ def convert_config_value_by_src(value: str, src: bool | int | float | str):
     elif isinstance(src, float):
         return float(value)
     else:
-        assert isinstance(src, str)
+        assert src is None or isinstance(src, str)
         return value if value != 'null' else None
 
 
