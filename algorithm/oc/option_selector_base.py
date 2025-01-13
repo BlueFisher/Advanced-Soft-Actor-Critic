@@ -56,7 +56,9 @@ class OptionSelectorBase(SAC_Base):
                  target_d_alpha: float = 0.98,
                  target_c_alpha: float = 1.,
                  d_policy_entropy_penalty: float = 0.5,
+
                  learning_rate: float = 3e-4,
+
                  gamma: float = 0.99,
                  v_lambda: float = 1.,
                  v_rho: float = 1.,
@@ -66,17 +68,24 @@ class OptionSelectorBase(SAC_Base):
                  discrete_dqn_like: bool = False,
                  discrete_dqn_epsilon: float = 0.2,
                  use_n_step_is: bool = True,
+
                  siamese: Optional[SIAMESE] = None,
                  siamese_use_q: bool = False,
                  siamese_use_adaptive: bool = False,
+
                  use_prediction: bool = False,
                  transition_kl: float = 0.8,
                  use_extra_data: bool = True,
+
                  curiosity: Optional[CURIOSITY] = None,
                  curiosity_strength: float = 1.,
                  use_rnd: bool = False,
                  rnd_n_sample: int = 10,
+
                  use_normalization: bool = False,
+
+                 offline_loss=False,
+
                  action_noise: Optional[List[float]] = None,
 
                  use_dilation: bool = False,
@@ -160,6 +169,7 @@ class OptionSelectorBase(SAC_Base):
                          use_rnd,
                          rnd_n_sample,
                          use_normalization,
+                         offline_loss,
                          action_noise,
                          replay_config)
 
@@ -2248,7 +2258,7 @@ class OptionSelectorBase(SAC_Base):
                         l_option_indexes=bn_option_indexes[:, self.option_burn_in_from:],
                         l_pre_actions=bn_pre_actions[:, self.option_burn_in_from:],
                         l_pre_low_seq_hidden_states=bn_pre_low_seq_hidden_states[:, self.option_burn_in_from:]
-                    )  # TODO SHOULD NOT option_burn_in_from
+                    )  # TODO: SHOULD NOT option_burn_in_from
 
                 if self.use_n_step_is or (self.d_action_sizes and not self.discrete_dqn_like):
                     with self._profiler('get_l_probs', repeat=10):

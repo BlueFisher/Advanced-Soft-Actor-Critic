@@ -69,17 +69,24 @@ class SAC_Base:
                  discrete_dqn_like: bool = False,
                  discrete_dqn_epsilon: float = 0.2,
                  use_n_step_is: bool = True,
+
                  siamese: Optional[SIAMESE] = None,
                  siamese_use_q: bool = False,
                  siamese_use_adaptive: bool = False,
+
                  use_prediction: bool = False,
                  transition_kl: float = 0.8,
                  use_extra_data: bool = True,
+
                  curiosity: Optional[CURIOSITY] = None,
                  curiosity_strength: float = 1.,
                  use_rnd: bool = False,
                  rnd_n_sample: int = 10,
+
                  use_normalization: bool = False,
+
+                 offline_loss: bool = False,
+
                  action_noise: Optional[List[float]] = None,
 
                  replay_config: Optional[dict] = None):
@@ -134,17 +141,24 @@ class SAC_Base:
         discrete_dqn_like: false # Whether using policy or only Q network if discrete is in action spaces
         discrete_dqn_epsilon: 0.2 # Probability of using random action
         use_n_step_is: true # Whether using importance sampling
+
         siamese: null # ATC | BYOL
         siamese_use_q: false # Whether using contrastive q
         siamese_use_adaptive: false # Whether using adaptive weights
+
         use_prediction: false # Whether training a transition model
         transition_kl: 0.8 # The coefficient of KL of transition and standard normal
         use_extra_data: true # Whether using extra data to train prediction model
+
         curiosity: null # FORWARD | INVERSE
         curiosity_strength: 1 # Curiosity strength if using curiosity
         use_rnd: false # Whether using RND
         rnd_n_sample: 10 # RND sample times
+
         use_normalization: false # Whether using observation normalization
+
+        offline_loss: false # Whether using offline loss
+
         action_noise: null # [noise_min, noise_max]
         """
         self._kwargs = locals()
@@ -171,6 +185,7 @@ class SAC_Base:
 
         self.write_summary_per_step = int(write_summary_per_step)
         self.save_model_per_step = int(save_model_per_step)
+
         self.batch_size = batch_size
         self.tau = tau
         self.update_target_per_step = update_target_per_step
@@ -178,6 +193,7 @@ class SAC_Base:
         self.target_d_alpha = target_d_alpha
         self.target_c_alpha = target_c_alpha
         self.d_policy_entropy_penalty = d_policy_entropy_penalty
+
         self.gamma = gamma
         self.v_lambda = v_lambda
         self.v_rho = v_rho
@@ -187,17 +203,24 @@ class SAC_Base:
         self.discrete_dqn_like = discrete_dqn_like
         self.discrete_dqn_epsilon = discrete_dqn_epsilon
         self.use_n_step_is = use_n_step_is
+
         self.siamese = siamese
         self.siamese_use_q = siamese_use_q
         self.siamese_use_adaptive = siamese_use_adaptive
+
         self.use_prediction = use_prediction
         self.transition_kl = transition_kl
         self.use_extra_data = use_extra_data
+
         self.curiosity = curiosity
         self.curiosity_strength = curiosity_strength
         self.use_rnd = use_rnd
         self.rnd_n_sample = rnd_n_sample
+
         self.use_normalization = use_normalization
+
+        self.offline_loss = offline_loss
+
         self.action_noise = action_noise
 
         self._set_logger()
@@ -1859,6 +1882,8 @@ class SAC_Base:
             # [ensemble_q_sample, batch, 1] -> [batch, 1]
 
             loss_c_policy = c_alpha * log_prob - min_c_q_for_gradient
+            if self.offline_loss:
+                loss_c_policy += functional.mse_loss(action_sampled, action, reduction='none').sum(-1, keepdim=True)
             # [batch, 1]
 
         loss_policy = torch.mean(loss_d_policy + loss_c_policy)

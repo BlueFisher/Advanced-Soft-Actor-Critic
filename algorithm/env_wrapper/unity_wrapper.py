@@ -482,7 +482,7 @@ class UnityWrapper(EnvWrapper):
             raise RuntimeError("Environments cannot be started")
 
     def send_option(self, option: Dict[str, int]):
-        # TODO multiple envs
+        # TODO: multiple envs
         self._env_processes[0].option_channel.send_option(option)
 
     def init(self):
