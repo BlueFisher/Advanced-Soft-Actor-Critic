@@ -39,6 +39,11 @@ class ModelBaseRep(nn.Module):
             pre_action: [batch, l, action_size]
             pre_seq_hidden_state: [batch, l, *seq_hidden_state_shape]
             padding_mask (torch.bool): [batch, l]
+
+        Returns:
+            state: [batch, l, state_size]
+            seq_hidden_state: [batch, l, *seq_hidden_state_shape] if seq_encoder is None
+                              [batch, *seq_hidden_state_shape] if seq_encoder is RNN
         """
 
         raise Exception("ModelRep not implemented")
