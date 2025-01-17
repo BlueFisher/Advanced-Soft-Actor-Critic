@@ -664,9 +664,6 @@ class OptionSelectorBase(SAC_Base):
                                                    disable_sample=disable_sample,
                                                    force_rnd_if_available=force_rnd_if_available)
 
-        self._logger.debug(self.option_list[option_index[0]].ma_name.split('-')[0])
-        self._logger.debug(f'{termination.cpu().numpy()[0]*100:.2f}%')
-
         return (option_index.detach().cpu().numpy().astype(np.int8),
                 action.detach().cpu().numpy(),
                 prob.detach().cpu().numpy(),

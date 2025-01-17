@@ -1,5 +1,6 @@
+import logging
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Set, Tuple
+from typing import Iterator
 
 import numpy as np
 
@@ -7,6 +8,7 @@ from algorithm.oc.option_selector_base import OptionSelectorBase
 from algorithm.utils.elapse_timer import unified_elapsed_timer
 from algorithm.utils.enums import *
 from algorithm.utils.operators import gen_pre_n_actions
+from algorithm.utils.visualization.option import OptionVisual
 
 from .. import agent
 from ..agent import AGENT_MAX_LIVENESS, Agent, AgentManager, MultiAgentsManager
@@ -16,19 +18,22 @@ class OC_Agent(Agent):
     # tmp data, waiting for reward and done to `end_transition`
     _tmp_option_changed_index: int = -1  # The latest option start index
     _tmp_option_index: int = -1  # The latest option index
-    _tmp_pre_low_seq_hidden_state: Optional[np.ndarray] = None
-    _tmp_low_seq_hidden_state: Optional[np.ndarray] = None
+    _tmp_pre_low_seq_hidden_state: np.ndarray | None = None
+    _tmp_low_seq_hidden_state: np.ndarray | None = None
     _tmp_termination: float = 1.
-    _tmp_key_seq_hidden_state: Optional[np.ndarray] = None
+    _tmp_key_seq_hidden_state: np.ndarray | None = None
 
     def __init__(self,
                  agent_id: int,
-                 obs_shapes: List[Tuple],
-                 d_action_sizes: List[int],
+                 obs_shapes: list[tuple],
+                 d_action_sizes: list[int],
                  c_action_size: int,
-                 seq_hidden_state_shape: Tuple[int, ...],
-                 low_seq_hidden_state_shape: Tuple[int, ...],
+                 option_names: list[str],
+                 seq_hidden_state_shape: tuple[int, ...],
+                 low_seq_hidden_state_shape: tuple[int, ...],
                  max_episode_length=-1):
+
+        self.option_names = option_names
 
         self.low_seq_hidden_state_shape = low_seq_hidden_state_shape
 
@@ -43,7 +48,11 @@ class OC_Agent(Agent):
                          seq_hidden_state_shape,
                          max_episode_length)
 
-    def _generate_empty_episode_trans(self, episode_length: int = 0) -> Dict[str, np.ndarray | List[np.ndarray]]:
+        self._option_visual = None
+        if self._logger.root.level == logging.DEBUG:
+            self._option_visual = OptionVisual(option_names)
+
+    def _generate_empty_episode_trans(self, episode_length: int = 0) -> dict[str, np.ndarray | list[np.ndarray]]:
         empty_episode_trans = super()._generate_empty_episode_trans(episode_length)
         empty_episode_trans['option_index'] = np.full((episode_length, ), -1, dtype=np.int8)
         empty_episode_trans['option_changed_index'] = np.full((episode_length, ), -1, dtype=np.int32)
@@ -54,13 +63,13 @@ class OC_Agent(Agent):
         return empty_episode_trans
 
     def set_tmp_obs_action(self,
-                           obs_list: List[np.ndarray],
+                           obs_list: list[np.ndarray],
                            option_index: int,
                            action: np.ndarray,
                            prob: np.ndarray,
                            seq_hidden_state: np.ndarray,
                            low_seq_hidden_state: np.ndarray,
-                           termination: bool):
+                           termination: float):
 
         super().set_tmp_obs_action(obs_list, action, prob, seq_hidden_state)
 
@@ -74,6 +83,9 @@ class OC_Agent(Agent):
         self._tmp_pre_low_seq_hidden_state = self._tmp_low_seq_hidden_state
         self._tmp_low_seq_hidden_state = low_seq_hidden_state
         self._tmp_termination = termination
+
+        if self._option_visual is not None:
+            self._option_visual.add_option_termination(option_index, termination)
 
     def get_tmp_option_index(self) -> int:
         return self._tmp_option_index
@@ -96,7 +108,7 @@ class OC_Agent(Agent):
                        done: bool = False,
                        max_reached: bool = False,
                        force_terminated: bool = False,
-                       next_obs_list: Optional[List[np.ndarray]] = None) -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
+                       next_obs_list: list[np.ndarray] | None = None) -> dict[str, np.ndarray | list[np.ndarray]] | None:
         if self._tmp_obs_list is None:
             return
 
@@ -129,8 +141,8 @@ class OC_Agent(Agent):
             return self._end_episode(next_obs_list if next_obs_list is not None else self._padding_obs_list)
 
     def _end_episode(self,
-                     next_obs_list: List[np.ndarray]) \
-            -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
+                     next_obs_list: list[np.ndarray]) \
+            -> dict[str, np.ndarray | list[np.ndarray]] | None:
 
         self._add_transition(
             index=self._tmp_index + 1,
@@ -145,6 +157,9 @@ class OC_Agent(Agent):
             pre_seq_hidden_state=self._padding_seq_hidden_state,
             pre_low_seq_hidden_state=self._padding_low_seq_hidden_state,
         )
+
+        if self._option_visual is not None:
+            self._option_visual.reset()
 
         episode_trans = self.get_episode_trans()
 
@@ -169,7 +184,7 @@ class OC_Agent(Agent):
 
     def _add_transition(self,
                         index: int,
-                        obs_list: List[np.ndarray],
+                        obs_list: list[np.ndarray],
                         option_index: int,
                         option_changed_index: int,
                         action: np.ndarray,
@@ -182,7 +197,7 @@ class OC_Agent(Agent):
         """
         Args:
             index: int
-            obs_list: List([*obs_shapes_i], ...)
+            obs_list: list([*obs_shapes_i], ...)
             option_index: int
             option_changed_index: int
             action: [action_size, ]
@@ -195,7 +210,7 @@ class OC_Agent(Agent):
 
         Returns:
             ep_indexes (np.int32): [1, episode_len], int
-            ep_obses_list: List([1, episode_len, *obs_shapes_i], ...)
+            ep_obses_list: list([1, episode_len, *obs_shapes_i], ...)
             ep_option_indexes (np.int8): [1, episode_len]
             ep_actions: [1, episode_len, action_size]
             ep_rewards: [1, episode_len]
@@ -242,11 +257,11 @@ class OC_Agent(Agent):
         self.current_step += 1
 
     def get_episode_trans(self,
-                          force_length: int | None = None) -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
+                          force_length: int | None = None) -> dict[str, np.ndarray | list[np.ndarray]] | None:
         """
         Returns:
             ep_indexes (np.int32): [1, episode_len]
-            ep_obses_list: List([1, episode_len, *obs_shapes_i], ...)
+            ep_obses_list: list([1, episode_len, *obs_shapes_i], ...)
             ep_option_indexes (np.int8): [1, episode_len]
             ep_option_changed_indexes (np.int32): [1, episode_len]
             ep_actions: [1, episode_len, action_size]
@@ -286,7 +301,7 @@ class OC_Agent(Agent):
         ep_indexes = np.expand_dims(tmp['index'], 0)
         # [1, episode_len]
         ep_obses_list = [np.expand_dims(o, 0) for o in tmp['obs_list']]
-        # List([1, episode_len, *obs_shape_si], ...)
+        # list([1, episode_len, *obs_shape_si], ...)
         ep_option_indexes = np.expand_dims(tmp['option_index'], 0)  # [1, episode_len]
         ep_option_changed_indexes = np.expand_dims(tmp['option_changed_index'], 0)  # [1, episode_len]
         ep_actions = np.expand_dims(tmp['action'], 0)  # [1, episode_len, action_size]
@@ -318,12 +333,12 @@ class OC_Agent(Agent):
         return len(self._tmp_option_changed_indexes)
 
     def get_key_trans(self,
-                      force_length: int) -> Dict[str, np.ndarray | List[np.ndarray]]:
+                      force_length: int) -> dict[str, np.ndarray | list[np.ndarray]]:
         """
         Returns:
             key_indexes (np.int32): [1, key_len]
             key_padding_masks (np.bool): [1, key_len]
-            key_obses_list: List([1, key_len, *obs_shapes_i], ...)
+            key_obses_list: list([1, key_len, *obs_shapes_i], ...)
             key_option_indexes (np.int32): [1, key_len]
             key_pre_seq_hidden_states: [1, key_len, *seq_hidden_state_shape]
         """
@@ -333,7 +348,7 @@ class OC_Agent(Agent):
         ep_indexes = np.expand_dims(tmp['index'], 0)
         # [1, episode_len]
         ep_obses_list = [np.expand_dims(o, 0) for o in tmp['obs_list']]
-        # List([1, episode_len, *obs_shape_si], ...)
+        # list([1, episode_len, *obs_shape_si], ...)
         ep_option_indexes = np.expand_dims(tmp['option_index'], 0)
         # [1, episode_len]
         ep_pre_seq_hidden_states = np.expand_dims(tmp['pre_seq_hidden_state'], 0)
@@ -382,21 +397,23 @@ class OC_Agent(Agent):
 class OC_AgentManager(AgentManager):
     def __init__(self,
                  name: str,
-                 obs_names: List[str],
-                 obs_shapes: List[Tuple[int]],
-                 d_action_sizes: List[int],
+                 obs_names: list[str],
+                 obs_shapes: list[tuple[int]],
+                 d_action_sizes: list[int],
                  c_action_size: int,
                  max_episode_length: int = -1):
         super().__init__(name, obs_names, obs_shapes, d_action_sizes, c_action_size,
                          max_episode_length)
-        self.agents_dict: Dict[int, OC_Agent] = {}
-        self.rl: Optional[OptionSelectorBase] = None
+
+        self.agents_dict: dict[int, OC_Agent] = {}
+        self.rl: OptionSelectorBase | None = None
 
     def set_rl(self, rl: OptionSelectorBase) -> None:
         super().set_rl(rl)
 
         self.option_seq_encoder = rl.option_seq_encoder
         self.use_dilation = rl.use_dilation
+        self.option_names = [o.ma_name for o in rl.option_list]
 
     def _verify_agents(self,
                        agent_ids: np.ndarray):
@@ -411,6 +428,7 @@ class OC_AgentManager(AgentManager):
                     self.obs_shapes,
                     self.d_action_sizes,
                     self.c_action_size,
+                    self.option_names,
                     seq_hidden_state_shape=self.rl.seq_hidden_state_shape,
                     low_seq_hidden_state_shape=self.rl.low_seq_hidden_state_shape,
                     max_episode_length=self.max_episode_length
@@ -444,7 +462,7 @@ class OC_AgentManager(AgentManager):
     @unified_elapsed_timer('get_action', repeat=10)
     def get_action(self,
                    agent_ids: np.ndarray,
-                   obs_list: List[np.ndarray],
+                   obs_list: list[np.ndarray],
                    last_reward: np.ndarray,
                    offline_action: np.ndarray | None = None,
                    disable_sample: bool = False,
@@ -646,14 +664,14 @@ class OC_AgentManager(AgentManager):
 
 
 class OC_MultiAgentsManager(MultiAgentsManager):
-    _ma_manager: Dict[str, OC_AgentManager]
+    _ma_manager: dict[str, OC_AgentManager]
 
     def __init__(self,
-                 ma_obs_names: Dict[str, List[str]],
-                 ma_obs_shapes: Dict[str, List[Tuple[int, ...]]],
-                 ma_d_action_sizes: Dict[str, List[int]],
-                 ma_c_action_size: Dict[str, int],
-                 inference_ma_names: Set[str],
+                 ma_obs_names: dict[str, list[str]],
+                 ma_obs_shapes: dict[str, list[tuple[int, ...]]],
+                 ma_d_action_sizes: dict[str, list[int]],
+                 ma_c_action_size: dict[str, int],
+                 inference_ma_names: set[str],
                  model_abs_dir: Path,
                  max_episode_length: int = -1):
 
@@ -668,7 +686,7 @@ class OC_MultiAgentsManager(MultiAgentsManager):
                          model_abs_dir,
                          max_episode_length=max_episode_length)
 
-    def __iter__(self) -> Iterator[Tuple[str, OC_AgentManager]]:
+    def __iter__(self) -> Iterator[tuple[str, OC_AgentManager]]:
         return iter(self._ma_manager.items())
 
     def get_option(self):
