@@ -433,6 +433,9 @@ class OptionSelectorBase(SAC_Base):
         return self.option_list[0].get_initial_seq_hidden_state(batch_size,
                                                                 get_numpy)
 
+    def get_option_names(self) -> list[str]:
+        return [option.ma_name for option in self.option_list]
+
     @torch.no_grad()
     def _update_target_variables(self, tau=1.) -> None:
         target = self.model_target_rep.parameters()
