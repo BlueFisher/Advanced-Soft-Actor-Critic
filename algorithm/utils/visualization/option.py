@@ -1,9 +1,8 @@
-from pathlib import Path
-from typing import Optional
-
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
+
+
+geom = None
 
 
 def _get_vertices(x, y):
@@ -43,6 +42,9 @@ class OptionVisual:
         self.pre_step = -1
 
         self.fig, self.ax = plt.subplots(figsize=(8, 4))
+
+        if geom is not None:
+            self.fig.canvas.manager.window.setGeometry(*geom.getRect())
 
         self._bg = self.fig.canvas.copy_from_bbox(self.fig.bbox)
 
@@ -103,6 +105,9 @@ class OptionVisual:
 
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
+
+        global geom
+        geom = self.fig.canvas.manager.window.geometry()
 
     def reset(self):
         self.pre_termination = None

@@ -413,10 +413,12 @@ class OC_AgentManager(AgentManager):
 
         self.option_seq_encoder = rl.option_seq_encoder
         self.use_dilation = rl.use_dilation
-        self.option_names = [o.ma_name for o in rl.option_list]
+        self.option_names = rl.get_option_names()
 
     def _verify_agents(self,
                        agent_ids: np.ndarray):
+
+        assert self.rl is not None
 
         for agent_id in self.agents_liveness:
             self.agents_liveness[agent_id] -= 1

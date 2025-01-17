@@ -422,6 +422,8 @@ class AgentManager:
         Verify whether id in self.agents_dict and whether agent is active
         """
 
+        assert self.rl is not None
+
         for agent_id in self.agents_liveness:
             self.agents_liveness[agent_id] -= 1
 
