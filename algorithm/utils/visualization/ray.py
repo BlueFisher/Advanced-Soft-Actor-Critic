@@ -13,7 +13,7 @@ class RayVisual:
         self.fig = None
         self.idx = 0
 
-    def __call__(self, *rays: np.ndarray | torch.Tensor, max_batch=5, save_name=None):
+    def __call__(self, *rays: np.ndarray | torch.Tensor, max_batch=5, save_name: str | None = None):
         """
         Args:
             *rays: [batch, ray_size, C]

@@ -1,7 +1,7 @@
 import torch
 
 import algorithm.nn_models as m
-from algorithm.utils.image_visual import ImageVisual
+from algorithm.utils.visualization.image import ImageVisual
 
 
 class ModelRep(m.ModelBaseRep):

@@ -2,8 +2,8 @@ import torch
 from torchvision import transforms as T
 
 import algorithm.nn_models as m
-from algorithm.utils.image_visual import ImageVisual
-from algorithm.utils.ray import RayVisual
+from algorithm.utils.visualization.image import ImageVisual
+from algorithm.utils.visualization.ray import RayVisual
 from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
 
 
@@ -50,7 +50,7 @@ class ModelRep(m.ModelBaseRep):
                 pre_action: torch.Tensor,
                 pre_seq_hidden_state: torch.Tensor | None,
                 padding_mask: torch.Tensor | None = None):
-        llm_state, vis, vis_third, ray, vec = obs_list
+        llm_obs, vis, vis_third, ray, vec = obs_list
 
         """ PREPROCESSING """
         # remove the center ray
@@ -76,7 +76,7 @@ class ModelRep(m.ModelBaseRep):
         return x, self._get_empty_seq_hidden_state(x)
 
     def get_state_from_encoders(self, obs_list, encoders):
-        llm_state, vis, vis_third, ray, vec = obs_list
+        llm_obs, vis, vis_third, ray, vec = obs_list
 
         vis_encoder, vis_third_encoder, ray_encoder = encoders
 
@@ -86,7 +86,7 @@ class ModelRep(m.ModelBaseRep):
         return x
 
     def get_augmented_encoders(self, obs_list):
-        llm_state, vis, vis_third, ray, vec = obs_list
+        llm_obs, vis, vis_third, ray, vec = obs_list
 
         """ PREPROCESSING """
         # remove the center ray
