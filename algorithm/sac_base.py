@@ -1,6 +1,6 @@
 import logging
-import math
 import random
+import threading
 from collections import defaultdict
 from itertools import chain
 from pathlib import Path
@@ -250,6 +250,12 @@ class SAC_Base:
         self._build_ckpt()
         self._init_replay_buffer(replay_config)
         self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
+
+        self._batch_available_event = threading.Event()  # Event for batch availability by sample thread
+        self._batch_obtained_event = threading.Event()  # Event for batch obtained by main thread
+        self._batch = None
+        self._pointers = None
+        threading.Thread(target=self._sample_thread, daemon=True).start()
 
     def _set_logger(self):
         if self.ma_name is None:
@@ -749,7 +755,7 @@ class SAC_Base:
     def rnd_sample_d_action(self, state: torch.Tensor,
                             d_policy: distributions.Categorical) -> torch.Tensor:
         """
-        Sample action `self.rnd_n_sample` times, 
+        Sample action `self.rnd_n_sample` times,
         choose the action that has the max (model_rnd(s, a) - model_target_rnd(s, a))**2
 
         Args:
@@ -785,7 +791,7 @@ class SAC_Base:
     def rnd_sample_c_action(self, state: torch.Tensor,
                             c_policy: distributions.Normal) -> torch.Tensor:
         """
-        Sample action `self.rnd_n_sample` times, 
+        Sample action `self.rnd_n_sample` times,
         choose the action that has the max (model_rnd(s, a) - model_target_rnd(s, a))**2
 
         Args:
@@ -2453,135 +2459,195 @@ class SAC_Base:
                           m_pre_seq_hidden_states,
                           priority_is if self.use_priority else None)
 
-    @unified_elapsed_timer('train_all', 10)
+    def _sample_thread(self):
+        self._batch_obtained_event.set()
+
+        while True:
+            if self.use_replay_buffer:
+                with self._profiler(f'thread_{threading.get_ident()}.sample_from_replay_buffer', repeat=10) as profiler:
+                    train_data = self._sample_from_replay_buffer()
+                    if train_data is None:
+                        profiler.ignore()
+                        self._batch = None
+                        self._batch_available_event.set()
+                        time.sleep(1)
+                        continue
+
+                pointers, batch = train_data
+                batch_list = [batch]
+                self._pointers = pointers
+            else:
+                batch_list = self.batch_buffer.get_batch()
+                if len(batch_list) == 0:
+                    self._batch = None
+                    self._batch_available_event.set()
+                    time.sleep(1)
+                    continue
+
+                batch_list = [(*batch, None) for batch in batch_list]  # None is priority_is
+
+            for batch in batch_list:
+                self._batch_obtained_event.wait()
+                self._batch_obtained_event.clear()
+
+                (bn_indexes,
+                 bn_padding_masks,
+                 m_obses_list,
+                 bn_actions,
+                 bn_rewards,
+                 bn_dones,
+                 bn_mu_probs,
+                 m_pre_seq_hidden_states,
+                 priority_is) = batch
+                """
+                bn_indexes (np.int32): [batch, b + n]
+                bn_padding_masks (bool): [batch, b + n]
+                m_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
+                bn_actions: [batch, b + n, action_size]
+                bn_rewards: [batch, b + n]
+                bn_dones (bool): [batch, b + n]
+                bn_mu_probs: [batch, b + n, action_size]
+                m_pre_seq_hidden_states: [batch, b + n + 1, *seq_hidden_state_shape]
+                priority_is: [batch, 1]
+                """
+
+                with self._profiler(f'thread_{threading.get_ident()}.to_gpu', repeat=10):
+                    bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
+                    bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
+                    m_obses_list = [torch.from_numpy(t).to(self.device) for t in m_obses_list]
+                    for i, m_obses in enumerate(m_obses_list):
+                        # obs is image. It is much faster to convert uint8 to float32 in GPU
+                        if m_obses.dtype == torch.uint8:
+                            m_obses_list[i] = m_obses.type(torch.float32) / 255.
+                    bn_actions = torch.from_numpy(bn_actions).to(self.device)
+                    bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
+                    bn_dones = torch.from_numpy(bn_dones).to(self.device)
+                    bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
+                    m_pre_seq_hidden_states = torch.from_numpy(m_pre_seq_hidden_states).to(self.device)
+                    if self.use_replay_buffer and self.use_priority:
+                        priority_is = torch.from_numpy(priority_is).to(self.device)
+
+                self._batch = (bn_indexes,
+                               bn_padding_masks,
+                               m_obses_list,
+                               bn_actions,
+                               bn_rewards,
+                               bn_dones,
+                               bn_mu_probs,
+                               m_pre_seq_hidden_states,
+                               priority_is)
+
+                self._batch_available_event.set()
+
+    @unified_elapsed_timer('train a step', 10)
     def train(self) -> int:
         step = self.get_global_step()
 
+        with self._profiler('waiting_batch_available', repeat=10):
+            self._batch_available_event.wait()
+            self._batch_available_event.clear()
+
+        if self._batch is None:
+            self._profiler('train a step').ignore()
+            return step
+
+        (bn_indexes,
+         bn_padding_masks,
+         m_obses_list,
+         bn_actions,
+         bn_rewards,
+         bn_dones,
+         bn_mu_probs,
+         m_pre_seq_hidden_states,
+         priority_is) = self._batch
+        """
+        bn_indexes (np.int32): [batch, b + n]
+        bn_padding_masks (bool): [batch, b + n]
+        m_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
+        bn_actions: [batch, b + n, action_size]
+        bn_rewards: [batch, b + n]
+        bn_dones (bool): [batch, b + n]
+        bn_mu_probs: [batch, b + n, action_size]
+        m_pre_seq_hidden_states: [batch, b + n + 1, *seq_hidden_state_shape]
+        priority_is: [batch, 1]
+        """
+        pointers = self._pointers  # Could be None if NOT use_replay_buffer
+
+        self._batch_obtained_event.set()
+
+        with self._profiler('train', repeat=10):
+            m_target_states = self._train(
+                bn_indexes=bn_indexes,
+                bn_padding_masks=bn_padding_masks,
+                m_obses_list=m_obses_list,
+                bn_actions=bn_actions,
+                bn_rewards=bn_rewards,
+                bn_dones=bn_dones,
+                bn_mu_probs=bn_mu_probs,
+                m_pre_seq_hidden_states=m_pre_seq_hidden_states,
+                priority_is=priority_is if self.use_replay_buffer and self.use_priority else None)
+
+        if step % self.save_model_per_step == 0:
+            self.save_model()
+
         if self.use_replay_buffer:
-            with self._profiler('sample_from_replay_buffer', repeat=10) as profiler:
-                train_data = self._sample_from_replay_buffer()
-                if train_data is None:
-                    profiler.ignore()
-                    self._profiler('train_all').ignore()
-                    return step
+            bn_obses_list = [m_obses[:, :-1, ...] for m_obses in m_obses_list]
+            next_obs_list = [m_obses[:, -1, ...] for m_obses in m_obses_list]
+            bn_pre_actions = gen_pre_n_actions(bn_actions)  # [batch, b + n, action_size]
+            bn_pre_seq_hidden_states = m_pre_seq_hidden_states[:, :-1, ...]  # [batch, b + n, *seq_hidden_state_shape]
 
-            pointers, batch = train_data
-            batch_list = [batch]
-        else:
-            batch_list = self.batch_buffer.get_batch()
-            batch_list = [(*batch, None) for batch in batch_list]  # None is priority_is
+            with self._profiler('get_l_states_with_seq_hidden_states', repeat=10):
+                bn_states, next_bn_seq_hidden_states = self.get_l_states_with_seq_hidden_states(
+                    l_indexes=bn_indexes,
+                    l_padding_masks=bn_padding_masks,
+                    l_obses_list=bn_obses_list,
+                    l_pre_actions=bn_pre_actions,
+                    l_pre_seq_hidden_states=bn_pre_seq_hidden_states)
 
-        for batch in batch_list:
-            (bn_indexes,
-             bn_padding_masks,
-             m_obses_list,
-             bn_actions,
-             bn_rewards,
-             bn_dones,
-             bn_mu_probs,
-             m_pre_seq_hidden_states,
-             priority_is) = batch
-
-            """
-            bn_indexes (np.int32): [batch, b + n]
-            bn_padding_masks (bool): [batch, b + n]
-            m_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
-            bn_actions: [batch, b + n, action_size]
-            bn_rewards: [batch, b + n]
-            bn_dones (bool): [batch, b + n]
-            bn_mu_probs: [batch, b + n, action_size]
-            m_pre_seq_hidden_states: [batch, b + n + 1, *seq_hidden_state_shape]
-            priority_is: [batch, 1]
-            """
-            with self._profiler('to gpu', repeat=10):
-                bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
-                bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
-                m_obses_list = [torch.from_numpy(t).to(self.device) for t in m_obses_list]
-                for i, m_obses in enumerate(m_obses_list):
-                    # obs is image. It is much faster to convert uint8 to float32 in GPU
-                    if m_obses.dtype == torch.uint8:
-                        m_obses_list[i] = m_obses.type(torch.float32) / 255.
-                bn_actions = torch.from_numpy(bn_actions).to(self.device)
-                bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
-                bn_dones = torch.from_numpy(bn_dones).to(self.device)
-                bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
-                m_pre_seq_hidden_states = torch.from_numpy(m_pre_seq_hidden_states).to(self.device)
-                if self.use_replay_buffer and self.use_priority:
-                    priority_is = torch.from_numpy(priority_is).to(self.device)
-
-            with self._profiler('train', repeat=10):
-                m_target_states = self._train(
-                    bn_indexes=bn_indexes,
-                    bn_padding_masks=bn_padding_masks,
-                    m_obses_list=m_obses_list,
-                    bn_actions=bn_actions,
-                    bn_rewards=bn_rewards,
-                    bn_dones=bn_dones,
-                    bn_mu_probs=bn_mu_probs,
-                    m_pre_seq_hidden_states=m_pre_seq_hidden_states,
-                    priority_is=priority_is if self.use_replay_buffer and self.use_priority else None)
-
-            if step % self.save_model_per_step == 0:
-                self.save_model()
-
-            if self.use_replay_buffer:
-                bn_obses_list = [m_obses[:, :-1, ...] for m_obses in m_obses_list]
-                next_obs_list = [m_obses[:, -1, ...] for m_obses in m_obses_list]
-                bn_pre_actions = gen_pre_n_actions(bn_actions)  # [batch, b + n, action_size]
-                bn_pre_seq_hidden_states = m_pre_seq_hidden_states[:, :-1, ...]  # [batch, b + n, *seq_hidden_state_shape]
-
-                with self._profiler('get_l_states_with_seq_hidden_states', repeat=10):
-                    bn_states, next_bn_seq_hidden_states = self.get_l_states_with_seq_hidden_states(
-                        l_indexes=bn_indexes,
-                        l_padding_masks=bn_padding_masks,
+            if self.use_n_step_is or (self.d_action_sizes and not self.discrete_dqn_like):
+                with self._profiler('get_l_probs', repeat=10):
+                    bn_pi_probs_tensor = self.get_l_probs(
                         l_obses_list=bn_obses_list,
-                        l_pre_actions=bn_pre_actions,
-                        l_pre_seq_hidden_states=bn_pre_seq_hidden_states)
+                        l_states=bn_states,
+                        l_actions=bn_actions)
 
-                if self.use_n_step_is or (self.d_action_sizes and not self.discrete_dqn_like):
-                    with self._profiler('get_l_probs', repeat=10):
-                        bn_pi_probs_tensor = self.get_l_probs(
-                            l_obses_list=bn_obses_list,
-                            l_states=bn_states,
-                            l_actions=bn_actions)
+            # Update td_error
+            if self.use_priority:
+                with self._profiler('get_td_error', repeat=10):
+                    td_error = self._get_td_error(
+                        bn_padding_masks=bn_padding_masks,
+                        bn_obses_list=bn_obses_list,
+                        bn_states=bn_states,
+                        bn_target_states=m_target_states[:, :-1, ...],
+                        bn_actions=bn_actions,
+                        bn_rewards=bn_rewards,
+                        next_obs_list=next_obs_list,
+                        next_target_state=m_target_states[:, -1, ...],
+                        bn_dones=bn_dones,
+                        bn_mu_probs=bn_pi_probs_tensor).detach().cpu().numpy()
+                self.replay_buffer.update(pointers, td_error)
 
-                # Update td_error
-                if self.use_priority:
-                    with self._profiler('get_td_error', repeat=10):
-                        td_error = self._get_td_error(
-                            bn_padding_masks=bn_padding_masks,
-                            bn_obses_list=bn_obses_list,
-                            bn_states=bn_states,
-                            bn_target_states=m_target_states[:, :-1, ...],
-                            bn_actions=bn_actions,
-                            bn_rewards=bn_rewards,
-                            next_obs_list=next_obs_list,
-                            next_target_state=m_target_states[:, -1, ...],
-                            bn_dones=bn_dones,
-                            bn_mu_probs=bn_pi_probs_tensor).detach().cpu().numpy()
-                    self.replay_buffer.update(pointers, td_error)
+            bn_padding_masks = bn_padding_masks.detach().cpu().numpy()
+            padding_mask = bn_padding_masks.reshape(-1)
 
-                bn_padding_masks = bn_padding_masks.detach().cpu().numpy()
-                padding_mask = bn_padding_masks.reshape(-1)
+            # Update seq_hidden_states
+            if self.seq_hidden_state_shape[-1] != 0:
+                pointers_list = [pointers + 1 + i for i in range(-self.burn_in_step, self.n_step)]
+                tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
 
-                # Update seq_hidden_states
-                if self.seq_hidden_state_shape[-1] != 0:
-                    pointers_list = [pointers + 1 + i for i in range(-self.burn_in_step, self.n_step)]
-                    tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
+                next_bn_seq_hidden_states = next_bn_seq_hidden_states.detach().cpu().numpy()
+                seq_hidden_state = next_bn_seq_hidden_states.reshape(-1, *next_bn_seq_hidden_states.shape[2:])
+                self.replay_buffer.update_transitions(tmp_pointers[~padding_mask], 'pre_seq_hidden_state', seq_hidden_state[~padding_mask])
 
-                    next_bn_seq_hidden_states = next_bn_seq_hidden_states.detach().cpu().numpy()
-                    seq_hidden_state = next_bn_seq_hidden_states.reshape(-1, *next_bn_seq_hidden_states.shape[2:])
-                    self.replay_buffer.update_transitions(tmp_pointers[~padding_mask], 'pre_seq_hidden_state', seq_hidden_state[~padding_mask])
+            # Update n_mu_probs
+            if self.use_n_step_is or (self.d_action_sizes and not self.discrete_dqn_like):
+                pointers_list = [pointers + i for i in range(-self.burn_in_step, self.n_step)]
+                tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
 
-                # Update n_mu_probs
-                if self.use_n_step_is or (self.d_action_sizes and not self.discrete_dqn_like):
-                    pointers_list = [pointers + i for i in range(-self.burn_in_step, self.n_step)]
-                    tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
+                pi_probs = bn_pi_probs_tensor.detach().cpu().numpy()
+                pi_prob = pi_probs.reshape(-1, *pi_probs.shape[2:])
+                self.replay_buffer.update_transitions(tmp_pointers[~padding_mask], 'mu_prob', pi_prob[~padding_mask])
 
-                    pi_probs = bn_pi_probs_tensor.detach().cpu().numpy()
-                    pi_prob = pi_probs.reshape(-1, *pi_probs.shape[2:])
-                    self.replay_buffer.update_transitions(tmp_pointers[~padding_mask], 'mu_prob', pi_prob[~padding_mask])
-
-            step = self._increase_global_step()
+        step = self._increase_global_step()
 
         return step

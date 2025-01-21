@@ -12,7 +12,9 @@ class ModelRep(m.ModelBaseRep):
         self.attn_usvs = m.MultiheadAttention(9, 1)
         self.attn_enemies = m.MultiheadAttention(6, 1)
 
-        self.rnn = m.GRU(9 + 6 + self.c_action_size, 64, 1)
+        self.ray_dense = m.LinearLayers(122, 8, 1)
+
+        self.rnn = m.GRU(9 + 6 + 8 + self.c_action_size, 64, 1)
 
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         feat_usvs, feat_enemeis, ray_obs, vec_obs = obs_list
@@ -29,11 +31,14 @@ class ModelRep(m.ModelBaseRep):
                                               key_padding_mask=feat_enemeis_mask)
         attned_enemies = attned_enemies.mean(-2)
 
+        ray = self.ray_dense(ray_obs)
+
         if rnn_state is not None:
             rnn_state = rnn_state[:, 0]
 
         state, hn = self.rnn(torch.concat([attned_usvs,
                                            attned_enemies,
+                                           ray,
                                            pre_action], dim=-1), rnn_state)
         state = torch.cat([state, vec_obs], dim=-1)
 

@@ -193,7 +193,7 @@ class Main:
 
         ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size = self.env.init()
 
-        if self.base_config['offline_env_config']['enabled']:
+        if self.train_mode and self.base_config['offline_env_config']['enabled']:
             from algorithm.env_wrapper.offline_wrapper import OfflineWrapper
 
             self.offline_env = OfflineWrapper(env_name=self.base_config['offline_env_config']['env_name'],
