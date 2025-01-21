@@ -35,7 +35,11 @@ def _get_vertices_list(x, y):
 
 
 class OptionVisual:
+    fig = None
+
     def __init__(self, option_names: list[str]) -> None:
+        return
+
         self.num_options = len(option_names)
 
         self.pre_termination = None
@@ -63,6 +67,9 @@ class OptionVisual:
     def add_option_termination(self,
                                option: int,
                                termination: float):
+        if self.fig is None:
+            return
+
         option = int(option)
         termination = float(termination)
 
@@ -110,6 +117,9 @@ class OptionVisual:
         geom = self.fig.canvas.manager.window.geometry()
 
     def reset(self):
+        if self.fig is None:
+            return
+
         self.pre_termination = None
         self.pre_step = -1
 
@@ -121,6 +131,9 @@ class OptionVisual:
             self.dots[i].set_ydata([])
 
     def __del__(self):
+        if self.fig is None:
+            return
+
         plt.close(self.fig)
 
 

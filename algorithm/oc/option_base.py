@@ -23,6 +23,10 @@ class OptionBase(SAC_Base):
         self.random_q = random_q
         super().__init__(*args, **kwargs)
 
+    def _sample_thread(self):
+        # Disable sample thread
+        pass
+
     def _set_logger(self):
         if self.ma_name is None:
             self._logger = logging.getLogger('option')
