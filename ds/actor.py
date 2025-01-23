@@ -6,6 +6,7 @@ import multiprocessing as mp
 import os
 import threading
 import time
+from multiprocessing.sharedctypes import SynchronizedArray
 from pathlib import Path
 from typing import Dict, List, Set
 
@@ -16,6 +17,7 @@ import algorithm.config_helper as config_helper
 from algorithm.agent import Agent, AgentManager
 from algorithm.sac_main import Main
 from algorithm.utils import ElapsedTimer, ReadWriteLock, gen_pre_n_actions
+from algorithm.utils.elapse_timer import UnifiedElapsedTimer
 from algorithm.utils.enums import *
 
 from .constants import *
@@ -33,7 +35,7 @@ from .utils import (SharedMemoryManager, get_episode_shapes_dtypes,
 class AgentManagerBuffer:
     def __init__(self,
                  episode_buffer: SharedMemoryManager,
-                 episode_length_array: mp.Array,
+                 episode_length_array: SynchronizedArray,
                  episode_sender_processes: List[mp.Process]):
         self.episode_buffer = episode_buffer
         self.episode_length_array = episode_length_array
@@ -45,7 +47,7 @@ class EpisodeSender:
                  actor_id: int,
                  _id: int,
                  episode_buffer: SharedMemoryManager,
-                 episode_length_array: mp.Array,
+                 episode_length_array: SynchronizedArray,
 
                  logger_in_file: bool,
                  debug: bool,
@@ -102,13 +104,17 @@ class Actor(Main):
     _stub = None
 
     def __init__(self, root_dir, config_dir, args):
+        self.root_dir = root_dir
+
         self._logger = logging.getLogger('ds.actor')
 
-        config_abs_dir = self._init_config(root_dir, config_dir, args)
+        self._profiler = UnifiedElapsedTimer(self._logger)
+
+        self._config_abs_dir = self._init_config(root_dir, config_dir, args)
 
         self._sac_actor_lock = ReadWriteLock(5, 1, 1, logger=self._logger)
         self._init_env()
-        self._init_sac(config_abs_dir)
+        self._init_sac()
         self._init_episode_sender()
 
         self._run()
@@ -194,19 +200,22 @@ class Actor(Main):
 
         return config_abs_dir
 
-    def _init_sac(self, config_abs_dir):
+    def _init_sac(self):
         self._ma_agent_manager_buffer: Dict[str, AgentManagerBuffer] = {}
 
         for n, mgr in self.ma_manager:
             # If nn models exists, load saved model, or copy a new one
-            saved_nn_abs_path = mgr.model_abs_dir / 'saved_nn.py'
-            if saved_nn_abs_path.exists():
-                spec = importlib.util.spec_from_file_location('nn', str(saved_nn_abs_path))
-                self._logger.info(f'Loaded nn from existed {saved_nn_abs_path}')
+            saved_nn_abs_dir = mgr.model_abs_dir / 'nn'
+            if saved_nn_abs_dir.exists():
+                nn_abs_path = saved_nn_abs_dir / f'{mgr.config["sac_config"]["nn"]}.py'
+                spec = importlib.util.spec_from_file_location(f'{self._get_relative_package(nn_abs_path)}.{mgr.config["sac_config"]["nn"]}',
+                                                              nn_abs_path)
+                self._logger.info(f'Loaded nn from existed {nn_abs_path}')
             else:
-                nn_abs_path = config_abs_dir / f'{mgr.config["sac_config"]["nn"]}.py'
+                nn_abs_path = self._config_abs_dir / f'{mgr.config["sac_config"]["nn"]}.py'
 
-                spec = importlib.util.spec_from_file_location('nn', str(nn_abs_path))
+                spec = importlib.util.spec_from_file_location(f'{self._get_relative_package(nn_abs_path)}.{mgr.config["sac_config"]["nn"]}',
+                                                              nn_abs_path)
                 self._logger.info(f'Loaded nn in env dir: {nn_abs_path}')
 
             nn = importlib.util.module_from_spec(spec)
@@ -235,7 +244,7 @@ class Actor(Main):
                 max_episode_length,
                 mgr.obs_shapes,
                 mgr.action_size,
-                mgr.rl.seq_hidden_state_shape if mgr.seq_encoder is not None else None)
+                mgr.rl.seq_hidden_state_shape)
 
             ep_shmm = SharedMemoryManager(self.base_config['episode_queue_size'],
                                           logger=logging.getLogger(f'ds.actor.ep_shmm.{n}'),
@@ -291,7 +300,7 @@ class Actor(Main):
                    ep_rewards: np.ndarray,
                    ep_dones: np.ndarray,
                    ep_probs: List[np.ndarray],
-                   ep_seq_hidden_states: np.ndarray = None):
+                   ep_pre_seq_hidden_states: np.ndarray = None):
 
         mgr = self.ma_manager[ma_name]
         mgr_buffer = self._ma_agent_manager_buffer[ma_name]
@@ -308,7 +317,7 @@ class Actor(Main):
             ep_rewards: [1, episode_len]
             ep_dones: [1, episode_len]
             ep_probs: [1, episode_len]
-            ep_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
+            ep_pre_seq_hidden_states: [1, episode_len, *seq_hidden_state_shape]
         """
         episode_idx = mgr_buffer.episode_buffer.put([
             ep_indexes,
@@ -317,7 +326,7 @@ class Actor(Main):
             ep_rewards,
             ep_dones,
             ep_probs,
-            ep_seq_hidden_states
+            ep_pre_seq_hidden_states
         ])
         mgr_buffer.episode_length_array[episode_idx] = ep_indexes.shape[1]
 
@@ -351,9 +360,10 @@ class Actor(Main):
                     self.ma_manager.reset_and_continue()
 
                 while not self.ma_manager.done and self._stub.connected:
-                    (decision_step,
-                     terminal_step,
-                     all_envs_done) = self.env.step(ma_d_action, ma_c_action)
+                    with self._profiler('env.step', repeat=10):
+                        (decision_step,
+                         terminal_step,
+                         all_envs_done) = self.env.step(ma_d_action, ma_c_action)
 
                     if decision_step is None:
                         force_reset = True
@@ -362,12 +372,13 @@ class Actor(Main):
                         break
 
                     with self._sac_actor_lock.read():
-                        ma_d_action, ma_c_action = self.ma_manager.get_ma_action(
-                            ma_agent_ids=decision_step.ma_agent_ids,
-                            ma_obs_list=decision_step.ma_obs_list,
-                            ma_last_reward=decision_step.ma_last_reward,
-                            force_rnd_if_available=True
-                        )
+                        with self._profiler('get_ma_action', repeat=10):
+                            ma_d_action, ma_c_action = self.ma_manager.get_ma_action(
+                                ma_agent_ids=decision_step.ma_agent_ids,
+                                ma_obs_list=decision_step.ma_obs_list,
+                                ma_last_reward=decision_step.ma_last_reward,
+                                force_rnd_if_available=True
+                            )
 
                     self.ma_manager.end_episode(
                         ma_agent_ids=terminal_step.ma_agent_ids,
@@ -390,7 +401,7 @@ class Actor(Main):
 
                         # ep_indexes,
                         # ep_obses_list, ep_actions, ep_rewards, ep_dones, ep_probs,
-                        # ep_seq_hidden_states
+                        # ep_pre_seq_hidden_states
                         for episode_trans in episode_trans_list:
                             self._add_trans(n, **episode_trans)
 
@@ -539,7 +550,7 @@ class StubEpisodeSenderController:
                     ep_rewards,
                     ep_dones,
                     ep_mu_probs,
-                    ep_seq_hidden_states=None):
+                    ep_pre_seq_hidden_states):
         self._learner_stub.Add(learner_pb2.AddRequest(ma_name=ma_name,
                                                       ep_indexes=ndarray_to_proto(ep_indexes),
                                                       ep_obses_list=[ndarray_to_proto(ep_obses)
@@ -548,4 +559,4 @@ class StubEpisodeSenderController:
                                                       ep_rewards=ndarray_to_proto(ep_rewards),
                                                       ep_dones=ndarray_to_proto(ep_dones),
                                                       ep_mu_probs=ndarray_to_proto(ep_mu_probs),
-                                                      ep_seq_hidden_states=ndarray_to_proto(ep_seq_hidden_states)))
+                                                      ep_pre_seq_hidden_states=ndarray_to_proto(ep_pre_seq_hidden_states)))

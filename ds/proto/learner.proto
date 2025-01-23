@@ -35,5 +35,5 @@ message AddRequest {
   NDarray ep_rewards = 5;
   NDarray ep_dones = 6;
   NDarray ep_mu_probs = 7;
-  NDarray ep_seq_hidden_states = 8;
+  NDarray ep_pre_seq_hidden_states = 8;
 }

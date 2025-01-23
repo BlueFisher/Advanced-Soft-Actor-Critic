@@ -120,8 +120,6 @@ class OptionSelectorBase(SAC_Base):
         self.option_configs = option_configs
         self.num_options = len(option_configs)
 
-        self._key_batch = None
-
         super().__init__(obs_names,
                          obs_shapes,
                          d_action_sizes,
@@ -415,6 +413,11 @@ class OptionSelectorBase(SAC_Base):
                 option.remove_models(global_step)
 
         self.low_seq_hidden_state_shape = self.option_list[0].seq_hidden_state_shape
+
+    def _init_replay_buffer(self, replay_config=None):
+        self._key_batch = None
+
+        return super()._init_replay_buffer(replay_config)
 
     def set_train_mode(self, train_mode=True):
         super().set_train_mode(train_mode)

@@ -407,7 +407,8 @@ class UnityWrapper(EnvWrapper):
                                                                n_envs=min(self.max_n_envs_per_process, self.n_envs - i * self.max_n_envs_per_process)))
         else:
             self._logger.info('Using multi-processing environments')
-            multiprocessing.set_start_method('spawn')
+            if multiprocessing.get_start_method(allow_none=True) is None:
+                multiprocessing.set_start_method('spawn')
 
             # All environments are executed in parallel
             self._conns: List[multiprocessing.connection.Connection] = [None] * self._env_processes_size

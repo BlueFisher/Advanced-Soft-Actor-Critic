@@ -6,6 +6,7 @@ import os
 import threading
 import traceback
 from multiprocessing.connection import Connection
+from multiprocessing.sharedctypes import SynchronizedArray
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -25,7 +26,7 @@ class BatchGenerator:
                  _id: int,
 
                  episode_buffer: SharedMemoryManager,
-                 episode_length_array: mp.Array,
+                 episode_length_array: SynchronizedArray,
                  batch_buffer: SharedMemoryManager,
 
                  logger_in_file: bool,
@@ -56,10 +57,10 @@ class BatchGenerator:
 
         if ma_name is None:
             self._logger = logging.getLogger(f'ds.learner.trainer.batch_generator_{_id}')
+            self._logger.info(f'BatchGenerator {_id} ({os.getpid()}) initialized')
         else:
             self._logger = logging.getLogger(f'ds.learner.trainer.{ma_name}.batch_generator_{_id}')
-
-        self._logger.info(f'BatchGenerator({ma_name}) {_id} ({os.getpid()}) initialized')
+            self._logger.info(f'BatchGenerator({ma_name}) {_id} ({os.getpid()}) initialized')
 
         episode_buffer.init_logger(self._logger)
         batch_buffer.init_logger(self._logger)
@@ -88,22 +89,21 @@ class BatchGenerator:
              ep_rewards,
              ep_dones,
              ep_mu_probs,
-             ep_seq_hidden_states) = episode
+             ep_pre_seq_hidden_states) = episode
 
             ep_padding_masks = np.zeros_like(ep_indexes, dtype=bool)
             ep_padding_masks[:, -1] = True  # The last step is next_step
             ep_padding_masks[ep_indexes == -1] = True
 
             """
-            bn_indexes: [episode_len - bn + 1, bn]
-            bn_padding_masks: [episode_len - bn + 1, bn]
-            bn_obses_list: list([episode_len - bn + 1, bn, *obs_shapes_i], ...)
-            bn_actions: [episode_len - bn + 1, bn, action_size]
-            bn_rewards: [episode_len - bn + 1, bn]
-            next_obs_list: list([episode_len - bn + 1, *obs_shapes_i], ...)
-            bn_dones: [episode_len - bn + 1, bn]
-            bn_mu_probs: [episode_len - bn + 1, bn]
-            bn_seq_hidden_states: [episode_len - bn + 1, bn, *seq_hidden_state_shape]
+            bn_indexes (np.int32): [ep_len - bn + 1, bn]
+            bn_padding_masks (bool): [ep_len - bn + 1, bn]
+            m_obses_list: list([ep_len - bn + 1 + 1, bn, *obs_shapes_i], ...)
+            bn_actions: [ep_len - bn + 1, bn, action_size]
+            bn_rewards: [ep_len - bn + 1, bn]
+            bn_dones (bool): [ep_len - bn + 1, bn]
+            bn_probs: [ep_len - bn + 1, bn, action_size]
+            m_pre_seq_hidden_states: [ep_len - bn + 1 + 1, bn, *seq_hidden_state_shape]
             """
             ori_batch = episode_to_batch(self.burn_in_step,
                                          self.n_step,
@@ -115,7 +115,9 @@ class BatchGenerator:
                                          l_rewards=ep_rewards,
                                          l_dones=ep_dones,
                                          l_probs=ep_mu_probs,
-                                         l_seq_hidden_states=ep_seq_hidden_states)
+                                         l_pre_seq_hidden_states=ep_pre_seq_hidden_states)
+
+            ori_batch = list(ori_batch)
 
             if _rest_batch is not None:
                 ori_batch = traverse_lists((_rest_batch, ori_batch), lambda rb, b: np.concatenate([rb, b]))
@@ -142,7 +144,7 @@ class Trainer:
     def __init__(self,
                  all_variables_buffer: SharedMemoryManager,
                  episode_buffer: SharedMemoryManager,
-                 episode_length_array: mp.Array,
+                 episode_length_array: SynchronizedArray,
                  cmd_pipe_server: Connection,
 
                  logger_in_file: bool,
@@ -204,7 +206,7 @@ class Trainer:
             self.sac.burn_in_step + self.sac.n_step,
             obs_shapes,
             sum(d_action_sizes) + c_action_size,
-            self.sac.seq_hidden_state_shape if self.sac.seq_encoder is not None else None)
+            self.sac.seq_hidden_state_shape)
 
         self._batch_buffer = SharedMemoryManager(self.base_config['batch_queue_size'],
                                                  logger=logging.getLogger(f'ds.learner.trainer.batch_shmm.{self._logger.name}'),
@@ -284,27 +286,24 @@ class Trainer:
 
             (bn_indexes,
              bn_padding_masks,
-             bn_obses_list,
+             m_obses_list,
              bn_actions,
              bn_rewards,
-             next_obs_list,
              bn_dones,
              bn_mu_probs,
-             bn_seq_hidden_states) = batch
+             m_pre_seq_hidden_states) = batch
 
             with timer_train:
                 with self.sac_lock:
                     try:
                         step = self.sac.train(bn_indexes=bn_indexes,
                                               bn_padding_masks=bn_padding_masks,
-                                              bn_obses_list=bn_obses_list,
+                                              m_obses_list=m_obses_list,
                                               bn_actions=bn_actions,
                                               bn_rewards=bn_rewards,
-                                              next_obs_list=next_obs_list,
                                               bn_dones=bn_dones,
                                               bn_mu_probs=bn_mu_probs,
-                                              f_seq_hidden_states=bn_seq_hidden_states[:, :1]
-                                              if bn_seq_hidden_states is not None else None)
+                                              m_pre_seq_hidden_states=m_pre_seq_hidden_states)
                     except Exception as e:
                         self._logger.error(e)
                         self._logger.error(traceback.format_exc())

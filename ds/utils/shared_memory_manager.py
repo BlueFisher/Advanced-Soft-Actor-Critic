@@ -79,13 +79,15 @@ class SharedMemoryManager:
                                      lambda shape, dtype: np.zeros(shape, dtype=dtype))
 
         self.shms = traverse_lists(self.buffer,
-                                   lambda b: [SharedMemory(create=True, size=b.nbytes) for _ in range(self.queue_size)])
+                                   lambda b: [SharedMemory(create=True, size=b.nbytes) if b.nbytes > 0 else None
+                                              for _ in range(self.queue_size)])
 
     def init_from_data_buffer(self, data_buffer):
         self.buffer = data_buffer
 
         self.shms = traverse_lists(self.buffer,
-                                   lambda b: [SharedMemory(create=True, size=b.nbytes) for _ in range(self.queue_size)])
+                                   lambda b: [SharedMemory(create=True, size=b.nbytes) if b.nbytes > 0 else None
+                                              for _ in range(self.queue_size)])
 
     def get(self, timeout=None):
         with self._timer_get_shm_index, self._counter_get_shm_index_empty:
@@ -98,6 +100,8 @@ class SharedMemoryManager:
 
         # Copy shm to buffer
         def _tra(b: np.ndarray, shms: List[SharedMemory]):
+            if b.nbytes == 0:
+                return
             shm_np = np.ndarray(b.shape, dtype=b.dtype, buffer=shms[shm_idx].buf)
             np.copyto(b, shm_np)
 
@@ -134,7 +138,7 @@ class SharedMemoryManager:
 
         # Copy data to shm
         def _tra(d: np.ndarray, shms: List[SharedMemory]):
-            if len(d.shape) == 0:
+            if d.nbytes == 0:
                 return
             shm_np = np.ndarray(d.shape, dtype=d.dtype, buffer=shms[shm_idx].buf)
             np.copyto(shm_np, d)

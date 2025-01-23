@@ -2,7 +2,7 @@ import logging
 import sys
 from itertools import chain
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import torch
@@ -16,9 +16,9 @@ from algorithm.sac_base import SAC_Base
 
 class SAC_DS_Base(SAC_Base):
     def __init__(self,
-                 obs_names: List[str],
-                 obs_shapes: List[Tuple[int]],
-                 d_action_sizes: List[int],
+                 obs_names: list[str],
+                 obs_shapes: list[tuple[int]],
+                 d_action_sizes: list[int],
                  c_action_size: int,
                  model_abs_dir: Optional[Path],
                  device: Optional[str] = None,
@@ -60,18 +60,24 @@ class SAC_DS_Base(SAC_Base):
 
                  discrete_dqn_like: bool = False,
                  discrete_dqn_epsilon: float = 0.2,
+
                  siamese: Optional[SIAMESE] = None,
                  siamese_use_q: bool = False,
                  siamese_use_adaptive: bool = False,
+
                  use_prediction: bool = False,
                  transition_kl: float = 0.8,
                  use_extra_data: bool = True,
+
                  curiosity: Optional[CURIOSITY] = None,
                  curiosity_strength: float = 1.,
+
                  use_rnd: bool = False,
                  rnd_n_sample: int = 10,
+
                  use_normalization: bool = False,
-                 action_noise: Optional[List[float]] = None):
+
+                 action_noise: Optional[list[float]] = None):
 
         self.obs_names = obs_names
         self.obs_shapes = obs_shapes
@@ -92,6 +98,7 @@ class SAC_DS_Base(SAC_Base):
 
         self.write_summary_per_step = int(write_summary_per_step)
         self.save_model_per_step = int(save_model_per_step)
+
         self.batch_size = batch_size
         self.tau = tau
         self.update_target_per_step = update_target_per_step
@@ -99,6 +106,7 @@ class SAC_DS_Base(SAC_Base):
         self.target_d_alpha = target_d_alpha
         self.target_c_alpha = target_c_alpha
         self.d_policy_entropy_penalty = d_policy_entropy_penalty
+
         self.gamma = gamma
         self.v_lambda = v_lambda
         self.v_rho = v_rho
@@ -107,22 +115,29 @@ class SAC_DS_Base(SAC_Base):
 
         self.discrete_dqn_like = discrete_dqn_like
         self.discrete_dqn_epsilon = discrete_dqn_epsilon
+
         self.siamese = siamese
         self.siamese_use_q = siamese_use_q
         self.siamese_use_adaptive = siamese_use_adaptive
+
         self.use_prediction = use_prediction
         self.transition_kl = transition_kl
         self.use_extra_data = use_extra_data
+
         self.curiosity = curiosity
         self.curiosity_strength = curiosity_strength
+
         self.use_rnd = use_rnd
         self.rnd_n_sample = rnd_n_sample
+
         self.use_normalization = use_normalization
+
         self.action_noise = action_noise
 
         self.use_replay_buffer = False
         self.use_priority = False
         self.use_n_step_is = True
+        self.offline_loss = False
 
         self._set_logger()
 
@@ -169,7 +184,7 @@ class SAC_DS_Base(SAC_Base):
         else:
             return variables
 
-    def update_policy_variables(self, t_variables: List[np.ndarray]):
+    def update_policy_variables(self, t_variables: list[np.ndarray]):
         """
         For actor to update its own network from learner
         """
@@ -234,7 +249,7 @@ class SAC_DS_Base(SAC_Base):
         else:
             return variables
 
-    def update_all_variables(self, t_variables: List[np.ndarray]):
+    def update_all_variables(self, t_variables: list[np.ndarray]):
         if any([np.isnan(v.sum()) for v in t_variables]):
             return False
 
@@ -246,37 +261,33 @@ class SAC_DS_Base(SAC_Base):
         return True
 
     def train(self,
-              bn_indexes,
-              bn_padding_masks,
-              bn_obses_list,
-              bn_actions,
-              bn_rewards,
-              next_obs_list,
-              bn_dones,
-              bn_mu_probs,
-              f_seq_hidden_states=None):
+              bn_indexes: np.ndarray,
+              bn_padding_masks: np.ndarray,
+              m_obses_list: list[np.ndarray],
+              bn_actions: np.ndarray,
+              bn_rewards: np.ndarray,
+              bn_dones: np.ndarray,
+              bn_mu_probs: np.ndarray,
+              m_pre_seq_hidden_states: np.ndarray):
 
         bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
         bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
-        bn_obses_list = [torch.from_numpy(t).to(self.device) for t in bn_obses_list]
+        m_obses_list = [torch.from_numpy(t).to(self.device) for t in m_obses_list]
         bn_actions = torch.from_numpy(bn_actions).to(self.device)
         bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
-        next_obs_list = [torch.from_numpy(t).to(self.device) for t in next_obs_list]
         bn_dones = torch.from_numpy(bn_dones).to(self.device)
         bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
-        if self.seq_encoder is not None:
-            f_seq_hidden_states = torch.from_numpy(f_seq_hidden_states).to(self.device)
+        m_pre_seq_hidden_states = torch.from_numpy(m_pre_seq_hidden_states).to(self.device)
 
         self._train(bn_indexes=bn_indexes,
                     bn_padding_masks=bn_padding_masks,
-                    bn_obses_list=bn_obses_list,
+                    m_obses_list=m_obses_list,
                     bn_actions=bn_actions,
                     bn_rewards=bn_rewards,
-                    next_obs_list=next_obs_list,
                     bn_dones=bn_dones,
                     bn_mu_probs=bn_mu_probs,
-                    priority_is=None,
-                    f_seq_hidden_states=f_seq_hidden_states if self.seq_encoder is not None else None)
+                    m_pre_seq_hidden_states=m_pre_seq_hidden_states,
+                    priority_is=None)
 
         step = self.get_global_step()
 

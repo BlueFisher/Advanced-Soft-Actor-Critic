@@ -89,7 +89,7 @@ def get_episode_shapes_dtypes(max_episode_length: int,
     ep_rewards
     ep_dones
     ep_mu_probs
-    ep_seq_hidden_states
+    ep_pre_seq_hidden_states
     """
     episode_shapes = [
         (1, max_episode_length),
@@ -98,7 +98,7 @@ def get_episode_shapes_dtypes(max_episode_length: int,
         (1, max_episode_length),
         (1, max_episode_length),
         (1, max_episode_length, action_size),
-        (1, max_episode_length, *seq_hidden_state_shape) if seq_hidden_state_shape is not None else None
+        (1, max_episode_length, *seq_hidden_state_shape)
     ]
     episode_dtypes = [
         np.int32,
@@ -107,7 +107,7 @@ def get_episode_shapes_dtypes(max_episode_length: int,
         np.float32,
         bool,
         np.float32,
-        np.float32 if seq_hidden_state_shape is not None else None
+        np.float32
     ]
 
     return episode_shapes, episode_dtypes
@@ -121,25 +121,23 @@ def get_batch_shapes_dtype(batch_size: int,
     """
     bn_indexes
     bn_padding_masks
-    bn_obses_list
+    m_obses_list
     bn_actions
     bn_rewards
-    next_obs_list
     bn_dones
     bn_mu_probs
-    bn_seq_hidden_states
+    m_pre_seq_hidden_states
     """
 
     batch_shapes = [
         (batch_size, bn),
         (batch_size, bn),
-        [(batch_size, bn, *o) for o in obs_shapes],
+        [(batch_size, bn + 1, *o) for o in obs_shapes],
         (batch_size, bn, action_size),
         (batch_size, bn),
-        [(batch_size, *o) for o in obs_shapes],
         (batch_size, bn),
         (batch_size, bn, action_size),
-        (batch_size, bn, *seq_hidden_state_shape) if seq_hidden_state_shape is not None else None
+        (batch_size, bn + 1, *seq_hidden_state_shape)
     ]
     batch_dtypes = [
         np.int32,
@@ -147,10 +145,9 @@ def get_batch_shapes_dtype(batch_size: int,
         [np.float32 for _ in obs_shapes],
         np.float32,
         np.float32,
-        [np.float32 for _ in obs_shapes],
         bool,
         np.float32,
-        np.float32 if seq_hidden_state_shape is not None else None
+        np.float32
     ]
 
     return batch_shapes, batch_dtypes
