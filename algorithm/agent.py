@@ -629,7 +629,7 @@ class AgentManager:
     def put_episode(self):
         # ep_indexes,
         # ep_obses_list, ep_actions, ep_rewards, ep_dones, ep_probs,
-        # ep_seq_hidden_states
+        # ep_pre_seq_hidden_states
         for episode_trans in self._tmp_episode_trans_list:
             self.rl.put_episode(**episode_trans)
         self.clear_tmp_episode_trans_list()
@@ -656,7 +656,7 @@ class AgentManager:
     def log_episode(self) -> None:
         # ep_indexes,
         # ep_obses_list, ep_actions, ep_rewards, ep_dones, ep_probs,
-        # ep_seq_hidden_states
+        # ep_pre_seq_hidden_states
         for episode_trans in self._tmp_episode_trans_list:
             self.rl.log_episode(**episode_trans)
 

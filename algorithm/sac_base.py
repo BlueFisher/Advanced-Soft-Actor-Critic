@@ -251,12 +251,6 @@ class SAC_Base:
         self._init_replay_buffer(replay_config)
         self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
 
-        self._batch_available_event = threading.Event()  # Event for batch availability by sample thread
-        self._batch_obtained_event = threading.Event()  # Event for batch obtained by main thread
-        self._batch = None
-        self._pointers = None
-        threading.Thread(target=self._sample_thread, daemon=True).start()
-
     def _set_logger(self):
         if self.ma_name is None:
             self._logger = logging.getLogger('sac.base')
@@ -616,6 +610,9 @@ class SAC_Base:
             self._update_target_variables()
 
     def _init_replay_buffer(self, replay_config: Optional[dict] = None) -> None:
+        self._batch = None
+        self._pointers = None
+
         if self.train_mode:
             if self.use_replay_buffer:
                 replay_config = {} if replay_config is None else replay_config
@@ -627,6 +624,11 @@ class SAC_Base:
                                                 self.n_step,
                                                 self._padding_action,
                                                 self.batch_size)
+
+            self._batch_available_event = threading.Event()  # Event for batch availability by sample thread
+            self._batch_obtained_event = threading.Event()  # Event for batch obtained by main thread
+
+            threading.Thread(target=self._sample_thread, daemon=True).start()
 
     def set_train_mode(self, train_mode=True):
         self.train_mode = train_mode
@@ -2469,7 +2471,6 @@ class SAC_Base:
                     if train_data is None:
                         profiler.ignore()
                         self._batch = None
-                        self._batch_available_event.set()
                         time.sleep(1)
                         continue
 
@@ -2480,7 +2481,6 @@ class SAC_Base:
                 batch_list = self.batch_buffer.get_batch()
                 if len(batch_list) == 0:
                     self._batch = None
-                    self._batch_available_event.set()
                     time.sleep(1)
                     continue
 
@@ -2543,13 +2543,13 @@ class SAC_Base:
     def train(self) -> int:
         step = self.get_global_step()
 
-        with self._profiler('waiting_batch_available', repeat=10):
-            self._batch_available_event.wait()
-            self._batch_available_event.clear()
-
         if self._batch is None:
             self._profiler('train a step').ignore()
             return step
+
+        with self._profiler('waiting_batch_available', repeat=10):
+            self._batch_available_event.wait()
+            self._batch_available_event.clear()
 
         (bn_indexes,
          bn_padding_masks,

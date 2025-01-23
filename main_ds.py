@@ -15,8 +15,9 @@ if __name__ == '__main__':
     parser.add_argument('env')
     parser.add_argument('process_type', choices=['learner', 'l',
                                                  'actor', 'a'])
-    parser.add_argument('--hit', action='store_true', default=False)
-    parser.add_argument('--oc', action='store_true', default=False)
+    parser.add_argument('--hit', type=int, default=None, nargs='?', const=1)
+    # TODO: OC
+    # parser.add_argument('--oc', action='store_true', default=False)
 
     parser.add_argument('--config', '-c', help='Config file')
     parser.add_argument('--override', '-o', default=[], nargs='+', help='Override config')
@@ -58,13 +59,19 @@ if __name__ == '__main__':
     config_dir = f'envs/{args.env}'
 
     if args.process_type in ['learner', 'l']:
-        if args.hit:
+        if args.hit is not None:
+            import algorithm.sac_main_hit
+            algorithm.sac_main_hit.HIT_REWARD = args.hit
+
             from ds.main_hit import LearnerHit as Learner
         else:
             from ds.learner import Learner
         Learner(root_dir, config_dir, args)
     elif args.process_type in ['actor', 'a']:
-        if args.hit:
+        if args.hit is not None:
+            import algorithm.sac_main_hit
+            algorithm.sac_main_hit.HIT_REWARD = args.hit
+
             from ds.main_hit import ActorHit as Actor
         else:
             from ds.actor import Actor

@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import torch
@@ -80,7 +80,7 @@ def format_global_step(num):
     return '%s%s' % (num, ['', 'k', 'm', 'g', 't', 'p'][magnitude])
 
 
-def traverse_lists(data: Any | Tuple, process) -> List:
+def traverse_lists(data: Any | tuple, process) -> list:
     if not isinstance(data, tuple):
         data = (data, )
 
@@ -101,12 +101,12 @@ def episode_to_batch(burn_in_step: int,
                      padding_action: np.ndarray,
                      l_indexes: np.ndarray,
                      l_padding_masks: np.ndarray,
-                     l_obses_list: List[np.ndarray],
+                     l_obses_list: list[np.ndarray],
                      l_actions: np.ndarray,
                      l_rewards: np.ndarray,
                      l_dones: np.ndarray,
                      l_probs: np.ndarray,
-                     l_pre_seq_hidden_states: np.ndarray) -> List[np.ndarray | List[np.ndarray]]:
+                     l_pre_seq_hidden_states: np.ndarray) -> tuple[np.ndarray | list[np.ndarray]]:
     """
     Args:
         burn_in_step: int
@@ -183,11 +183,11 @@ def episode_to_batch(burn_in_step: int,
     m_pre_seq_hidden_states = np.concatenate([l_pre_seq_hidden_states[:, i:i + bn + 1]
                                               for i in range(ep_len - 1)], axis=0)
 
-    return [bn_indexes,
+    return (bn_indexes,
             bn_padding_masks,
             tmp_m_obses_list,
             bn_actions,
             bn_rewards,
             bn_dones,
             bn_probs,
-            m_pre_seq_hidden_states]
+            m_pre_seq_hidden_states)

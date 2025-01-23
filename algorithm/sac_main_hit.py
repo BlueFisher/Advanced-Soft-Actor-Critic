@@ -9,7 +9,7 @@ from .agent import Agent
 from .sac_main import Main
 
 
-HIT_REWARD = 1
+HIT_REWARD: int = 1
 
 
 class AgentHit(Agent):

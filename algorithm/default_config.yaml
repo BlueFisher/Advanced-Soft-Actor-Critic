@@ -15,7 +15,9 @@ base_config:
     env_name: env_name
     env_args: null
 
-  name: "{time}-{hostname}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
+  name: "{time}-{hostname}" # Training name. 
+                            # Placeholder "{time}" will be replaced to the time that trianing begins
+                            # Placeholder "{hostname}" will be replaced to the hostname of the machine
 
   n_envs: 1 # N agents running in parallel
 

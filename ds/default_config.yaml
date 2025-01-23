@@ -10,9 +10,19 @@ base_config:
       win32: path_win32
       linux: path_linux
 
-  name: "{time}" # Training name. Placeholder "{time}" will be replaced to the time that trianing begins
+  offline_env_config:
+    enabled: false
+    env_name: env_name
+    env_args: null
+
+  name:
+    "{time}-{hostname}" # Training name.
+    # Placeholder "{time}" will be replaced to the time that trianing begins
+    # Placeholder "{hostname}" will be replaced to the hostname of the machine
 
   n_envs: 1 # N agents running in parallel
+
+  obs_preprocessor: null
 
   max_step_each_iter: -1 # Max step in each iteration
   reset_on_iteration: true # Whether forcing reset agent if an episode terminated
