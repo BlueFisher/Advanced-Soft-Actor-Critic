@@ -36,7 +36,7 @@ class RayVisual:
                                                figsize=(3 * fig_size, 3 * max_batch))
             self.scs = [[] for _ in range(max_batch)]
 
-            self._bg = self.fig.canvas.copy_from_bbox(self.fig.bbox)
+            # self._bg = self.fig.canvas.copy_from_bbox(self.fig.bbox)
 
             for i in range(max_batch):
                 for j, ray in enumerate(rays):
@@ -53,7 +53,7 @@ class RayVisual:
 
             plt.pause(0.1)
 
-        self.fig.canvas.restore_region(self._bg)
+        # self.fig.canvas.restore_region(self._bg)
         for i in range(batch_size):
             for j, ray in enumerate(rays):
                 mask = ray[i, :, -2] == 0.
@@ -63,7 +63,7 @@ class RayVisual:
                 self.scs[i][j].set_offsets(np.c_[ray_x, ray_y])
                 self.axes[i][j].draw_artist(self.scs[i][j])
 
-        self.fig.canvas.blit(self.fig.bbox)
+        self.fig.canvas.draw()
         self.fig.canvas.flush_events()
         self.idx += 1
 
@@ -74,5 +74,7 @@ if __name__ == '__main__':
     image_visual = RayVisual()
     while True:
         rays = [np.random.rand(2, 720, 2), np.random.rand(2, 720, 2)]
-        image_visual(*rays)
+        for ray in rays:
+            ray[:, :, -2] = 0
+        image_visual(*rays, max_batch=2)
         time.sleep(0.1)

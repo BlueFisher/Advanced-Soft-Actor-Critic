@@ -36,7 +36,6 @@ class ImageVisual:
                                                figsize=(3 * fig_size, 3 * max_batch))
             self.ims = [[] for _ in range(max_batch)]
 
-            self._bg = self.fig.canvas.copy_from_bbox(self.fig.bbox)
 
             for i in range(max_batch):
                 for j, image in enumerate(images):
@@ -47,13 +46,12 @@ class ImageVisual:
 
             plt.pause(0.1)
 
-        self.fig.canvas.restore_region(self._bg)
         for i in range(batch_size):
             for j, image in enumerate(images):
                 self.ims[i][j].set_data(image[i])
                 self.axes[i][j].draw_artist(self.ims[i][j])
 
-        self.fig.canvas.blit(self.fig.bbox)
+        self.fig.canvas.draw()
         self.fig.canvas.flush_events()
 
         if self.model_abs_dir:

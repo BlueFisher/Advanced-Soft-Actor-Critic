@@ -676,11 +676,11 @@ class AgentManager:
 
             if len(eps) == 0:
                 eps = [-1]
-            last_ep = eps[-1]
+            ep_idx = eps[-1] + 1
 
-            np.savez(eps_dir / f'{last_ep+1}.npz',
-                     **{f'ep_obs_{i}': ep_obs for i, ep_obs in enumerate(ep_obses_list)},
-                     ep_indexes=ep_indexes)
+            np.savez(eps_dir / f'{ep_idx}.npz',
+                     **{obs_name: np.squeeze(ep_obses, axis=0) for obs_name, ep_obses in zip(self.obs_names, ep_obses_list)},
+                     ep_indexes=np.squeeze(ep_indexes, axis=0))
 
 
 class MultiAgentsManager:
