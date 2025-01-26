@@ -192,6 +192,7 @@ class Trainer:
             model_abs_dir=model_abs_dir,
             device=device,
             ma_name=ma_name,
+            train_mode=True,
             last_ckpt=last_ckpt,
 
             nn_config=config['nn_config'],
