@@ -52,11 +52,22 @@ nn_config:
   rep: null
   policy: null
 
+replay_config:
+  capacity: 524288 # 262144 131072 65536
+  alpha: 0.9 # [0~1] convert the importance of TD error to priority. If 0, PER will reduce to vanilla replay buffer
+  beta: 0.4 # Importance-sampling, from initial value increasing to 1
+  beta_increment_per_sampling: 0.001 # Increment step
+  td_error_min: 0.01 # Small amount to avoid zero priority
+  td_error_max: 1. # Clipped abs error
+
 sac_config:
   nn: nn # Neural network models file
   seed: null # Random seed
   write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
   save_model_per_step: 10000 # Save model every N steps
+
+  use_replay_buffer: true # Whether using prioritized replay buffer
+  use_priority: true # Whether using PER importance ratio
 
   ensemble_q_num: 2 # Number of Qs
   ensemble_q_sample: 2 # Number of min Qs

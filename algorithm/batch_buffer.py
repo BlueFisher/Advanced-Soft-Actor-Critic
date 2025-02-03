@@ -29,7 +29,7 @@ class BatchBuffer:
                     ep_rewards: np.ndarray,
                     ep_dones: np.ndarray,
                     ep_probs: np.ndarray,
-                    ep_pre_seq_hidden_states: Optional[np.ndarray] = None) -> None:
+                    ep_pre_seq_hidden_states: np.ndarray) -> None:
         """
         Args:
             ep_indexes (np.int32): [1, ep_len]
