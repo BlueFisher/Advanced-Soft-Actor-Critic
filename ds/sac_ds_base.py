@@ -21,18 +21,22 @@ class SAC_DS_Base(SAC_Base):
                  d_action_sizes: list[int],
                  c_action_size: int,
                  model_abs_dir: Optional[Path],
+                 nn,
+
                  device: Optional[str] = None,
                  ma_name: Optional[str] = None,
-                 summary_path: str = 'log',
+                 summary_path: Optional[str] = 'log',
                  train_mode: bool = True,
                  last_ckpt: Optional[str] = None,
 
                  nn_config: Optional[dict] = None,
 
-                 nn=None,
                  seed: Optional[float] = None,
                  write_summary_per_step: float = 1e3,
                  save_model_per_step: float = 1e5,
+
+                 use_replay_buffer: bool = True,
+                 use_priority: bool = True,
 
                  ensemble_q_num: int = 2,
                  ensemble_q_sample: int = 2,
@@ -71,13 +75,14 @@ class SAC_DS_Base(SAC_Base):
 
                  curiosity: Optional[CURIOSITY] = None,
                  curiosity_strength: float = 1.,
-
                  use_rnd: bool = False,
                  rnd_n_sample: int = 10,
 
                  use_normalization: bool = False,
 
-                 action_noise: Optional[list[float]] = None):
+                 action_noise: Optional[list[float]] = None,
+
+                 replay_config: Optional[dict] = None):
 
         self.obs_names = obs_names
         self.obs_shapes = obs_shapes
@@ -88,6 +93,9 @@ class SAC_DS_Base(SAC_Base):
         self.model_abs_dir = model_abs_dir
         self.ma_name = ma_name
         self.train_mode = train_mode
+
+        self.use_replay_buffer = use_replay_buffer
+        self.use_priority = use_priority
 
         self.ensemble_q_num = ensemble_q_num
         self.ensemble_q_sample = ensemble_q_sample
@@ -134,8 +142,6 @@ class SAC_DS_Base(SAC_Base):
 
         self.action_noise = action_noise
 
-        self.use_replay_buffer = False
-        self.use_priority = False
         self.use_n_step_is = True
         self.offline_loss = False
 
@@ -160,6 +166,7 @@ class SAC_DS_Base(SAC_Base):
 
         self._build_model(nn, nn_config, init_log_alpha, learning_rate)
         self._build_ckpt()
+        self._init_replay_buffer(replay_config)
         self._init_or_restore(int(last_ckpt) if last_ckpt is not None else None)
 
     def _set_logger(self):
@@ -259,41 +266,3 @@ class SAC_DS_Base(SAC_Base):
             v.data.copy_(torch.from_numpy(t_v).to(self.device))
 
         return True
-
-    def train(self,
-              bn_indexes: np.ndarray,
-              bn_padding_masks: np.ndarray,
-              m_obses_list: list[np.ndarray],
-              bn_actions: np.ndarray,
-              bn_rewards: np.ndarray,
-              bn_dones: np.ndarray,
-              bn_mu_probs: np.ndarray,
-              m_pre_seq_hidden_states: np.ndarray):
-
-        bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
-        bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
-        m_obses_list = [torch.from_numpy(t).to(self.device) for t in m_obses_list]
-        bn_actions = torch.from_numpy(bn_actions).to(self.device)
-        bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
-        bn_dones = torch.from_numpy(bn_dones).to(self.device)
-        bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
-        m_pre_seq_hidden_states = torch.from_numpy(m_pre_seq_hidden_states).to(self.device)
-
-        self._train(bn_indexes=bn_indexes,
-                    bn_padding_masks=bn_padding_masks,
-                    m_obses_list=m_obses_list,
-                    bn_actions=bn_actions,
-                    bn_rewards=bn_rewards,
-                    bn_dones=bn_dones,
-                    bn_mu_probs=bn_mu_probs,
-                    m_pre_seq_hidden_states=m_pre_seq_hidden_states,
-                    priority_is=None)
-
-        step = self.get_global_step()
-
-        if step % self.save_model_per_step == 0:
-            self.save_model()
-
-        step = self._increase_global_step()
-
-        return step
