@@ -54,6 +54,7 @@ class BatchBuffer:
                                      l_dones=ep_dones,
                                      l_probs=ep_probs,
                                      l_pre_seq_hidden_states=ep_pre_seq_hidden_states)
+        ori_batch = list(ori_batch)
 
         if self._rest_batch is not None:
             ori_batch = traverse_lists((self._rest_batch, ori_batch), lambda rb, b: np.concatenate([rb, b]))

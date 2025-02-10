@@ -103,7 +103,7 @@ def episode_to_batch(burn_in_step: int,
     key_seq_hidden_state = None
     key_seq_hidden_state = l_pre_seq_hidden_states.squeeze(0)[key_indexes]  # [1, key_len, *seq_hidden_state_shape]
 
-    return [bn_indexes,
+    return (bn_indexes,
             bn_padding_masks,
             m_obses_list,
             bn_option_indexes,
@@ -112,12 +112,12 @@ def episode_to_batch(burn_in_step: int,
             bn_dones,
             bn_probs,
             m_pre_seq_hidden_states,
-            m_pre_low_seq_hidden_states], \
-        [key_indexes,
+            m_pre_low_seq_hidden_states), \
+        (key_indexes,
          key_padding_masks,
          key_obses_list,
          key_option_index,
-         key_seq_hidden_state]
+         key_seq_hidden_state)
 
 
 def _padding_key_batch(padding_len: int,
@@ -192,6 +192,9 @@ class BatchBuffer(BatchBuffer):
                                                     l_probs=ep_probs,
                                                     l_pre_seq_hidden_states=ep_pre_seq_hidden_states,
                                                     l_pre_low_seq_hidden_states=ep_pre_low_seq_hidden_states)
+
+        ori_batch = list(ori_batch)
+        ori_key_trans = list(ori_key_trans)
 
         ori_key_batch = traverse_lists(ori_key_trans, lambda k: k.repeat(ori_batch[0].shape[0], axis=0))
 

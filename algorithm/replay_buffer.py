@@ -17,7 +17,7 @@ class DataStorage:
 
     def __init__(self, capacity):
         self.capacity = capacity
-        self.max_id = 10 * capacity  # For multithreading storage
+        self.max_id = 10 * capacity  # For multithreading storage, max_id should be larger than capacity
 
         self._data_key_is_image = {}
 
@@ -308,7 +308,7 @@ class PrioritizedReplayBuffer:
     def sample(self) -> Tuple[np.ndarray, Dict[str, np.ndarray], np.ndarray]:
         """
         Returns:
-            data index: [batch, ]
+            data index (np.int64): [batch, ]
             transitions: dict
             priority weights: [batch, 1]
         """

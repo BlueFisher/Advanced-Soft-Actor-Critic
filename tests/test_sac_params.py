@@ -74,6 +74,7 @@ def __gen_test(test_from: int):
         'siamese': [None, 'ATC', 'BYOL'],
         'siamese_use_q': [False, True],
         'siamese_use_adaptive': [False, True],
+        'use_n_step_is': [True, False],
         'use_rnd': [True, False],
         # 'action_noise': [None, [0.1, 0.1]]
     }
