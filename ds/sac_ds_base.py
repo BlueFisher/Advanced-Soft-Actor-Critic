@@ -147,6 +147,10 @@ class SAC_DS_Base(SAC_Base):
 
         self._set_logger()
 
+        if self.use_n_step_is and c_action_size == 0 and len(d_action_sizes) != 0 and discrete_dqn_like:
+            self.use_n_step_is = False
+            self._logger.warning('use_n_step_is is disabled because of discrete DQN-like')
+
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:

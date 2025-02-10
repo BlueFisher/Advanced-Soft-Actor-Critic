@@ -202,6 +202,7 @@ class SAC_Base:
 
         self.discrete_dqn_like = discrete_dqn_like
         self.discrete_dqn_epsilon = discrete_dqn_epsilon
+
         self.use_n_step_is = use_n_step_is
 
         self.siamese = siamese
@@ -224,6 +225,10 @@ class SAC_Base:
         self.action_noise = action_noise
 
         self._set_logger()
+
+        if self.use_n_step_is and c_action_size == 0 and len(d_action_sizes) != 0 and discrete_dqn_like:
+            self.use_n_step_is = False
+            self._logger.warning('use_n_step_is is disabled because of discrete DQN-like')
 
         if device is None:
             if torch.cuda.is_available():
@@ -1320,8 +1325,8 @@ class SAC_Base:
                next_obs_list: List[torch.Tensor],
                next_state: torch.Tensor,
                n_dones: torch.Tensor,
-               n_mu_probs: torch.Tensor = None) -> Tuple[Optional[torch.Tensor],
-                                                         Optional[torch.Tensor]]:
+               n_mu_probs: torch.Tensor | None = None) -> Tuple[Optional[torch.Tensor],
+                                                                Optional[torch.Tensor]]:
         """
         Args:
             n_padding_masks (torch.bool): [batch, n]
@@ -2183,7 +2188,7 @@ class SAC_Base:
                       next_obs_list: List[torch.Tensor],
                       next_target_state: torch.Tensor,
                       bn_dones: torch.Tensor,
-                      bn_mu_probs: torch.Tensor) -> torch.Tensor:
+                      bn_mu_probs: torch.Tensor | None) -> torch.Tensor:
         """
         Args:
             bn_padding_masks (torch.bool): [batch, b + n]
@@ -2604,7 +2609,7 @@ class SAC_Base:
                     l_pre_actions=bn_pre_actions,
                     l_pre_seq_hidden_states=bn_pre_seq_hidden_states)
 
-            if self.use_n_step_is or (self.d_action_sizes and not self.discrete_dqn_like):
+            if self.use_n_step_is:
                 with self._profiler('get_l_probs', repeat=10):
                     bn_pi_probs_tensor = self.get_l_probs(
                         l_obses_list=bn_obses_list,
@@ -2624,7 +2629,7 @@ class SAC_Base:
                         next_obs_list=next_obs_list,
                         next_target_state=m_target_states[:, -1, ...],
                         bn_dones=bn_dones,
-                        bn_mu_probs=bn_pi_probs_tensor).detach().cpu().numpy()
+                        bn_mu_probs=bn_pi_probs_tensor if self.use_n_step_is else None).detach().cpu().numpy()
                 self.replay_buffer.update(pointers, td_error)
 
             bn_padding_masks = bn_padding_masks.detach().cpu().numpy()
@@ -2640,7 +2645,7 @@ class SAC_Base:
                 self.replay_buffer.update_transitions(tmp_pointers[~padding_mask], 'pre_seq_hidden_state', seq_hidden_state[~padding_mask])
 
             # Update n_mu_probs
-            if self.use_n_step_is or (self.d_action_sizes and not self.discrete_dqn_like):
+            if self.use_n_step_is:
                 pointers_list = [pointers + i for i in range(-self.burn_in_step, self.n_step)]
                 tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
 
