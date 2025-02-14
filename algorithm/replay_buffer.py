@@ -309,7 +309,7 @@ class PrioritizedReplayBuffer:
         """
         Returns:
             data index (np.int64): [batch, ]
-            transitions: dict
+            transitions: dict [batch, *]
             priority weights: [batch, 1]
         """
         with self._lock.read():
@@ -325,6 +325,46 @@ class PrioritizedReplayBuffer:
             is_weights = p / self._sum_tree.total_p
             self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
             is_weights = np.power(is_weights / np.min(is_weights), -self.beta).astype(np.float32)
+
+            return data_ids, transitions, np.expand_dims(is_weights, axis=1)
+
+    def sample(self, prev_n: int = 0, post_n: int = 0) -> Tuple[np.ndarray, Dict[str, np.ndarray], np.ndarray]:
+        """
+        Returns:
+            data index (np.int64): [batch, ]
+            transitions: dict [batch, prev_n + 1 + post_n, *]
+            priority weights: [batch, 1]
+        """
+        with self._lock.read():
+            if self._trans_storage.size < self.batch_size:
+                return None
+
+            leaf_pointers, p = self._sum_tree.sample(self.batch_size)
+
+            data_pointers = self._sum_tree.leaf_idx_to_data_idx(leaf_pointers)
+            _transitions = self._trans_storage.get(data_pointers)
+            data_ids = self._trans_storage.get_ids(data_pointers)
+
+            is_weights = p / self._sum_tree.total_p
+            self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
+            is_weights = np.power(is_weights / np.min(is_weights), -self.beta).astype(np.float32)
+
+            transitions = {k: np.zeros((v.shape[0],
+                                        prev_n + 1 + post_n,
+                                        *v.shape[1:]), dtype=v.dtype) for k, v in _transitions.items()}
+
+            for k, v in _transitions.items():
+                transitions[k][:, prev_n] = v
+
+            for i in range(prev_n):
+                t_trans = self.get_storage_data(data_ids - i - 1)
+                for k, v in t_trans.items():
+                    transitions[k][:, prev_n - i - 1] = v
+
+            for i in range(1, post_n + 1):
+                t_trans = self.get_storage_data(data_ids + i)
+                for k, v in t_trans.items():
+                    transitions[k][:, prev_n + i] = v
 
             return data_ids, transitions, np.expand_dims(is_weights, axis=1)
 

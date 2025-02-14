@@ -5,7 +5,7 @@ default:
 
     n_envs: 2
 
-    max_iter: 50
+    max_iter: 500
     max_step: 50
     max_step_each_iter: 100
 
@@ -35,6 +35,12 @@ attn:
     burn_in_step: 8
     seq_encoder: ATTN
     nn: nn_attn
+
+offline:
+  base_config:
+    offline_env_config:
+      enabled: true
+      env_name: TEST
 
 #################### ! OC ####################
 

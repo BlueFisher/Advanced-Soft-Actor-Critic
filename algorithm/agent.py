@@ -5,6 +5,7 @@ from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 import numpy as np
 
+from algorithm.imitation_base import ImitationBase
 from algorithm.sac_base import SAC_Base
 from algorithm.utils.elapse_timer import (UnifiedElapsedTimer,
                                           unified_elapsed_timer)
@@ -342,6 +343,8 @@ class AgentManager:
         self.rl: Optional[SAC_Base] = None
         self.seq_encoder = None
 
+        self.il: Optional[ImitationBase] = None
+
         self._logger = logging.getLogger(f'agent_mgr.{name}')
         self._profiler = UnifiedElapsedTimer(self._logger)
 
@@ -385,6 +388,9 @@ class AgentManager:
     def set_rl(self, rl: SAC_Base) -> None:
         self.rl = rl
         self.seq_encoder = rl.seq_encoder
+
+    def set_il(self, il: ImitationBase) -> None:
+        self.il = il
 
     def reset(self) -> None:
         """
@@ -466,7 +472,6 @@ class AgentManager:
                    agent_ids: np.ndarray,
                    obs_list: List[np.ndarray],
                    last_reward: np.ndarray,
-                   offline_action: np.ndarray | None = None,
                    disable_sample: bool = False,
                    force_rnd_if_available: bool = False) -> np.ndarray:
         assert len(agent_ids) == obs_list[0].shape[0]
@@ -496,7 +501,6 @@ class AgentManager:
                 pre_action=pre_action,
                 pre_seq_hidden_state=pre_seq_hidden_state,
 
-                offline_action=offline_action,
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
@@ -534,7 +538,6 @@ class AgentManager:
                 ep_pre_actions=ep_pre_actions,
                 ep_pre_attn_states=ep_pre_attn_states,
 
-                offline_action=offline_action,
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
@@ -758,16 +761,12 @@ class MultiAgentsManager:
                       ma_obs_list: Dict[str, List[np.ndarray]],
                       ma_last_reward: Dict[str, np.ndarray],
 
-                      ma_offline_action: Dict[str, np.ndarray] | None = None,
                       disable_sample: bool = False,
                       force_rnd_if_available: bool = False) -> Tuple[Dict[str, np.ndarray],
                                                                      Dict[str, np.ndarray]]:
 
         ma_d_action = {}
         ma_c_action = {}
-
-        if ma_offline_action is None:
-            ma_offline_action = {}
 
         for n, mgr in self:
             if len(ma_agent_ids[n]) == 0:
@@ -778,7 +777,6 @@ class MultiAgentsManager:
                 agent_ids=ma_agent_ids[n],
                 obs_list=ma_obs_list[n],
                 last_reward=ma_last_reward[n],
-                offline_action=ma_offline_action[n] if n in ma_offline_action else None,
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )

@@ -99,7 +99,6 @@ class OptionBase(SAC_Base):
                       pre_action: torch.Tensor,
                       pre_seq_hidden_state: torch.Tensor,
 
-                      offline_action: torch.Tensor | None = None,
                       disable_sample: bool = False,
                       force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
                                                                      torch.Tensor,
@@ -109,8 +108,6 @@ class OptionBase(SAC_Base):
             obs_list: list([batch, *obs_shapes_i], ...)
             pre_action: [batch, action_size]
             pre_seq_hidden_state: [batch, *seq_hidden_state_shape]
-
-            offline_action: [batch, action_size]
 
         Returns:
             action: [batch, action_size]
@@ -132,7 +129,6 @@ class OptionBase(SAC_Base):
 
         action, prob = self._choose_action(obs_list,
                                            state,
-                                           offline_action,
                                            disable_sample,
                                            force_rnd_if_available)
 

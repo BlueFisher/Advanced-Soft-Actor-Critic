@@ -466,7 +466,6 @@ class OC_AgentManager(AgentManager):
                    agent_ids: np.ndarray,
                    obs_list: list[np.ndarray],
                    last_reward: np.ndarray,
-                   offline_action: np.ndarray | None = None,
                    disable_sample: bool = False,
                    force_rnd_if_available: bool = False) -> None:
         assert len(agent_ids) == obs_list[0].shape[0]
@@ -508,7 +507,6 @@ class OC_AgentManager(AgentManager):
                 pre_low_seq_hidden_state=pre_low_seq_hidden_state,
                 pre_termination=pre_termination,
 
-                offline_action=offline_action,
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
@@ -534,7 +532,6 @@ class OC_AgentManager(AgentManager):
                 pre_low_seq_hidden_state=pre_low_seq_hidden_state,
                 pre_termination=pre_termination,
 
-                offline_action=offline_action,
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
@@ -587,7 +584,6 @@ class OC_AgentManager(AgentManager):
                 pre_low_seq_hidden_state=pre_low_seq_hidden_state,
                 pre_termination=pre_termination,
 
-                offline_action=offline_action,
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
@@ -645,7 +641,6 @@ class OC_AgentManager(AgentManager):
                 pre_low_seq_hidden_state=pre_low_seq_hidden_state,
                 pre_termination=pre_termination,
 
-                offline_action=offline_action,
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )

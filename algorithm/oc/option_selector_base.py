@@ -84,8 +84,6 @@ class OptionSelectorBase(SAC_Base):
 
                  use_normalization: bool = False,
 
-                 offline_loss=False,
-
                  action_noise: Optional[List[float]] = None,
 
                  use_dilation: bool = False,
@@ -169,7 +167,6 @@ class OptionSelectorBase(SAC_Base):
                          use_rnd,
                          rnd_n_sample,
                          use_normalization,
-                         offline_loss,
                          action_noise,
                          replay_config)
 
@@ -530,7 +527,6 @@ class OptionSelectorBase(SAC_Base):
                               pre_low_seq_hidden_state: torch.Tensor,
                               pre_termination_mask: torch.Tensor,
 
-                              offline_action: torch.Tensor | None = None,
                               disable_sample: bool = False,
                               force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
                                                                              torch.Tensor,
@@ -545,7 +541,6 @@ class OptionSelectorBase(SAC_Base):
             pre_action: [batch, action_size]
             pre_low_seq_hidden_state: [batch, *low_seq_hidden_state_shape]
             pre_termination_mask (bool): [batch, ]
-            offline_action: [batch, action_size]
 
         Returns:
             new_option_index (torch.int64): [batch, ]
@@ -587,7 +582,6 @@ class OptionSelectorBase(SAC_Base):
              o_termination) = option.choose_action(o_low_obs_list,
                                                    pre_action[mask],
                                                    pre_low_seq_hidden_state[mask],
-                                                   offline_action=offline_action,
                                                    disable_sample=disable_sample,
                                                    force_rnd_if_available=force_rnd_if_available)
             action[mask] = o_action
@@ -606,7 +600,6 @@ class OptionSelectorBase(SAC_Base):
                       pre_low_seq_hidden_state: np.ndarray,
                       pre_termination: np.ndarray,
 
-                      offline_action: torch.Tensor | None = None,
                       disable_sample: bool = False,
                       force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
                                                                      np.ndarray,
@@ -622,8 +615,6 @@ class OptionSelectorBase(SAC_Base):
             pre_seq_hidden_state (np): [batch, *seq_hidden_state_shape]
             pre_low_seq_hidden_state (np): [batch, *low_seq_hidden_state_shape]
             pre_termination: [batch, ]
-
-            offline_action (np): [batch, action_size]
 
         Returns:
             option_index (np.int8): [batch, ]
@@ -668,7 +659,6 @@ class OptionSelectorBase(SAC_Base):
                                                    pre_action,
                                                    pre_low_seq_hidden_state,
                                                    pre_termination_mask,
-                                                   offline_action=offline_action,
                                                    disable_sample=disable_sample,
                                                    force_rnd_if_available=force_rnd_if_available)
 
@@ -691,7 +681,6 @@ class OptionSelectorBase(SAC_Base):
                            pre_low_seq_hidden_state: np.ndarray,
                            pre_termination: np.ndarray,
 
-                           offline_action: np.ndarray | None = None,
                            disable_sample: bool = False,
                            force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
                                                                           np.ndarray,
@@ -710,8 +699,6 @@ class OptionSelectorBase(SAC_Base):
             pre_option_index (np.int8): [batch, ]
             pre_low_seq_hidden_state (np): [batch, *low_seq_hidden_state_shape]
             pre_termination: [batch, ]
-
-            offline_action (np): [batch, action_size]
 
         Returns:
             option_index (np.int8): [batch, ]
@@ -758,7 +745,6 @@ class OptionSelectorBase(SAC_Base):
                                                    pre_action,
                                                    pre_low_seq_hidden_state,
                                                    pre_termination_mask,
-                                                   offline_action=offline_action,
                                                    disable_sample=disable_sample,
                                                    force_rnd_if_available=force_rnd_if_available)
 
@@ -782,7 +768,6 @@ class OptionSelectorBase(SAC_Base):
                                    pre_low_seq_hidden_state: np.ndarray,
                                    pre_termination: np.ndarray,
 
-                                   offline_action: np.ndarray | None = None,
                                    disable_sample: bool = False,
                                    force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
                                                                                   np.ndarray,
@@ -802,8 +787,6 @@ class OptionSelectorBase(SAC_Base):
             pre_action (np): [batch, action_size]
             pre_low_seq_hidden_state (np): [batch, *low_seq_hidden_state_shape]
             pre_termination (np): [batch, ]
-
-            offline_action (np): [batch, action_size]
 
         Returns:
             option_index (np.int8): [batch]
@@ -853,7 +836,6 @@ class OptionSelectorBase(SAC_Base):
                                                    pre_action,
                                                    pre_low_seq_hidden_state,
                                                    pre_termination_mask,
-                                                   offline_action=offline_action,
                                                    disable_sample=disable_sample,
                                                    force_rnd_if_available=force_rnd_if_available)
 
@@ -1967,35 +1949,26 @@ class OptionSelectorBase(SAC_Base):
                 priority_is (np): [batch, 1]
             )
         """
-        sampled = self.replay_buffer.sample()
+        sampled = self.replay_buffer.sample(prev_n=self.burn_in_step,
+                                            post_n=self.n_step)
         if sampled is None:
             return None
 
         """
         trans:
-            index (np.int32): [batch, ]
-            padding_mask (bool): [batch, ]
-            obs_i: [batch, *obs_shapes_i]
-            option_index (np.int8): [batch, ]
-            option_changed_index (np.int32): [batch, ]
-            action: [batch, action_size]
-            reward: [batch, ]
-            done (bool): [batch, ]
-            mu_prob: [batch, action_size]
-            pre_seq_hidden_state: [batch, *seq_hidden_state_shape]
-            pre_low_seq_hidden_state: [batch, *low_seq_hidden_state_shape]
+            index (np.int32): [batch, bn + 1]
+            padding_mask (bool): [batch, bn + 1]
+            obs_i: [batch, bn + 1, *obs_shapes_i]
+            option_index (np.int8): [batch, bn + 1]
+            option_changed_index (np.int32): [batch, bn + 1]
+            action: [batch, bn + 1,action_size]
+            reward: [batch, bn + 1]
+            done (bool): [batch, bn + 1]
+            mu_prob: [batch, bn + 1, action_size]
+            pre_seq_hidden_state: [batch, bn + 1, *seq_hidden_state_shape]
+            pre_low_seq_hidden_state: [batch, bn + 1, *low_seq_hidden_state_shape]
         """
-        pointers, trans, priority_is = sampled
-
-        # Get burn_in_step + n_step transitions
-        # TODO: could be faster, no need get all data
-        batch = {k: np.zeros((v.shape[0],
-                              self.burn_in_step + self.n_step + 1,
-                              *v.shape[1:]), dtype=v.dtype)
-                 for k, v in trans.items()}
-
-        for k, v in trans.items():
-            batch[k][:, self.burn_in_step] = v
+        pointers, batch, priority_is = sampled
 
         def set_padding(t, mask):
             t['index'][mask] = -1
@@ -2011,37 +1984,33 @@ class OptionSelectorBase(SAC_Base):
             t['pre_seq_hidden_state'][mask] = 0.
             t['pre_low_seq_hidden_state'][mask] = 0.
 
-        # Get next n_step data
+        trans_index = batch['index'][:, self.burn_in_step]
+
+        # Padding next n_step data
         for i in range(1, self.n_step + 1):
-            t_trans = self.replay_buffer.get_storage_data(pointers + i)
+            t_trans_index = batch['index'][:, self.burn_in_step + i]
 
-            mask = (t_trans['index'] - trans['index']) != i
-            set_padding(t_trans, mask)
+            mask = (t_trans_index - trans_index) != i
+            set_padding({k: v[:, self.burn_in_step + i] for k, v in batch.items()}, mask)
 
-            for k, v in t_trans.items():
-                batch[k][:, self.burn_in_step + i] = v
+        # Padding previous burn_in_step data
+        for i in range(self.burn_in_step):
+            t_trans_index = batch['index'][:, self.burn_in_step - i - 1]
 
-        # Get previous burn_in_step data
-        for i in range(self.burn_in_step):  # TODO: option_burn_in_step is enough in dilated attn
-            t_trans = self.replay_buffer.get_storage_data(pointers - i - 1)
-
-            mask = (trans['index'] - t_trans['index']) != i + 1
-            set_padding(t_trans, mask)
-
-            for k, v in t_trans.items():
-                batch[k][:, self.burn_in_step - i - 1] = v
+            mask = (trans_index - t_trans_index) != i + 1
+            set_padding({k: v[:, self.burn_in_step - i - 1] for k, v in batch.items()}, mask)
 
         """
-        m_indexes (np.int32): [batch, N + 1]
-        m_padding_masks (bool): [batch, N + 1]
-        m_obses_list: list([batch, N + 1, *obs_shapes_i], ...)
-        m_option_indexes (np.int8): [batch, N + 1]
-        m_actions: [batch, N + 1, action_size]
-        m_rewards: [batch, N + 1]
-        m_dones (bool): [batch, N + 1]
-        m_mu_probs: [batch, N + 1, action_size]
-        m_pre_seq_hidden_states: [batch, N + 1, *seq_hidden_state_shape]
-        m_pre_low_seq_hidden_states: [batch, N + 1, *low_seq_hidden_state_shape]
+        m_indexes (np.int32): [batch, bn + 1]
+        m_padding_masks (bool): [batch, bn + 1]
+        m_obses_list: list([batch, bn + 1, *obs_shapes_i], ...)
+        m_option_indexes (np.int8): [batch, bn + 1]
+        m_actions: [batch, bn + 1, action_size]
+        m_rewards: [batch, bn + 1]
+        m_dones (bool): [batch, bn + 1]
+        m_mu_probs: [batch, bn + 1, action_size]
+        m_pre_seq_hidden_states: [batch, bn + 1, *seq_hidden_state_shape]
+        m_pre_low_seq_hidden_states: [batch, bn + 1, *low_seq_hidden_state_shape]
         """
         m_indexes = batch['index']
         m_padding_masks = batch['padding_mask']
@@ -2064,10 +2033,11 @@ class OptionSelectorBase(SAC_Base):
 
         key_batch = None
         if self.use_dilation:
+            # TODO: multiple threads risks
             key_trans = {k: np.zeros((v.shape[0],
                                       self.key_max_length + 1,
-                                      *v.shape[1:]), dtype=v.dtype)
-                         for k, v in trans.items()}
+                                      *v.shape[2:]), dtype=v.dtype)
+                         for k, v in batch.items()}
             # From the state that need to be trained
             for k, v in batch.items():
                 key_trans[k][:, -1] = v[:, self.burn_in_step]
@@ -2395,8 +2365,8 @@ class OptionSelectorBase(SAC_Base):
                 pi_prob = pi_probs.reshape(-1, *pi_probs.shape[2:])
                 self.replay_buffer.update_transitions(tmp_pointers[~low_padding_mask], 'mu_prob', pi_prob[~low_padding_mask])
 
-        step = self._increase_global_step()
+        step = self.increase_global_step()
         for option in self.option_list:
-            option._increase_global_step()
+            option.increase_global_step()
 
         return step

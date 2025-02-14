@@ -145,7 +145,6 @@ class SAC_DS_Base(SAC_Base):
         self.action_noise = action_noise
 
         self.use_n_step_is = True
-        self.offline_loss = False
 
         self._set_logger()
 
