@@ -25,9 +25,9 @@ def get_ma_obs_list(n_envs, ma_obs_shapes):
 
 class TestWrapper(EnvWrapper):
     def __init__(self, env_args, n_envs=1, model_abs_dir: Path | None = None):
-        super().__init__(True, 'TEST', 
-                         env_args=env_args, 
-                         n_envs=n_envs, 
+        super().__init__(True, 'TEST',
+                         env_args=env_args,
+                         n_envs=n_envs,
                          model_abs_dir=model_abs_dir)
 
         self.env_args = {} if env_args is None else env_args
@@ -73,6 +73,9 @@ class TestWrapper(EnvWrapper):
                 'test0': 3,
                 'test1': 5
             }
+
+        self._ma_d_action_sizes = ma_d_action_sizes
+        self._ma_c_action_size = ma_c_action_size
 
         return self._ma_obs_names, self._ma_obs_shapes, ma_d_action_sizes, ma_c_action_size
 

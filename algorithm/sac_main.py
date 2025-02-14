@@ -196,10 +196,16 @@ class Main:
         if self.train_mode and self.base_config['offline_env_config']['enabled']:
             from algorithm.env_wrapper.offline_wrapper import OfflineWrapper
 
-            self.offline_env = OfflineWrapper(env_name=self.base_config['offline_env_config']['env_name'],
-                                              env_args=self.base_config['offline_env_config']['env_args'],
-                                              n_envs=self.base_config['n_envs'],
-                                              model_abs_dir=self.model_abs_dir)
+            if self.base_config['offline_env_config']['env_name'] == 'TEST':
+                self.offline_env = TestOfflineWrapper(env_name=self.base_config['offline_env_config']['env_name'],
+                                                      env_args=self.base_config['offline_env_config']['env_args'],
+                                                      n_envs=self.base_config['n_envs'],
+                                                      model_abs_dir=self.model_abs_dir)
+            else:
+                self.offline_env = OfflineWrapper(env_name=self.base_config['offline_env_config']['env_name'],
+                                                  env_args=self.base_config['offline_env_config']['env_args'],
+                                                  n_envs=self.base_config['n_envs'],
+                                                  model_abs_dir=self.model_abs_dir)
             _ma_obs_names, _ma_obs_shapes, _ma_d_action_sizes, _ma_c_action_size = self.offline_env.init()
         else:
             self.offline_env = None

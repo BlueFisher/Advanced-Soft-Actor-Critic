@@ -115,6 +115,8 @@ class SAC_DS_Base(SAC_Base):
         self.target_c_alpha = target_c_alpha
         self.d_policy_entropy_penalty = d_policy_entropy_penalty
 
+        self.learning_rate = learning_rate
+
         self.gamma = gamma
         self.v_lambda = v_lambda
         self.v_rho = v_rho
