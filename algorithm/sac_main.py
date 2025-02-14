@@ -9,9 +9,11 @@ from typing import Dict, Set
 import numpy as np
 
 import algorithm.config_helper as config_helper
+from algorithm.env_wrapper.test_offline_wrapper import TestOfflineWrapper
 
 from .agent import MultiAgentsManager
 from .sac_base import SAC_Base
+from .imitation_base import ImitationBase
 from .utils import UnifiedElapsedTimer, format_global_step
 from .utils.enums import *
 
@@ -255,20 +257,24 @@ class Main:
             spec.loader.exec_module(nn)
             mgr.config['sac_config']['nn'] = nn
 
-            mgr.set_rl(SAC_Base(obs_names=mgr.obs_names,
-                                obs_shapes=mgr.obs_shapes,
-                                d_action_sizes=mgr.d_action_sizes,
-                                c_action_size=mgr.c_action_size,
-                                model_abs_dir=mgr.model_abs_dir,
-                                device=self.device,
-                                ma_name=None if len(self.ma_manager) == 1 else n,
-                                train_mode=self.train_mode and n not in self.inference_ma_names,
-                                last_ckpt=self.last_ckpt,
+            sac = SAC_Base(obs_names=mgr.obs_names,
+                           obs_shapes=mgr.obs_shapes,
+                           d_action_sizes=mgr.d_action_sizes,
+                           c_action_size=mgr.c_action_size,
+                           model_abs_dir=mgr.model_abs_dir,
+                           device=self.device,
+                           ma_name=None if len(self.ma_manager) == 1 else n,
+                           train_mode=self.train_mode and n not in self.inference_ma_names,
+                           last_ckpt=self.last_ckpt,
 
-                                nn_config=mgr.config['nn_config'],
-                                **mgr.config['sac_config'],
+                           nn_config=mgr.config['nn_config'],
+                           **mgr.config['sac_config'],
 
-                                replay_config=mgr.config['replay_config']))
+                           replay_config=mgr.config['replay_config'])
+            mgr.set_rl(sac)
+
+            if self.train_mode and self.base_config['offline_env_config']['enabled']:
+                mgr.set_il(ImitationBase(sac))
 
     def _run(self):
         force_reset = False
@@ -283,6 +289,21 @@ class Main:
                 if self.base_config['max_step'] != -1 and trained_steps >= self.base_config['max_step']:
                     break
 
+                if self.offline_env is not None:
+                    self.ma_manager.set_train_mode(True)
+                    for _ in range(100):
+                        (ma_ep_obs_list,
+                         ma_ep_action,
+                         ma_reward,
+                         ma_done) = self.offline_env.get_episode()
+
+                        for n, mgr in self.ma_manager:
+                            trained_steps = mgr.il.train(ep_obses_list=ma_ep_obs_list[n],
+                                                         ep_actions=ma_ep_action[n],
+                                                         ep_rewards=ma_reward[n],
+                                                         ep_dones=ma_done[n])
+                    self.ma_manager.set_train_mode(False)
+
                 step = 0
                 iter_time = time.time()
 
@@ -291,17 +312,12 @@ class Main:
                         or self.ma_manager.max_reached \
                         or force_reset:
                     self.ma_manager.reset()
-                    if is_training_iteration and self.offline_env is not None:
-                        ma_agent_ids, ma_obs_list, ma_offline_action = self.offline_env.reset(reset_config=self.reset_config)
-                    else:
-                        ma_agent_ids, ma_obs_list = self.env.reset(reset_config=self.reset_config)
-                        ma_offline_action = None
+                    ma_agent_ids, ma_obs_list = self.env.reset(reset_config=self.reset_config)
                     ma_d_action, ma_c_action = self.ma_manager.get_ma_action(
                         ma_agent_ids=ma_agent_ids,
                         ma_obs_list=ma_obs_list,
                         ma_last_reward={n: np.zeros(len(agent_ids))
                                         for n, agent_ids in ma_agent_ids.items()},
-                        ma_offline_action=ma_offline_action,
                         disable_sample=self.disable_sample
                     )
 
@@ -311,14 +327,9 @@ class Main:
 
                 while not self.ma_manager.done:
                     with self._profiler('env.step', repeat=10):
-                        if is_training_iteration and self.offline_env is not None:
-                            (decision_step,
-                             terminal_step,
-                             all_envs_done) = self.offline_env.step(ma_d_action, ma_c_action)
-                        else:
-                            (decision_step,
-                             terminal_step,
-                             all_envs_done) = self.env.step(ma_d_action, ma_c_action)
+                        (decision_step,
+                            terminal_step,
+                            all_envs_done) = self.env.step(ma_d_action, ma_c_action)
                         self._extra_step(ma_d_action, ma_c_action)
 
                     if decision_step is None:
@@ -332,7 +343,6 @@ class Main:
                             ma_agent_ids=decision_step.ma_agent_ids,
                             ma_obs_list=decision_step.ma_obs_list,
                             ma_last_reward=decision_step.ma_last_reward,
-                            ma_offline_action=decision_step.ma_offline_action,
                             disable_sample=self.disable_sample
                         )
 
@@ -357,14 +367,15 @@ class Main:
                         if not is_training_iteration:
                             self.ma_manager.log_episode()
 
-                        self.ma_manager.put_episode()
+                        if self.offline_env is None:
+                            self.ma_manager.put_episode()
 
-                        # Always training even if the current iteration is inference
-                        with self._profiler('train', repeat=10) as profiler:
-                            next_trained_steps = self.ma_manager.train(trained_steps)
-                            if next_trained_steps == trained_steps:
-                                profiler.ignore()
-                            trained_steps = next_trained_steps
+                            # Always training even if the current iteration is inference
+                            with self._profiler('train', repeat=10) as profiler:
+                                next_trained_steps = self.ma_manager.train(trained_steps)
+                                if next_trained_steps == trained_steps:
+                                    profiler.ignore()
+                                trained_steps = next_trained_steps
 
                     step += 1
 
@@ -375,8 +386,9 @@ class Main:
                     self._log_episode_info(inference_iterations, time.time() - iter_time)
 
                 if self.train_mode:
-                    is_training_iteration = not is_training_iteration
-                    self.ma_manager.set_train_mode(is_training_iteration)
+                    if self.offline_env is None:
+                        is_training_iteration = not is_training_iteration
+                        self.ma_manager.set_train_mode(is_training_iteration)
                 else:
                     self.ma_manager.save_tmp_episode_trans_list()
 
@@ -399,6 +411,9 @@ class Main:
 
         except KeyboardInterrupt:
             self._logger.warning('KeyboardInterrupt')
+
+            if self.train_mode:
+                self.ma_manager.save_model(True)
 
         finally:
             if self.train_mode:

@@ -96,8 +96,6 @@ sac_config:
 
   use_normalization: false # Whether using observation normalization
 
-  offline_loss: false # Whether using offline loss
-
   action_noise: null # [noise_min, noise_max]
 
 oc_config:
