@@ -21,7 +21,7 @@ class DataStorage:
 
         self._data_key_is_image = {}
 
-    def add(self, data: dict) -> np.ndarray:
+    def add(self, data: dict[str, np.ndarray]) -> np.ndarray:
         """
         args: list
             The first dimension of each element is the length of an episode
@@ -63,10 +63,10 @@ class DataStorage:
     def get_curr_id(self) -> int:
         return self._id % self.capacity
 
-    def update(self, ids, key, data):
+    def update(self, ids: np.ndarray, key: str, data: np.ndarray):
         self._buffer[key][ids % self.capacity] = data
 
-    def get(self, ids) -> Dict[str, np.ndarray]:
+    def get(self, ids: np.ndarray) -> Dict[str, np.ndarray]:
         """
         Get data from buffer without verifying whether ids in buffer
         """
@@ -82,7 +82,7 @@ class DataStorage:
 
         return data
 
-    def get_ids(self, ids) -> np.ndarray:
+    def get_ids(self, ids: np.ndarray) -> np.ndarray:
         """
         Get true data ids
         """
@@ -284,9 +284,10 @@ class PrioritizedReplayBuffer:
                 else:
                     self._fill_bar.close()
 
-    def add_with_td_error(self, td_error: np.ndarray,
+    def add_with_td_error(self,
+                          td_error: np.ndarray,
                           transitions: Dict[str, np.ndarray],
-                          ignore_size=0) -> None:
+                          ignore_size: int = 0) -> None:
         td_error = np.asarray(td_error)
         td_error = td_error.flatten()
 
@@ -371,7 +372,7 @@ class PrioritizedReplayBuffer:
     def get_curr_id(self) -> int:
         return self._trans_storage.get_curr_id()
 
-    def get_storage_data(self, data_ids) -> Dict[str, np.ndarray]:
+    def get_storage_data(self, data_ids: np.ndarray) -> Dict[str, np.ndarray]:
         """
         Get data without verifying whether data_ids exist
         """
@@ -394,11 +395,17 @@ class PrioritizedReplayBuffer:
 
             probs = np.power(clipped_errors, self.alpha)
 
-            self._sum_tree.update(data_ids % self.capacity, probs)
+            # Avoid data_ids is overrided by new data
+            curr_data_ids = self._trans_storage.get_ids(data_ids)
+            mask = curr_data_ids == data_ids
+            self._sum_tree.update(data_ids[mask] % self.capacity, probs[mask])
 
-    def update_transitions(self, data_ids, key, data) -> None:
+    def update_transitions(self, data_ids: np.ndarray, key: str, data: np.ndarray) -> None:
         with self._lock.write():
-            self._trans_storage.update(data_ids, key, data)
+            # Avoid data_ids is overrided by new data
+            curr_data_ids = self._trans_storage.get_ids(data_ids)
+            mask = curr_data_ids == data_ids
+            self._trans_storage.update(data_ids[mask], key, data[mask])
 
     def save(self, save_dir: Path, ckpt: int) -> None:
         # for p in p.glob('*-rb_tree.npy'):
