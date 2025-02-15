@@ -4,7 +4,6 @@ import threading
 from collections import defaultdict
 from itertools import chain
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -20,22 +19,22 @@ from .utils import *
 
 class SAC_Base:
     def __init__(self,
-                 obs_names: List[str],
-                 obs_shapes: List[Tuple[int]],
-                 d_action_sizes: List[int],
+                 obs_names: list[str],
+                 obs_shapes: list[tuple[int]],
+                 d_action_sizes: list[int],
                  c_action_size: int,
-                 model_abs_dir: Optional[Path],
+                 model_abs_dir: Path | None,
                  nn,
 
-                 device: Optional[str] = None,
-                 ma_name: Optional[str] = None,
-                 summary_path: Optional[str] = 'log',
+                 device: str | None = None,
+                 ma_name: str | None = None,
+                 summary_path: str | None = 'log',
                  train_mode: bool = True,
-                 last_ckpt: Optional[str] = None,
+                 last_ckpt: str | None = None,
 
-                 nn_config: Optional[dict] = None,
+                 nn_config: dict | None = None,
 
-                 seed: Optional[float] = None,
+                 seed: float | None = None,
                  write_summary_per_step: float = 1e3,
                  save_model_per_step: float = 1e5,
 
@@ -47,7 +46,7 @@ class SAC_Base:
 
                  burn_in_step: int = 0,
                  n_step: int = 1,
-                 seq_encoder: Optional[SEQ_ENCODER] = None,
+                 seq_encoder: SEQ_ENCODER | None = None,
 
                  batch_size: int = 256,
                  tau: float = 0.005,
@@ -70,7 +69,7 @@ class SAC_Base:
                  discrete_dqn_epsilon: float = 0.2,
                  use_n_step_is: bool = True,
 
-                 siamese: Optional[SIAMESE] = None,
+                 siamese: SIAMESE | None = None,
                  siamese_use_q: bool = False,
                  siamese_use_adaptive: bool = False,
 
@@ -78,19 +77,19 @@ class SAC_Base:
                  transition_kl: float = 0.8,
                  use_extra_data: bool = True,
 
-                 curiosity: Optional[CURIOSITY] = None,
+                 curiosity: CURIOSITY | None = None,
                  curiosity_strength: float = 1.,
                  use_rnd: bool = False,
                  rnd_n_sample: int = 10,
 
                  use_normalization: bool = False,
 
-                 action_noise: Optional[List[float]] = None,
+                 action_noise: list[float] | None = None,
 
-                 replay_config: Optional[dict] = None):
+                 replay_config: dict | None = None):
         """
-        obs_names: List of names of observations
-        obs_shapes: List of dimensions of observations
+        obs_names: list of names of observations
+        obs_shapes: list of dimensions of observations
         d_action_sizes: Dimensions of discrete actions
         c_action_size: Dimension of continuous actions
         model_abs_dir: The directory that saves summary, checkpoints, config etc.
@@ -258,7 +257,7 @@ class SAC_Base:
         else:
             self._logger = logging.getLogger(f'sac.base.{self.ma_name}')
 
-    def _build_model(self, nn, nn_config: Optional[dict], init_log_alpha: float, learning_rate: float) -> None:
+    def _build_model(self, nn, nn_config: dict | None, init_log_alpha: float, learning_rate: float) -> None:
         """
         Initialize variables, network models and optimizers
         """
@@ -375,14 +374,14 @@ class SAC_Base:
         self.optimizer_rep = adam_optimizer(self.model_rep.parameters())
 
         """ Q """
-        self.model_q_list: List[ModelBaseQ] = [nn.ModelQ(state_size,
+        self.model_q_list: list[ModelBaseQ] = [nn.ModelQ(state_size,
                                                          self.d_action_sizes,
                                                          self.c_action_size,
                                                          False,
                                                          self.model_abs_dir).to(self.device)
                                                for _ in range(self.ensemble_q_num)]
 
-        self.model_target_q_list: List[ModelBaseQ] = [nn.ModelQ(state_size,
+        self.model_target_q_list: list[ModelBaseQ] = [nn.ModelQ(state_size,
                                                                 self.d_action_sizes,
                                                                 self.c_action_size,
                                                                 True,
@@ -413,13 +412,13 @@ class SAC_Base:
                 self.optimizer_siamese = adam_optimizer(self.contrastive_weight_list)
 
             elif self.siamese == SIAMESE.BYOL:
-                self.model_rep_projection_list: List[ModelBaseRepProjection] = [
+                self.model_rep_projection_list: list[ModelBaseRepProjection] = [
                     nn.ModelRepProjection(test_encoder.shape[-1]).to(self.device) for test_encoder in test_encoder_list]
-                self.model_target_rep_projection_list: List[ModelBaseRepProjection] = [
+                self.model_target_rep_projection_list: list[ModelBaseRepProjection] = [
                     nn.ModelRepProjection(test_encoder.shape[-1]).to(self.device) for test_encoder in test_encoder_list]
 
                 test_projection_list = [pro(test_encoder) for pro, test_encoder in zip(self.model_rep_projection_list, test_encoder_list)]
-                self.model_rep_prediction_list: List[ModelBaseRepPrediction] = [
+                self.model_rep_prediction_list: list[ModelBaseRepPrediction] = [
                     nn.ModelRepPrediction(test_projection.shape[-1]).to(self.device) for test_projection in test_projection_list]
                 self.optimizer_siamese = adam_optimizer(chain(*[pro.parameters() for pro in self.model_rep_projection_list],
                                                               *[pre.parameters() for pre in self.model_rep_prediction_list]))
@@ -610,7 +609,7 @@ class SAC_Base:
             self._logger.info('Initializing from scratch')
             self._update_target_variables()
 
-    def _init_replay_buffer(self, replay_config: Optional[dict] = None) -> None:
+    def _init_replay_buffer(self, replay_config: dict | None = None) -> None:
         self._batch = None
         self._pointers = None
 
@@ -736,7 +735,7 @@ class SAC_Base:
             )
 
     @torch.no_grad()
-    def _udpate_normalizer(self, obs_list: List[torch.Tensor]) -> None:
+    def _udpate_normalizer(self, obs_list: list[torch.Tensor]) -> None:
         self.normalizer_step.add_(obs_list[0].shape[0])
 
         input_to_old_means = [obs_list[i] - self.running_means[i] for i in range(len(obs_list))]
@@ -821,7 +820,7 @@ class SAC_Base:
         return c_actions[torch.arange(batch), c_idx]
 
     @torch.no_grad()
-    def _random_action(self, d_action, c_action) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _random_action(self, d_action, c_action) -> tuple[torch.Tensor, torch.Tensor]:
         if self.action_noise is None:
             return d_action, c_action
 
@@ -846,10 +845,10 @@ class SAC_Base:
 
     @torch.no_grad()
     def _choose_action(self,
-                       obs_list: List[torch.Tensor],
+                       obs_list: list[torch.Tensor],
                        state: torch.Tensor,
                        disable_sample: bool = False,
-                       force_rnd_if_available: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
+                       force_rnd_if_available: bool = False) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             obs_list: list([batch, *obs_shapes_i], ...)
@@ -924,12 +923,12 @@ class SAC_Base:
 
     @torch.no_grad()
     def choose_action(self,
-                      obs_list: List[np.ndarray],
+                      obs_list: list[np.ndarray],
                       pre_action: np.ndarray,
                       pre_seq_hidden_state: np.ndarray,
 
                       disable_sample: bool = False,
-                      force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
+                      force_rnd_if_available: bool = False) -> tuple[np.ndarray,
                                                                      np.ndarray,
                                                                      np.ndarray]:
         """
@@ -972,12 +971,12 @@ class SAC_Base:
     def choose_attn_action(self,
                            ep_indexes: np.ndarray,
                            ep_padding_masks: np.ndarray,
-                           ep_obses_list: List[np.ndarray],
+                           ep_obses_list: list[np.ndarray],
                            ep_pre_actions: np.ndarray,
                            ep_pre_attn_states: np.ndarray,
 
                            disable_sample: bool = False,
-                           force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
+                           force_rnd_if_available: bool = False) -> tuple[np.ndarray,
                                                                           np.ndarray,
                                                                           np.ndarray]:
         """
@@ -1026,7 +1025,7 @@ class SAC_Base:
     def get_m_data(self,
                    bn_indexes: torch.Tensor,
                    bn_padding_masks: torch.Tensor,
-                   bn_actions: torch.Tensor,) -> Tuple[torch.Tensor,
+                   bn_actions: torch.Tensor,) -> tuple[torch.Tensor,
                                                        torch.Tensor,
                                                        torch.Tensor]:
         """
@@ -1052,11 +1051,11 @@ class SAC_Base:
         self,
         l_indexes: torch.Tensor,
         l_padding_masks: torch.Tensor,
-        l_obses_list: List[torch.Tensor],
+        l_obses_list: list[torch.Tensor],
         l_pre_actions: torch.Tensor,
         l_pre_seq_hidden_states: torch.Tensor,
         is_target=False
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             l_indexes: [batch, l]
@@ -1105,10 +1104,10 @@ class SAC_Base:
         self,
         l_indexes: torch.Tensor,
         l_padding_masks: torch.Tensor,
-        l_obses_list: List[torch.Tensor],
+        l_obses_list: list[torch.Tensor],
         l_pre_actions: torch.Tensor,
         l_pre_seq_hidden_states: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             l_indexes (torch.int32): [batch, l]
@@ -1161,7 +1160,7 @@ class SAC_Base:
 
     @torch.no_grad()
     def get_l_probs(self,
-                    l_obses_list: List[torch.Tensor],
+                    l_obses_list: list[torch.Tensor],
                     l_states: torch.Tensor,
                     l_actions: torch.Tensor) -> torch.Tensor:
         """
@@ -1296,15 +1295,15 @@ class SAC_Base:
     @torch.no_grad()
     def _get_y(self,
                n_padding_masks: torch.Tensor,
-               n_obses_list: List[torch.Tensor],
+               n_obses_list: list[torch.Tensor],
                n_states: torch.Tensor,
                n_actions: torch.Tensor,
                n_rewards: torch.Tensor,
-               next_obs_list: List[torch.Tensor],
+               next_obs_list: list[torch.Tensor],
                next_state: torch.Tensor,
                n_dones: torch.Tensor,
-               n_mu_probs: torch.Tensor | None = None) -> Tuple[Optional[torch.Tensor],
-                                                                Optional[torch.Tensor]]:
+               n_mu_probs: torch.Tensor | None = None) -> tuple[torch.Tensor | None,
+                                                                torch.Tensor | None]:
         """
         Args:
             n_padding_masks (torch.bool): [batch, n]
@@ -1447,22 +1446,22 @@ class SAC_Base:
         return d_y, c_y  # [batch, 1]
 
     def _train_rep_q(self,
-                     bn_indexes: List[torch.Tensor],
-                     bn_padding_masks: List[torch.Tensor],
-                     bn_obses_list: List[torch.Tensor],
+                     bn_indexes: list[torch.Tensor],
+                     bn_padding_masks: list[torch.Tensor],
+                     bn_obses_list: list[torch.Tensor],
                      bn_states: torch.Tensor,
                      bn_target_states: torch.Tensor,
                      bn_actions: torch.Tensor,
                      bn_rewards: torch.Tensor,
-                     next_obs_list: List[torch.Tensor],
+                     next_obs_list: list[torch.Tensor],
                      next_state: torch.Tensor,
                      next_target_state: torch.Tensor,
                      bn_dones: torch.Tensor,
                      bn_mu_probs: torch.Tensor,
-                     priority_is: Optional[torch.Tensor] = None,) -> Tuple[torch.Tensor,
-                                                                           Optional[torch.Tensor],
-                                                                           Optional[torch.Tensor],
-                                                                           Optional[torch.Tensor]]:
+                     priority_is: torch.Tensor | None = None,) -> tuple[torch.Tensor,
+                                                                        torch.Tensor | None,
+                                                                        torch.Tensor | None,
+                                                                        torch.Tensor | None]:
         """
         Args:
             bn_indexes (torch.int32): [batch, b + n],
@@ -1590,8 +1589,8 @@ class SAC_Base:
 
     @torch.no_grad()
     def calculate_adaptive_weights(self,
-                                   grads_main: List[torch.Tensor],
-                                   loss_list: List[torch.Tensor],
+                                   grads_main: list[torch.Tensor],
+                                   loss_list: list[torch.Tensor],
                                    model: nn.Module) -> None:
 
         grads_aux_list = [autograd.grad(loss, model.parameters(),
@@ -1615,13 +1614,13 @@ class SAC_Base:
                 param.grad += cos * grad_aux
 
     def _train_siamese_representation_learning(self,
-                                               grads_rep_main: List[torch.Tensor],
-                                               grads_q_main_list: List[List[torch.Tensor]],
+                                               grads_rep_main: list[torch.Tensor],
+                                               grads_q_main_list: list[list[torch.Tensor]],
                                                bn_indexes: torch.Tensor,
                                                bn_padding_masks: torch.Tensor,
-                                               bn_obses_list: List[torch.Tensor],
-                                               bn_actions: torch.Tensor) -> Tuple[torch.Tensor,
-                                                                                  Optional[torch.Tensor]]:
+                                               bn_obses_list: list[torch.Tensor],
+                                               bn_actions: torch.Tensor) -> tuple[torch.Tensor,
+                                                                                  torch.Tensor | None]:
         """
         Args:
             grads_rep_main list(torch.Tensor)
@@ -1781,7 +1780,7 @@ class SAC_Base:
                    m_states,
                    m_target_states,
                    bn_actions,
-                   bn_rewards) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                   bn_rewards) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         bn_obses_list = [m_obs[:, :-1, ...] for m_obs in m_obses_list]
         bn_states = m_states[:, :-1, ...]
 
@@ -1818,11 +1817,11 @@ class SAC_Base:
         return torch.mean(approx_next_state_dist.entropy()), loss_reward, loss_obs
 
     def _train_policy(self,
-                      obs_list: List[torch.Tensor],
+                      obs_list: list[torch.Tensor],
                       state: torch.Tensor,
                       action: torch.Tensor,
-                      mu_d_policy_probs: torch.Tensor = None) -> Tuple[Optional[torch.Tensor],
-                                                                       Optional[torch.Tensor]]:
+                      mu_d_policy_probs: torch.Tensor = None) -> tuple[torch.Tensor | None,
+                                                                       torch.Tensor | None]:
         batch = state.shape[0]
 
         d_policy, c_policy = self.model_policy(state, obs_list)
@@ -1887,7 +1886,7 @@ class SAC_Base:
 
     def _train_alpha(self,
                      obs_list: torch.Tensor,
-                     state: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+                     state: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch = state.shape[0]
 
         with torch.no_grad():
@@ -2007,7 +2006,7 @@ class SAC_Base:
     def _train(self,
                bn_indexes: torch.Tensor,
                bn_padding_masks: torch.Tensor,
-               m_obses_list: List[torch.Tensor],
+               m_obses_list: list[torch.Tensor],
                bn_actions: torch.Tensor,
                bn_rewards: torch.Tensor,
                bn_dones: torch.Tensor,
@@ -2156,12 +2155,12 @@ class SAC_Base:
     @torch.no_grad()
     def _get_td_error(self,
                       bn_padding_masks: torch.Tensor,
-                      bn_obses_list: List[torch.Tensor],
+                      bn_obses_list: list[torch.Tensor],
                       bn_states: torch.Tensor,
                       bn_target_states: torch.Tensor,
                       bn_actions: torch.Tensor,
                       bn_rewards: torch.Tensor,
-                      next_obs_list: List[torch.Tensor],
+                      next_obs_list: list[torch.Tensor],
                       next_target_state: torch.Tensor,
                       bn_dones: torch.Tensor,
                       bn_mu_probs: torch.Tensor | None) -> torch.Tensor:
@@ -2247,7 +2246,7 @@ class SAC_Base:
 
     def put_episode(self,
                     ep_indexes: np.ndarray,
-                    ep_obses_list: List[np.ndarray],
+                    ep_obses_list: list[np.ndarray],
                     ep_actions: np.ndarray,
                     ep_rewards: np.ndarray,
                     ep_dones: np.ndarray,
@@ -2296,7 +2295,7 @@ class SAC_Base:
     def _fill_replay_buffer(self,
                             ep_indexes: np.ndarray,
                             ep_padding_masks: np.ndarray,
-                            ep_obses_list: List[np.ndarray],
+                            ep_obses_list: list[np.ndarray],
                             ep_actions: np.ndarray,
                             ep_rewards: np.ndarray,
                             ep_dones: np.ndarray,
@@ -2340,8 +2339,8 @@ class SAC_Base:
         # n_step transitions except the first one and the last obs
         self.replay_buffer.add(storage_data, ignore_size=1)
 
-    def _sample_from_replay_buffer(self) -> Tuple[np.ndarray,
-                                                  Tuple[np.ndarray | List[np.ndarray], ...]]:
+    def _sample_from_replay_buffer(self) -> tuple[np.ndarray,
+                                                  tuple[np.ndarray | list[np.ndarray], ...]]:
         """
         Sample from replay buffer
 

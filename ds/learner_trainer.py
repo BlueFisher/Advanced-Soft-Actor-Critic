@@ -1,16 +1,10 @@
 import importlib
 import logging
-import math
-import multiprocessing as mp
-import os
 import threading
 import traceback
 from multiprocessing.connection import Connection
 from multiprocessing.sharedctypes import SynchronizedArray
 from pathlib import Path
-from typing import List, Optional, Tuple
-
-import numpy as np
 
 import algorithm.config_helper as config_helper
 from algorithm.utils import RLock, traverse_lists
@@ -32,15 +26,15 @@ class Trainer:
 
                  logger_in_file: bool,
                  debug: bool,
-                 ma_name: Optional[str],
+                 ma_name: str | None,
 
-                 obs_names: List[str],
-                 obs_shapes: List[Tuple[int]],
-                 d_action_sizes: List[int],
+                 obs_names: list[str],
+                 obs_shapes: list[tuple[int]],
+                 d_action_sizes: list[int],
                  c_action_size: int,
                  model_abs_dir: Path,
                  device: str,
-                 last_ckpt: Optional[str],
+                 last_ckpt: str | None,
 
                  config):
 

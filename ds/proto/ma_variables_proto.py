@@ -1,9 +1,8 @@
-from typing import Optional
 from .numproto import ndarray_to_proto, proto_to_ndarray
 from .ma_variables_pb2 import MAVariables, Variables
 
 
-def ma_variables_to_proto(ma_variables: Optional[dict]):
+def ma_variables_to_proto(ma_variables: dict | None):
     if ma_variables is None:
         return MAVariables()
 

@@ -8,7 +8,6 @@ import threading
 import time
 from multiprocessing.sharedctypes import SynchronizedArray
 from pathlib import Path
-from typing import Dict, List, Set
 
 import grpc
 import numpy as np
@@ -36,7 +35,7 @@ class AgentManagerBuffer:
     def __init__(self,
                  episode_buffer: SharedMemoryManager,
                  episode_length_array: SynchronizedArray,
-                 episode_sender_processes: List[mp.Process]):
+                 episode_sender_processes: list[mp.Process]):
         self.episode_buffer = episode_buffer
         self.episode_length_array = episode_length_array
         self.episode_sender_processes = episode_sender_processes
@@ -201,7 +200,7 @@ class Actor(Main):
         return config_abs_dir
 
     def _init_sac(self):
-        self._ma_agent_manager_buffer: Dict[str, AgentManagerBuffer] = {}
+        self._ma_agent_manager_buffer: dict[str, AgentManagerBuffer] = {}
 
         for n, mgr in self.ma_manager:
             # If nn models exists, load saved model, or copy a new one
@@ -295,11 +294,11 @@ class Actor(Main):
                    ma_name: str,
 
                    ep_indexes: np.ndarray,
-                   ep_obses_list: List[np.ndarray],
+                   ep_obses_list: list[np.ndarray],
                    ep_actions: np.ndarray,
                    ep_rewards: np.ndarray,
                    ep_dones: np.ndarray,
-                   ep_probs: List[np.ndarray],
+                   ep_probs: list[np.ndarray],
                    ep_pre_seq_hidden_states: np.ndarray = None):
 
         mgr = self.ma_manager[ma_name]

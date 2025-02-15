@@ -1,6 +1,5 @@
 import logging
 import time
-from typing import Dict, Optional
 
 CLEAR_EACH_LOG = True  # Whether clear last avg time when step % repeat == 0
 REPEAT_OVERRIDE = None  # Override repeat argument
@@ -9,11 +8,11 @@ MAX_REPEAT_TO_DISABLE_COUNTER = 20
 
 class UnifiedElapsedTimer:
     def __init__(self,
-                 logger: Optional[logging.Logger] = None,
+                 logger: logging.Logger | None = None,
                  logger_level: int = logging.DEBUG):
         self._logger = logging.getLogger(logger.name + '.profiler')
         self._logger_level = logger_level
-        self._elapsed_timer_dict: Dict[str, ElapsedTimer] = {}
+        self._elapsed_timer_dict: dict[str, ElapsedTimer] = {}
 
     def __call__(self, log: str, repeat: int = 1, force_report: bool = True):
         if log not in self._elapsed_timer_dict:
@@ -39,8 +38,8 @@ def unified_elapsed_timer(log: str, repeat: int = 1, force_report: bool = True,
 
 class ElapsedTimer:
     def __init__(self,
-                 log: Optional[str],
-                 logger: Optional[logging.Logger] = None,
+                 log: str | None,
+                 logger: logging.Logger | None = None,
                  logger_level: int = logging.DEBUG,
                  repeat: int = 1,
                  force_report: bool = True):
@@ -110,7 +109,7 @@ class ElapsedCounter:
 
     def __init__(self,
                  log: str,
-                 logger: Optional[logging.Logger] = None,
+                 logger: logging.Logger | None = None,
                  logger_level: int = logging.DEBUG,
                  repeat=1):
         self._log = log

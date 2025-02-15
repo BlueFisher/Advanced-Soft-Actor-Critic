@@ -4,7 +4,6 @@ import shutil
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Set
 
 import numpy as np
 
@@ -62,7 +61,7 @@ class Main:
 
         # Initialize config from command line arguments
         self.train_mode = not args.run
-        self.inference_ma_names: Set[str] = set(args.run_a)
+        self.inference_ma_names: set[str] = set(args.run_a)
         self.render = args.render
         self.unity_run_in_editor = args.u_editor
         self.unity_quality_level = args.u_quality_level
@@ -423,8 +422,8 @@ class Main:
             self._logger.info('Training terminated')
 
     def _extra_step(self,
-                    ma_d_action: Dict[str, np.ndarray],
-                    ma_c_action: Dict[str, np.ndarray]):
+                    ma_d_action: dict[str, np.ndarray],
+                    ma_c_action: dict[str, np.ndarray]):
         pass
 
     def _log_episode_summaries(self):

@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import gymnasium as gym
 import numpy as np
@@ -21,7 +20,7 @@ class GymWrapper(EnvWrapper):
     def __init__(self,
                  train_mode: bool = True,
                  env_name: str = None,
-                 env_args: Optional[str | Dict] = None,
+                 env_args: str | dict | None = None,
                  n_envs: int = 1,
                  model_abs_dir: Path | None = None,
 
@@ -33,10 +32,10 @@ class GymWrapper(EnvWrapper):
         self._logger = logging.getLogger('GymWrapper')
         self._logger.info(', '.join(gym.envs.registry.keys()))
 
-    def init(self) -> Tuple[Dict[str, List[str]],
-                            Dict[str, List[Tuple[int]]],
-                            Dict[str, List[int]],
-                            Dict[str, int]]:
+    def init(self) -> tuple[dict[str, list[str]],
+                            dict[str, list[tuple[int]]],
+                            dict[str, list[int]],
+                            dict[str, int]]:
         self.env = env = gym.make_vec(self.env_name,
                                       render_mode='human' if self.render else None,
                                       num_envs=self.n_envs,
@@ -60,8 +59,8 @@ class GymWrapper(EnvWrapper):
                 {'gym': d_action_sizes},
                 {'gym': c_action_size})
 
-    def reset(self, reset_config: Optional[Dict] = None) -> Tuple[Dict[str, List[int]],
-                                                                  Dict[str, List[np.ndarray]]]:
+    def reset(self, reset_config: dict | None = None) -> tuple[dict[str, list[int]],
+                                                               dict[str, list[np.ndarray]]]:
         obs, info = self.env.reset(options={**reset_config}
                                    if reset_config is not None else None)
 
@@ -71,8 +70,8 @@ class GymWrapper(EnvWrapper):
         return {'gym': agent_ids}, {'gym': [obs]}
 
     def step(self,
-             ma_d_action: Dict[str, np.ndarray],
-             ma_c_action: Dict[str, np.ndarray]) -> Tuple[DecisionStep, TerminalStep]:
+             ma_d_action: dict[str, np.ndarray],
+             ma_c_action: dict[str, np.ndarray]) -> tuple[DecisionStep, TerminalStep]:
         if self.is_discrete:
             d_action = ma_d_action['gym']
             # Convert one-hot to label

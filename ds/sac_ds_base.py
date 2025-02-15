@@ -2,7 +2,6 @@ import logging
 import sys
 from itertools import chain
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import torch
@@ -20,18 +19,18 @@ class SAC_DS_Base(SAC_Base):
                  obs_shapes: list[tuple[int]],
                  d_action_sizes: list[int],
                  c_action_size: int,
-                 model_abs_dir: Optional[Path],
+                 model_abs_dir: Path | None,
                  nn,
 
-                 device: Optional[str] = None,
-                 ma_name: Optional[str] = None,
-                 summary_path: Optional[str] = 'log',
+                 device: str | None = None,
+                 ma_name: str | None = None,
+                 summary_path: str | None = 'log',
                  train_mode: bool = True,
-                 last_ckpt: Optional[str] = None,
+                 last_ckpt: str | None = None,
 
-                 nn_config: Optional[dict] = None,
+                 nn_config: dict | None = None,
 
-                 seed: Optional[float] = None,
+                 seed: float | None = None,
                  write_summary_per_step: float = 1e3,
                  save_model_per_step: float = 1e5,
 
@@ -43,7 +42,7 @@ class SAC_DS_Base(SAC_Base):
 
                  burn_in_step: int = 0,
                  n_step: int = 1,
-                 seq_encoder: Optional[SEQ_ENCODER] = None,
+                 seq_encoder: SEQ_ENCODER | None = None,
 
                  batch_size: int = 256,
                  tau: float = 0.005,
@@ -65,7 +64,7 @@ class SAC_DS_Base(SAC_Base):
                  discrete_dqn_like: bool = False,
                  discrete_dqn_epsilon: float = 0.2,
 
-                 siamese: Optional[SIAMESE] = None,
+                 siamese: SIAMESE | None = None,
                  siamese_use_q: bool = False,
                  siamese_use_adaptive: bool = False,
 
@@ -73,16 +72,16 @@ class SAC_DS_Base(SAC_Base):
                  transition_kl: float = 0.8,
                  use_extra_data: bool = True,
 
-                 curiosity: Optional[CURIOSITY] = None,
+                 curiosity: CURIOSITY | None = None,
                  curiosity_strength: float = 1.,
                  use_rnd: bool = False,
                  rnd_n_sample: int = 10,
 
                  use_normalization: bool = False,
 
-                 action_noise: Optional[list[float]] = None,
+                 action_noise: list[float] | None = None,
 
-                 replay_config: Optional[dict] = None):
+                 replay_config: dict | None = None):
 
         self.obs_names = obs_names
         self.obs_shapes = obs_shapes

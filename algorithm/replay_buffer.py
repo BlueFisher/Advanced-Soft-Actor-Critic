@@ -2,7 +2,6 @@ import io
 import logging
 import math
 from pathlib import Path
-from typing import Dict, Tuple
 
 import numpy as np
 from tqdm import tqdm
@@ -66,7 +65,7 @@ class DataStorage:
     def update(self, ids: np.ndarray, key: str, data: np.ndarray):
         self._buffer[key][ids % self.capacity] = data
 
-    def get(self, ids: np.ndarray) -> Dict[str, np.ndarray]:
+    def get(self, ids: np.ndarray) -> dict[str, np.ndarray]:
         """
         Get data from buffer without verifying whether ids in buffer
         """
@@ -173,7 +172,7 @@ class SumTree:
 
             tree_idx = parent_idx
 
-    def sample(self, batch_size) -> Tuple[np.ndarray, np.ndarray]:
+    def sample(self, batch_size) -> tuple[np.ndarray, np.ndarray]:
         """
         Returns:
             leaf_idx: The index of leaves of the whole sum tree
@@ -260,7 +259,7 @@ class PrioritizedReplayBuffer:
         tqdm_out = TqdmToLogger(self._logger, level=logging.INFO)
         self._fill_bar = tqdm(total=self.batch_size, desc='Filling the buffer...', file=tqdm_out)
 
-    def add(self, transitions: Dict[str, np.ndarray], ignore_size=0) -> None:
+    def add(self, transitions: dict[str, np.ndarray], ignore_size=0) -> None:
         with self._lock.write():
             if self._trans_storage.size == 0:
                 max_p = self.td_error_max
@@ -286,7 +285,7 @@ class PrioritizedReplayBuffer:
 
     def add_with_td_error(self,
                           td_error: np.ndarray,
-                          transitions: Dict[str, np.ndarray],
+                          transitions: dict[str, np.ndarray],
                           ignore_size: int = 0) -> None:
         td_error = np.asarray(td_error)
         td_error = td_error.flatten()
@@ -306,7 +305,7 @@ class PrioritizedReplayBuffer:
                 probs[-ignore_size:] = 0
             self._sum_tree.add(data_pointers, probs)
 
-    def sample(self) -> Tuple[np.ndarray, Dict[str, np.ndarray], np.ndarray]:
+    def sample(self) -> tuple[np.ndarray, dict[str, np.ndarray], np.ndarray]:
         """
         Returns:
             data index (np.int64): [batch, ]
@@ -329,7 +328,7 @@ class PrioritizedReplayBuffer:
 
             return data_ids, transitions, np.expand_dims(is_weights, axis=1)
 
-    def sample(self, prev_n: int = 0, post_n: int = 0) -> Tuple[np.ndarray, Dict[str, np.ndarray], np.ndarray]:
+    def sample(self, prev_n: int = 0, post_n: int = 0) -> tuple[np.ndarray, dict[str, np.ndarray], np.ndarray]:
         """
         Returns:
             data index (np.int64): [batch, ]
@@ -372,7 +371,7 @@ class PrioritizedReplayBuffer:
     def get_curr_id(self) -> int:
         return self._trans_storage.get_curr_id()
 
-    def get_storage_data(self, data_ids: np.ndarray) -> Dict[str, np.ndarray]:
+    def get_storage_data(self, data_ids: np.ndarray) -> dict[str, np.ndarray]:
         """
         Get data without verifying whether data_ids exist
         """

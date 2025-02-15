@@ -1,6 +1,5 @@
 import math
 from enum import Enum
-from typing import List, Optional
 
 import torch
 from torch import nn
@@ -53,7 +52,7 @@ class MultiheadAttention(nn.Module):
     def __init__(self,
                  embed_dim: int,
                  num_heads: int = 1,
-                 pe: Optional[POSITIONAL_ENCODING] = None,
+                 pe: POSITIONAL_ENCODING | None = None,
                  qkv_dense_depth: int = 0,
                  out_dense_depth: int = 1,
                  dropout: float = 0.) -> None:
@@ -91,10 +90,10 @@ class MultiheadAttention(nn.Module):
                 query: torch.Tensor,
                 key: torch.Tensor,
                 value: torch.Tensor,
-                query_index: Optional[torch.Tensor] = None,
-                key_index: Optional[torch.Tensor] = None,
-                key_padding_mask: Optional[torch.Tensor] = None,
-                attn_mask: Optional[torch.Tensor] = None):
+                query_index: torch.Tensor | None = None,
+                key_index: torch.Tensor | None = None,
+                key_padding_mask: torch.Tensor | None = None,
+                attn_mask: torch.Tensor | None = None):
         """
         Args:
             query: [batch, seq_q_len, embed_dim]
@@ -262,11 +261,11 @@ class GatedCatLayer(nn.Module):
 class EpisodeMultiheadAttentionBlock(nn.Module):
     def __init__(self, embed_dim: int, num_heads: int,
 
-                 pe: Optional[POSITIONAL_ENCODING] = None,
+                 pe: POSITIONAL_ENCODING | None = None,
                  qkv_dense_depth: int = 0,
                  out_dense_depth: int = 1,
                  dropout: float = 0.,
-                 gate: Optional[GATE] = None,
+                 gate: GATE | None = None,
                  use_layer_norm: bool = False):
         super().__init__()
 
@@ -300,9 +299,9 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
 
     def get_attn_mask(self,
                       seq_k_len: int,
-                      seq_q_len_only_attend_to_rest_key: Optional[int] = None,
-                      key_index: Optional[torch.Tensor] = None,
-                      key_padding_mask: Optional[torch.Tensor] = None,
+                      seq_q_len_only_attend_to_rest_key: int | None = None,
+                      key_index: torch.Tensor | None = None,
+                      key_padding_mask: torch.Tensor | None = None,
                       device='cpu') -> torch.Tensor:
         """
         Args:
@@ -376,8 +375,8 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
                 seq_q_len: int,
                 cut_query: bool = True,
                 query_only_attend_to_rest_key: bool = False,
-                key_index: Optional[torch.Tensor] = None,
-                key_padding_mask: Optional[torch.Tensor] = None):
+                key_index: torch.Tensor | None = None,
+                key_padding_mask: torch.Tensor | None = None):
         """
         Args:
             key: [batch, seq_k_len, embed_dim]
@@ -464,13 +463,13 @@ class EpisodeMultiheadAttentionBlock(nn.Module):
 class EpisodeMultiheadAttention(nn.Module):
     def __init__(self, embed_dim: int,
                  num_layers: int = 2,
-                 num_heads: int | List[int] = 1,
-                 pe: Optional[POSITIONAL_ENCODING] | List[Optional[POSITIONAL_ENCODING]] = False,
-                 qkv_dense_depth: int | List[int] = 0,
-                 out_dense_depth: int | List[int] = 1,
-                 dropout: float | List[float] = 0.,
-                 gate: Optional[GATE] | List[Optional[GATE]] = None,
-                 use_layer_norm: bool | List[bool] = False):
+                 num_heads: int | list[int] = 1,
+                 pe: POSITIONAL_ENCODING | None | list[POSITIONAL_ENCODING | None] = False,
+                 qkv_dense_depth: int | list[int] = 0,
+                 out_dense_depth: int | list[int] = 1,
+                 dropout: float | list[float] = 0.,
+                 gate: GATE | None | list[GATE | None] = None,
+                 use_layer_norm: bool | list[bool] = False):
         super().__init__()
 
         self.num_layers = num_layers
@@ -524,12 +523,12 @@ class EpisodeMultiheadAttention(nn.Module):
                 key: torch.Tensor,
                 seq_q_len: int = 1,
                 cut_query: bool = True,
-                hidden_state: Optional[torch.Tensor] = None,
+                hidden_state: torch.Tensor | None = None,
                 is_prev_hidden_state: bool = False,
 
                 query_only_attend_to_rest_key: bool = False,
-                key_index: Optional[torch.Tensor] = None,
-                key_padding_mask: Optional[torch.Tensor] = None):
+                key_index: torch.Tensor | None = None,
+                key_padding_mask: torch.Tensor | None = None):
         """
         Args:
             key: [batch, seq_k_len, embed_dim]
@@ -546,7 +545,7 @@ class EpisodeMultiheadAttention(nn.Module):
             encoded_query: [batch, seq_q_len, output_dim]  if cut_query
                            [batch, seq_k_len, output_dim]  if not cut_query
             next_hidden_state: [batch, seq_q_len, sum(output_dim_list[:-1])]
-            attn_weights_list: List[[batch, seq_k_len_i, seq_k_len_i], ...]
+            attn_weights_list: list[[batch, seq_k_len_i, seq_k_len_i], ...]
         """
         seq_k_len = key.shape[1]
         assert seq_q_len <= seq_k_len

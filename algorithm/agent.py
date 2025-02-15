@@ -1,7 +1,7 @@
 import logging
 from copy import deepcopy
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Set, Tuple
+from typing import Iterator
 
 import numpy as np
 
@@ -30,20 +30,20 @@ class Agent:
 
     # tmp data, waiting for reward and done to `end_transition`
     _tmp_index: int = -1
-    _tmp_obs_list: Optional[List[np.ndarray]] = None
-    _tmp_action: Optional[np.ndarray] = None
-    _tmp_prob: Optional[np.ndarray] = None
-    _tmp_pre_seq_hidden_state: Optional[np.ndarray] = None
-    _tmp_seq_hidden_state: Optional[np.ndarray] = None
+    _tmp_obs_list: list[np.ndarray] | None = None
+    _tmp_action: np.ndarray | None = None
+    _tmp_prob: np.ndarray | None = None
+    _tmp_pre_seq_hidden_state: np.ndarray | None = None
+    _tmp_seq_hidden_state: np.ndarray | None = None
 
-    _tmp_episode_trans: Dict[str, np.ndarray | List[np.ndarray]]
+    _tmp_episode_trans: dict[str, np.ndarray | list[np.ndarray]]
 
     def __init__(self,
                  agent_id: int,
-                 obs_shapes: List[Tuple[int, ...]],
-                 d_action_sizes: List[int],
+                 obs_shapes: list[tuple[int, ...]],
+                 d_action_sizes: list[int],
                  c_action_size: int,
-                 seq_hidden_state_shape: Tuple[int, ...],
+                 seq_hidden_state_shape: tuple[int, ...],
                  max_episode_length: int = -1):
         self.agent_id = agent_id
         self.obs_shapes = obs_shapes
@@ -63,7 +63,7 @@ class Agent:
 
         self._logger = logging.getLogger(f'agent.{agent_id}')
 
-    def _generate_empty_episode_trans(self, episode_length: int = 0) -> Dict[str, np.ndarray | List[np.ndarray]]:
+    def _generate_empty_episode_trans(self, episode_length: int = 0) -> dict[str, np.ndarray | list[np.ndarray]]:
         empty_episode_trans = {
             'index': -np.ones((episode_length, ), dtype=np.int32),
             'obs_list': [np.zeros((episode_length, *s), dtype=np.float32) for s in self.obs_shapes],
@@ -78,7 +78,7 @@ class Agent:
         return empty_episode_trans
 
     def set_tmp_obs_action(self,
-                           obs_list: List[np.ndarray],
+                           obs_list: list[np.ndarray],
                            action: np.ndarray,
                            prob: np.ndarray,
                            seq_hidden_state: np.ndarray):
@@ -92,7 +92,7 @@ class Agent:
     def get_tmp_index(self) -> int:
         return self._tmp_index
 
-    def get_tmp_obs_list(self) -> List[np.ndarray]:
+    def get_tmp_obs_list(self) -> list[np.ndarray]:
         if self._tmp_obs_list is None:
             return self._padding_obs_list
         return self._tmp_obs_list
@@ -112,7 +112,7 @@ class Agent:
                        done: bool = False,
                        max_reached: bool = False,
                        force_terminated: bool = False,
-                       next_obs_list: Optional[List[np.ndarray]] = None) -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
+                       next_obs_list: list[np.ndarray] | None = None) -> dict[str, np.ndarray | list[np.ndarray]] | None:
         if self._tmp_obs_list is None:
             return
 
@@ -142,8 +142,8 @@ class Agent:
             return self._end_episode(next_obs_list if next_obs_list is not None else self._padding_obs_list)
 
     def _end_episode(self,
-                     next_obs_list: List[np.ndarray]) \
-            -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
+                     next_obs_list: list[np.ndarray]) \
+            -> dict[str, np.ndarray | list[np.ndarray]] | None:
 
         self._add_transition(
             index=self._tmp_index + 1,
@@ -173,7 +173,7 @@ class Agent:
 
     def _add_transition(self,
                         index: int,
-                        obs_list: List[np.ndarray],
+                        obs_list: list[np.ndarray],
                         action: np.ndarray,
                         reward: float,
                         done: bool,
@@ -183,7 +183,7 @@ class Agent:
         """
         Args:
             index: int
-            obs_list: List([*obs_shapes_i], ...)
+            obs_list: list([*obs_shapes_i], ...)
             action: [action_size, ]
             reward: float
             done: bool
@@ -246,11 +246,11 @@ class Agent:
         pass
 
     def get_episode_trans(self,
-                          force_length: int | None = None) -> Optional[Dict[str, np.ndarray | List[np.ndarray]]]:
+                          force_length: int | None = None) -> dict[str, np.ndarray | list[np.ndarray]] | None:
         """
         Returns:
             ep_indexes (np.int32): [1, episode_len]
-            ep_obses_list: List([1, episode_len, *obs_shapes_i], ...)
+            ep_obses_list: list([1, episode_len, *obs_shapes_i], ...)
             ep_actions: [1, episode_len, action_size]
             ep_rewards: [1, episode_len]
             ep_dones (np.bool): [1, episode_len]
@@ -285,7 +285,7 @@ class Agent:
 
         ep_indexes = np.expand_dims(tmp['index'], 0)  # [1, episode_len]
         ep_obses_list = [np.expand_dims(o, 0) for o in tmp['obs_list']]
-        # List([1, episode_len, *obs_shape_si], ...)
+        # list([1, episode_len, *obs_shape_si], ...)
         ep_actions = np.expand_dims(tmp['action'], 0)  # [1, episode_len, action_size]
         ep_rewards = np.expand_dims(tmp['reward'], 0)  # [1, episode_len]
         ep_dones = np.expand_dims(np.logical_and(tmp['done'],
@@ -323,9 +323,9 @@ class Agent:
 class AgentManager:
     def __init__(self,
                  name: str,
-                 obs_names: List[str],
-                 obs_shapes: List[Tuple[int]],
-                 d_action_sizes: List[int],
+                 obs_names: list[str],
+                 obs_shapes: list[tuple[int]],
+                 d_action_sizes: list[int],
                  c_action_size: int,
                  max_episode_length: int = -1):
         self.name = name
@@ -337,13 +337,13 @@ class AgentManager:
         self.action_size = self.d_action_summed_size + self.c_action_size
         self.max_episode_length = max_episode_length
 
-        self.agents_dict: Dict[int, Agent] = {}  # {agent_id: Agent}
-        self.agents_liveness: Dict[int, int] = {}  # {agent_id: int}
+        self.agents_dict: dict[int, Agent] = {}  # {agent_id: Agent}
+        self.agents_liveness: dict[int, int] = {}  # {agent_id: int}
 
-        self.rl: Optional[SAC_Base] = None
+        self.rl: SAC_Base | None = None
         self.seq_encoder = None
 
-        self.il: Optional[ImitationBase] = None
+        self.il: ImitationBase | None = None
 
         self._logger = logging.getLogger(f'agent_mgr.{name}')
         self._profiler = UnifiedElapsedTimer(self._logger)
@@ -359,15 +359,15 @@ class AgentManager:
         self._data[k] = v
 
     @property
-    def agents(self) -> List[Agent]:
+    def agents(self) -> list[Agent]:
         return list(self.agents_dict.values())
 
     @property
-    def non_empty_agents(self) -> List[Agent]:
+    def non_empty_agents(self) -> list[Agent]:
         return [a for a in self.agents if not a.is_empty]
 
     @property
-    def empty_agents(self) -> List[Agent]:
+    def empty_agents(self) -> list[Agent]:
         return [a for a in self.agents if a.is_empty]
 
     @property
@@ -448,7 +448,7 @@ class AgentManager:
         # Some agents may disabled unexpectively
         # Some agents in Unity may disabled and enabled again in a new episode,
         #   but are assigned new agent ids
-        # Set done to these zombie agents
+        # set done to these zombie agents
         for agent_id in self.agents_liveness:
             agent = self.agents_dict[agent_id]
             if self.agents_liveness[agent_id] <= 0 and not agent.done:
@@ -457,7 +457,7 @@ class AgentManager:
     def _get_merged_index(self, agent_ids: np.ndarray) -> np.ndarray:
         return np.stack([self.agents_dict[_id].get_tmp_index() for _id in agent_ids])
 
-    def _get_merged_obs_list(self, agent_ids: np.ndarray) -> List[np.ndarray]:
+    def _get_merged_obs_list(self, agent_ids: np.ndarray) -> list[np.ndarray]:
         agents_obs_list = [self.agents_dict[_id].get_tmp_obs_list() for _id in agent_ids]
         return [np.stack(o) for o in zip(*agents_obs_list)]
 
@@ -470,7 +470,7 @@ class AgentManager:
     @unified_elapsed_timer('get_action', repeat=10)
     def get_action(self,
                    agent_ids: np.ndarray,
-                   obs_list: List[np.ndarray],
+                   obs_list: list[np.ndarray],
                    last_reward: np.ndarray,
                    disable_sample: bool = False,
                    force_rnd_if_available: bool = False) -> np.ndarray:
@@ -555,7 +555,7 @@ class AgentManager:
 
     def get_test_action(self,
                         agent_ids: np.ndarray,
-                        obs_list: List[np.ndarray]) -> np.ndarray:
+                        obs_list: list[np.ndarray]) -> np.ndarray:
         assert len(agent_ids) == obs_list[0].shape[0]
 
         self._verify_agents(agent_ids)
@@ -599,10 +599,10 @@ class AgentManager:
 
     def end_episode(self,
                     agent_ids: np.ndarray,
-                    obs_list: List[np.ndarray],
+                    obs_list: list[np.ndarray],
                     last_reward: np.ndarray,
                     max_reached: np.ndarray,
-                    force_terminated: bool = False) -> Dict[str, np.ndarray | List[np.ndarray]]:
+                    force_terminated: bool = False) -> dict[str, np.ndarray | list[np.ndarray]]:
         for i, agent_id in enumerate(agent_ids):
             if agent_id not in self.agents_dict:
                 continue
@@ -645,8 +645,8 @@ class AgentManager:
 
         return trained_steps
 
-    def get_tmp_episode_trans_list(self) -> List[
-        Dict[str, np.ndarray | List[np.ndarray]]
+    def get_tmp_episode_trans_list(self) -> list[
+        dict[str, np.ndarray | list[np.ndarray]]
     ]:
         return self._tmp_episode_trans_list
 
@@ -687,14 +687,14 @@ class AgentManager:
 
 
 class MultiAgentsManager:
-    _ma_manager: Dict[str, AgentManager]
+    _ma_manager: dict[str, AgentManager]
 
     def __init__(self,
-                 ma_obs_names: Dict[str, List[str]],
-                 ma_obs_shapes: Dict[str, List[Tuple[int, ...]]],
-                 ma_d_action_sizes: Dict[str, List[int]],
-                 ma_c_action_size: Dict[str, int],
-                 inference_ma_names: Set[str],
+                 ma_obs_names: dict[str, list[str]],
+                 ma_obs_shapes: dict[str, list[tuple[int, ...]]],
+                 ma_d_action_sizes: dict[str, list[int]],
+                 ma_c_action_size: dict[str, int],
+                 inference_ma_names: set[str],
                  model_abs_dir: Path,
                  max_episode_length: int = -1):
         self._inference_ma_names = inference_ma_names
@@ -712,7 +712,7 @@ class MultiAgentsManager:
             else:
                 self._ma_manager[n].set_model_abs_dir(model_abs_dir / n.replace('?', '-'))
 
-    def __iter__(self) -> Iterator[Tuple[str, AgentManager]]:
+    def __iter__(self) -> Iterator[tuple[str, AgentManager]]:
         return iter(self._ma_manager.items())
 
     def __getitem__(self, k) -> AgentManager:
@@ -757,13 +757,13 @@ class MultiAgentsManager:
             mgr.rl.set_train_mode(train_mode)
 
     def get_ma_action(self,
-                      ma_agent_ids: Dict[str, np.ndarray],
-                      ma_obs_list: Dict[str, List[np.ndarray]],
-                      ma_last_reward: Dict[str, np.ndarray],
+                      ma_agent_ids: dict[str, np.ndarray],
+                      ma_obs_list: dict[str, list[np.ndarray]],
+                      ma_last_reward: dict[str, np.ndarray],
 
                       disable_sample: bool = False,
-                      force_rnd_if_available: bool = False) -> Tuple[Dict[str, np.ndarray],
-                                                                     Dict[str, np.ndarray]]:
+                      force_rnd_if_available: bool = False) -> tuple[dict[str, np.ndarray],
+                                                                     dict[str, np.ndarray]]:
 
         ma_d_action = {}
         ma_c_action = {}
@@ -786,11 +786,11 @@ class MultiAgentsManager:
         return ma_d_action, ma_c_action
 
     def get_test_ma_action(self,
-                           ma_agent_ids: Dict[str, np.ndarray],
-                           ma_obs_list: Dict[str, List[np.ndarray]],
+                           ma_agent_ids: dict[str, np.ndarray],
+                           ma_obs_list: dict[str, list[np.ndarray]],
                            ma_last_reward=None,
-                           disable_sample=None) -> Tuple[Dict[str, np.ndarray],
-                                                         Dict[str, np.ndarray]]:
+                           disable_sample=None) -> tuple[dict[str, np.ndarray],
+                                                         dict[str, np.ndarray]]:
         ma_d_action = {}
         ma_c_action = {}
 
@@ -806,10 +806,10 @@ class MultiAgentsManager:
         return ma_d_action, ma_c_action
 
     def end_episode(self,
-                    ma_agent_ids: Dict[str, np.ndarray],
-                    ma_obs_list: Dict[str, List[np.ndarray]],
-                    ma_last_reward: Dict[str, float],
-                    ma_max_reached: Dict[str, bool],
+                    ma_agent_ids: dict[str, np.ndarray],
+                    ma_obs_list: dict[str, list[np.ndarray]],
+                    ma_last_reward: dict[str, float],
+                    ma_max_reached: dict[str, bool],
                     force_terminated: bool = False) -> None:
         for n, mgr in self:
             mgr.end_episode(
