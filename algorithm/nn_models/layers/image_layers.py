@@ -1,7 +1,8 @@
-from typing import Callable, Optional, Tuple
+from typing import Callable
 
 import torch
 from torch import nn
+from torchvision.models.vision_transformer import VisionTransformer
 
 from .linear_layers import LinearLayers
 
@@ -23,12 +24,12 @@ def conv1d_output_size(
 
 
 def conv2d_output_shape(
-    h_w: Tuple[int, int],
-    kernel_size: int | Tuple[int, int] = 1,
+    h_w: tuple[int, int],
+    kernel_size: int | tuple[int, int] = 1,
     stride: int = 1,
     padding: int = 0,
     dilation: int = 1
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Calculates the output shape (height and width) of the output of a convolution layer.
     kernel_size, stride, padding and dilation correspond to the inputs of the
@@ -53,7 +54,7 @@ def conv2d_output_shape(
     return h, w
 
 
-def pool_out_shape(h_w: Tuple[int, int], kernel_size: int) -> Tuple[int, int]:
+def pool_out_shape(h_w: tuple[int, int], kernel_size: int) -> tuple[int, int]:
     """
     Calculates the output shape (height and width) of the output of a max pooling layer.
     kernel_size corresponds to the inputs of the
@@ -66,13 +67,13 @@ def pool_out_shape(h_w: Tuple[int, int], kernel_size: int) -> Tuple[int, int]:
 
 
 def convtranspose_output_shape(
-    h_w: Tuple[int, int],
-    kernel_size: int | Tuple[int, int] = 1,
+    h_w: tuple[int, int],
+    kernel_size: int | tuple[int, int] = 1,
     stride: int = 1,
     padding: int = 0,
     output_padding: int = 0,
     dilation: int = 1
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     https://pytorch.org/docs/stable/generated/torch.nn.ConvTranspose2d.html#torch.nn.ConvTranspose2d
     """
@@ -86,7 +87,7 @@ def convtranspose_output_shape(
     return h, w
 
 
-def default_conv1d(l, channels) -> Tuple[nn.Module, int, int]:
+def default_conv1d(l, channels) -> tuple[nn.Module, int, int]:
     conv_1_l = conv1d_output_size(l, 8, 4)
     conv_2_l = conv1d_output_size(conv_1_l, 4, 2)
 
@@ -100,7 +101,7 @@ def default_conv1d(l, channels) -> Tuple[nn.Module, int, int]:
 
 class Conv1dLayers(nn.Module):
     def __init__(self, in_l: int, in_channels: int,
-                 conv: str | Tuple[nn.Module, int, int],
+                 conv: str | tuple[nn.Module, int, int],
                  out_dense_n: int = 64, out_dense_depth: int = 0, output_size: int = None):
         super().__init__()
 
@@ -112,7 +113,7 @@ class Conv1dLayers(nn.Module):
         elif isinstance(conv, tuple):
             self.conv_layers, l, out_c = conv
         else:
-            raise RuntimeError('Argument conv should a Tuple[nn.Module, Tuple[int, int], int]')
+            raise RuntimeError('Argument conv should a tuple[nn.Module, tuple[int, int], int]')
 
         self.conv_output_size = l * out_c
 
@@ -136,7 +137,7 @@ class Conv1dLayers(nn.Module):
             raise Exception('The dimension of input should be greater than or equal to 3')
 
 
-def small_visual(height, width, channels) -> Tuple[nn.Module, int, int]:
+def small_visual(height, width, channels) -> tuple[nn.Module, int, int]:
     conv_1_hw = conv2d_output_shape((height, width), 3, 1)
     conv_2_hw = conv2d_output_shape(conv_1_hw, 3, 1)
 
@@ -148,7 +149,7 @@ def small_visual(height, width, channels) -> Tuple[nn.Module, int, int]:
     ), conv_2_hw, 144
 
 
-def simple_visual(height, width, channels) -> Tuple[nn.Module, int, int]:
+def simple_visual(height, width, channels) -> tuple[nn.Module, int, int]:
     conv_1_hw = conv2d_output_shape((height, width), 8, 4)
     conv_2_hw = conv2d_output_shape(conv_1_hw, 4, 2)
 
@@ -160,7 +161,7 @@ def simple_visual(height, width, channels) -> Tuple[nn.Module, int, int]:
     ), conv_2_hw, 32
 
 
-def nature_visual(height, width, channels) -> Tuple[nn.Module, int, int]:
+def nature_visual(height, width, channels) -> tuple[nn.Module, int, int]:
     conv_1_hw = conv2d_output_shape((height, width), 8, 4)
     conv_2_hw = conv2d_output_shape(conv_1_hw, 4, 2)
     conv_3_hw = conv2d_output_shape(conv_2_hw, 3, 1)
@@ -177,7 +178,7 @@ def nature_visual(height, width, channels) -> Tuple[nn.Module, int, int]:
 
 class ConvLayers(nn.Module):
     def __init__(self, in_height: int, in_width: int, in_channels: int,
-                 conv: str | Tuple[nn.Module, Tuple[int, int], int],
+                 conv: str | tuple[nn.Module, tuple[int, int], int],
                  out_dense_n: int = 64, out_dense_depth: int = 0, output_size: int = None):
         super().__init__()
 
@@ -193,7 +194,7 @@ class ConvLayers(nn.Module):
         elif isinstance(conv, tuple):
             self.conv_layers, (h, w), out_c = conv
         else:
-            raise RuntimeError('Argument conv should a Tuple[nn.Module, Tuple[int, int], int]')
+            raise RuntimeError('Argument conv should a tuple[nn.Module, tuple[int, int], int]')
 
         self.conv_output_size = h * w * out_c
 
@@ -243,6 +244,34 @@ class ConvTransposeLayers(nn.Module):
             return vis.reshape(*batch, *vis.shape[1:])
         else:
             raise Exception('The dimension of input should be greater than or equal to 2')
+
+
+class VisionTransformer(VisionTransformer):
+    def forward(self, x: torch.Tensor):
+        if x.dim() >= 4:
+            batch = x.shape[:-3]
+
+            x = x.reshape(-1, *x.shape[-3:])
+            x = x.permute([0, 3, 1, 2])
+
+            # Reshape and permute the input tensor
+            x = self._process_input(x)
+            n = x.shape[0]
+
+            # Expand the class token to the full batch
+            batch_class_token = self.class_token.expand(n, -1, -1)
+            x = torch.cat([batch_class_token, x], dim=1)
+
+            x = self.encoder(x)
+
+            # Classifier "token" as used by standard language architectures
+            x = x[:, 0]
+
+            x = x.reshape(*batch, self.hidden_dim)
+
+            return x
+        else:
+            raise Exception('The dimension of input should be greater than or equal to 4')
 
 
 class Transform(nn.Module):
