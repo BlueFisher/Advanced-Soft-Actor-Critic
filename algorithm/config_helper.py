@@ -7,7 +7,6 @@ import sys
 import time
 from copy import copy, deepcopy
 from pathlib import Path
-from typing import List, Optional
 
 import numpy as np
 import yaml
@@ -15,8 +14,8 @@ import yaml
 
 def initialize_config_from_yaml(default_config_path: Path,
                                 config_file_path: Path,
-                                config_cat: Optional[str] = None,
-                                override: Optional[List[str]] = None,
+                                config_cat: str | None = None,
+                                override: list[str] | None = None,
                                 is_evolver=False):
     """
     config_cat: Specific experiment name. 

@@ -1,4 +1,3 @@
-from typing import List
 import torch
 
 import algorithm.nn_models as m

@@ -1,5 +1,4 @@
 import math
-from typing import List, Optional
 
 import numpy as np
 
@@ -24,7 +23,7 @@ class BatchBuffer:
     def put_episode(self,
                     ep_indexes: np.ndarray,
                     ep_padding_masks: np.ndarray,
-                    ep_obses_list: List[np.ndarray],
+                    ep_obses_list: list[np.ndarray],
                     ep_actions: np.ndarray,
                     ep_rewards: np.ndarray,
                     ep_dones: np.ndarray,
@@ -74,5 +73,5 @@ class BatchBuffer:
             else:
                 self._batch_list.append(batch)
 
-    def get_batch(self) -> List[np.ndarray | List[np.ndarray]]:
+    def get_batch(self) -> list[np.ndarray | list[np.ndarray]]:
         return self._batch_list

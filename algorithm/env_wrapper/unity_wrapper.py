@@ -8,7 +8,7 @@ import random
 import time
 import uuid
 from pathlib import Path
-from typing import Callable, Dict, List, Tuple
+from typing import Callable
 
 import numpy as np
 from mlagents_envs.environment import ActionTuple, UnityEnvironment
@@ -48,7 +48,7 @@ class OptionChannel(SideChannel):
     def __init__(self) -> None:
         super().__init__(uuid.UUID("621f0a70-4f87-11ea-a6bf-784f4387d1f7"))
 
-    def send_option(self, data: Dict[str, int]) -> None:
+    def send_option(self, data: dict[str, int]) -> None:
         # Add the string to an OutgoingMessage
         msg = OutgoingMessage()
         msg.write_string(json.dumps(data))
@@ -62,9 +62,9 @@ class OptionChannel(SideChannel):
 class UnityWrapperProcess:
     env_done = False  # Whether env process is done from the signal by Unity
 
-    _ma_group_ids: Dict[str, np.ndarray] = {}  # the group id corresponding to each agent
-    _ma_u_group_ids: Dict[str, np.ndarray] = {}  # all unique group ids
-    _ma_u_group_id_counts: Dict[str, np.ndarray] = {}  # the agent count in each unique group
+    _ma_group_ids: dict[str, np.ndarray] = {}  # the group id corresponding to each agent
+    _ma_u_group_ids: dict[str, np.ndarray] = {}  # all unique group ids
+    _ma_u_group_id_counts: dict[str, np.ndarray] = {}  # the agent count in each unique group
 
     def __init__(self,
                  conn: multiprocessing.connection.Connection | None = None,
@@ -78,7 +78,7 @@ class UnityWrapperProcess:
                  time_scale: float = 1,
                  seed: int | None = None,
                  scene: str | None = None,
-                 env_args: Dict | None = None,
+                 env_args: dict | None = None,
                  n_envs: int = 1):
         """
         Args:
@@ -183,13 +183,13 @@ class UnityWrapperProcess:
             discrete action sizes: list[int], list of all action branches
             continuous action size: int
         """
-        self.ma_obs_names: Dict[str, List[str]] = {}
-        self.ma_obs_shapes: Dict[str, Tuple[int, ...]] = {}
-        self.ma_d_action_sizes: Dict[str, List[int]] = {}
-        self.ma_c_action_size: Dict[str, int] = {}
+        self.ma_obs_names: dict[str, list[str]] = {}
+        self.ma_obs_shapes: dict[str, tuple[int, ...]] = {}
+        self.ma_d_action_sizes: dict[str, list[int]] = {}
+        self.ma_c_action_size: dict[str, int] = {}
 
         self._env.reset()
-        self.behavior_names: List[str] = list(self._env.behavior_specs)
+        self.behavior_names: list[str] = list(self._env.behavior_specs)
 
         for n in self.behavior_names:
             behavior_spec = self._env.behavior_specs[n]
@@ -283,14 +283,14 @@ class UnityWrapperProcess:
 
         self._env.step()
 
-        decision_ma_agent_ids: Dict[str, np.ndarray] = {}
-        decision_ma_obs_list: Dict[str, List[np.ndarray]] = {}
-        decision_ma_last_reward: Dict[str, np.ndarray] = {}
+        decision_ma_agent_ids: dict[str, np.ndarray] = {}
+        decision_ma_obs_list: dict[str, list[np.ndarray]] = {}
+        decision_ma_last_reward: dict[str, np.ndarray] = {}
 
-        terminal_ma_agent_ids: Dict[str, List[int]] = {}
-        terminal_ma_obs_list: Dict[str, List[np.ndarray]] = {}
-        terminal_ma_last_reward: Dict[str, np.ndarray] = {}
-        terminal_ma_max_reached: Dict[str, np.ndarray] = {}
+        terminal_ma_agent_ids: dict[str, list[int]] = {}
+        terminal_ma_obs_list: dict[str, list[np.ndarray]] = {}
+        terminal_ma_last_reward: dict[str, np.ndarray] = {}
+        terminal_ma_max_reached: dict[str, np.ndarray] = {}
 
         for n in self.behavior_names:  # receving data from the environment
             decision_steps, terminal_steps = self._env.get_steps(n)
@@ -327,7 +327,7 @@ class UnityWrapper(EnvWrapper):
     def __init__(self,
                  train_mode: bool = True,
                  env_name: str = None,
-                 env_args: List[str] | Dict | None = None,
+                 env_args: list[str] | dict | None = None,
                  n_envs: int = 1,
                  model_abs_dir: Path | None = None,
 
@@ -389,7 +389,7 @@ class UnityWrapper(EnvWrapper):
             self._logger.info('Using sequential environments')
 
             # All environments are executed sequentially
-            self._env_processes: List[UnityWrapperProcess] = []
+            self._env_processes: list[UnityWrapperProcess] = []
 
             for i in range(self._env_processes_size):
                 self._env_processes.append(UnityWrapperProcess(conn=None,
@@ -411,8 +411,8 @@ class UnityWrapper(EnvWrapper):
                 multiprocessing.set_start_method('spawn')
 
             # All environments are executed in parallel
-            self._conns: List[multiprocessing.connection.Connection] = [None] * self._env_processes_size
-            self._processes: List[multiprocessing.Process] = [None] * self._env_processes_size
+            self._conns: list[multiprocessing.connection.Connection] = [None] * self._env_processes_size
+            self._processes: list[multiprocessing.Process] = [None] * self._env_processes_size
 
             self._generate_processes()
 
@@ -482,7 +482,7 @@ class UnityWrapper(EnvWrapper):
         if None in self._conns:
             raise RuntimeError("Environments cannot be started")
 
-    def send_option(self, option: Dict[str, int]):
+    def send_option(self, option: dict[str, int]):
         # TODO: multiple envs
         self._env_processes[0].option_channel.send_option(option)
 
@@ -502,7 +502,7 @@ class UnityWrapper(EnvWrapper):
         return ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size
 
     def _cumulate_ma_n_agents_list(self,
-                                   ma_envs_agent_ids: Dict[str, List[int]]):
+                                   ma_envs_agent_ids: dict[str, list[int]]):
         """
         Indicating the cumulative agents counts of each env process in the next decision step
         """
@@ -520,8 +520,8 @@ class UnityWrapper(EnvWrapper):
     def _map_agent_ids(self, agent_ids: np.ndarray, i: int) -> np.ndarray:
         return agent_ids * MAX_N_ENVS + i
 
-    def reset(self, reset_config=None) -> Tuple[Dict[str, List[int]],
-                                                Dict[str, List[np.ndarray]]]:
+    def reset(self, reset_config=None) -> tuple[dict[str, list[int]],
+                                                dict[str, list[np.ndarray]]]:
         ma_envs_agent_ids = {n: [] for n in self.behavior_names}
         ma_envs_obs_list = {n: [] for n in self.behavior_names}
 
@@ -548,8 +548,8 @@ class UnityWrapper(EnvWrapper):
         return ma_agent_ids, ma_obs_list
 
     def step(self,
-             ma_d_action: Dict[str, np.ndarray],
-             ma_c_action: Dict[str, np.ndarray]) -> Tuple[DecisionStep, TerminalStep]:
+             ma_d_action: dict[str, np.ndarray],
+             ma_c_action: dict[str, np.ndarray]) -> tuple[DecisionStep, TerminalStep]:
 
         decision_ma_envs_agent_ids = {n: [] for n in self.behavior_names}
         decision_ma_envs_obs_list = {n: [] for n in self.behavior_names}

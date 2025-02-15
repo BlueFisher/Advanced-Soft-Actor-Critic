@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -32,10 +31,10 @@ class TestWrapper(EnvWrapper):
 
         self.env_args = {} if env_args is None else env_args
 
-    def init(self) -> Tuple[Dict[str, List[str]],
-                            Dict[str, List[Tuple[int]]],
-                            Dict[str, List[int]],
-                            Dict[str, int]]:
+    def init(self) -> tuple[dict[str, list[str]],
+                            dict[str, list[tuple[int]]],
+                            dict[str, list[int]],
+                            dict[str, int]]:
         """
         Returns:
             ma_obs_names: dict[str, list[str]]
@@ -79,8 +78,8 @@ class TestWrapper(EnvWrapper):
 
         return self._ma_obs_names, self._ma_obs_shapes, ma_d_action_sizes, ma_c_action_size
 
-    def reset(self, reset_config: Optional[Dict] = None) -> Tuple[Dict[str, np.ndarray],
-                                                                  Dict[str, List[np.ndarray]]]:
+    def reset(self, reset_config: dict | None = None) -> tuple[dict[str, np.ndarray],
+                                                               dict[str, list[np.ndarray]]]:
         """
         return:
             ma_agent_ids: dict[str, (NAgents, )]
@@ -89,8 +88,8 @@ class TestWrapper(EnvWrapper):
         return get_ma_agent_ids(self.n_envs, self._ma_obs_names), get_ma_obs_list(self.n_envs, self._ma_obs_shapes)
 
     def step(self,
-             ma_d_action: Dict[str, np.ndarray],
-             ma_c_action: Dict[str, np.ndarray]) -> Tuple[DecisionStep, TerminalStep]:
+             ma_d_action: dict[str, np.ndarray],
+             ma_c_action: dict[str, np.ndarray]) -> tuple[DecisionStep, TerminalStep]:
         """
         Args:
             ma_d_action: dict[str, (NAgents, discrete_action_size)], one hot like action

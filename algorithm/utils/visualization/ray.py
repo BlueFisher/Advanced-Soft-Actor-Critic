@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,7 +6,7 @@ import torch
 
 
 class RayVisual:
-    def __init__(self, model_abs_dir: Optional[Path] = None) -> None:
+    def __init__(self, model_abs_dir: Path | None = None) -> None:
         self.model_abs_dir = model_abs_dir
 
         self.fig = None

@@ -2,7 +2,6 @@ import logging
 import multiprocessing as mp
 from multiprocessing.shared_memory import SharedMemory
 from queue import Empty
-from typing import List, Optional
 
 import numpy as np
 
@@ -12,17 +11,17 @@ from algorithm.utils import ElapsedCounter, ElapsedTimer, traverse_lists
 class SharedMemoryManager:
     def __init__(self,
                  queue_size: int = 1,
-                 logger: Optional[logging.Logger] = None,
+                 logger: logging.Logger | None = None,
                  logger_level: int = logging.INFO,
-                 counter_get_shm_index_empty_log: Optional[str] = None,
-                 timer_get_shm_index_log: Optional[str] = None,
+                 counter_get_shm_index_empty_log: str | None = None,
+                 timer_get_shm_index_log: str | None = None,
 
-                 timer_get_data_log: Optional[str] = None,
+                 timer_get_data_log: str | None = None,
 
-                 counter_get_free_shm_index_empty_log: Optional[str] = None,
-                 timer_get_free_shm_index_log: Optional[str] = None,
+                 counter_get_free_shm_index_empty_log: str | None = None,
+                 timer_get_free_shm_index_log: str | None = None,
 
-                 timer_put_data_log: Optional[str] = None,
+                 timer_put_data_log: str | None = None,
 
                  log_repeat: int = 1,
                  force_report: bool = True):
@@ -58,7 +57,7 @@ class SharedMemoryManager:
         self.init_logger(logger, logger_level)
 
     def init_logger(self,
-                    logger: Optional[logging.Logger] = None,
+                    logger: logging.Logger | None = None,
                     logger_level: int = logging.INFO):
         self._counter_get_shm_index_empty = ElapsedCounter(self.counter_get_shm_index_empty_log, logger, logger_level,
                                                            self.log_repeat)
@@ -99,7 +98,7 @@ class SharedMemoryManager:
                 return None, None
 
         # Copy shm to buffer
-        def _tra(b: np.ndarray, shms: List[SharedMemory]):
+        def _tra(b: np.ndarray, shms: list[SharedMemory]):
             if b.nbytes == 0:
                 return
             shm_np = np.ndarray(b.shape, dtype=b.dtype, buffer=shms[shm_idx].buf)
@@ -137,7 +136,7 @@ class SharedMemoryManager:
                     return None
 
         # Copy data to shm
-        def _tra(d: np.ndarray, shms: List[SharedMemory]):
+        def _tra(d: np.ndarray, shms: list[SharedMemory]):
             if d.nbytes == 0:
                 return
             shm_np = np.ndarray(d.shape, dtype=d.dtype, buffer=shms[shm_idx].buf)

@@ -1,11 +1,6 @@
-from typing import List, Optional
-
 import torch
 from torch import nn, optim
 from torch.nn import functional
-
-from algorithm.nn_models import Optional
-from algorithm.utils import Optional
 
 from ..nn_models import *
 from ..sac_base import SAC_Base
@@ -36,7 +31,7 @@ class OptionBase(SAC_Base):
     def _init_replay_buffer(self, replay_config):
         return
 
-    def _build_model(self, nn, nn_config: Optional[dict], init_log_alpha: float, learning_rate: float) -> None:
+    def _build_model(self, nn, nn_config: dict | None, init_log_alpha: float, learning_rate: float) -> None:
         super()._build_model(nn, nn_config, init_log_alpha, learning_rate)
 
         if self.fix_policy:
@@ -95,12 +90,12 @@ class OptionBase(SAC_Base):
 
     @torch.no_grad()
     def choose_action(self,
-                      obs_list: List[torch.Tensor],
+                      obs_list: list[torch.Tensor],
                       pre_action: torch.Tensor,
                       pre_seq_hidden_state: torch.Tensor,
 
                       disable_sample: bool = False,
-                      force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
+                      force_rnd_if_available: bool = False) -> tuple[torch.Tensor,
                                                                      torch.Tensor,
                                                                      torch.Tensor]:
         """
@@ -142,11 +137,11 @@ class OptionBase(SAC_Base):
         self,
         l_indexes: torch.Tensor,
         l_padding_masks: torch.Tensor,
-        l_obses_list: List[torch.Tensor],
+        l_obses_list: list[torch.Tensor],
         l_pre_actions: torch.Tensor,
         l_pre_seq_hidden_states: torch.Tensor,
         is_target=False
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             l_indexes: [batch, l]
@@ -198,11 +193,11 @@ class OptionBase(SAC_Base):
         self,
         l_indexes: torch.Tensor,
         l_padding_masks: torch.Tensor,
-        l_obses_list: List[torch.Tensor],
+        l_obses_list: list[torch.Tensor],
         l_pre_actions: torch.Tensor,
         l_pre_seq_hidden_states: torch.Tensor
-    ) -> Tuple[torch.Tensor,
-               Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor,
+               torch.Tensor | None]:
         """
         Args:
             l_indexes (torch.int32): [batch, l]
@@ -320,15 +315,15 @@ class OptionBase(SAC_Base):
                next_n_terminations: torch.Tensor,
 
                n_padding_masks: torch.Tensor,
-               n_obses_list: List[torch.Tensor],
+               n_obses_list: list[torch.Tensor],
                n_states: torch.Tensor,
                n_actions: torch.Tensor,
                n_rewards: torch.Tensor,
-               next_obs_list: List[torch.Tensor],
+               next_obs_list: list[torch.Tensor],
                next_state: torch.Tensor,
                n_dones: torch.Tensor,
-               n_mu_probs: Optional[torch.Tensor] = None) -> Tuple[Optional[torch.Tensor],
-                                                                   Optional[torch.Tensor]]:
+               n_mu_probs: torch.Tensor | None = None) -> tuple[torch.Tensor | None,
+                                                                torch.Tensor | None]:
         """
         Args:
             next_n_vs_over_options: [batch, n, num_options]
@@ -482,7 +477,7 @@ class OptionBase(SAC_Base):
 
     @torch.no_grad()
     def get_v(self,
-              obs_list: List[torch.Tensor],
+              obs_list: list[torch.Tensor],
               state: torch.Tensor,
               is_target=False) -> torch.Tensor:
         """
@@ -554,19 +549,19 @@ class OptionBase(SAC_Base):
 
                             bn_indexes: torch.Tensor,
                             bn_padding_masks: torch.Tensor,
-                            bn_obses_list: List[torch.Tensor],
-                            bn_target_obses_list: List[torch.Tensor],
+                            bn_obses_list: list[torch.Tensor],
+                            bn_target_obses_list: list[torch.Tensor],
                             bn_states: torch.Tensor,
                             bn_target_states: torch.Tensor,
                             bn_actions: torch.Tensor,
                             bn_rewards: torch.Tensor,
-                            next_obs_list: List[torch.Tensor],
-                            next_target_obs_list: List[torch.Tensor],
+                            next_obs_list: list[torch.Tensor],
+                            next_target_obs_list: list[torch.Tensor],
                             next_state: torch.Tensor,
                             next_target_state: torch.Tensor,
                             bn_dones: torch.Tensor,
                             bn_mu_probs: torch.Tensor,
-                            priority_is: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+                            priority_is: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             next_n_vs_over_options: [batch, n, num_options]
@@ -736,7 +731,7 @@ class OptionBase(SAC_Base):
 
     def train_policy_alpha(self,
                            bn_padding_masks: torch.Tensor,
-                           bn_obses_list: List[torch.Tensor],
+                           bn_obses_list: list[torch.Tensor],
                            m_states: torch.Tensor,
                            bn_actions: torch.Tensor,
                            bn_mu_probs: torch.Tensor) -> None:
@@ -796,7 +791,7 @@ class OptionBase(SAC_Base):
 
     def compute_termination_grads(self,
                                   terminal_entropy: float,
-                                  obs_list: List[torch.Tensor],
+                                  obs_list: list[torch.Tensor],
                                   state: torch.Tensor,
                                   y: torch.Tensor,
                                   v_over_options: torch.Tensor,
@@ -847,13 +842,13 @@ class OptionBase(SAC_Base):
                       next_n_vs_over_options: torch.Tensor,
 
                       bn_padding_masks: torch.Tensor,
-                      bn_obses_list: List[torch.Tensor],
-                      bn_target_obses_list: List[torch.Tensor],
+                      bn_obses_list: list[torch.Tensor],
+                      bn_target_obses_list: list[torch.Tensor],
                       bn_states: torch.Tensor,
                       bn_target_states: torch.Tensor,
                       bn_actions: torch.Tensor,
                       bn_rewards: torch.Tensor,
-                      next_obs_list: List[torch.Tensor],
+                      next_obs_list: list[torch.Tensor],
                       next_target_state: torch.Tensor,
                       bn_dones: torch.Tensor,
                       bn_mu_probs: torch.Tensor) -> torch.Tensor:

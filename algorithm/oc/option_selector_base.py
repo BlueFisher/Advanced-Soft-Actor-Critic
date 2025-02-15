@@ -1,6 +1,5 @@
 from collections import defaultdict
 from itertools import chain
-from typing import List, Optional
 
 import numpy as np
 import torch
@@ -19,22 +18,22 @@ class OptionSelectorBase(SAC_Base):
     option_list = None
 
     def __init__(self,
-                 obs_names: List[str],
-                 obs_shapes: List[Tuple],
-                 d_action_sizes: List[int],
+                 obs_names: list[str],
+                 obs_shapes: list[tuple],
+                 d_action_sizes: list[int],
                  c_action_size: int,
-                 model_abs_dir: Optional[Path],
+                 model_abs_dir: Path | None,
                  nn,
 
-                 device: Optional[str] = None,
-                 ma_name: Optional[str] = None,
-                 summary_path: Optional[str] = 'log',
+                 device: str | None = None,
+                 ma_name: str | None = None,
+                 summary_path: str | None = 'log',
                  train_mode: bool = True,
-                 last_ckpt: Optional[str] = None,
+                 last_ckpt: str | None = None,
 
-                 nn_config: Optional[dict] = None,
+                 nn_config: dict | None = None,
 
-                 seed: Optional[float] = None,
+                 seed: float | None = None,
                  write_summary_per_step: float = 1e3,
                  save_model_per_step: float = 1e5,
 
@@ -46,7 +45,7 @@ class OptionSelectorBase(SAC_Base):
 
                  burn_in_step: int = 0,
                  n_step: int = 1,
-                 seq_encoder: Optional[SEQ_ENCODER] = None,
+                 seq_encoder: SEQ_ENCODER | None = None,
 
                  batch_size: int = 256,
                  tau: float = 0.005,
@@ -69,7 +68,7 @@ class OptionSelectorBase(SAC_Base):
                  discrete_dqn_epsilon: float = 0.2,
                  use_n_step_is: bool = True,
 
-                 siamese: Optional[SIAMESE] = None,
+                 siamese: SIAMESE | None = None,
                  siamese_use_q: bool = False,
                  siamese_use_adaptive: bool = False,
 
@@ -77,25 +76,25 @@ class OptionSelectorBase(SAC_Base):
                  transition_kl: float = 0.8,
                  use_extra_data: bool = True,
 
-                 curiosity: Optional[CURIOSITY] = None,
+                 curiosity: CURIOSITY | None = None,
                  curiosity_strength: float = 1.,
                  use_rnd: bool = False,
                  rnd_n_sample: int = 10,
 
                  use_normalization: bool = False,
 
-                 action_noise: Optional[List[float]] = None,
+                 action_noise: list[float] | None = None,
 
                  use_dilation: bool = False,
                  option_burn_in_step: int = -1,
-                 option_seq_encoder: Optional[SEQ_ENCODER] = None,
+                 option_seq_encoder: SEQ_ENCODER | None = None,
                  option_eplison: float = 0.2,
                  terminal_entropy: float = 0.01,
                  key_max_length: int = 200,
-                 option_nn_config: Optional[dict] = None,
-                 option_configs: List[dict] = [],
+                 option_nn_config: dict | None = None,
+                 option_configs: list[dict] = [],
 
-                 replay_config: Optional[dict] = None):
+                 replay_config: dict | None = None):
 
         sac_base.BatchBuffer = BatchBuffer
 
@@ -176,7 +175,7 @@ class OptionSelectorBase(SAC_Base):
         else:
             self._logger = logging.getLogger(f'option_selector.{self.ma_name}')
 
-    def _build_model(self, nn, nn_config: Optional[dict], init_log_alpha: float, learning_rate: float) -> None:
+    def _build_model(self, nn, nn_config: dict | None, init_log_alpha: float, learning_rate: float) -> None:
         """
         Initialize variables, network models and optimizers
         """
@@ -387,7 +386,7 @@ class OptionSelectorBase(SAC_Base):
         self.option_nn_config = defaultdict(dict, self.option_nn_config)
         option_kwargs['nn_config'] = self.option_nn_config
 
-        self.option_list: List[OptionBase] = [None] * self.num_options
+        self.option_list: list[OptionBase] = [None] * self.num_options
         for i, option_config in enumerate(self.option_configs):
             if self.model_abs_dir is not None:
                 option_kwargs['model_abs_dir'] = self.model_abs_dir / option_config['name']
@@ -476,7 +475,7 @@ class OptionSelectorBase(SAC_Base):
     def _choose_option_index(self,
                              pre_option_index: torch.Tensor,
                              state: torch.Tensor,
-                             pre_termination_mask: torch.Tensor) -> Tuple[torch.Tensor,
+                             pre_termination_mask: torch.Tensor) -> tuple[torch.Tensor,
                                                                           torch.Tensor]:
         """
         Args:
@@ -520,7 +519,7 @@ class OptionSelectorBase(SAC_Base):
         return option_index
 
     def _choose_option_action(self,
-                              obs_list: List[torch.Tensor],
+                              obs_list: list[torch.Tensor],
                               state: torch.Tensor,
                               pre_option_index: torch.Tensor,
                               pre_action: torch.Tensor,
@@ -528,7 +527,7 @@ class OptionSelectorBase(SAC_Base):
                               pre_termination_mask: torch.Tensor,
 
                               disable_sample: bool = False,
-                              force_rnd_if_available: bool = False) -> Tuple[torch.Tensor,
+                              force_rnd_if_available: bool = False) -> tuple[torch.Tensor,
                                                                              torch.Tensor,
                                                                              torch.Tensor,
                                                                              torch.Tensor,
@@ -593,7 +592,7 @@ class OptionSelectorBase(SAC_Base):
 
     @torch.no_grad()
     def choose_action(self,
-                      obs_list: List[np.ndarray],
+                      obs_list: list[np.ndarray],
                       pre_option_index: np.ndarray,
                       pre_action: np.ndarray,
                       pre_seq_hidden_state: np.ndarray,
@@ -601,7 +600,7 @@ class OptionSelectorBase(SAC_Base):
                       pre_termination: np.ndarray,
 
                       disable_sample: bool = False,
-                      force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
+                      force_rnd_if_available: bool = False) -> tuple[np.ndarray,
                                                                      np.ndarray,
                                                                      np.ndarray,
                                                                      np.ndarray,
@@ -673,7 +672,7 @@ class OptionSelectorBase(SAC_Base):
     def choose_attn_action(self,
                            ep_indexes: np.ndarray,
                            ep_padding_masks: np.ndarray,
-                           ep_obses_list: List[np.ndarray],
+                           ep_obses_list: list[np.ndarray],
                            ep_pre_actions: np.ndarray,
                            ep_pre_attn_states: np.ndarray,
 
@@ -682,7 +681,7 @@ class OptionSelectorBase(SAC_Base):
                            pre_termination: np.ndarray,
 
                            disable_sample: bool = False,
-                           force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
+                           force_rnd_if_available: bool = False) -> tuple[np.ndarray,
                                                                           np.ndarray,
                                                                           np.ndarray,
                                                                           np.ndarray,
@@ -759,7 +758,7 @@ class OptionSelectorBase(SAC_Base):
     def choose_dilated_attn_action(self,
                                    key_indexes: np.ndarray,
                                    key_padding_masks: np.ndarray,
-                                   key_obses_list: List[np.ndarray],
+                                   key_obses_list: list[np.ndarray],
                                    key_option_indexes: np.ndarray,
                                    key_attn_states: np.ndarray,
 
@@ -769,7 +768,7 @@ class OptionSelectorBase(SAC_Base):
                                    pre_termination: np.ndarray,
 
                                    disable_sample: bool = False,
-                                   force_rnd_if_available: bool = False) -> Tuple[np.ndarray,
+                                   force_rnd_if_available: bool = False) -> tuple[np.ndarray,
                                                                                   np.ndarray,
                                                                                   np.ndarray,
                                                                                   np.ndarray,
@@ -851,16 +850,16 @@ class OptionSelectorBase(SAC_Base):
     def get_l_states(self,
                      l_indexes: torch.Tensor,
                      l_padding_masks: torch.Tensor,
-                     l_obses_list: List[torch.Tensor],
+                     l_obses_list: list[torch.Tensor],
                      l_pre_actions: torch.Tensor,
                      l_pre_seq_hidden_states: torch.Tensor,
 
-                     key_batch: Optional[Tuple[torch.Tensor,
-                                               torch.Tensor,
-                                               List[torch.Tensor],
-                                               torch.Tensor]] = None,
+                     key_batch: tuple[torch.Tensor,
+                                      torch.Tensor,
+                                      list[torch.Tensor],
+                                      torch.Tensor] | None = None,
 
-                     is_target=False) -> Tuple[torch.Tensor, torch.Tensor]:
+                     is_target=False) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             l_indexes: [batch, l]
@@ -958,17 +957,17 @@ class OptionSelectorBase(SAC_Base):
         self,
         l_indexes: torch.Tensor,
         l_padding_masks: torch.Tensor,
-        l_obses_list: List[torch.Tensor],
+        l_obses_list: list[torch.Tensor],
         l_pre_actions: torch.Tensor,
         l_pre_seq_hidden_states: torch.Tensor,
 
-        key_batch: Optional[Tuple[torch.Tensor,
-                                  torch.Tensor,
-                                  List[torch.Tensor],
-                                  torch.Tensor]] = None,
+        key_batch: tuple[torch.Tensor,
+                         torch.Tensor,
+                         list[torch.Tensor],
+                         torch.Tensor] | None = None,
 
-    ) -> Tuple[torch.Tensor,
-               Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor,
+               torch.Tensor | None]:
         """
         Args:
             l_indexes (torch.int32): [batch, l]
@@ -1040,8 +1039,8 @@ class OptionSelectorBase(SAC_Base):
             )
 
     def get_l_low_obses_list(self,
-                             l_obses_list: List[torch.Tensor],
-                             l_states: torch.Tensor) -> List[torch.Tensor]:
+                             l_obses_list: list[torch.Tensor],
+                             l_states: torch.Tensor) -> list[torch.Tensor]:
         """
         Args:
             l_obses_list: list([batch, l, *obs_shapes_i], ...)
@@ -1058,11 +1057,11 @@ class OptionSelectorBase(SAC_Base):
     def get_l_low_states(self,
                          l_indexes: torch.Tensor,
                          l_padding_masks: torch.Tensor,
-                         l_low_obses_list: List[torch.Tensor],
+                         l_low_obses_list: list[torch.Tensor],
                          l_option_indexes: torch.Tensor,
                          l_pre_actions: torch.Tensor,
                          l_pre_low_seq_hidden_states: torch.Tensor = None,
-                         is_target=False) -> Tuple[torch.Tensor,
+                         is_target=False) -> tuple[torch.Tensor,
                                                    torch.Tensor]:
         """
         Args:
@@ -1116,10 +1115,10 @@ class OptionSelectorBase(SAC_Base):
     def get_l_low_states_with_seq_hidden_states(self,
                                                 l_indexes: torch.Tensor,
                                                 l_padding_masks: torch.Tensor,
-                                                l_low_obses_list: List[torch.Tensor],
+                                                l_low_obses_list: list[torch.Tensor],
                                                 l_option_indexes: torch.Tensor,
                                                 l_pre_actions: torch.Tensor,
-                                                l_pre_low_seq_hidden_states: torch.Tensor = None) -> Tuple[torch.Tensor,
+                                                l_pre_low_seq_hidden_states: torch.Tensor = None) -> tuple[torch.Tensor,
                                                                                                            torch.Tensor]:
         """
         Args:
@@ -1165,7 +1164,7 @@ class OptionSelectorBase(SAC_Base):
 
     @torch.no_grad()
     def get_l_probs(self,
-                    l_low_obses_list: List[torch.Tensor],
+                    l_low_obses_list: list[torch.Tensor],
                     l_low_states: torch.Tensor,
                     l_option_indexes: torch.Tensor,
                     l_actions: torch.Tensor) -> torch.Tensor:
@@ -1206,13 +1205,13 @@ class OptionSelectorBase(SAC_Base):
                       bn_padding_masks: torch.Tensor,
                       bn_states: torch.Tensor,
                       bn_option_indexes: torch.Tensor,
-                      obn_low_obses_list: List[torch.Tensor],
-                      obn_low_target_obses_list: List[torch.Tensor],
+                      obn_low_obses_list: list[torch.Tensor],
+                      obn_low_target_obses_list: list[torch.Tensor],
                       obn_low_states: torch.Tensor,
                       obn_low_target_states: torch.Tensor,
                       bn_actions: torch.Tensor,
                       bn_rewards: torch.Tensor,
-                      next_low_target_obs_list: List[torch.Tensor],
+                      next_low_target_obs_list: list[torch.Tensor],
                       next_low_target_state: torch.Tensor,
                       bn_dones: torch.Tensor,
                       bn_mu_probs: torch.Tensor) -> torch.Tensor:
@@ -1273,19 +1272,19 @@ class OptionSelectorBase(SAC_Base):
                  bn_padding_masks: torch.Tensor,
                  m_states: torch.Tensor,
                  bn_option_indexes: torch.Tensor,
-                 om_low_obses_list: List[torch.Tensor],
-                 om_low_target_obses_list: List[torch.Tensor],
+                 om_low_obses_list: list[torch.Tensor],
+                 om_low_target_obses_list: list[torch.Tensor],
                  bn_actions: torch.Tensor,
                  bn_rewards: torch.Tensor,
                  bn_dones: torch.Tensor,
                  bn_mu_probs: torch.Tensor,
-                 om_pre_low_seq_hidden_states: Optional[torch.Tensor] = None,
-                 priority_is: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor,
-                                                                      torch.Tensor,
-                                                                      list[torch.Tensor],
-                                                                      list[torch.Tensor],
-                                                                      torch.Tensor,
-                                                                      torch.Tensor]:
+                 om_pre_low_seq_hidden_states: torch.Tensor | None = None,
+                 priority_is: torch.Tensor | None = None) -> tuple[torch.Tensor,
+                                                                   torch.Tensor,
+                                                                   list[torch.Tensor],
+                                                                   list[torch.Tensor],
+                                                                   torch.Tensor,
+                                                                   torch.Tensor]:
         """
         Args:
             bn_indexes (torch.int32): [batch, b + n],
@@ -1468,8 +1467,8 @@ class OptionSelectorBase(SAC_Base):
 
                             m_states: torch.Tensor,
                             bn_option_indexes: torch.Tensor,
-                            om_low_target_obses_list: List[torch.Tensor],
-                            om_low_target_states: List[torch.Tensor],
+                            om_low_target_obses_list: list[torch.Tensor],
+                            om_low_target_states: list[torch.Tensor],
                             bn_dones: torch.Tensor,
                             priority_is: torch.Tensor) -> list[torch.Tensor]:
         """
@@ -1551,7 +1550,7 @@ class OptionSelectorBase(SAC_Base):
     def _train(self,
                bn_indexes: torch.Tensor,
                bn_padding_masks: torch.Tensor,
-               m_obses_list: List[torch.Tensor],
+               m_obses_list: list[torch.Tensor],
                bn_option_indexes: torch.Tensor,
                bn_actions: torch.Tensor,
                bn_rewards: torch.Tensor,
@@ -1560,9 +1559,9 @@ class OptionSelectorBase(SAC_Base):
                m_pre_seq_hidden_states: torch.Tensor,
                m_pre_low_seq_hidden_states: torch.Tensor,
                priority_is: torch.Tensor = None,
-               key_batch: Optional[Tuple[torch.Tensor | List[torch.Tensor], ...]] = None) -> Tuple[torch.Tensor,
-                                                                                                   List[torch.Tensor],
-                                                                                                   torch.Tensor]:
+               key_batch: tuple[torch.Tensor | list[torch.Tensor], ...] | None = None) -> tuple[torch.Tensor,
+                                                                                                list[torch.Tensor],
+                                                                                                torch.Tensor]:
         """
         Args:
             bn_indexes (torch.int32): [batch, b + n]
@@ -1823,13 +1822,13 @@ class OptionSelectorBase(SAC_Base):
 
     def put_episode(self,
                     ep_indexes: np.ndarray,
-                    ep_obses_list: List[np.ndarray],
+                    ep_obses_list: list[np.ndarray],
                     ep_option_indexes: np.ndarray,
                     ep_option_changed_indexes: np.ndarray,
                     ep_actions: np.ndarray,
                     ep_rewards: np.ndarray,
                     ep_dones: np.ndarray,
-                    ep_probs: List[np.ndarray],
+                    ep_probs: list[np.ndarray],
                     ep_pre_seq_hidden_states: np.ndarray,
                     ep_pre_low_seq_hidden_states: np.ndarray) -> None:
         # Ignore episodes which length is too short
@@ -1872,7 +1871,7 @@ class OptionSelectorBase(SAC_Base):
     def _fill_replay_buffer(self,
                             ep_indexes: np.ndarray,
                             ep_padding_masks: np.ndarray,
-                            ep_obses_list: List[np.ndarray],
+                            ep_obses_list: list[np.ndarray],
                             ep_option_indexes: np.ndarray,
                             ep_option_changed_indexes: np.ndarray,
                             ep_actions: np.ndarray,
@@ -1928,9 +1927,9 @@ class OptionSelectorBase(SAC_Base):
         # n_step transitions except the first one and the last obs
         self.replay_buffer.add(storage_data, ignore_size=1)
 
-    def _sample_from_replay_buffer(self) -> Tuple[np.ndarray,
-                                                  Tuple[np.ndarray | List[np.ndarray], ...],
-                                                  Tuple[np.ndarray | List[np.ndarray], ...]]:
+    def _sample_from_replay_buffer(self) -> tuple[np.ndarray,
+                                                  tuple[np.ndarray | list[np.ndarray], ...],
+                                                  tuple[np.ndarray | list[np.ndarray], ...]]:
         """
         Sample from replay buffer
 

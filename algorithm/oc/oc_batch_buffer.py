@@ -1,5 +1,4 @@
 import math
-from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -13,16 +12,16 @@ def episode_to_batch(burn_in_step: int,
                      padding_action: np.ndarray,
                      l_indexes: np.ndarray,
                      l_padding_masks: np.ndarray,
-                     l_obses_list: List[np.ndarray],
+                     l_obses_list: list[np.ndarray],
                      l_option_indexes: np.ndarray,
                      l_option_changed_indexes: np.ndarray,
                      l_actions: np.ndarray,
                      l_rewards: np.ndarray,
                      l_dones: np.ndarray,
-                     l_probs: Optional[np.ndarray] = None,
-                     l_pre_seq_hidden_states: Optional[np.ndarray] = None,
-                     l_pre_low_seq_hidden_states: np.ndarray = None) -> Tuple[List[np.ndarray | List[np.ndarray]],
-                                                                              List[np.ndarray | List[np.ndarray]]]:
+                     l_probs: np.ndarray | None = None,
+                     l_pre_seq_hidden_states: np.ndarray | None = None,
+                     l_pre_low_seq_hidden_states: np.ndarray = None) -> tuple[list[np.ndarray | list[np.ndarray]],
+                                                                              list[np.ndarray | list[np.ndarray]]]:
     """
     Args:
         burn_in_step: int
@@ -123,9 +122,9 @@ def episode_to_batch(burn_in_step: int,
 def _padding_key_batch(padding_len: int,
                        key_indexes: np.ndarray,
                        key_padding_masks: np.ndarray,
-                       key_obses_list: List[np.ndarray],
+                       key_obses_list: list[np.ndarray],
                        key_option_index: np.ndarray,
-                       key_seq_hidden_state: Optional[np.ndarray]):
+                       key_seq_hidden_state: np.ndarray | None):
     bsz = key_indexes.shape[0]
     return [
         np.concatenate([-np.ones((bsz, padding_len), dtype=key_indexes.dtype), key_indexes], axis=1),
@@ -152,13 +151,13 @@ class BatchBuffer(BatchBuffer):
     def put_episode(self,
                     ep_indexes: np.ndarray,
                     ep_padding_masks: np.ndarray,
-                    ep_obses_list: List[np.ndarray],
+                    ep_obses_list: list[np.ndarray],
                     ep_option_indexes: np.ndarray,
                     ep_option_changed_indexes: np.ndarray,
                     ep_actions: np.ndarray,
                     ep_rewards: np.ndarray,
                     ep_dones: np.ndarray,
-                    ep_probs: List[np.ndarray],
+                    ep_probs: list[np.ndarray],
                     ep_pre_seq_hidden_states: np.ndarray,
                     ep_pre_low_seq_hidden_states: np.ndarray) -> None:
         """
@@ -228,8 +227,8 @@ class BatchBuffer(BatchBuffer):
                 self._batch_list.append(batch)
                 self._key_batch_list.append(key_batch)
 
-    def get_batch(self) -> Tuple[List[np.ndarray | List[np.ndarray]],
-                                 List[np.ndarray | List[np.ndarray]]]:
+    def get_batch(self) -> tuple[list[np.ndarray | list[np.ndarray]],
+                                 list[np.ndarray | list[np.ndarray]]]:
         if len(self._batch_list) == 0 and self._rest_batch is not None:
             r = [self._rest_batch], [self._rest_key_batch]
             self._rest_batch, self._rest_key_batch = None, None

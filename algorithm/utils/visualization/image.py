@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,7 +6,7 @@ import torch
 
 
 class ImageVisual:
-    def __init__(self, model_abs_dir: Optional[Path] = None) -> None:
+    def __init__(self, model_abs_dir: Path | None = None) -> None:
         self.model_abs_dir = model_abs_dir
 
         self.fig = None
@@ -35,7 +34,6 @@ class ImageVisual:
                                                squeeze=False,
                                                figsize=(3 * fig_size, 3 * max_batch))
             self.ims = [[] for _ in range(max_batch)]
-
 
             for i in range(max_batch):
                 for j, image in enumerate(images):

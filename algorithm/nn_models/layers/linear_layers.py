@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 from torch import nn
 
@@ -25,7 +23,7 @@ def hook(layer, input, output):
 
 class LinearLayers(nn.Module):
     def __init__(self, input_size, dense_n=64, dense_depth=0, output_size=None,
-                 activation: Optional[nn.Module] = None,
+                 activation: nn.Module | None = None,
                  dropout: float = 0.):
         """
                  ┌────────┐

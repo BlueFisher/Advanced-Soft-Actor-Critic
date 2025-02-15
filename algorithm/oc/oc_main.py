@@ -2,7 +2,6 @@ import importlib.util
 import logging
 import shutil
 from pathlib import Path
-from typing import Dict
 
 import numpy as np
 
@@ -83,8 +82,8 @@ class OC_Main(Main):
                                           replay_config=mgr.config['replay_config']))
 
     def _extra_step(self,
-                    ma_d_action: Dict[str, np.ndarray],
-                    ma_c_action: Dict[str, np.ndarray]):
+                    ma_d_action: dict[str, np.ndarray],
+                    ma_c_action: dict[str, np.ndarray]):
         if not self.train_mode:
             pass
             # ma_option = self.ma_manager.get_option()

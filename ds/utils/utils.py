@@ -1,7 +1,6 @@
 import functools
 import threading
 import time
-from typing import List, Tuple
 
 import grpc
 import numpy as np
@@ -79,7 +78,7 @@ class PeerSet(object):
 
 
 def get_episode_shapes_dtypes(max_episode_length: int,
-                              obs_shapes: List[Tuple],
+                              obs_shapes: list[tuple],
                               action_size: int,
                               seq_hidden_state_shape=None):
     """

@@ -1,8 +1,6 @@
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
-import tqdm
 
 import numpy as np
 
@@ -15,7 +13,7 @@ else:
 class OfflineWrapper(EnvWrapper):
     def __init__(self,
                  env_name: str,
-                 env_args: Optional[str | Dict] = None,
+                 env_args: str | dict | None = None,
                  n_envs: int = 1,
                  model_abs_dir: Path | None = None):
         super().__init__(True, env_name, env_args, n_envs, model_abs_dir)
@@ -30,21 +28,21 @@ class OfflineWrapper(EnvWrapper):
 
         self._logger.info(f'Dataset directory: {self._dataset_dir}')
 
-    def init(self) -> Tuple[Dict[str, List[str]],
-                            Dict[str, List[Tuple[int]]],
-                            Dict[str, List[int]],
-                            Dict[str, int]]:
+    def init(self) -> tuple[dict[str, list[str]],
+                            dict[str, list[tuple[int]]],
+                            dict[str, list[int]],
+                            dict[str, int]]:
         # Load dataset info
         with open(self._dataset_dir / 'info.json') as f:
             ma_dataset_info = json.load(f)
 
-        ma_names: List[str] = list(ma_dataset_info.keys())
-        ma_obs_names: Dict[str, List[str]] = {n: ma_dataset_info[n]['obs_names'] for n in ma_names}
-        ma_obs_shapes: Dict[str, List[Tuple]] = {n: [tuple(s) for s in ma_dataset_info[n]['obs_shapes']] for n in ma_names}
-        ma_d_action_sizes: Dict[str, List[int]] = {n: ma_dataset_info[n]['d_action_sizes'] for n in ma_names}
-        ma_c_action_size: Dict[str, int] = {n: ma_dataset_info[n]['c_action_size'] for n in ma_names}
-        ma_ep_count: Dict[str, int] = {n: ma_dataset_info[n]['ep_count'] for n in ma_names}
-        ma_max_step: Dict[str, int] = {n: ma_dataset_info[n]['max_step'] for n in ma_names}
+        ma_names: list[str] = list(ma_dataset_info.keys())
+        ma_obs_names: dict[str, list[str]] = {n: ma_dataset_info[n]['obs_names'] for n in ma_names}
+        ma_obs_shapes: dict[str, list[tuple]] = {n: [tuple(s) for s in ma_dataset_info[n]['obs_shapes']] for n in ma_names}
+        ma_d_action_sizes: dict[str, list[int]] = {n: ma_dataset_info[n]['d_action_sizes'] for n in ma_names}
+        ma_c_action_size: dict[str, int] = {n: ma_dataset_info[n]['c_action_size'] for n in ma_names}
+        ma_ep_count: dict[str, int] = {n: ma_dataset_info[n]['ep_count'] for n in ma_names}
+        ma_max_step: dict[str, int] = {n: ma_dataset_info[n]['max_step'] for n in ma_names}
 
         self.ma_names = ma_names
         self.ma_obs_names = ma_obs_names
@@ -75,7 +73,7 @@ class OfflineWrapper(EnvWrapper):
 
             self._logger.info(f'Dataset {n} episode count: {ma_ep_count[n]}, max step (except the last next_obs): {ma_max_step[n]}')
 
-        self._ma_next_ep_index: Dict[str, int] = {n: 0 for n in self.ma_names}
+        self._ma_next_ep_index: dict[str, int] = {n: 0 for n in self.ma_names}
 
         return ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size
 

@@ -1,5 +1,3 @@
-from typing import Dict, List, Optional, Tuple
-
 import numpy as np
 
 if __name__ in ('__main__', '__mp_main__'):
@@ -12,10 +10,10 @@ class ObsPreprocessorWrapper(EnvWrapper):
     def __init__(self, env: EnvWrapper):
         self._env = env
 
-    def init(self) -> Tuple[Dict[str, List[str]],
-                            Dict[str, List[Tuple[int]]],
-                            Dict[str, List[int]],
-                            Dict[str, int]]:
+    def init(self) -> tuple[dict[str, list[str]],
+                            dict[str, list[tuple[int]]],
+                            dict[str, list[int]],
+                            dict[str, int]]:
         """
         Returns:
             ma_obs_names: dict[str, list[str]]
@@ -26,8 +24,8 @@ class ObsPreprocessorWrapper(EnvWrapper):
 
         return self._env.init()
 
-    def reset(self, reset_config: Optional[Dict] = None) -> Tuple[Dict[str, np.ndarray],
-                                                                  Dict[str, List[np.ndarray]]]:
+    def reset(self, reset_config: dict | None = None) -> tuple[dict[str, np.ndarray],
+                                                               dict[str, list[np.ndarray]]]:
         """
         return:
             ma_agent_ids: dict[str, (NAgents, )]
@@ -36,8 +34,8 @@ class ObsPreprocessorWrapper(EnvWrapper):
         return self._env.reset(reset_config)
 
     def step(self,
-             ma_d_action: Dict[str, np.ndarray],
-             ma_c_action: Dict[str, np.ndarray]) -> Tuple[DecisionStep, TerminalStep]:
+             ma_d_action: dict[str, np.ndarray],
+             ma_c_action: dict[str, np.ndarray]) -> tuple[DecisionStep, TerminalStep]:
         """
         Args:
             ma_d_action: dict[str, (NAgents, discrete_action_size)], one hot like action
