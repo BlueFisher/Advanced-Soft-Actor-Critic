@@ -1,7 +1,6 @@
 import csv
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List
 from bisect import bisect
 
 import matplotlib as mpl
@@ -52,7 +51,7 @@ def get_scene_paths(scene: str):
     return scene_paths
 
 
-def get_exp_paths_dict(scene_path: Path) -> Dict[str, List[Path]]:
+def get_exp_paths_dict(scene_path: Path) -> dict[str, list[Path]]:
     exp_paths = defaultdict(list)
 
     if scene_path.exists():
@@ -81,7 +80,7 @@ def get_fitted_xy(x, y):
 
 # Generate csv for each tag in exp_path
 def generate_cache(exp_path: Path, tags):
-    log_paths: List[Path] = []
+    log_paths: list[Path] = []
 
     exp_log_path = exp_path.joinpath('log')
     if exp_log_path.exists():

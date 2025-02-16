@@ -1,6 +1,7 @@
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
-
 
 geom = None
 
@@ -38,7 +39,8 @@ class OptionVisual:
     fig = None
 
     def __init__(self, option_names: list[str]) -> None:
-        return
+        if 'ENABLE_OPTION_VISUAL' not in os.environ:
+            return
 
         self.num_options = len(option_names)
 
@@ -139,6 +141,7 @@ class OptionVisual:
 
 if __name__ == '__main__':
     import time
+
     # Test OptionVisual
     option_visual = OptionVisual(option_names=['aaa', 'bbb', 'ccc', 'ddd'])
     for _ in range(5):

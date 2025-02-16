@@ -411,9 +411,6 @@ class Main:
         except KeyboardInterrupt:
             self._logger.warning('KeyboardInterrupt')
 
-            if self.train_mode:
-                self.ma_manager.save_model(True)
-
         finally:
             if self.train_mode:
                 self.ma_manager.save_model()

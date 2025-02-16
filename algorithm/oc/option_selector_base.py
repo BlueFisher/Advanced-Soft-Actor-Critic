@@ -400,10 +400,10 @@ class OptionSelectorBase(SAC_Base):
                                              fix_policy=option_config['fix_policy'],
                                              random_q=option_config['random_q'],
                                              **option_kwargs)
+            self._logger.info(f'[{i}] - {self.option_list[i].ma_name} initialized')
 
         if self.train_mode:
             for i, option in enumerate(self.option_list):
-                self._logger.info(f'[{i}] - {option.ma_name}')
                 global_step = self.get_global_step()
                 option.set_global_step(global_step)
                 option.remove_models(global_step)

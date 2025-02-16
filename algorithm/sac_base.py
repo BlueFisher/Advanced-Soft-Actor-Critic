@@ -1635,6 +1635,9 @@ class SAC_Base:
             loss_siamese_q
         """
 
+        if not any([p.requires_grad for p in self.model_rep.parameters()]):
+            return None, None
+
         n_padding_masks = bn_padding_masks[:, self.burn_in_step:]
         n_obses_list = [bn_obses[:, self.burn_in_step:, ...] for bn_obses in bn_obses_list]
         encoder_list = self.model_rep.get_augmented_encoders(n_obses_list)  # [batch, n, f], ...
@@ -2116,11 +2119,11 @@ class SAC_Base:
                     if self.use_auto_alpha:
                         self.summary_writer.add_scalar('loss/c_alpha', c_alpha, self.global_step)
 
-                if self.siamese is not None:
+                if self.siamese is not None and loss_siamese is not None:
                     self.summary_writer.add_scalar('loss/siamese',
                                                    loss_siamese,
                                                    self.global_step)
-                    if self.siamese_use_q:
+                    if self.siamese_use_q and loss_siamese_q is not None:
                         self.summary_writer.add_scalar('loss/siamese_q',
                                                        loss_siamese_q,
                                                        self.global_step)
