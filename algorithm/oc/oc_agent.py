@@ -48,9 +48,7 @@ class OC_Agent(Agent):
                          seq_hidden_state_shape,
                          max_episode_length)
 
-        self._option_visual = None
-        if self._logger.root.level == logging.DEBUG:
-            self._option_visual = OptionVisual(option_names)
+        self._option_visual = OptionVisual(option_names)
 
     def _generate_empty_episode_trans(self, episode_length: int = 0) -> dict[str, np.ndarray | list[np.ndarray]]:
         empty_episode_trans = super()._generate_empty_episode_trans(episode_length)
@@ -84,8 +82,7 @@ class OC_Agent(Agent):
         self._tmp_low_seq_hidden_state = low_seq_hidden_state
         self._tmp_termination = termination
 
-        if self._option_visual is not None:
-            self._option_visual.add_option_termination(option_index, termination)
+        self._option_visual.add_option_termination(option_index, termination)
 
     def get_tmp_option_index(self) -> int:
         return self._tmp_option_index

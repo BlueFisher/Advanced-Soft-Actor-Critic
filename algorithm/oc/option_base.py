@@ -693,11 +693,11 @@ class OptionBase(SAC_Base):
             self.summary_available = True
 
             self.summary_writer.add_scalar('loss/q', loss_q, self.global_step)
-            if self.siamese is not None:
+            if self.siamese is not None and loss_siamese is not None:
                 self.summary_writer.add_scalar('loss/siamese',
                                                loss_siamese,
                                                self.global_step)
-                if self.siamese_use_q:
+                if self.siamese_use_q and loss_siamese_q is not None:
                     self.summary_writer.add_scalar('loss/siamese_q',
                                                    loss_siamese_q,
                                                    self.global_step)

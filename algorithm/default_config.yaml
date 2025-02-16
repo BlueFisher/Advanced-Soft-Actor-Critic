@@ -111,10 +111,10 @@ oc_config:
 
   option_configs:
     - name: option_0
-      fix_policy: false
-      random_q: false
+      fix_policy: false # Fix Policy and Representation
+      random_q: false # Ignore saved Q network and randomly initialize Q network
     - name: option_1
-      fix_policy: false
-      random_q: false
+      fix_policy: false # Fix Policy and Representation
+      random_q: false # Ignore saved Q network and randomly initialize Q network
 
 ma_config: null
