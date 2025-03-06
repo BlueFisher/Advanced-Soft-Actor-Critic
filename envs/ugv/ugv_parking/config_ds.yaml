@@ -6,8 +6,7 @@ default:
       # ClockwiseRace = 1
       # AnticlockwiseRace = 2
       # ReachingPark = 3
-      # TurnAround = 4
-      # Combined = 5
+      # Combined = 4
       task: 0
       disable_cam: 1
       domain_random: 0
@@ -24,6 +23,14 @@ default:
     n_envs: 50
     obs_preprocessor: obs_preprocessor
     max_step_each_iter: 500 # Max step in each iteration
+
+    # ACTOR
+    episode_queue_size: 5
+    episode_sender_process_num: 1
+
+    # LEARNER
+    batch_queue_size: 5
+    batch_generator_process_num: 1
 
   reset_config:
     disabled_wall_piece_reached_reward: 1
@@ -44,7 +51,7 @@ default:
     n_step: 3
 
     use_rnd: false
-    rnd_n_sample: 30
+    rnd_n_sample: 20
 
     siamese: null
     siamese_use_q: true
@@ -58,7 +65,7 @@ parking:
   base_config:
     env_args:
       task: 0
-    name: "parking-{time}"
+    name: "parking-cam-{time}"
 
   sac_config:
     nn: nn_low
@@ -67,7 +74,7 @@ clockwise_race:
   base_config:
     env_args:
       task: 1
-    name: "clockwise_race-{time}"
+    name: "clockwise_race-cam-{time}"
 
   sac_config:
     nn: nn_low
@@ -76,7 +83,7 @@ anticlockwise_race:
   base_config:
     env_args:
       task: 2
-    name: "anticlockwise_race-{time}"
+    name: "anticlockwise_race-cam-{time}"
 
   sac_config:
     nn: nn_low
@@ -85,86 +92,89 @@ reaching_park:
   base_config:
     env_args:
       task: 3
-    name: "reaching_park-{time}"
+    name: "reaching_park-cam-{time}"
 
   sac_config:
     nn: nn_low
 
-turn_around:
+combined-cam:
   base_config:
     env_args:
       task: 4
-    name: "turn_around-{time}"
-
-  sac_config:
-    nn: nn_low
-
-combined:
-  base_config:
-    env_args:
-      task: 5
-    name: "combined-{time}"
+    name: "combined-cam-{time}"
     max_step_each_iter: 650 # Max step in each iteration
+    obs_preprocessor: only_cam_preprocessor
 
   sac_config:
     nn: nn_parking
-    use_rnd: false
 
   oc_config:
     option_nn_config:
       rep:
-        ray_random: 0
+        ray_random: 250
 
     option_configs:
-      - name: parking-byolq-20250222152732krUT
+      - name: parking-cam
         fix_policy: true
         random_q: true
-      - name: clockwise_race-byolq-20250222152710BbFQ
+      - name: clockwise_race-cam
         fix_policy: true
         random_q: true
-      - name: anticlockwise_race-byolq-20250222152606KRyZ
+      - name: anticlockwise_race-cam
         fix_policy: true
         random_q: true
-      - name: reaching_park-byolq-20250222153100xfIT
-        fix_policy: true
-        random_q: true
-      - name: turn_around-byolq-20250222194704LZGb
+      - name: reaching_park-cam
         fix_policy: true
         random_q: true
 
-combined_nofix:
-  inherited: combined
-
+combined-cam-cheat-v:
+  inherited: combined-cam
   base_config:
-    name: "combined-nofix-{time}"
+    name: "combined-cam-cheat_v-{time}"
+  sac_config:
+    nn: nn_parking_cheat_v
+
+combined-seg:
+  base_config:
+    env_args:
+      task: 4
+      disable_cam: 1
+    name: "combined-seg-{time}"
+    max_step_each_iter: 650 # Max step in each iteration
+    obs_preprocessor: only_seg_preprocessor
 
   sac_config:
     nn: nn_parking
 
   oc_config:
+    option_nn_config:
+      rep:
+        ray_random: 250
+
     option_configs:
-      - name: parking-20250216130300UKMn
-        fix_policy: false
-        random_q: false
-      - name: clockwise_race-20250216130909nVth
-        fix_policy: false
-        random_q: false
-      - name: anticlockwise_race-20250216130613tsIx
-        fix_policy: false
-        random_q: false
-      - name: reaching_park-20250216131100foqy
-        fix_policy: false
-        random_q: false
+      - name: parking-seg
+        fix_policy: true
+        random_q: true
+      - name: clockwise_race-seg
+        fix_policy: true
+        random_q: true
+      - name: anticlockwise_race-seg
+        fix_policy: true
+        random_q: true
+      - name: reaching_park-seg
+        fix_policy: true
+        random_q: true
 
 combined_wo_parking:
   base_config:
     env_args:
-      task: 5
+      task: 4
     name: "combined_wo_parking-{time}"
     max_step_each_iter: 650 # Max step in each iteration
 
   sac_config:
     nn: nn_parking
+    use_rnd: false
 
   oc_config:
     option_configs:

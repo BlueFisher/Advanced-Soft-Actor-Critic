@@ -124,7 +124,7 @@ class OptionBase(SAC_Base):
 
         action, prob = self._choose_action(obs_list,
                                            state,
-                                           disable_sample,
+                                           disable_sample or self.fix_policy,
                                            force_rnd_if_available)
 
         termination = self.model_termination(state, obs_list)

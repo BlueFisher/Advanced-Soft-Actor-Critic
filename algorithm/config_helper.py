@@ -57,8 +57,6 @@ def initialize_config_from_yaml(default_config_path: Path,
                 else:
                     dict_ori[k] = v
 
-    _modify_platform(config)
-    _modify_platform(config_file)
     _update_dict(config, config_file['default'])
     if config_cat is not None:
         _update_dict(config, config_file[config_cat])
@@ -74,6 +72,9 @@ def initialize_config_from_yaml(default_config_path: Path,
                 tmp_config = tmp_config[k]
 
             tmp_config[last_k] = convert_config_value_by_src(v, tmp_config[last_k])
+
+    _modify_platform(config)
+    _modify_platform(config_file)
 
     ma_configs = {}
     # Deal with multi-agents config
