@@ -102,7 +102,7 @@ class ModelRep(m.ModelBaseRep):
                 pre_action: torch.Tensor,
                 pre_seq_hidden_state: torch.Tensor | None,
                 padding_mask: torch.Tensor | None = None):
-        high_state, llm_state, vis, vis_third, ray, vec = obs_list
+        high_state, llm_obs, vis, vis_third, ray, vec = obs_list
         high_state = high_state[..., NUM_OPTIONS:]
 
         """ PREPROCESSING """

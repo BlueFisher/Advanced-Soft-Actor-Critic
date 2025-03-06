@@ -1,10 +1,10 @@
 import torch
-from torchvision import transforms as T
+from torchvision.transforms import v2 as T
+from torchvision.transforms import InterpolationMode
 
 import algorithm.nn_models as m
 from algorithm.utils.visualization.image import ImageVisual
 from algorithm.utils.visualization.ray import RayVisual
-from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
 
 
 OBS_SHAPES = [(1,), (84, 84, 3), (84, 84, 3), (802,), (6,)]
@@ -34,15 +34,9 @@ class ModelRep(m.ModelBaseRep):
 
         self.dense = m.LinearLayers(64 * 3, dense_n=128, dense_depth=1)
 
-        cropper = torch.nn.Sequential(
-            T.RandomCrop(size=(50, 50)),
-            T.Resize(size=(84, 84))
-        )
         self._vis_random_transformers = T.RandomChoice([
-            m.Transform(SaltAndPepperNoise(0.2, 0.5)),
-            m.Transform(GaussianNoise()),
-            m.Transform(T.GaussianBlur(9, sigma=9)),
-            m.Transform(cropper)
+            m.Transform(T.RandomResizedCrop(size=(84, 84), scale=(0.8, 0.9), interpolation=InterpolationMode.NEAREST)),
+            m.Transform(T.ElasticTransform(alpha=100, sigma=5, interpolation=InterpolationMode.NEAREST))
         ])
 
     def forward(self,
@@ -75,7 +69,12 @@ class ModelRep(m.ModelBaseRep):
 
         return x, self._get_empty_seq_hidden_state(x)
 
-    def get_state_from_encoders(self, obs_list, encoders):
+    def get_state_from_encoders(self,
+                                encoders: torch.Tensor | tuple[torch.Tensor],
+                                obs_list: list[torch.Tensor],
+                                pre_action: torch.Tensor,
+                                pre_seq_hidden_state: torch.Tensor | None,
+                                padding_mask: torch.Tensor | None = None) -> torch.Tensor:
         llm_obs, vis, vis_third, ray, vec = obs_list
 
         vis_encoder, vis_third_encoder, ray_encoder = encoders
@@ -85,7 +84,8 @@ class ModelRep(m.ModelBaseRep):
 
         return x
 
-    def get_augmented_encoders(self, obs_list):
+    def get_augmented_encoders(self,
+                               obs_list: list[torch.Tensor]) -> torch.Tensor | tuple[torch.Tensor]:
         llm_obs, vis, vis_third, ray, vec = obs_list
 
         """ PREPROCESSING """
