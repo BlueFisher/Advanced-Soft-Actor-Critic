@@ -26,15 +26,13 @@ default:
     burn_in_step: 10
     seq_encoder: RNN
 
-    offline_loss: true
-
   ma_config:
     USVGuard?team=0:
       sac_config:
         nn: nn
     USVPatrol?team=0:
       sac_config:
-        nn: nn_patrol
+        nn: nn
     USVStrike?team=0:
       sac_config:
         nn: nn
