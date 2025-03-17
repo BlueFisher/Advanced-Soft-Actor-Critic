@@ -5,12 +5,8 @@ from pathlib import Path
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--root', default=None)
+    parser.add_argument('root')
     args = parser.parse_args()
-
-    if args.root is None:
-        print('root empty')
-        exit()
 
     root = args.root
 
