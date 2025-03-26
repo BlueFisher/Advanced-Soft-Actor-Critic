@@ -21,6 +21,9 @@ class ModelRep(m.ModelBaseRep):
 
         vis_obs = self.conv(vis_obs)
 
+        if rnn_state is not None:
+            rnn_state = rnn_state[:, 0]
+
         state, hn = self.rnn(torch.concat([vis_obs, vec_obs, pre_action], dim=-1), rnn_state)
 
         return state, hn

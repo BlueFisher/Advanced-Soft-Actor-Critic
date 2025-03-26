@@ -50,6 +50,9 @@ class ModelRep(m.ModelBaseRep):
 
         ray = self.ray_dense(torch.concat([ray_obs_1, ray_obs_2, ray_obs_3], dim=-1))
 
+        if rnn_state is not None:
+            rnn_state = rnn_state[:, 0]
+
         state, hn = self.rnn(torch.concat([attned_uavs,
                                            attned_bbox,
                                            vis,
