@@ -38,6 +38,9 @@ class ModelRep(m.ModelBaseRep):
         if padding_mask is not None:
             attned_agents[padding_mask] = 0.
 
+        if rnn_state is not None:
+            rnn_state = rnn_state[:, 0]
+
         state, hn = self.rnn(torch.concat([attned_agents,
                                            vec_obs,
                                            vis_obs,
