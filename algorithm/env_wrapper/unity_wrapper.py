@@ -327,7 +327,7 @@ class UnityWrapper(EnvWrapper):
     def __init__(self,
                  train_mode: bool = True,
                  env_name: str = None,
-                 env_args: list[str] | dict | None = None,
+                 env_args: dict | None = None,
                  n_envs: int = 1,
                  model_abs_dir: Path | None = None,
 

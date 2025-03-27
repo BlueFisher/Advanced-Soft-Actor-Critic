@@ -7,7 +7,7 @@ import algorithm.nn_models as m
 class ModelRep(m.ModelBaseRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (10, 9)  # AgentsBufferSensor
-        assert self.obs_shapes[1] == (84, 84, 3)  # CameraSensor
+        assert self.obs_shapes[1] == (3, 84, 84)  # CameraSensor
         assert self.obs_shapes[2] == (3, 6)  # EnemiesBufferSensor
         assert self.obs_shapes[3] == (122, )  # RayPerceptionSensor
         assert self.obs_shapes[4] == (8, )  # VectorSensor_size6

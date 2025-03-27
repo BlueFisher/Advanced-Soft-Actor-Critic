@@ -23,7 +23,7 @@ class ImageVisual:
         if len(images[0].shape) > 4:
             images = [image[:, -1, ...] for image in images]
         images = [image[:max_batch] for image in images]
-        images = [i.detach().cpu().numpy() if isinstance(i, torch.Tensor) else i for i in images]
+        images = [i.detach().cpu().numpy().transpose(0, 2, 3, 1) if isinstance(i, torch.Tensor) else i for i in images]
 
         batch_size = images[0].shape[0]
 
@@ -65,6 +65,6 @@ if __name__ == '__main__':
 
     image_visual = ImageVisual()
     while True:
-        images = [np.random.rand(2, 84, 84, 3), np.random.rand(2, 84, 84, 3)]
+        images = [np.random.rand(2, (3, 84, 84)), np.random.rand(2, (3, 84, 84))]
         image_visual(*images, max_batch=2)
         time.sleep(0.1)

@@ -7,6 +7,7 @@ import sys
 import time
 from copy import copy, deepcopy
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import yaml
@@ -15,7 +16,7 @@ import yaml
 def initialize_config_from_yaml(default_config_path: Path,
                                 config_file_path: Path,
                                 config_cat: str | None = None,
-                                override: list[str] | None = None,
+                                override: list[tuple[list[str], str]] | None = None,
                                 is_evolver=False):
     """
     config_cat: Specific experiment name. 
@@ -62,9 +63,7 @@ def initialize_config_from_yaml(default_config_path: Path,
         _update_dict(config, config_file[config_cat])
 
     if override is not None:
-        for kv in override:  # a.b.c=x
-            k, v = kv.split('=')
-            k_list = k.split('.')
+        for k_list, v in override:  # [k1, k2, k3], v
             last_k = k_list[-1]
 
             tmp_config = config
@@ -113,7 +112,10 @@ def initialize_config_from_yaml(default_config_path: Path,
     return config, ma_configs
 
 
-def convert_config_value(value: str):
+def convert_config_value(value: str | Any):
+    if not isinstance(value, str):
+        return value
+
     value = value.strip()
 
     if value.lower() in ['true', 'false']:

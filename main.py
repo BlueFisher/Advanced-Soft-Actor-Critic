@@ -25,7 +25,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--render', action='store_true', help='Render')
     parser.add_argument('--env_args', default=[], nargs='+', help='Additional arguments for environments. \
-                                                                    Eqvilent to --override base_config.env_args')    
+                                                                    Eqvilent to --override base_config.env_args')
     parser.add_argument('--envs', type=int, help='Number of env copies. Eqvilent to --override base_config.n_envs')
     parser.add_argument('--max_iter', type=int, help='Maximum iteration. Eqvilent to --override base_config.max_iter')
 
@@ -43,12 +43,23 @@ if __name__ == '__main__':
     parser.add_argument('--device', help='CPU or GPU')
     parser.add_argument('--ckpt', help='Ckeckpoint to restore')
     parser.add_argument('--nn', help='Neural network model. Eqvilent to --override sac_config.nn')
-    parser.add_argument('--repeat', type=int, default=1, help='Number of repeated experiments')
 
     parser.add_argument('--debug', action='store_true')
     args = parser.parse_args()
 
     set_logger(debug=args.debug)
+
+    override = []
+    if args.override is not None:
+        for kv in args.override:
+            k, v = kv.split('=')
+            k_list = k.split('.')
+            override.append((k_list, v))
+
+    env_args = {}
+    for env_arg in args.env_args:
+        k, v = env_arg.split('=')
+        env_args[k] = v
 
     if args.hit is not None:
         if args.oc:
@@ -68,10 +79,24 @@ if __name__ == '__main__':
             from algorithm.sac_main import Main
 
     root_dir = Path(__file__).resolve().parent
-    if sys.platform == 'win32':
-        for _ in range(args.repeat):
-            Main(root_dir, f'envs/{args.env}', args)
-    elif sys.platform == 'linux':
-        for i in range(args.repeat):
-            Main(root_dir, f'envs/{args.env}', args)
-            args.u_port += 1
+    Main(root_dir, f'envs/{args.env}',
+         config_cat=args.config,
+         override=override,
+         train_mode=not args.run,
+         inference_ma_names=set(args.run_a),
+         copy_model=args.copy_model,
+         logger_in_file=args.logger_in_file,
+         render=args.render,
+         env_args=env_args,
+         envs=args.envs,
+         max_iter=args.max_iter,
+         unity_port=args.u_port,
+         unity_run_in_editor=args.u_editor,
+         unity_quality_level=args.u_quality_level,
+         unity_time_scale=args.u_timescale,
+         name=args.name,
+         disable_sample=args.disable_sample,
+         use_env_nn=args.use_env_nn,
+         device=args.device,
+         last_ckpt=args.ckpt,
+         nn=args.nn)

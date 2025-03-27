@@ -210,7 +210,6 @@ class ConvLayers(nn.Module):
         if x.dim() >= 4:
             batch = x.shape[:-3]
             x = x.reshape(-1, *x.shape[-3:])
-            x = x.permute([0, 3, 1, 2])
             hidden = self.conv_layers(x)
             hidden = hidden.reshape(*batch, self.conv_output_size)
             return self.dense(hidden)
@@ -240,7 +239,6 @@ class ConvTransposeLayers(nn.Module):
             batch = x.shape[:-1]
             x = x.reshape(-1, self._channels, self._height, self._width)
             vis = self.conv_transpose(x)
-            vis = vis.permute([0, 2, 3, 1])
             return vis.reshape(*batch, *vis.shape[1:])
         else:
             raise Exception('The dimension of input should be greater than or equal to 2')
@@ -252,7 +250,6 @@ class VisionTransformer(VisionTransformer):
             batch = x.shape[:-3]
 
             x = x.reshape(-1, *x.shape[-3:])
-            x = x.permute([0, 3, 1, 2])
 
             # Reshape and permute the input tensor
             x = self._process_input(x)
@@ -287,8 +284,7 @@ class Transform(nn.Module):
         if x.dim() >= 4:
             batch = x.shape[:-3]
             x = x.reshape(-1, *x.shape[-3:])
-            x = x.permute([0, 3, 1, 2])
-            x = self.transform(x).permute([0, 2, 3, 1])
+            x = self.transform(x)
             return x.reshape(*batch, *x.shape[1:])
         else:
             raise Exception('The dimension of input should be greater than or equal to 4')

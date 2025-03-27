@@ -29,8 +29,6 @@ class TestWrapper(EnvWrapper):
                          n_envs=n_envs,
                          model_abs_dir=model_abs_dir)
 
-        self.env_args = {} if env_args is None else env_args
-
     def init(self) -> tuple[dict[str, list[str]],
                             dict[str, list[tuple[int]]],
                             dict[str, list[int]],

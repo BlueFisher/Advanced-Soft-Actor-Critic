@@ -8,45 +8,14 @@ sys.path.append(str(Path(__file__).parent.parent))
 from algorithm.sac_main import Main
 
 
-default_args = {
-    'override': [],
-    'run': True,
-    'run_a': [],
-    'copy_model': None,
-    'logger_in_file': False,
-
-    'render': False,
-
-    'envs': None,
-    'max_iter': None,
-
-    'u_port': None,
-    'u_editor': None,
-    'u_quality_level': None,
-    'u_timescale': None,
-
-    'name': None,
-    'disable_sample': False,
-    'use_env_nn': False,
-    'device': 'cpu',
-    'ckpt': None,
-    'nn': None,
-
-    'debug': True
-}
-
-
 class TestSACMain(unittest.TestCase):
-    def _test(self, config, env_args_dict):
-        args = argparse.Namespace(
-            config=config,
-            env_args=env_args_dict,
-            **default_args
-        )
-        print(args)
-
+    def _test(self, config_cat, env_args_dict):
         root_dir = Path(__file__).resolve().parent.parent
-        Main(root_dir, f'envs/test', args)
+        Main(root_dir,
+             f'envs/test',
+             config_cat=config_cat,
+             train_mode=False,
+             env_args=env_args_dict)
 
     @staticmethod
     def gen(config, param_dict):

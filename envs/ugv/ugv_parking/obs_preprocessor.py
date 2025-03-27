@@ -14,10 +14,10 @@ ONLY_CAM_OBS_NAMES = ['CameraSensor',
                       'ThirdPersonCameraSensor',
                       'VectorSensor_size6']
 
-ONLY_CAM_OBS_SHAPES = [(84, 84, 3),
+ONLY_CAM_OBS_SHAPES = [(3, 84, 84),
                        (1,),
                        (802,),
-                       (84, 84, 3),
+                       (3, 84, 84),
                        (6,)]
 
 
@@ -29,8 +29,8 @@ ONLY_SEG_OBS_NAMES = ['LLMStateSensor',
 
 ONLY_SEG_OBS_SHAPES = [(1,),
                        (802,),
-                       (84, 84, 3),
-                       (84, 84, 3),
+                       (3, 84, 84),
+                       (3, 84, 84),
                        (6,)]
 
 

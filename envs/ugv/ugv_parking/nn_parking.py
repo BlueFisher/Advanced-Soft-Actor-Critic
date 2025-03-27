@@ -1,13 +1,11 @@
 import torch
-from torchvision import transforms as T
 
 import algorithm.nn_models as m
-from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
 
 from .nn_low import OBS_SHAPES, RAY_SIZE, AUG_RAY_RANDOM_SIZE
 
 
-NUM_OPTIONS = 4
+NUM_OPTIONS = 5
 
 
 class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
@@ -46,6 +44,7 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
         # clockwise_race
         # anticlockwise_race
         # reaching_park
+        # turn_around
 
         """ PREPROCESSING """
         llm_state = llm_obs.to(torch.long)
@@ -152,4 +151,8 @@ class ModelRND(m.ModelRND):
 
 class ModelTermination(m.ModelTermination):
     def _build_model(self):
-        super()._build_model(dense_n=128, dense_depth=1)
+        super()._build_model(dense_n=128, dense_depth=2)
+
+
+ModelRepProjection = m.ModelRepProjection
+ModelRepPrediction = m.ModelRepPrediction

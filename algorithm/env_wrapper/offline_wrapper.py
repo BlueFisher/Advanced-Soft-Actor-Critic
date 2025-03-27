@@ -13,7 +13,7 @@ else:
 class OfflineWrapper(EnvWrapper):
     def __init__(self,
                  env_name: str,
-                 env_args: str | dict | None = None,
+                 env_args: dict | None = None,
                  n_envs: int = 1,
                  model_abs_dir: Path | None = None):
         super().__init__(True, env_name, env_args, n_envs, model_abs_dir)

@@ -10,7 +10,7 @@ from algorithm.utils.enums import *
 from tests.get_synthesis_data import *
 
 OBS_NAMES = ['vector', 'image']
-OBS_SHAPES = [(10,), (30, 30, 3)]
+OBS_SHAPES = [(10,), (3, 30, 30)]
 
 
 class TestOCModel(unittest.TestCase):
