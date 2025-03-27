@@ -8,8 +8,8 @@ from algorithm.utils.transform import GaussianNoise, SaltAndPepperNoise
 class ModelRep(m.ModelBaseRep):
     def _build_model(self, blur, brightness, need_speed):
         assert self.obs_shapes[0] == (6, 6)  # BoundingBoxSensor
-        assert self.obs_shapes[1] == (84, 84, 3)  # CameraSensor
-        assert self.obs_shapes[2] == (84, 84, 3)  # SegmentationSensor
+        assert self.obs_shapes[1] == (3, 84, 84)  # CameraSensor
+        assert self.obs_shapes[2] == (3, 84, 84)  # SegmentationSensor
         assert self.obs_shapes[3] == (7,)
 
         if blur != 0:

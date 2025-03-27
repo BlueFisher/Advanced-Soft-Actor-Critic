@@ -116,19 +116,19 @@ combined:
         ray_random: 0
 
     option_configs:
-      - name: parking-byolq-20250222152732krUT
+      - name: parking-byolq-20250304185148fROE
         fix_policy: true
         random_q: true
-      - name: clockwise_race-byolq-20250222152710BbFQ
+      - name: clockwise_race-byolq-20250302153045Ewsc
         fix_policy: true
         random_q: true
-      - name: anticlockwise_race-byolq-20250222152606KRyZ
+      - name: anticlockwise_race-byolq-20250302150616FESL
         fix_policy: true
         random_q: true
-      - name: reaching_park-byolq-20250222153100xfIT
+      - name: reaching_park-byolq-20250302150237joBg
         fix_policy: true
         random_q: true
-      - name: turn_around-byolq-20250222194704LZGb
+      - name: turn_around-byolq-20250302150618YTOj
         fix_policy: true
         random_q: true
 

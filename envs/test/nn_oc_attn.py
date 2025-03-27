@@ -3,7 +3,7 @@ import torch
 import algorithm.nn_models as m
 
 
-class ModelRep(m.ModelBaseOptionSelectorAttentionRep):
+class ModelOptionSelectorRep(m.ModelBaseOptionSelectorAttentionRep):
     def _build_model(self):
         embed_dim = self.obs_shapes[0][0]
 
@@ -37,7 +37,10 @@ class ModelRep(m.ModelBaseOptionSelectorAttentionRep):
         return output, hn, attn_weights_list
 
 
-ModelOptionRep = m.ModelSimpleRep
+ModelVOverOptions = m.ModelVOverOptions
+
+
+ModelRep = m.ModelSimpleRep
 
 
 ModelQ = m.ModelQ

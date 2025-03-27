@@ -7,7 +7,7 @@ from algorithm.utils.visualization.image import ImageVisual
 from algorithm.utils.visualization.ray import RayVisual
 
 
-OBS_SHAPES = [(1,), (84, 84, 3), (84, 84, 3), (802,), (6,)]
+OBS_SHAPES = [(1,), (3, 84, 84), (3, 84, 84), (802,), (6,)]
 
 RAY_SIZE = 400
 AUG_RAY_RANDOM_SIZE = 250
@@ -57,11 +57,11 @@ class ModelRep(m.ModelBaseRep):
         ray[..., random_index, 1] = 1.
 
         """ ENCODE """
-        # self._image_visual(vis, vis_third, max_batch=3)
+        self._image_visual(vis, vis_third, max_batch=3)
         vis_encoder = self.conv_cam_seg(vis)
         vis_third_encoder = self.conv_third_cam_seg(vis_third)
 
-        # self._ray_visual(ray, max_batch=3)
+        self._ray_visual(ray, max_batch=3)
         ray_encoder = self.ray_conv(ray)
 
         x = self.dense(torch.cat([vis_encoder, vis_third_encoder, ray_encoder], dim=-1))

@@ -7,46 +7,15 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from algorithm.oc.oc_main import OC_Main
 
-default_args = {
-    'oc': True,
-
-    'override': [],
-    'run': True,
-    'run_a': [],
-    'copy_model': None,
-    'logger_in_file': False,
-
-    'render': False,
-
-    'envs': None,
-    'max_iter': None,
-
-    'u_port': None,
-    'u_editor': None,
-    'u_quality_level': None,
-    'u_timescale': None,
-
-    'name': None,
-    'disable_sample': False,
-    'use_env_nn': False,
-    'device': 'cpu',
-    'ckpt': None,
-    'nn': None,
-
-    'debug': True
-}
-
 
 class TestOCMain(unittest.TestCase):
-    def _test(self, config, env_args_dict):
-        args = argparse.Namespace(
-            config=config,
-            env_args=env_args_dict,
-            **default_args
-        )
-
+    def _test(self, config_cat, env_args_dict):
         root_dir = Path(__file__).resolve().parent.parent
-        OC_Main(root_dir, f'envs/test', args)
+        OC_Main(root_dir,
+                f'envs/test',
+                config_cat=config_cat,
+                train_mode=False,
+                env_args=env_args_dict)
 
     @staticmethod
     def gen_oc(config, param_dict):
@@ -62,9 +31,9 @@ def __gen():
                'oc_attn',
                'oc_attn_o_rnn',
                'oc_dilated_rnn',
-            #    'oc_dilated_rnn_o_rnn',
+               #    'oc_dilated_rnn_o_rnn',
                'oc_dilated_attn',
-            #    'oc_dilated_attn_o_rnn'
+               #    'oc_dilated_attn_o_rnn'
                ]
 
     env_args_dict = {

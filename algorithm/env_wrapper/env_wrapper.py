@@ -33,22 +33,14 @@ class EnvWrapper:
     def __init__(self,
                  train_mode: bool = True,
                  env_name: str = None,
-                 env_args: list[str] | dict | None = None,
+                 env_args: dict | None = None,
                  n_envs: int = 1,
                  model_abs_dir: Path | None = None):
         self.train_mode = train_mode
         self.env_name = env_name
         self.env_args = {}
         if env_args is not None:
-            if isinstance(env_args, dict):
-                self.env_args = env_args
-            else:
-                for kv in env_args:
-                    if '=' in kv:
-                        k, v = kv.split('=')
-                    else:
-                        k, v = kv, 1.
-                    self.env_args[k] = v
+            self.env_args = env_args
         self.n_envs = n_envs
         self.model_abs_dir = model_abs_dir
 

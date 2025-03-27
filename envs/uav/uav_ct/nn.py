@@ -3,7 +3,7 @@ import torch
 import algorithm.nn_models as m
 
 OBS_NAMES = ['AgentsBufferSensor', 'CameraSensor', 'RayPerceptionSensor1', 'RayPerceptionSensor2', 'RayPerceptionSensor3', 'SegmentationSensor', 'VectorSensor_size9']
-OBS_SHAPES = [(3, 9), (84, 84, 1), (22,), (22,), (22,), (84, 84, 3), (9,)]
+OBS_SHAPES = [(3, 9), (84, 84, 1), (22,), (22,), (22,), (3, 84, 84), (9,)]
 
 
 class ModelRep(m.ModelBaseRep):

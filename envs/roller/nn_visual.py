@@ -6,7 +6,7 @@ from algorithm.utils.visualization.image import ImageVisual
 
 class ModelRep(m.ModelBaseRep):
     def _build_model(self):
-        assert self.obs_shapes[0] == (30, 30, 3)
+        assert self.obs_shapes[0] == (3, 30, 30)
         assert self.obs_shapes[1] == (6,)
 
         self.conv = m.ConvLayers(30, 30, 3, 'simple',

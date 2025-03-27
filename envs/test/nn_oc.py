@@ -3,7 +3,7 @@ import torch
 import algorithm.nn_models as m
 
 
-class ModelRep(m.ModelBaseOptionSelectorRep):
+class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
     def forward(self,
                 obs_list: list[torch.Tensor],
                 pre_action: torch.Tensor,
@@ -19,7 +19,10 @@ class ModelRep(m.ModelBaseOptionSelectorRep):
         return state, self._get_empty_seq_hidden_state(state)
 
 
-ModelOptionRep = m.ModelSimpleRep
+ModelVOverOptions = m.ModelVOverOptions
+
+
+ModelRep = m.ModelSimpleRep
 
 
 ModelQ = m.ModelQ

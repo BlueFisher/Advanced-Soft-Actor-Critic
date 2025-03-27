@@ -8,7 +8,7 @@ N_OTHER_AGENTS = 3
 class ModelRep(m.ModelBaseRep):
     def _build_model(self):
         assert self.obs_shapes[0] == (N_OTHER_AGENTS, 9)  # AgentsBufferSensor
-        assert self.obs_shapes[1] == (84, 84, 3)
+        assert self.obs_shapes[1] == (3, 84, 84)
         assert self.obs_shapes[2] == (12, )
 
         self.attn_envs = m.MultiheadAttention(9, 1)

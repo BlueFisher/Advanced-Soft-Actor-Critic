@@ -11,16 +11,54 @@ else:
 
 
 class GRU(nn.GRU):
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        num_layers: int = 1,
+        bias: bool = True,
+        dropout: float = 0.0,
+        device=None,
+        dtype=None,
+    ) -> None:
+        super().__init__(input_size=input_size,
+                         hidden_size=hidden_size,
+                         num_layers=num_layers,
+                         bias=bias,
+                         batch_first=True,
+                         dropout=dropout,
+                         device=device,
+                         dtype=dtype)
+
     def forward(self, x: torch.Tensor, h0: torch.Tensor = None):
         if h0 is not None:
             h0 = h0.transpose(0, 1).contiguous()
 
-        output, hn = super().forward(x.transpose(0, 1).contiguous(), h0)
+        output, hn = super().forward(x, h0)
 
-        return output.transpose(0, 1), hn.transpose(0, 1)
+        return output, hn.transpose(0, 1)
 
 
 class LSTM(nn.LSTM):
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        num_layers: int = 1,
+        bias: bool = True,
+        dropout: float = 0.0,
+        device=None,
+        dtype=None,
+    ) -> None:
+        super().__init__(input_size=input_size,
+                         hidden_size=hidden_size,
+                         num_layers=num_layers,
+                         bias=bias,
+                         batch_first=True,
+                         dropout=dropout,
+                         device=device,
+                         dtype=dtype)
+
     def forward(self, x: torch.Tensor, hc_0: torch.Tensor = None):
         if hc_0 is not None:
             hc_0 = hc_0.transpose(0, 1)
@@ -29,9 +67,9 @@ class LSTM(nn.LSTM):
             c0 = c0.contiguous()
             hc_0 = (h0, c0)
 
-        output, (hn, cn) = super().forward(x.transpose(0, 1).contiguous(), hc_0)
+        output, (hn, cn) = super().forward(x, hc_0)
 
-        return output.transpose(0, 1), torch.cat([hn, cn], dim=-1).transpose(0, 1)
+        return output, torch.cat([hn, cn], dim=-1).transpose(0, 1)
 
 
 class POSITIONAL_ENCODING(Enum):
