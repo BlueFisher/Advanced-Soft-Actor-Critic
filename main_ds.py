@@ -55,6 +55,18 @@ if __name__ == '__main__':
 
     set_logger(debug=args.debug)
 
+    override = []
+    if args.override is not None:
+        for kv in args.override:
+            k, v = kv.split('=')
+            k_list = k.split('.')
+            override.append((k_list, v))
+
+    env_args = {}
+    for env_arg in args.env_args:
+        k, v = env_arg.split('=')
+        env_args[k] = v
+
     root_dir = Path(__file__).resolve().parent
     config_dir = f'envs/{args.env}'
 
@@ -66,7 +78,33 @@ if __name__ == '__main__':
             from ds.main_hit import LearnerHit as Learner
         else:
             from ds.learner import Learner
-        Learner(root_dir, config_dir, args)
+        Learner(root_dir, config_dir,
+                config_cat=args.config,
+                override=override,
+                inference_ma_names=set(args.run_a),
+                copy_model=args.copy_model,
+                logger_in_file=args.logger_in_file,
+
+                learner_host=args.learner_host,
+                learner_port=args.learner_port,
+
+                render=args.render,
+                env_args=env_args,
+                envs=args.envs,
+
+                unity_port=args.u_port,
+                unity_run_in_editor=args.u_editor,
+                unity_quality_level=args.u_quality_level,
+                unity_time_scale=args.u_timescale,
+
+                name=args.name,
+                disable_sample=args.disable_sample,
+                use_env_nn=args.use_env_nn,
+                device=args.device,
+                last_ckpt=args.ckpt,
+                nn=args.nn,
+
+                debug=args.debug)
     elif args.process_type in ['actor', 'a']:
         if args.hit is not None:
             import algorithm.sac_main_hit
@@ -75,4 +113,24 @@ if __name__ == '__main__':
             from ds.main_hit import ActorHit as Actor
         else:
             from ds.actor import Actor
-        Actor(root_dir, config_dir, args)
+        Actor(root_dir, config_dir,
+              config_cat=args.config,
+              override=override,
+              inference_ma_names=set(args.run_a),
+              logger_in_file=args.logger_in_file,
+
+              learner_host=args.learner_host,
+              learner_port=args.learner_port,
+
+              render=args.render,
+              env_args=env_args,
+              envs=args.envs,
+
+              unity_port=args.u_port,
+              unity_run_in_editor=args.u_editor,
+              unity_quality_level=args.u_quality_level,
+              unity_time_scale=args.u_timescale,
+
+              device=args.device,
+
+              debug=args.debug)
