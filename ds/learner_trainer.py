@@ -1,6 +1,7 @@
 import importlib
 import logging
 import threading
+import time
 import traceback
 from multiprocessing.connection import Connection
 from multiprocessing.sharedctypes import SynchronizedArray
@@ -150,14 +151,20 @@ class Trainer:
 
         self._update_sac_bak()
 
+        pre_step = None
         while not self._closed:
             with timer_train:
                 with self.sac_lock:
                     try:
                         step = self.sac.train()
+                        if step == pre_step:
+                            timer_train.ignore()
+                            continue
                     except Exception as e:
                         self._logger.error(e)
                         self._logger.error(traceback.format_exc())
 
             if step > 0 and step % self.base_config['update_sac_bak_per_step'] == 0:
                 self._update_sac_bak()
+
+            pre_step = step

@@ -102,57 +102,115 @@ class Actor(Main):
     _id = -1
     _stub = None
 
-    def __init__(self, root_dir, config_dir, args):
-        self.root_dir = root_dir
+    def __init__(self,
+                 root_dir: Path | str,
+                 config_dir: Path | str,
+                 config_cat: str | None = None,
+                 override: list[tuple[list[str], str]] | None = None,
+                 inference_ma_names: set[str] | None = None,
+                 logger_in_file: bool = False,
+
+                 learner_host: str | None = None,
+                 learner_port: int | None = None,
+
+                 render: bool = False,
+                 env_args: dict | None = None,
+                 envs: int | None = None,
+
+                 unity_port: int | None = None,
+                 unity_run_in_editor: bool = False,
+                 unity_quality_level: int = 2,
+                 unity_time_scale: float | None = None,
+
+                 device: str | None = None,
+
+                 debug: bool = False):
+        self.root_dir = Path(root_dir)
+
+        self.inference_ma_names = inference_ma_names if inference_ma_names is not None else set()
+        self.logger_in_file = logger_in_file
+        self.render = render
+
+        self.unity_run_in_editor = unity_run_in_editor
+        self.unity_quality_level = unity_quality_level
+        self.unity_time_scale = unity_time_scale
+
+        self.device = device
+
+        self.debug = debug
 
         self._logger = logging.getLogger('ds.actor')
 
         self._profiler = UnifiedElapsedTimer(self._logger)
 
-        self._config_abs_dir = self._init_config(root_dir, config_dir, args)
+        self.model_abs_dir, self._config_abs_dir = self._init_config(config_dir,
+                                                                     config_cat,
+                                                                     override,
+
+                                                                     learner_host,
+                                                                     learner_port,
+
+                                                                     env_args,
+                                                                     envs,
+
+                                                                     unity_port)
+
+        if logger_in_file:
+            config_helper.add_file_logger(self.model_abs_dir.joinpath(f'actor_{self._id}.log'))
 
         self._sac_actor_lock = ReadWriteLock(5, 1, 1, logger=self._logger)
         self._init_env()
-        self._init_sac()
+        try:
+            self._init_sac()
+        except:
+            self.env.close()
+            self._logger.warning(f'Actor terminated by exception')
+            raise
         self._init_episode_sender()
 
         self._run()
 
-    def _init_config(self, root_dir, config_dir, args):
-        config_abs_dir = Path(root_dir).joinpath(config_dir)
+    def _init_config(self,
+                     config_dir: Path | str,
+                     config_cat: str | None,
+                     override: list[tuple[list[str], str]] | None,
+
+                     learner_host: str | None,
+                     learner_port: int | None,
+
+                     env_args: dict | None,
+                     envs: int | None,
+
+                     unity_port: int | None):
+        config_abs_dir = self.root_dir.joinpath(config_dir)
         config_abs_path = config_abs_dir.joinpath('config_ds.yaml')
         default_config_abs_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
         # Merge default_config.yaml and custom config.yaml
         config, ma_configs = config_helper.initialize_config_from_yaml(default_config_abs_path,
                                                                        config_abs_path,
-                                                                       args.config)
+                                                                       config_cat=config_cat,
+                                                                       override=override)
 
-        # Initialize config from command line arguments
-        self.debug = args.debug
-        self.logger_in_file = args.logger_in_file
-        self.inference_ma_names = set()
+        if learner_host is not None:
+            config['net_config']['learner_host'] = learner_host
+        if learner_port is not None:
+            config['net_config']['learner_port'] = learner_port
 
-        self.render = args.render
-        self.unity_run_in_editor = args.u_editor
-        self.unity_time_scale = args.u_timescale
+        if env_args is None:
+            env_args = {}
+        for k, v in env_args.items():
+            if config['base_config']['env_args'] is None:
+                config['base_config']['env_args'] = {}
 
-        self.device = args.device
-
-        if args.learner_host is not None:
-            config['net_config']['learner_host'] = args.learner_host
-        if args.learner_port is not None:
-            config['net_config']['learner_port'] = args.learner_port
-
-        for env_arg in args.env_args:
-            k, v = env_arg.split('=')
             if k in config['base_config']['env_args']:
                 config['base_config']['env_args'][k] = config_helper.convert_config_value_by_src(v, config['base_config']['env_args'][k])
             else:
                 config['base_config']['env_args'][k] = config_helper.convert_config_value(v)
-        if args.u_port is not None:
-            config['base_config']['unity_args']['port'] = args.u_port
-        if args.envs is not None:
-            config['base_config']['n_envs'] = args.envs
+
+        if envs is not None:
+            config['base_config']['n_envs'] = envs
+        if unity_port is not None:
+            config['base_config']['unity_args']['port'] = unity_port
 
         self._stub = StubController(config['net_config']['learner_host'],
                                     config['net_config']['learner_port'])
@@ -167,7 +225,6 @@ class Actor(Main):
 
         self._id = _id
 
-        self.model_abs_dir = model_abs_dir
         config['reset_config'] = reset_config
         config['nn_config'] = nn_config
         config['sac_config'] = sac_config
@@ -178,9 +235,6 @@ class Actor(Main):
         self._logger.name = self._logger.name + f'-{_id}'
         self._logger.info(f'Assigned to id {_id}')
         self._stub.update_actor_id(_id)
-
-        if self.logger_in_file:
-            config_helper.add_file_logger(model_abs_dir.joinpath(f'actor_{_id}.log'))
 
         config_helper.display_config(config, self._logger)
         convert_config_to_enum(config['sac_config'])
@@ -197,7 +251,7 @@ class Actor(Main):
         self.config = config
         self.ma_configs = ma_configs
 
-        return config_abs_dir
+        return model_abs_dir, config_abs_dir
 
     def _init_sac(self):
         self._ma_agent_manager_buffer: dict[str, AgentManagerBuffer] = {}
