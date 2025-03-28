@@ -45,8 +45,31 @@ class OC_Main(Main):
                  last_ckpt: str | None = None,
                  nn: str | None = None):
         """
-        root_dir: the root directory of asac
-        config_path: the directory of config file
+        Args:
+            root_dir: The root directory for the project.
+            config_dir: The directory containing configuration files.
+            config_cat: The category of the configuration. Defaults to None, which is default.
+            override: A list of overrides for configuration settings. Defaults to None.
+            train_mode: Whether the algorithm is in training mode. Defaults to True.
+            inference_ma_names: Names of multi-agent names for inference. Defaults to None.
+            copy_model: Path to a model to copy. Defaults to None.
+            logger_in_file: Whether to log output to a file. Defaults to False.
+
+            render: Whether to render the environment. Defaults to False.
+            env_args: Additional arguments for the environment. Defaults to None.
+            envs: Number of environments to use. Defaults to None.
+            max_iter: Maximum number of iterations. Defaults to None.
+            unity_port: Port for Unity environment communication. Defaults to None.
+            unity_run_in_editor: Whether Unity is running in editor mode. Defaults to False.
+            unity_quality_level: Quality level for Unity environment. Defaults to 2.
+            unity_time_scale: Time scale for Unity environment. Defaults to None.
+
+            name: Name of the experiment. Defaults to None.
+            disable_sample: Whether to disable sampling. Defaults to False.
+            use_env_nn: Whether to force the use of environment neural networks. Defaults to False.
+            device: Device to use for computation (e.g., "cpu" or "cuda"). Defaults to None.
+            last_ckpt: Path to the last checkpoint file. Defaults to None.
+            nn: Neural network model file name. Defaults to None.
         """
         sac_main.MultiAgentsManager = OC_MultiAgentsManager
 
@@ -88,7 +111,12 @@ class OC_Main(Main):
         self._handle_copy_model(copy_model)
 
         self._init_env()
-        self._init_oc()
+        try:
+            self._init_oc()
+        except:
+            self.env.close()
+            self._logger.warning('Training terminated by exception')
+            raise
 
         self._run()
 
