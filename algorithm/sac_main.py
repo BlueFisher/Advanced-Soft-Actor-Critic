@@ -27,6 +27,7 @@ class Main:
     def __init__(self,
                  root_dir: Path | str,
                  config_dir: Path | str,
+
                  config_cat: str | None = None,
                  override: list[tuple[list[str], str]] | None = None,
                  train_mode: bool = True,
@@ -51,8 +52,31 @@ class Main:
                  last_ckpt: str | None = None,
                  nn: str | None = None):
         """
-        root_dir: the root directory of asac
-        config_path: the directory of config file
+        Args:
+            root_dir: The root directory for the project.
+            config_dir: The directory containing configuration files.
+            config_cat: The category of the configuration. Defaults to None, which is default.
+            override: A list of overrides for configuration settings. Defaults to None.
+            train_mode: Whether the algorithm is in training mode. Defaults to True.
+            inference_ma_names: Names of multi-agent names for inference. Defaults to None.
+            copy_model: Path to a model to copy. Defaults to None.
+            logger_in_file: Whether to log output to a file. Defaults to False.
+
+            render: Whether to render the environment. Defaults to False.
+            env_args: Additional arguments for the environment. Defaults to None.
+            envs: Number of environments to use. Defaults to None.
+            max_iter: Maximum number of iterations. Defaults to None.
+            unity_port: Port for Unity environment communication. Defaults to None.
+            unity_run_in_editor: Whether Unity is running in editor mode. Defaults to False.
+            unity_quality_level: Quality level for Unity environment. Defaults to 2.
+            unity_time_scale: Time scale for Unity environment. Defaults to None.
+
+            name: Name of the experiment. Defaults to None.
+            disable_sample: Whether to disable sampling. Defaults to False.
+            use_env_nn: Whether to force the use of environment neural networks. Defaults to False.
+            device: Device to use for computation (e.g., "cpu" or "cuda"). Defaults to None.
+            last_ckpt: Path to the last checkpoint file. Defaults to None.
+            nn: Neural network model file name. Defaults to None.
         """
         self.root_dir = Path(root_dir)
 
@@ -92,23 +116,28 @@ class Main:
         self._handle_copy_model(copy_model)
 
         self._init_env()
-        self._init_sac()
+        try:
+            self._init_sac()
+        except:
+            self.env.close()
+            self._logger.warning('Training terminated by exception')
+            raise
 
         self._run()
 
     def _init_config(self,
                      config_dir: Path | str,
                      config_cat: str | None,
-                     override: list[tuple[list[str], str]] | None = None,
+                     override: list[tuple[list[str], str]] | None,
 
-                     env_args: dict | None = None,
-                     envs: int | None = None,
-                     max_iter: int | None = None,
+                     env_args: dict | None,
+                     envs: int | None,
+                     max_iter: int | None,
 
-                     unity_port: int | None = None,
+                     unity_port: int | None,
 
-                     name: str | None = None,
-                     nn: str | None = None):
+                     name: str | None,
+                     nn: str | None):
         config_abs_dir = self.root_dir.joinpath(config_dir)
         config_abs_path = config_abs_dir.joinpath('config.yaml')
         default_config_abs_path = Path(__file__).resolve().parent.joinpath('default_config.yaml')
@@ -148,6 +177,7 @@ class Main:
         model_abs_dir = self.root_dir.joinpath('models',
                                                config['base_config']['env_name'],
                                                config['base_config']['name'])
+        model_abs_dir.mkdir(parents=True, exist_ok=True)
 
         if self.train_mode:
             config_helper.save_config(config, model_abs_dir, 'config.yaml')
@@ -170,19 +200,29 @@ class Main:
         return model_abs_dir, config_abs_dir
 
     def _handle_copy_model(self,
-                           copy_model: str | None = None):
-        if copy_model is not None:
-            src_model_abs_dir = self.root_dir.joinpath('models',
-                                                       self.config['base_config']['env_name'],
-                                                       copy_model)
-            if not self.model_abs_dir.exists():
-                self._logger.info(f'Copying {src_model_abs_dir} -> {self.model_abs_dir}')
-                shutil.copytree(src_model_abs_dir, self.model_abs_dir)
-            else:
-                self._logger.warning(f'{self.model_abs_dir} exists, stop copying')
+                           copy_model: str | None):
+        if copy_model is None:
+            return
 
-        else:
-            self.model_abs_dir.mkdir(parents=True, exist_ok=True)
+        src_model_abs_dir = self.root_dir.joinpath('models',
+                                                   self.config['base_config']['env_name'],
+                                                   copy_model)
+
+        for item in src_model_abs_dir.iterdir():
+            dest_item = self.model_abs_dir / item.name
+
+            if item.is_dir():  # handle directory
+                if not dest_item.exists():
+                    shutil.copytree(item, dest_item)
+                    self._logger.info(f"Copying directory: {item} -> {dest_item}")
+                else:
+                    self._logger.warning(f"{dest_item} exists, stop copying")
+            else:  # handle file
+                if not dest_item.exists():
+                    shutil.copy2(item, dest_item)
+                    self._logger.info(f"Copying file: {item} -> {dest_item}")
+                else:
+                    self._logger.warning(f"{dest_item} exists, stop copying")
 
     def _get_relative_package(self, abs_path: Path):
         r = abs_path.parent.relative_to(self.root_dir)
