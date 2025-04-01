@@ -18,7 +18,7 @@ class DataStorage:
         self.capacity = capacity
         self.max_id = 10 * capacity  # For multithreading storage, max_id should be larger than capacity
 
-        self._data_key_is_image = {}
+        self.data_key_is_image = set()
 
     def add(self, data: dict[str, np.ndarray]) -> np.ndarray:
         """
@@ -32,12 +32,13 @@ class DataStorage:
             self._buffer['_id'] = np.zeros(self.capacity, dtype=np.int64)
             for k, v in data.items():
                 # Store uint8 if data is image
-                self._data_key_is_image[k] = ('camera' in k.lower()
-                                              or 'visual' in k.lower()
-                                              or 'image' in k.lower()
-                                              or 'segmentation' in k.lower()) and v.shape[-1] == 3
+                if ('camera' in k.lower()
+                        or 'visual' in k.lower()
+                        or 'image' in k.lower()
+                        or 'segmentation' in k.lower()):
+                    self.data_key_is_image.add(k)
 
-                dtype = np.uint8 if self._data_key_is_image[k] else v.dtype
+                dtype = np.uint8 if k in self.data_key_is_image else v.dtype
 
                 self._buffer[k] = np.zeros([self.capacity] + list(v.shape[1:]), dtype=dtype)
 
@@ -47,7 +48,7 @@ class DataStorage:
         self._buffer['_id'][pointers] = ids
         for k, v in data.items():
             # Store uint8 [0, 255] if data is image
-            if self._data_key_is_image[k]:
+            if k in self.data_key_is_image:
                 v = v * 255
             self._buffer[k][pointers] = v
 
