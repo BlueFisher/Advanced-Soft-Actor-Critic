@@ -716,7 +716,7 @@ class OptionBase(SAC_Base):
                 for approx_obs in approx_obs_list:
                     if approx_obs.dim() > 3:
                         self.summary_writer.add_images('observation',
-                                                       approx_obs.permute([0, 3, 1, 2]),
+                                                       approx_obs,
                                                        self.global_step)
             self.summary_writer.flush()
 
