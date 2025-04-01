@@ -4,6 +4,7 @@ from itertools import chain
 import numpy as np
 import torch
 from torch import distributions, nn, optim
+from torch.nn import functional
 
 from algorithm.oc.option_base import OptionBase
 
@@ -319,6 +320,30 @@ class OptionSelectorBase(SAC_Base):
                                                                       True).to(self.device)
                                                  for _ in range(self.ensemble_q_num)]
         self.optimizer_v_list = [adam_optimizer(self.model_v_over_options_list[i].parameters()) for i in range(self.ensemble_q_num)]
+
+        """ SIAMESE REPRESENTATION LEARNING """
+        if self.siamese in (SIAMESE.ATC, SIAMESE.BYOL):
+            test_encoder_list = self.model_rep.get_augmented_encoders(test_obs_list)
+            if not isinstance(test_encoder_list, tuple):
+                test_encoder_list = [test_encoder_list, ]
+
+            if self.siamese == SIAMESE.ATC:
+                self.contrastive_weight_list = [torch.randn((test_encoder.shape[-1], test_encoder.shape[-1]),
+                                                            requires_grad=True,
+                                                            device=self.device) for test_encoder in test_encoder_list]
+                self.optimizer_siamese = adam_optimizer(self.contrastive_weight_list)
+
+            elif self.siamese == SIAMESE.BYOL:
+                self.model_rep_projection_list: list[ModelBaseRepProjection] = [
+                    nn.ModelRepProjection(test_encoder.shape[-1]).to(self.device) for test_encoder in test_encoder_list]
+                self.model_target_rep_projection_list: list[ModelBaseRepProjection] = [
+                    nn.ModelRepProjection(test_encoder.shape[-1]).to(self.device) for test_encoder in test_encoder_list]
+
+                test_projection_list = [pro(test_encoder) for pro, test_encoder in zip(self.model_rep_projection_list, test_encoder_list)]
+                self.model_rep_prediction_list: list[ModelBaseRepPrediction] = [
+                    nn.ModelRepPrediction(test_projection.shape[-1]).to(self.device) for test_projection in test_projection_list]
+                self.optimizer_siamese = adam_optimizer(chain(*[pro.parameters() for pro in self.model_rep_projection_list],
+                                                              *[pre.parameters() for pre in self.model_rep_prediction_list]))
 
     def _build_ckpt(self) -> None:
         self.ckpt_dict = ckpt_dict = {
@@ -1399,15 +1424,23 @@ class OptionSelectorBase(SAC_Base):
     def _train_v(self,
                  y: torch.Tensor,
 
+                 bn_indexes: torch.Tensor,
+                 bn_padding_masks: torch.Tensor,
+                 m_obses_list: list[torch.Tensor],
                  m_states: torch.Tensor,
                  bn_option_indexes: torch.Tensor,
+                 bn_actions: torch.Tensor,
                  priority_is: torch.Tensor) -> list[torch.Tensor]:
         """
         Args:
             y: [batch, 1]
 
+            bn_indexes (torch.int32): [batch, b + n]
+            bn_padding_masks (torch.bool): [batch, b + n]
+            m_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
             m_states: [batch, b + n + 1, state_size]
             bn_option_indexes (torch.int64): [batch, b + n]
+            bn_actions: [batch, b + n, action_size]
             priority_is: [batch, 1]
 
         Returns:
@@ -1457,10 +1490,172 @@ class OptionSelectorBase(SAC_Base):
             if loss_v.requires_grad:
                 loss_v.backward(retain_graph=True)
 
-            if optimizer is not None:
-                optimizer.step()
+        grads_rep_main = [m.grad.detach() if m.grad is not None else None
+                          for m in self.model_rep.parameters()]
 
-        return loss_v_list
+        grads_v_main_list = [[m.grad.detach() if m.grad is not None else None for m in v.parameters()]
+                             for v in self.model_v_over_options_list]
+
+        """ Siamese Representation Learning """
+        loss_siamese, loss_siamese_q = None, None
+        if self.siamese is not None:
+            loss_siamese, loss_siamese_q = self._train_siamese_representation_learning(
+                grads_rep_main=grads_rep_main,
+                grads_v_main_list=grads_v_main_list,
+                bn_indexes=bn_indexes,
+                bn_padding_masks=bn_padding_masks,
+                bn_obses_list=[m_obses[:, :-1] for m_obses in m_obses_list],
+                bn_actions=bn_actions)
+
+        if optimizer is not None:
+            optimizer.step()
+
+        return loss_v_list, loss_siamese, loss_siamese_q
+
+    def _train_siamese_representation_learning(self,
+                                               grads_rep_main: list[torch.Tensor],
+                                               grads_v_main_list: list[list[torch.Tensor]],
+                                               bn_indexes: torch.Tensor,
+                                               bn_padding_masks: torch.Tensor,
+                                               bn_obses_list: list[torch.Tensor],
+                                               bn_actions: torch.Tensor) -> tuple[torch.Tensor,
+                                                                                  torch.Tensor | None]:
+        """
+        Args:
+            grads_rep_main list(torch.Tensor)
+            grads_v_main_list list(list(torch.Tensor))
+            bn_indexes (torch.int32): [batch, b + n]
+            bn_padding_masks (torch.bool): [batch, b + n]
+            bn_obses_list: list([batch, b + n, *obs_shapes_i], ...)
+            bn_actions: [batch, b + n, action_size]
+
+        Returns:
+            loss_siamese
+            loss_siamese_q
+        """
+
+        if not any([p.requires_grad for p in self.model_rep.parameters()]):
+            return None, None
+
+        n_padding_masks = bn_padding_masks[:, self.burn_in_step:]
+        n_obses_list = [bn_obses[:, self.burn_in_step:, ...] for bn_obses in bn_obses_list]
+        encoder_list = self.model_rep.get_augmented_encoders(n_obses_list)  # [batch, n, f], ...
+        target_encoder_list = self.model_target_rep.get_augmented_encoders(n_obses_list)  # [batch, n, f], ...
+
+        if not isinstance(encoder_list, tuple):
+            encoder_list = (encoder_list, )
+            target_encoder_list = (target_encoder_list, )
+
+        batch, n, *_ = encoder_list[0].shape
+
+        if self.siamese == SIAMESE.ATC:
+            _encoder_list = [e.reshape(batch * n, -1) for e in encoder_list]  # [batch * n, f], ...
+            _target_encoder_list = [t_e.reshape(batch * n, -1) for t_e in target_encoder_list]  # [batch * n, f], ...
+            logits_list = [torch.mm(e, weight) for e, weight in zip(_encoder_list, self.contrastive_weight_list)]
+            logits_list = [torch.mm(logits, t_e.t()) for logits, t_e in zip(logits_list, _target_encoder_list)]  # [batch * n, batch * n], ...
+            contrastive_labels = torch.block_diag(*torch.ones(batch, n, n, device=self.device))  # [batch * n, batch * n]
+
+            padding_mask = n_padding_masks.reshape(batch * n, 1)  # [batch * n, 1]
+
+            loss_siamese_list = [functional.binary_cross_entropy_with_logits(logits,
+                                                                             contrastive_labels,
+                                                                             reduction='none')
+                                 for logits in logits_list]
+            loss_siamese_list = [(loss * padding_mask).mean() for loss in loss_siamese_list]
+
+        elif self.siamese == SIAMESE.BYOL:
+            _encoder_list = [e.reshape(batch * n, -1) for e in encoder_list]  # [batch * n, f], ...
+            projection_list = [pro(encoder) for pro, encoder in zip(self.model_rep_projection_list, _encoder_list)]
+            prediction_list = [pre(projection) for pre, projection in zip(self.model_rep_prediction_list, projection_list)]
+            _target_encoder_list = [t_e.reshape(batch * n, -1) for t_e in target_encoder_list]  # [batch * n, f], ...
+            t_projection_list = [t_pro(t_e) for t_pro, t_e in zip(self.model_target_rep_projection_list, _target_encoder_list)]
+
+            padding_mask = n_padding_masks.reshape(batch * n)  # [batch * n, ]
+
+            loss_siamese_list = [(functional.cosine_similarity(prediction, t_projection) * padding_mask).mean()  # [batch * n, ] -> [1, ]
+                                 for prediction, t_projection in zip(prediction_list, t_projection_list)]
+
+        if self.siamese_use_q:
+            obses_list_at_n = [n_obses[:, 0:1, ...] for n_obses in n_obses_list]
+
+            _encoder = [e[:, 0:1, ...] for e in encoder_list]
+            _target_encoder = [t_e[:, 0:1, ...] for t_e in target_encoder_list]
+
+            pre_actions_at_n = bn_actions[:, self.burn_in_step - 1:self.burn_in_step, ...]
+
+            if self.seq_encoder in (None, SEQ_ENCODER.RNN):
+                padding_masks_at_n = bn_padding_masks[:, self.burn_in_step:self.burn_in_step + 1]
+                state = self.model_rep.get_state_from_encoders(_encoder if len(_encoder) > 1 else _encoder[0],
+                                                               obses_list_at_n,
+                                                               pre_actions_at_n,
+                                                               self.get_initial_seq_hidden_state(batch, False),
+                                                               padding_mask=padding_masks_at_n)
+                target_state = self.model_target_rep.get_state_from_encoders(_target_encoder if len(_target_encoder) > 1 else _target_encoder[0],
+                                                                             obses_list_at_n,
+                                                                             pre_actions_at_n,
+                                                                             self.get_initial_seq_hidden_state(batch, False),
+                                                                             padding_mask=padding_masks_at_n)
+                state = state[:, 0, ...]
+                target_state = target_state[:, 0, ...]
+
+            elif self.seq_encoder == SEQ_ENCODER.ATTN:
+                indexes_at_n = bn_indexes[:, self.burn_in_step:self.burn_in_step + 1]
+                padding_masks_at_n = bn_padding_masks[:, self.burn_in_step:self.burn_in_step + 1]
+                state = self.model_rep.get_state_from_encoders(1,
+                                                               _encoder if len(_encoder) > 1 else _encoder[0],
+                                                               indexes_at_n,
+                                                               obses_list_at_n,
+                                                               pre_actions_at_n,
+                                                               None,
+                                                               padding_mask=padding_masks_at_n)
+                target_state = self.model_target_rep.get_state_from_encoders(1,
+                                                                             _encoder if len(_encoder) > 1 else _encoder[0],
+                                                                             indexes_at_n,
+                                                                             obses_list_at_n,
+                                                                             pre_actions_at_n,
+                                                                             None,
+                                                                             padding_mask=padding_masks_at_n)
+                state = state[:, 0, ...]
+                target_state = target_state[:, 0, ...]
+
+            v_loss_list = []
+
+            v_list = [v(state)
+                      for v in self.model_v_over_options_list]  # ([batch, d_action_summed_size], [batch, 1]), ...
+            target_v_list = [v(target_state)
+                             for v in self.model_target_v_over_options_list]  # ([batch, d_action_summed_size], [batch, 1]), ...
+
+            v_loss_list += [functional.mse_loss(v, t_v)
+                            for v, t_v in zip(v_list, target_v_list)]
+
+            loss_list = loss_siamese_list + v_loss_list
+        else:
+            loss_list = loss_siamese_list
+
+        if self.siamese_use_q:
+            if self.siamese_use_adaptive:
+                for grads_v_main, v_loss, v in zip(grads_v_main_list, v_loss_list, self.model_v_over_options_list):
+                    self.calculate_adaptive_weights(grads_v_main, [v_loss], v)
+            else:
+                for v_loss, v in zip(v_loss_list, self.model_v_over_options_list):
+                    v_loss.backward(inputs=list(v.parameters()), retain_graph=True)
+
+        loss = sum(loss_list)
+
+        if self.siamese_use_adaptive:
+            self.calculate_adaptive_weights(grads_rep_main, loss_list, self.model_rep)
+        else:
+            loss.backward(inputs=list(self.model_rep.parameters()), retain_graph=True)
+
+        self.optimizer_siamese.zero_grad()
+        if self.siamese == SIAMESE.ATC:
+            loss.backward(inputs=self.contrastive_weight_list, retain_graph=True)
+        elif self.siamese == SIAMESE.BYOL:
+            loss.backward(inputs=list(chain(*[pro.parameters() for pro in self.model_rep_projection_list],
+                                            *[pre.parameters() for pre in self.model_rep_prediction_list])), retain_graph=True)
+        self.optimizer_siamese.step()
+
+        return sum(loss_siamese_list), sum(v_loss_list) if self.siamese_use_q else None
 
     def _train_terminations(self,
                             y: torch.Tensor,
@@ -1654,11 +1849,17 @@ class OptionSelectorBase(SAC_Base):
         next_n_vs_over_options = next_n_vs_over_options.detach()
         # [batch, n, num_options]
 
-        loss_v_list = self._train_v(y=y,
+        (loss_v_list,
+         loss_siamese,
+         loss_siamese_q) = self._train_v(y=y,
 
-                                    m_states=m_states,
-                                    bn_option_indexes=bn_option_indexes,
-                                    priority_is=priority_is)
+                                         bn_indexes=bn_indexes,
+                                         bn_padding_masks=bn_padding_masks,
+                                         m_obses_list=m_obses_list,
+                                         m_states=m_states,
+                                         bn_option_indexes=bn_option_indexes,
+                                         bn_actions=bn_actions,
+                                         priority_is=priority_is)
 
         if self.optimizer_rep:
             self.optimizer_rep.step()
@@ -1733,10 +1934,20 @@ class OptionSelectorBase(SAC_Base):
                 curr_rb_id = self.replay_buffer.get_curr_id()
                 self.summary_writer.add_scalar('metric/replay_id', curr_rb_id, self.global_step)
 
-            self.summary_writer.add_scalar('loss/v', loss_v_list[0], self.global_step)
+            with torch.no_grad():
+                self.summary_writer.add_scalar('loss/v', loss_v_list[0], self.global_step)
 
-            if self.use_rnd:
-                self.summary_writer.add_scalar('loss/rnd', loss_rnd, self.global_step)
+                if self.siamese is not None and loss_siamese is not None:
+                    self.summary_writer.add_scalar('loss/siamese',
+                                                   loss_siamese,
+                                                   self.global_step)
+                    if self.siamese_use_q and loss_siamese_q is not None:
+                        self.summary_writer.add_scalar('loss/siamese_q',
+                                                       loss_siamese_q,
+                                                       self.global_step)
+
+                if self.use_rnd:
+                    self.summary_writer.add_scalar('loss/rnd', loss_rnd, self.global_step)
 
             self.summary_writer.flush()
 

@@ -70,7 +70,10 @@ def initialize_config_from_yaml(default_config_path: Path,
             for k in k_list[:-1]:
                 tmp_config = tmp_config[k]
 
-            tmp_config[last_k] = convert_config_value_by_src(v, tmp_config[last_k])
+            if last_k in tmp_config:
+                tmp_config[last_k] = convert_config_value_by_src(v, tmp_config[last_k])
+            else:
+                tmp_config[last_k] = convert_config_value(v)
 
     _modify_platform(config)
     _modify_platform(config_file)
