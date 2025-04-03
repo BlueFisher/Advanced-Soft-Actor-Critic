@@ -1507,8 +1507,9 @@ class OptionSelectorBase(SAC_Base):
                 bn_obses_list=[m_obses[:, :-1] for m_obses in m_obses_list],
                 bn_actions=bn_actions)
 
-        if optimizer is not None:
-            optimizer.step()
+        for opt_v in self.optimizer_v_list:
+            if opt_v is not None:
+                opt_v.step()
 
         return loss_v_list, loss_siamese, loss_siamese_q
 
