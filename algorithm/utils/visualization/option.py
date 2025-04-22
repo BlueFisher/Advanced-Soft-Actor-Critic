@@ -50,7 +50,7 @@ class OptionVisual:
         self.fig, self.ax = plt.subplots(figsize=(8, 4))
 
         if geom is not None:
-            self.fig.canvas.manager.window.setGeometry(*geom.getRect())
+            self.fig.canvas.manager.window.wm_geometry(geom)
 
         self._bg = self.fig.canvas.copy_from_bbox(self.fig.bbox)
 

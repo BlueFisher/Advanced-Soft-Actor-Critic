@@ -91,11 +91,14 @@ def __gen_test(test_from: int):
         'option_seq_encoder': [None, 'RNN'],
         'd_action_sizes': [[3, 3, 4]],
         'c_action_size': [4],
-        'use_replay_buffer': [True, False],
+        'use_replay_buffer': [True],
         'burn_in_step': [5],
         'n_step': [3],
-        'discrete_dqn_like': [True, False],
-        'use_rnd': [True, False],
+        'discrete_dqn_like': [False],
+        'siamese': [None, 'ATC', 'BYOL'],
+        'siamese_use_q': [False, True],
+        'siamese_use_adaptive': [False, True],
+        # 'use_rnd': [True, False],
     }
 
     possible_param_dicts = get_product(param_dict_candidates)

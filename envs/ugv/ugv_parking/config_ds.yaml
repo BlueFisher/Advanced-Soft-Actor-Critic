@@ -58,7 +58,7 @@ default:
     siamese_use_adaptive: false
 
   oc_config:
-    option_eplison: 0.1
+    option_epsilon: 0.1
     terminal_entropy: -0.001 # Tending not to terminate >0, tending to terminate <0
 
 parking:
