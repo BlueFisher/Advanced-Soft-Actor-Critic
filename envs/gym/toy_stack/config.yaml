@@ -40,7 +40,7 @@ default:
     use_rnd: false
 
   oc_config:
-    option_eplison: 0.0 # Probability of switching options
+    option_epsilon: 0.0 # Probability of switching options
     option_seq_encoder: null
     terminal_entropy: 0.01 # Tending not to terminate >0, tending to terminate <0
     key_max_length: 100

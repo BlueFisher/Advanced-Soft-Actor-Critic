@@ -89,7 +89,7 @@ class OptionSelectorBase(SAC_Base):
                  use_dilation: bool = False,
                  option_burn_in_step: int = -1,
                  option_seq_encoder: SEQ_ENCODER | None = None,
-                 option_eplison: float = 0.2,
+                 option_epsilon: float = 0.2,
                  terminal_entropy: float = 0.01,
                  key_max_length: int = 200,
                  option_nn_config: dict | None = None,
@@ -102,7 +102,7 @@ class OptionSelectorBase(SAC_Base):
         self.use_dilation = use_dilation
         self.option_burn_in_step = option_burn_in_step
         self.option_seq_encoder = option_seq_encoder
-        self.option_eplison = option_eplison
+        self.option_epsilon = option_epsilon
         self.terminal_entropy = terminal_entropy
         self.key_max_length = key_max_length
         self.option_nn_config = option_nn_config
@@ -528,7 +528,7 @@ class OptionSelectorBase(SAC_Base):
         option_index[pre_termination_mask] = new_option_index[pre_termination_mask]
 
         if self.train_mode:
-            random_mask = torch.rand_like(option_index, dtype=torch.float32) < self.option_eplison
+            random_mask = torch.rand_like(option_index, dtype=torch.float32) < self.option_epsilon
             if self.use_rnd:
                 rnd = self.model_rnd.cal_rnd(state)  # [batch, num_options, f]
                 t_rnd = self.model_target_rnd.cal_rnd(state)  # [batch, num_options, f]
