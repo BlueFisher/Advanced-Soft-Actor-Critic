@@ -3,6 +3,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Iterator
 
+from networkx import is_empty
 import numpy as np
 
 from algorithm.imitation_base import ImitationBase
@@ -134,6 +135,13 @@ class Agent:
             self.reward += reward
 
         if done:
+            if not self.done and self.is_empty:
+                self.steps = 0
+                self.reward = 0
+                self.current_step = 0
+                self.current_reward = 0
+                return
+
             if not self.done:
                 self.done = True
                 self.max_reached = max_reached
