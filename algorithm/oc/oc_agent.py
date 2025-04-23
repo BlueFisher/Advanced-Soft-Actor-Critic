@@ -130,6 +130,14 @@ class OC_Agent(Agent):
             self.reward += reward
 
         if done:
+            # if the episode is done and the agent is empty, reset the agent
+            if not self.done and self.is_empty:
+                self.steps = 0
+                self.reward = 0
+                self.current_step = 0
+                self.current_reward = 0
+                return
+
             if not self.done:
                 self.done = True
                 self.max_reached = max_reached
