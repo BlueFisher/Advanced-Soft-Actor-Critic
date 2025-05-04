@@ -41,19 +41,17 @@ class OptionBase(SAC_Base):
                 param.requires_grad = False
 
         self.model_termination = nn.ModelTermination(self.state_size).to(self.device)
-        self.model_target_termination = nn.ModelTermination(self.state_size).to(self.device)
         self.optimizer_termination = optim.Adam(self.model_termination.parameters(), lr=learning_rate)
 
     def _build_ckpt(self) -> None:
         super()._build_ckpt()
 
         self.ckpt_dict['model_termination'] = self.model_termination
-        self.ckpt_dict['model_target_termination'] = self.model_target_termination
 
     def _init_or_restore(self, last_ckpt: int | None) -> None:
         super()._init_or_restore(last_ckpt)
 
-        if self.random_q:
+        if self.train_mode and self.random_q:
             for model_q in self.model_q_list + self.model_target_q_list:
                 for p in model_q.parameters():
                     if p.dim() > 1:
@@ -61,18 +59,6 @@ class OptionBase(SAC_Base):
                     else:
                         torch.nn.init.normal_(p)
             self._logger.warning('Model Q randomized')
-
-    @torch.no_grad()
-    def _update_target_variables(self, tau=1.) -> None:
-        target = self.model_target_termination.parameters()
-        source = self.model_termination.parameters()
-
-        for target_param, param in zip(target, source):
-            target_param.data.copy_(
-                target_param.data * (1. - tau) + param.data * tau
-            )
-
-        super()._update_target_variables(tau)
 
     def remove_models(self, gt: int):
         if self.ckpt_dir is None:
@@ -585,8 +571,9 @@ class OptionBase(SAC_Base):
         next_n_target_obses_list = [torch.concat([bn_target_obses[:, self.burn_in_step + 1:, ...],
                                                   next_target_obs.unsqueeze(1)], dim=1)
                                     for bn_target_obses, next_target_obs, in zip(bn_target_obses_list, next_target_obs_list)]
-        next_n_target_terminations = self.model_target_termination(next_n_target_states, next_n_target_obses_list)  # [batch, n, 1]
-        next_n_target_terminations = next_n_target_terminations.squeeze(-1)  # [batch, n]
+        with torch.no_grad():
+            next_n_target_terminations = self.model_termination(next_n_target_states, next_n_target_obses_list)  # [batch, n, 1]
+            next_n_target_terminations = next_n_target_terminations.squeeze(-1)  # [batch, n]
 
         obs_list = [bn_obses[:, self.burn_in_step, ...] for bn_obses in bn_obses_list]
         state = bn_states[:, self.burn_in_step, ...]
@@ -878,8 +865,9 @@ class OptionBase(SAC_Base):
         next_n_target_obses_list = [torch.concat([bn_target_obses[:, self.burn_in_step + 1:, ...],
                                                   next_obs.unsqueeze(1)], dim=1)
                                     for bn_target_obses, next_obs, in zip(bn_target_obses_list, next_obs_list)]
-        next_n_target_terminations = self.model_target_termination(next_n_target_states, next_n_target_obses_list)  # [batch, n, 1]
-        next_n_target_terminations = next_n_target_terminations.squeeze(-1)  # [batch, n]
+        with torch.no_grad():
+            next_n_target_terminations = self.model_termination(next_n_target_states, next_n_target_obses_list)  # [batch, n, 1]
+            next_n_target_terminations = next_n_target_terminations.squeeze(-1)  # [batch, n]
 
         obs_list = [bn_obses[:, self.burn_in_step, ...] for bn_obses in bn_obses_list]
         state = bn_states[:, self.burn_in_step, ...]
