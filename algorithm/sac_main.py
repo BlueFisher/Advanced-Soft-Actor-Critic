@@ -380,7 +380,7 @@ class Main:
 
                 if self.offline_env is not None:
                     self.ma_manager.set_train_mode(True)
-                    for _ in range(100):
+                    for _ in range(100):  # TODO: Make it configurable
                         (ma_ep_obs_list,
                          ma_ep_action,
                          ma_reward,
@@ -407,7 +407,7 @@ class Main:
                         ma_obs_list=ma_obs_list,
                         ma_last_reward={n: np.zeros(len(agent_ids))
                                         for n, agent_ids in ma_agent_ids.items()},
-                        disable_sample=self.disable_sample
+                        disable_sample=self.disable_sample or not is_training_iteration
                     )
 
                     force_reset = False
@@ -432,7 +432,7 @@ class Main:
                             ma_agent_ids=decision_step.ma_agent_ids,
                             ma_obs_list=decision_step.ma_obs_list,
                             ma_last_reward=decision_step.ma_last_reward,
-                            disable_sample=self.disable_sample
+                            disable_sample=self.disable_sample or not is_training_iteration
                         )
 
                     self.ma_manager.end_episode(
@@ -456,15 +456,17 @@ class Main:
                         if not is_training_iteration:
                             self.ma_manager.log_episode()
 
+                        # If the offline env is not None, ignore the episode and training, only log the episode
                         if self.offline_env is None:
+                            # Only training in the training iteration, but always put episoded to the buffer
                             self.ma_manager.put_episode()
 
-                            # Always training even if the current iteration is inference
-                            with self._profiler('train', repeat=10) as profiler:
-                                next_trained_steps = self.ma_manager.train(trained_steps)
-                                if next_trained_steps == trained_steps:
-                                    profiler.ignore()
-                                trained_steps = next_trained_steps
+                            if is_training_iteration:
+                                with self._profiler('train', repeat=10) as profiler:
+                                    next_trained_steps = self.ma_manager.train(trained_steps)
+                                    if next_trained_steps == trained_steps:
+                                        profiler.ignore()
+                                    trained_steps = next_trained_steps
 
                     step += 1
 
