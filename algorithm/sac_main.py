@@ -380,7 +380,7 @@ class Main:
 
                 if self.offline_env is not None:
                     self.ma_manager.set_train_mode(True)
-                    for _ in range(100):  # TODO: Make it configurable
+                    for _ in range(self.base_config['offline_env_config']['steps_before_eval']):
                         (ma_ep_obs_list,
                          ma_ep_action,
                          ma_reward,

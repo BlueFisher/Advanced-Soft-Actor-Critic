@@ -12,6 +12,7 @@ base_config:
 
   offline_env_config:
     enabled: false
+    steps_before_eval: 100 # Training steps before online evaluation
     env_name: env_name
     env_args: null
 
