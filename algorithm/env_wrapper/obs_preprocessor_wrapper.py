@@ -56,3 +56,6 @@ class ObsPreprocessorWrapper(EnvWrapper):
 
     def close(self):
         self._env.close()
+
+    def send_option(self, option):
+        self._env.send_option(option)
