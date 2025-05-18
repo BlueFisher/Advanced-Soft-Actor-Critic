@@ -29,6 +29,7 @@ default:
     disabled_wall_piece_reached_reward: 1
     parking_entry_reached_reward: 2
     parking_spot_reached_reward: 5
+    disabled_wall_piece: 0 # Binary mask indicating which walls are disabled
 
   nn_config:
     rep:
@@ -108,6 +109,9 @@ combined:
 
   sac_config:
     nn: nn_parking
+
+  reset_config:
+    disabled_wall_piece: 2176
 
   oc_config:
     option_nn_config:
