@@ -1589,12 +1589,12 @@ class OptionSelectorBase(SAC_Base):
                 state = self.model_rep.get_state_from_encoders(_encoder if len(_encoder) > 1 else _encoder[0],
                                                                obses_list_at_n,
                                                                pre_actions_at_n,
-                                                               self.get_initial_seq_hidden_state(batch, False),
+                                                               self.get_initial_seq_hidden_state(batch, False).unsqueeze(1),
                                                                padding_mask=padding_masks_at_n)
                 target_state = self.model_target_rep.get_state_from_encoders(_target_encoder if len(_target_encoder) > 1 else _target_encoder[0],
                                                                              obses_list_at_n,
                                                                              pre_actions_at_n,
-                                                                             self.get_initial_seq_hidden_state(batch, False),
+                                                                             self.get_initial_seq_hidden_state(batch, False).unsqueeze(1),
                                                                              padding_mask=padding_masks_at_n)
                 state = state[:, 0, ...]
                 target_state = target_state[:, 0, ...]
