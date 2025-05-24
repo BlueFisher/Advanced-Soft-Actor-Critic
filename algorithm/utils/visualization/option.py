@@ -39,7 +39,7 @@ class OptionVisual:
     fig = None
 
     def __init__(self, option_names: list[str]) -> None:
-        if 'ENABLE_OPTION_VISUAL' not in os.environ:
+        if 'ENABLE_OPTION_VISUAL' not in os.environ or os.environ['ENABLE_OPTION_VISUAL'] != '1':
             return
 
         self.num_options = len(option_names)
