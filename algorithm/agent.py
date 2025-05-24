@@ -866,3 +866,10 @@ class MultiAgentsManager:
     def save_tmp_episode_trans_list(self) -> None:
         for n, mgr in self:
             mgr.save_episode()
+
+    def close(self) -> None:
+        for n, mgr in self:
+            if mgr.rl is None:
+                continue
+
+            mgr.rl.close()

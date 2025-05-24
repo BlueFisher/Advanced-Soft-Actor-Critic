@@ -507,6 +507,7 @@ class Main:
             if self.train_mode:
                 self.ma_manager.save_model()
             self.env.close()
+            self.ma_manager.close()
 
             self._logger.info('Training terminated')
 

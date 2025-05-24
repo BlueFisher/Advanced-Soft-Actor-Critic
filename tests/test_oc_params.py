@@ -76,6 +76,8 @@ class TestOCModel(unittest.TestCase):
                                                    episode_len=40))
             step = sac.train()
 
+        sac.close()
+
     @staticmethod
     def gen(param_dict):
         def func(self):
