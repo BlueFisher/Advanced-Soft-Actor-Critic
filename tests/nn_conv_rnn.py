@@ -53,7 +53,7 @@ class ModelRep(m.ModelBaseRep):
 
         vis_encoder = encoders
 
-        state, _ = self.rnn(torch.cat([vis_encoder], dim=-1), pre_seq_hidden_state)
+        state, _ = self.rnn(torch.cat([vis_encoder], dim=-1), pre_seq_hidden_state[:, 0])
 
         state = self.dense(torch.cat([obs_vec, state], dim=-1))
 
