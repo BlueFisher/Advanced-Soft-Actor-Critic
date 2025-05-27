@@ -52,7 +52,7 @@ class TestModel(unittest.TestCase):
                                                 d_action_sizes=param_dict['d_action_sizes'],
                                                 c_action_size=param_dict['c_action_size'],
                                                 seq_hidden_state_shape=seq_hidden_state_shape,
-                                                episode_len=40))
+                                                episode_len=random.randint(30, 100)))
             step = sac.train()
 
         sac.close()

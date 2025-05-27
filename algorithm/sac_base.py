@@ -695,19 +695,33 @@ class SAC_Base:
     def get_global_step(self) -> int:
         return self.global_step.item()
 
-    def get_initial_action(self, batch_size) -> np.ndarray:
-        if self.d_action_sizes:
-            d_actions = [np.random.randint(0, d_action_size, size=batch_size)
-                         for d_action_size in self.d_action_sizes]
-            d_actions = [np.eye(d_action_size, dtype=np.int32)[d_action]
-                         for d_action, d_action_size in zip(d_actions, self.d_action_sizes)]
-            d_action = np.concatenate(d_actions, axis=-1).astype(np.float32)
+    def get_initial_action(self, batch_size, get_numpy=True) -> np.ndarray:
+        if get_numpy:
+            if self.d_action_sizes:
+                d_actions = [np.random.randint(0, d_action_size, size=batch_size)
+                             for d_action_size in self.d_action_sizes]
+                d_actions = [np.eye(d_action_size, dtype=np.int32)[d_action]
+                             for d_action, d_action_size in zip(d_actions, self.d_action_sizes)]
+                d_action = np.concatenate(d_actions, axis=-1).astype(np.float32)
+            else:
+                d_action = np.zeros((batch_size, 0), dtype=np.float32)
+
+            c_action = np.zeros([batch_size, self.c_action_size], dtype=np.float32)
+
+            return np.concatenate([d_action, c_action], axis=-1)
         else:
-            d_action = np.zeros((batch_size, 0), dtype=np.float32)
+            if self.d_action_sizes:
+                d_actions = [torch.randint(0, d_action_size, (batch_size,), device=self.device)
+                             for d_action_size in self.d_action_sizes]
+                d_actions_one_hot = [functional.one_hot(d_action, num_classes=d_action_size)
+                                     for d_action, d_action_size in zip(d_actions, self.d_action_sizes)]
+                d_action = torch.cat(d_actions_one_hot, dim=-1)
+            else:
+                d_action = torch.zeros((batch_size, 0), dtype=torch.float32, device=self.device)
 
-        c_action = np.zeros([batch_size, self.c_action_size], dtype=np.float32)
+            c_action = torch.zeros((batch_size, self.c_action_size), dtype=torch.float32, device=self.device)
 
-        return np.concatenate([d_action, c_action], axis=-1)
+            return torch.cat([d_action, c_action], dim=-1)
 
     def get_initial_seq_hidden_state(self, batch_size, get_numpy=True) -> np.ndarray | torch.Tensor:
         if get_numpy:
@@ -1322,13 +1336,12 @@ class SAC_Base:
         c_alpha = torch.exp(self.log_c_alpha)
 
         n_states = nx_states[:, :-1, :]  # [batch, n, state_size]
-        n_obses_list = [nx_obses[:, :-1, ...] for nx_obses in nx_obses_list]  # list([batch, n, *obs_shapes_i], ...)
-
         next_n_states = nx_states[:, 1:, ...]  # [batch, n, state_size]
-        next_n_obses_list = [nx_obses[:, 1:, ...] for nx_obses in nx_obses_list]  # list([batch, n, *obs_shapes_i], ...)
 
-        d_policy, c_policy = self.model_policy(n_states, n_obses_list)
-        next_d_policy, next_c_policy = self.model_policy(next_n_states, next_n_obses_list)
+        nx_d_policy, nx_c_policy = self.model_policy(nx_states, nx_obses_list)
+
+        nx_actions = torch.cat([n_actions,
+                                self.get_initial_action(n_actions.shape[0], get_numpy=False).unsqueeze(1)], dim=1)  # [batch, n + 1, action_size]
 
         if self.curiosity is not None:
             if self.curiosity == CURIOSITY.FORWARD:
@@ -1343,21 +1356,22 @@ class SAC_Base:
             n_rewards += in_n_rewards  # [batch, n]
 
         if self.c_action_size:
-            n_c_actions_sampled = c_policy.rsample()  # [batch, n, c_action_size]
-            next_n_c_actions_sampled = next_c_policy.rsample()  # [batch, n, c_action_size]
+            nx_c_action_sampled = nx_c_policy.rsample()  # [batch, n + 1, c_action_size]
         else:
-            n_c_actions_sampled = torch.zeros(0, device=self.device)
-            next_n_c_actions_sampled = torch.zeros(0, device=self.device)
+            nx_c_action_sampled = torch.zeros(0, device=self.device)
 
-        n_qs_list = [q(n_states, torch.tanh(n_c_actions_sampled), n_obses_list) for q in self.model_target_q_list]
-        next_n_qs_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled), next_n_obses_list) for q in self.model_target_q_list]
-        # ([batch, n, d_action_summed_size], [batch, n, 1])
+        nx_qs_list = [q(nx_states, torch.tanh(nx_c_action_sampled), nx_obses_list) for q in self.model_q_list]
+        # ([batch, n + 1, d_action_summed_size], [batch, n + 1, 1])
 
-        n_d_qs_list = [q[0] for q in n_qs_list]  # [batch, n, d_action_summed_size]
-        n_c_qs_list = [q[1] for q in n_qs_list]  # [batch, n, 1]
+        n_d_qs_list = [q[0][:, :-1] for q in nx_qs_list]
+        # [batch, n + 1, d_action_summed_size] -> [batch, n, d_action_summed_size]
+        n_c_qs_list = [q[1][:, :-1] for q in nx_qs_list]
+        # [batch, n + 1, 1] -> [batch, n, 1]
 
-        next_n_d_qs_list = [q[0] for q in next_n_qs_list]  # [batch, n, d_action_summed_size]
-        next_n_c_qs_list = [q[1] for q in next_n_qs_list]  # [batch, n, 1]
+        next_n_d_qs_list = [q[0][:, 1:] for q in nx_qs_list]
+        # [batch, n + 1, d_action_summed_size] -> [batch, n, d_action_summed_size]
+        next_n_c_qs_list = [q[1][:, 1:] for q in nx_qs_list]
+        # [batch, n + 1, 1] -> [batch, n, 1]
 
         d_y, c_y = None, None
 
@@ -1366,6 +1380,9 @@ class SAC_Base:
             # [ensemble_q_num, batch, n, d_action_summed_size] -> [ensemble_q_sample, batch, n, d_action_summed_size]
 
             if self.discrete_dqn_like:
+                next_n_obses_list = [nx_obses[:, 1:, ...] for nx_obses in nx_obses_list]  # list([batch, n, *obs_shapes_i], ...)
+                next_n_c_actions_sampled = nx_c_action_sampled[:, 1:, :]  # [batch, n, c_action_size]
+
                 next_n_d_eval_qs_list = [q(next_n_states, torch.tanh(next_n_c_actions_sampled), next_n_obses_list)[0] for q in self.model_q_list]
                 stacked_next_n_d_eval_qs = torch.stack(next_n_d_eval_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
                 # [ensemble_q_num, batch, n, d_action_summed_size] -> [ensemble_q_sample, batch, n, d_action_summed_size]
@@ -1382,17 +1399,19 @@ class SAC_Base:
                 mean_n_qs = torch.mean(stacked_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
                 mean_next_n_qs = torch.mean(stacked_next_n_d_qs, dim=0)  # [batch, n, d_action_summed_size]
 
-                probs = d_policy.probs  # [batch, n, d_action_summed_size]
-                next_probs = next_d_policy.probs  # [batch, n, d_action_summed_size]
+                nx_probs = nx_d_policy.probs  # [batch, n + 1, d_action_summed_size]
+
+                n_probs = nx_probs[:, :-1]  # [batch, n, d_action_summed_size]
+                next_n_probs = nx_probs[:, 1:]  # [batch, n, d_action_summed_size]
                 # ! Note that the probs here is not strict probabilities
                 # ! sum(probs) == self.d_action_branch_size
-                clipped_probs = probs.clamp(min=1e-8)  # [batch, n, d_action_summed_size]
-                clipped_next_probs = next_probs.clamp(min=1e-8)  # [batch, n, d_action_summed_size]
-                tmp_n_vs = mean_n_qs - d_alpha * torch.log(clipped_probs)  # [batch, n, d_action_summed_size]
-                tmp_next_n_vs = mean_next_n_qs - d_alpha * torch.log(clipped_next_probs)  # [batch, n, d_action_summed_size]
+                clipped_n_probs = n_probs.clamp(min=1e-8)  # [batch, n, d_action_summed_size]
+                clipped_next_n_probs = next_n_probs.clamp(min=1e-8)  # [batch, n, d_action_summed_size]
+                tmp_n_vs = mean_n_qs - d_alpha * torch.log(clipped_n_probs)  # [batch, n, d_action_summed_size]
+                tmp_next_n_vs = mean_next_n_qs - d_alpha * torch.log(clipped_next_n_probs)  # [batch, n, d_action_summed_size]
 
-                n_vs = torch.sum(probs * tmp_n_vs, dim=-1) / self.d_action_branch_size  # [batch, n]
-                next_n_vs = torch.sum(next_probs * tmp_next_n_vs, dim=-1) / self.d_action_branch_size  # [batch, n]
+                n_vs = torch.sum(n_probs * tmp_n_vs, dim=-1) / self.d_action_branch_size  # [batch, n]
+                next_n_vs = torch.sum(next_n_probs * tmp_next_n_vs, dim=-1) / self.d_action_branch_size  # [batch, n]
 
                 if self.use_n_step_is:
                     n_d_actions = n_actions[..., :self.d_action_summed_size]  # [batch, n, d_action_summed_size]
@@ -1400,7 +1419,9 @@ class SAC_Base:
                     n_d_mu_probs = n_d_mu_probs * n_d_actions  # [batch, n, d_action_summed_size]
                     n_d_mu_probs[n_d_mu_probs == 0.] = 1.
                     n_d_mu_probs = n_d_mu_probs.prod(-1)  # [batch, n]
-                    n_d_pi_probs = torch.exp(d_policy.log_prob(n_d_actions).sum(-1))  # [batch, n]
+
+                    nx_d_pi_probs = torch.exp(nx_d_policy.log_prob(nx_actions[..., :self.d_action_summed_size]).sum(-1))  # [batch, n + 1]
+                    n_d_pi_probs = nx_d_pi_probs[:, :-1]  # [batch, n]
 
                 d_y = self._v_trace(n_padding_masks=n_padding_masks,
                                     n_rewards=n_rewards,
@@ -1411,8 +1432,9 @@ class SAC_Base:
                                     next_n_vs=next_n_vs)
 
         if self.c_action_size:
-            n_actions_log_prob = sum_log_prob(squash_correction_log_prob(c_policy, n_c_actions_sampled))  # [batch, n]
-            next_n_actions_log_prob = sum_log_prob(squash_correction_log_prob(next_c_policy, next_n_c_actions_sampled))  # [batch, n]
+            nx_actions_log_prob = sum_log_prob(squash_correction_log_prob(nx_c_policy, nx_c_action_sampled))  # [batch, n + 1]
+            n_actions_log_prob = nx_actions_log_prob[:, :-1]  # [batch, n]
+            next_n_actions_log_prob = nx_actions_log_prob[:, 1:]  # [batch, n]
 
             stacked_n_c_qs = torch.stack(n_c_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
             # [ensemble_q_num, batch, n, 1] -> [ensemble_q_sample, batch, n, 1]
@@ -1431,9 +1453,10 @@ class SAC_Base:
             # next_v = scale_inverse_h(next_v)
 
             if self.use_n_step_is:
-                n_c_actions = n_actions[..., self.d_action_summed_size:]
                 n_c_mu_probs = n_mu_probs[..., self.d_action_summed_size:]  # [batch, n, c_action_size]
-                n_c_pi_probs = squash_correction_prob(c_policy, torch.atanh(n_c_actions))
+                nx_c_pi_probs = squash_correction_prob(nx_c_policy, torch.atanh(nx_actions[..., self.d_action_summed_size:]))
+                # [batch, n + 1, c_action_size]
+                n_c_pi_probs = nx_c_pi_probs[:, :-1]
                 # [batch, n, c_action_size]
 
             c_y = self._v_trace(n_padding_masks=n_padding_masks,
@@ -2501,6 +2524,7 @@ class SAC_Base:
 
         if self._batch is None:
             self._profiler('train a step').ignore()
+            self._batch_obtained_event.set()
             return step
 
         with self._profiler('waiting_batch_available', repeat=10):

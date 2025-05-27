@@ -1382,8 +1382,7 @@ class OptionSelectorBase(SAC_Base):
             obnx_low_states[mask] = o_obnx_low_states
             obnx_low_target_states[mask] = o_obnx_low_target_states
 
-            o_obn_padding_masks = bn_padding_masks[mask, self.option_burn_in_from:]
-            o_obn_padding_masks = torch.logical_or(o_obn_padding_masks,
+            o_obn_padding_masks = torch.logical_or(bn_padding_masks[mask, self.option_burn_in_from:],
                                                    bn_option_indexes[mask, self.option_burn_in_from:] != i)
 
             o_d_y, o_c_y = option.compute_rep_q_grads(
@@ -1814,7 +1813,6 @@ class OptionSelectorBase(SAC_Base):
                                                      is_target=True)
             # [batch, b + n + 1, state_size]
 
-        obn_option_indexes = bn_option_indexes[:, self.option_burn_in_from:]  # [batch, ob + n, state_size]
         n_option_indexes = bn_option_indexes[:, self.burn_in_step:]  # [batch, n]
         option_index = n_option_indexes[:, 0]  # [batch, ]
 
@@ -2431,16 +2429,16 @@ class OptionSelectorBase(SAC_Base):
             return step
 
         (bn_indexes,
-            bn_padding_masks,
-            bnx_obses_list,
-            bn_option_indexes,
-            bn_actions,
-            bn_rewards,
-            bn_dones,
-            bn_mu_probs,
-            bnx_pre_seq_hidden_states,
-            bnx_pre_low_seq_hidden_states,
-            priority_is) = self._batch
+         bn_padding_masks,
+         bnx_obses_list,
+         bn_option_indexes,
+         bn_actions,
+         bn_rewards,
+         bn_dones,
+         bn_mu_probs,
+         bnx_pre_seq_hidden_states,
+         bnx_pre_low_seq_hidden_states,
+         priority_is) = self._batch
 
         """
         bn_indexes (np.int32): [batch, b + n]
