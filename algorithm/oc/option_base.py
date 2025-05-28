@@ -330,7 +330,6 @@ class OptionBase(SAC_Base):
         d_alpha = torch.exp(self.log_d_alpha)
         c_alpha = torch.exp(self.log_c_alpha)
 
-        n_states = nx_states[:, :-1, :]  # [batch, n, state_size]
         next_n_states = nx_states[:, 1:, ...]  # [batch, n, state_size]
 
         next_n_vs, _ = next_n_vs_over_options.max(-1)  # [batch, n]
@@ -348,19 +347,15 @@ class OptionBase(SAC_Base):
         nx_qs_list = [q(nx_states, torch.tanh(nx_c_action_sampled), nx_obses_list) for q in self.model_q_list]
         # ([batch, n + 1, d_action_summed_size], [batch, n + 1, 1])
 
-        n_d_qs_list = [q[0][:, :-1] for q in nx_qs_list]
-        # [batch, n + 1, d_action_summed_size] -> [batch, n, d_action_summed_size]
-        n_c_qs_list = [q[1][:, :-1] for q in nx_qs_list]
-        # [batch, n + 1, 1] -> [batch, n, 1]
-
-        next_n_d_qs_list = [q[0][:, 1:] for q in nx_qs_list]
-        # [batch, n + 1, d_action_summed_size] -> [batch, n, d_action_summed_size]
-        next_n_c_qs_list = [q[1][:, 1:] for q in nx_qs_list]
-        # [batch, n + 1, 1] -> [batch, n, 1]
-
         d_y, c_y = None, None
 
         if self.d_action_sizes:
+            n_d_qs_list = [q[0][:, :-1] for q in nx_qs_list]
+            # [batch, n + 1, d_action_summed_size] -> [batch, n, d_action_summed_size]
+
+            next_n_d_qs_list = [q[0][:, 1:] for q in nx_qs_list]
+            # [batch, n + 1, d_action_summed_size] -> [batch, n, d_action_summed_size]
+
             stacked_next_n_d_qs = torch.stack(next_n_d_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
             # [ensemble_q_num, batch, n, d_action_summed_size] -> [ensemble_q_sample, batch, n, d_action_summed_size]
 
@@ -421,6 +416,12 @@ class OptionBase(SAC_Base):
                                     next_n_vs=next_n_vs)
 
         if self.c_action_size:
+            n_c_qs_list = [q[1][:, :-1] for q in nx_qs_list]
+            # [batch, n + 1, 1] -> [batch, n, 1]
+
+            next_n_c_qs_list = [q[1][:, 1:] for q in nx_qs_list]
+            # [batch, n + 1, 1] -> [batch, n, 1]
+
             nx_actions_log_prob = sum_log_prob(squash_correction_log_prob(nx_c_policy, nx_c_action_sampled))  # [batch, n + 1]
             n_actions_log_prob = nx_actions_log_prob[:, :-1]  # [batch, n]
             next_n_actions_log_prob = nx_actions_log_prob[:, 1:]  # [batch, n]

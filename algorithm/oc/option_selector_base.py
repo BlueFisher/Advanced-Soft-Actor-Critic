@@ -2420,13 +2420,14 @@ class OptionSelectorBase(SAC_Base):
     def train(self) -> int:
         step = self.get_global_step()
 
+        if self._batch is None:
+            self._profiler('train a step').ignore()
+            self._batch_obtained_event.set()
+            return step
+
         with self._profiler('waiting_batch_available', repeat=10):
             self._batch_available_event.wait()
             self._batch_available_event.clear()
-
-        if self._batch is None:
-            self._profiler('train a step').ignore()
-            return step
 
         (bn_indexes,
          bn_padding_masks,
