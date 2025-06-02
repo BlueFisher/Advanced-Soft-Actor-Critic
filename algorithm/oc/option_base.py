@@ -235,7 +235,7 @@ class OptionBase(SAC_Base):
 
     @torch.no_grad()
     def get_dqn_like_d_y(self,
-                         next_n_terminations: torch.Tensor,
+                         n_terminations: torch.Tensor,
 
                          next_n_vs: torch.Tensor,
 
@@ -246,7 +246,7 @@ class OptionBase(SAC_Base):
                          stacked_next_target_n_d_qs: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            next_n_terminations: [batch, n]
+            n_terminations: [batch, n]
             next_n_vs: [batch, n]
             n_padding_masks (torch.bool): [batch, n]
             n_rewards: [batch, n]
@@ -283,11 +283,11 @@ class OptionBase(SAC_Base):
         next_q, _ = torch.min(stacked_max_next_target_q, dim=0)
         # [batch, 1]
 
-        next_termination = next_n_terminations[batch_tensor, last_solid_index].unsqueeze(-1)  # [batch, 1]
+        termination = n_terminations[batch_tensor, last_solid_index].unsqueeze(-1)  # [batch, 1]
         next_v = next_n_vs[batch_tensor, last_solid_index].unsqueeze(-1)  # [batch, 1]
 
-        next_q = (1 - next_termination) * next_q + \
-            next_termination * next_v  # [batch, 1]
+        next_q = (1 - termination) * next_q + \
+            termination * next_v  # [batch, 1]
 
         g = torch.sum(self._gamma_ratio * n_rewards, dim=-1, keepdim=True)  # [batch, 1]
         y = g + torch.pow(self.gamma, last_solid_index.unsqueeze(-1) + 1) * next_q * ~done  # [batch, 1]
@@ -298,7 +298,7 @@ class OptionBase(SAC_Base):
     def _get_y(self,
                next_n_vs_over_options: torch.Tensor,
 
-               next_n_terminations: torch.Tensor,
+               n_terminations: torch.Tensor,
 
                n_padding_masks: torch.Tensor,
                nx_obses_list: list[torch.Tensor],
@@ -312,7 +312,7 @@ class OptionBase(SAC_Base):
         Args:
             next_n_vs_over_options: [batch, n, num_options]
 
-            next_n_terminations: [batch, n]
+            n_terminations: [batch, n]
 
             n_padding_masks (torch.bool): [batch, n]
             nx_obses_list: list([batch, n + 1, *obs_shapes_i], ...)
@@ -344,7 +344,7 @@ class OptionBase(SAC_Base):
         else:
             nx_c_action_sampled = torch.zeros(0, device=self.device)
 
-        nx_qs_list = [q(nx_states, torch.tanh(nx_c_action_sampled), nx_obses_list) for q in self.model_q_list]
+        nx_qs_list = [q(nx_states, torch.tanh(nx_c_action_sampled), nx_obses_list) for q in self.model_target_q_list]
         # ([batch, n + 1, d_action_summed_size], [batch, n + 1, 1])
 
         d_y, c_y = None, None
@@ -367,7 +367,7 @@ class OptionBase(SAC_Base):
                 stacked_next_n_d_eval_qs = torch.stack(next_n_d_eval_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
                 # [ensemble_q_num, batch, n, d_action_summed_size] -> [ensemble_q_sample, batch, n, d_action_summed_size]
 
-                d_y = self.get_dqn_like_d_y(next_n_terminations=next_n_terminations,
+                d_y = self.get_dqn_like_d_y(n_terminations=n_terminations,
                                             next_n_vs=next_n_vs,
                                             n_padding_masks=n_padding_masks,
                                             n_rewards=n_rewards,
@@ -391,8 +391,8 @@ class OptionBase(SAC_Base):
                 clipped_next_n_probs = next_n_probs.clamp(min=1e-8)  # [batch, n, d_action_summed_size]
                 tmp_n_vs = min_n_d_qs - d_alpha * torch.log(clipped_n_probs)  # [batch, n, d_action_summed_size]
 
-                tmp_next_n_vs = (1 - next_n_terminations.unsqueeze(-1)) * (min_next_n_d_qs - d_alpha * torch.log(clipped_next_n_probs)) + \
-                    next_n_terminations.unsqueeze(-1) * next_n_vs.unsqueeze(-1)  # [batch, n, d_action_summed_size]
+                tmp_next_n_vs = (1 - n_terminations.unsqueeze(-1)) * (min_next_n_d_qs - d_alpha * torch.log(clipped_next_n_probs)) + \
+                    n_terminations.unsqueeze(-1) * next_n_vs.unsqueeze(-1)  # [batch, n, d_action_summed_size]
 
                 n_vs = torch.sum(n_probs * tmp_n_vs, dim=-1) / self.d_action_branch_size  # [batch, n]
                 next_n_vs = torch.sum(next_n_probs * tmp_next_n_vs, dim=-1) / self.d_action_branch_size  # [batch, n]
@@ -437,7 +437,7 @@ class OptionBase(SAC_Base):
             min_next_n_c_qs = min_next_n_c_qs.squeeze(dim=-1)  # [batch, n]
 
             """NORMAL"""
-            # next_termination = next_n_terminations[:, -1:]  # [batch, 1]
+            # termination = n_terminations[:, -1:]  # [batch, 1]
             # min_next_max_v = min_next_n_vs[:, -1:]  # [batch, 1]
             # next_action_log_prob = next_n_actions_log_prob[:, -1:]  # [batch, 1]
 
@@ -445,13 +445,13 @@ class OptionBase(SAC_Base):
             # done = n_dones[:, -1:]  # [batch, 1]
             # c_y = torch.sum(self._gamma_ratio * n_rewards, dim=-1, keepdim=True)  # [batch, 1]
             # c_y = c_y + self.gamma ** self.n_step * ~done * \
-            #     ((1 - next_termination) * (min_next_c_q - c_alpha * next_action_log_prob) +
-            #      next_termination * min_next_max_v)
+            #     ((1 - termination) * (min_next_c_q - c_alpha * next_action_log_prob) +
+            #      termination * min_next_max_v)
 
             """V-TRACE"""
             n_vs = min_n_c_qs - c_alpha * n_actions_log_prob  # [batch, n]
-            next_n_vs = (1 - next_n_terminations) * (min_next_n_c_qs - c_alpha * next_n_actions_log_prob) + \
-                next_n_terminations * next_n_vs  # [batch, n]
+            next_n_vs = (1 - n_terminations) * (min_next_n_c_qs - c_alpha * next_n_actions_log_prob) + \
+                n_terminations * next_n_vs  # [batch, n]
 
             if self.use_n_step_is:
                 n_c_mu_probs = n_mu_probs[..., self.d_action_summed_size:]  # [batch, n, c_action_size]
@@ -569,11 +569,12 @@ class OptionBase(SAC_Base):
             bn_mu_probs: [batch, b + n, action_size]
             priority_is: [batch, 1]
         """
-        next_n_target_states = bnx_target_states[:, self.burn_in_step + 1:]  # [batch, n, state_size]
-        next_n_target_obses_list = [bnx_obses[:, self.burn_in_step + 1:, ...] for bnx_obses in bnx_target_obses_list]  # list([batch, n, *obs_shapes_i], ...)
+
+        n_target_states = bnx_target_states[:, self.burn_in_step:-1]  # [batch, n, state_size]
+        n_target_obses_list = [bnx_obses[:, self.burn_in_step:-1, ...] for bnx_obses in bnx_target_obses_list]  # list([batch, n, *obs_shapes_i], ...)
         with torch.no_grad():
-            next_n_target_terminations = self.model_termination(next_n_target_states, next_n_target_obses_list)  # [batch, n, 1]
-            next_n_target_terminations = next_n_target_terminations.squeeze(-1)  # [batch, n]
+            n_target_terminations = self.model_termination(n_target_states, n_target_obses_list)  # [batch, n, 1]
+            n_target_terminations = n_target_terminations.squeeze(-1)  # [batch, n]
 
         obs_list = [bnx_obses[:, self.burn_in_step, ...] for bnx_obses in bnx_obses_list]
         state = bnx_states[:, self.burn_in_step, ...]
@@ -591,7 +592,7 @@ class OptionBase(SAC_Base):
 
         d_y, c_y = self._get_y(next_n_vs_over_options=next_n_vs_over_options,
 
-                               next_n_terminations=next_n_target_terminations,
+                               n_terminations=n_target_terminations,
 
                                n_padding_masks=bn_padding_masks[:, self.burn_in_step:, ...],
                                nx_obses_list=[bnx_obses[:, self.burn_in_step:, ...] for bnx_obses in bnx_target_obses_list],
@@ -844,10 +845,10 @@ class OptionBase(SAC_Base):
             The td-error of observations, [batch, 1]
         """
 
-        next_n_target_states = bnx_target_states[:, self.burn_in_step + 1:]  # [batch, n, state_size]
-        next_n_target_obses_list = [bnx_obses[:, self.burn_in_step + 1:, ...] for bnx_obses in bnx_target_obses_list]  # list([batch, n, *obs_shapes_i], ...)
-        next_n_target_terminations = self.model_termination(next_n_target_states, next_n_target_obses_list)  # [batch, n, 1]
-        next_n_target_terminations = next_n_target_terminations.squeeze(-1)  # [batch, n]
+        n_target_states = bnx_target_states[:, self.burn_in_step:-1]  # [batch, n, state_size]
+        n_target_obses_list = [bnx_obses[:, self.burn_in_step:-1, ...] for bnx_obses in bnx_target_obses_list]  # list([batch, n, *obs_shapes_i], ...)
+        n_target_terminations = self.model_termination(n_target_states, n_target_obses_list)  # [batch, n, 1]
+        n_target_terminations = n_target_terminations.squeeze(-1)  # [batch, n]
 
         obs_list = [bnx_obses[:, self.burn_in_step, ...] for bnx_obses in bnx_obses_list]
         action = bn_actions[:, self.burn_in_step, ...]
@@ -868,7 +869,7 @@ class OptionBase(SAC_Base):
 
         d_y, c_y = self._get_y(next_n_vs_over_options=next_n_vs_over_options,
 
-                               next_n_terminations=next_n_target_terminations,
+                               n_terminations=n_target_terminations,
 
                                n_padding_masks=bn_padding_masks[:, self.burn_in_step:, ...],
                                nx_obses_list=[bnx_obses[:, self.burn_in_step:, ...] for bnx_obses in bnx_obses_list],

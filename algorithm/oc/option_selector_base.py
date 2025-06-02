@@ -1269,6 +1269,9 @@ class OptionSelectorBase(SAC_Base):
             if not torch.any(mask):
                 continue
 
+            o_obn_padding_masks = torch.logical_or(bn_padding_masks[mask, self.option_burn_in_from:],
+                                                   bn_option_indexes[mask, self.option_burn_in_from:] != i)
+
             o_obnx_obses_list = [torch.concat([obn_low_obses[mask], obnx_low_target_obses[mask, -1:]], dim=1)
                                  for obn_low_obses, obnx_low_target_obses
                                  in zip(obn_low_obses_list, obnx_low_target_obses_list)]
@@ -1276,7 +1279,7 @@ class OptionSelectorBase(SAC_Base):
             o_td_error = option._get_td_error(
                 next_n_vs_over_options=next_n_vs_over_options[mask],
 
-                bn_padding_masks=bn_padding_masks[mask, self.option_burn_in_from:],
+                bn_padding_masks=o_obn_padding_masks,
                 bnx_obses_list=o_obnx_obses_list,
                 bnx_target_obses_list=[obnx_low_target_obses[mask] for obnx_low_target_obses in obnx_low_target_obses_list],
                 state=low_state[mask],
