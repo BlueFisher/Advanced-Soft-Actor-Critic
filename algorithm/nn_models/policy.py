@@ -69,7 +69,7 @@ class JointOneHotCategorical(torch.distributions.Distribution):
     def sample_deter(self) -> torch.Tensor:
         logits_list = self.logits.split(self.logits_size_list, dim=-1)
         sampled_list = [torch.nn.functional.one_hot(logits.argmax(dim=-1),
-                                                 logits_size)
+                                                    logits_size)
                         for logits, logits_size in zip(logits_list, self.logits_size_list)]
 
         return torch.concat(sampled_list, dim=-1)

@@ -1360,7 +1360,7 @@ class SAC_Base:
         else:
             nx_c_action_sampled = torch.zeros(0, device=self.device)
 
-        nx_qs_list = [q(nx_states, torch.tanh(nx_c_action_sampled), nx_obses_list) for q in self.model_q_list]
+        nx_qs_list = [q(nx_states, torch.tanh(nx_c_action_sampled), nx_obses_list) for q in self.model_target_q_list]
         # ([batch, n + 1, d_action_summed_size], [batch, n + 1, 1])
 
         d_y, c_y = None, None
