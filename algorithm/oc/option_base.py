@@ -306,8 +306,8 @@ class OptionBase(SAC_Base):
                n_actions: torch.Tensor,
                n_rewards: torch.Tensor,
                n_dones: torch.Tensor,
-               n_mu_probs: torch.Tensor | None = None) -> tuple[torch.Tensor | None,
-                                                                torch.Tensor | None]:
+               n_mu_probs: torch.Tensor | None) -> tuple[torch.Tensor | None,
+                                                         torch.Tensor | None]:
         """
         Args:
             next_n_vs_over_options: [batch, n, num_options]
@@ -600,7 +600,7 @@ class OptionBase(SAC_Base):
                                n_actions=bn_actions[:, self.burn_in_step:, ...],
                                n_rewards=bn_rewards[:, self.burn_in_step:],
                                n_dones=bn_dones[:, self.burn_in_step:],
-                               n_mu_probs=bn_mu_probs[:, self.burn_in_step:] if self.use_n_step_is else None)
+                               n_mu_probs=bn_mu_probs[:, self.burn_in_step:])
         #  [batch, 1], [batch, 1]
 
         loss_q_list = [torch.zeros((batch, 1), device=self.device) for _ in range(self.ensemble_q_num)]
@@ -826,7 +826,7 @@ class OptionBase(SAC_Base):
                       bn_actions: torch.Tensor,
                       bn_rewards: torch.Tensor,
                       bn_dones: torch.Tensor,
-                      bn_mu_probs: torch.Tensor) -> torch.Tensor:
+                      bn_mu_probs: torch.Tensor | None) -> torch.Tensor:
         """
         Args:
             next_n_vs_over_options: [batch, n, num_options]
