@@ -1262,8 +1262,8 @@ class SAC_Base:
                  n_padding_masks: torch.Tensor,
                  n_rewards: torch.Tensor,
                  n_dones: torch.Tensor,
-                 n_mu_probs: torch.Tensor,
-                 n_pi_probs: torch.Tensor,
+                 n_mu_probs: torch.Tensor | None,
+                 n_pi_probs: torch.Tensor | None,
                  n_vs: torch.Tensor,
                  next_n_vs: torch.Tensor) -> torch.Tensor:
         """
@@ -1316,8 +1316,8 @@ class SAC_Base:
                n_actions: torch.Tensor,
                n_rewards: torch.Tensor,
                n_dones: torch.Tensor,
-               n_mu_probs: torch.Tensor | None = None) -> tuple[torch.Tensor | None,
-                                                                torch.Tensor | None]:
+               n_mu_probs: torch.Tensor | None) -> tuple[torch.Tensor | None,
+                                                         torch.Tensor | None]:
         """
         Args:
             n_padding_masks (torch.bool): [batch, n]
@@ -2603,7 +2603,8 @@ class SAC_Base:
                         bn_actions=bn_actions,
                         bn_rewards=bn_rewards,
                         bn_dones=bn_dones,
-                        bn_mu_probs=bn_pi_probs_tensor if self.use_n_step_is else None).detach().cpu().numpy()
+                        bn_mu_probs=bn_pi_probs_tensor if self.use_n_step_is else None
+                    ).detach().cpu().numpy()
                 self.replay_buffer.update(pointers, td_error)
 
             bn_padding_masks = bn_padding_masks.detach().cpu().numpy()
