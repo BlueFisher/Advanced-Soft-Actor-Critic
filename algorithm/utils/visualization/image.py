@@ -12,7 +12,11 @@ class ImageVisual:
         self.fig = None
         self.idx = 0
 
-    def __call__(self, *images: np.ndarray | torch.Tensor, max_batch=5, save_name: str | None = None):
+    def __call__(self, *images: np.ndarray | torch.Tensor,
+                 max_batch=5,
+                 range_min=0,
+                 range_max=1,
+                 save_name: str | None = None):
         """
         Supporting RGB and gray images
         Only supporting images with batch size less than 5
@@ -38,7 +42,7 @@ class ImageVisual:
             for i in range(max_batch):
                 for j, image in enumerate(images):
                     self.axes[i][j].axis('off')
-                    self.ims[i].append(self.axes[i][j].imshow(image[i], vmin=0, vmax=1))
+                    self.ims[i].append(self.axes[i][j].imshow(image[i], vmin=range_min, vmax=range_max))
 
             plt.show(block=False)
 

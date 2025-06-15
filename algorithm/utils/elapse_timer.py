@@ -82,7 +82,7 @@ class ElapsedTimer:
 
         if self._step % self._repeat == 0:
             if self._force_report or abs(average_time - self._last_report_avg_time) > 0.1:
-                log = f'{self._log}: {average_time:.2f}s'
+                log = f'{self._log}: {average_time:.4f}s'
                 if self._logger_level == logging.DEBUG:
                     self._logger.debug(log)
                 elif self._logger_level == logging.INFO:
