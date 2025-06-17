@@ -32,31 +32,31 @@ class AgentHit(Agent):
 
 
 class MainHit(Main):
-    def _run(self):
-        for n, mgr in self.ma_manager:
-            mgr['evaluation_data'] = {
-                'episodes': 0,
-                'hit': 0,
-                'hit_steps': 0,
-                'failed_steps': 0
-            }
+    # def _run(self):
+    #     for n, mgr in self.ma_manager:
+    #         mgr['evaluation_data'] = {
+    #             'episodes': 0,
+    #             'hit': 0,
+    #             'hit_steps': 0,
+    #             'failed_steps': 0
+    #         }
 
-        super()._run()
+    #     super()._run()
 
-        if not self.train_mode:
-            for n, mgr in self.ma_manager:
-                ev = mgr['evaluation_data']
+    #     if not self.train_mode:
+    #         for n, mgr in self.ma_manager:
+    #             ev = mgr['evaluation_data']
 
-                if len(self.ma_manager) == 1:
-                    result_path = self.model_abs_dir / 'result.txt'
-                else:
-                    result_path = self.model_abs_dir / f'{n}_result.txt'
-                result_path.touch(exist_ok=True)
-                hostname = socket.gethostname()
-                log = f'{hostname}, {ev["episodes"]}, {ev["hit"]}, {ev["hit_steps"]}, {ev["failed_steps"]}'
-                with open(result_path, 'a') as f:
-                    f.write(log + '\n')
-                self._logger.info(log)
+    #             if len(self.ma_manager) == 1:
+    #                 result_path = self.model_abs_dir / 'result.txt'
+    #             else:
+    #                 result_path = self.model_abs_dir / f'{n}_result.txt'
+    #             result_path.touch(exist_ok=True)
+    #             hostname = socket.gethostname()
+    #             log = f'{hostname}, {ev["episodes"]}, {ev["hit"]}, {ev["hit_steps"]}, {ev["failed_steps"]}'
+    #             with open(result_path, 'a') as f:
+    #                 f.write(log + '\n')
+    #             self._logger.info(log)
 
     def _log_episode_summaries(self):
         for n, mgr in self.ma_manager:
@@ -89,15 +89,15 @@ class MainHit(Main):
             hit = sum([a.hit for a in mgr.non_empty_agents])
             max_step = max([a.steps for a in mgr.non_empty_agents])
 
-            if not self.train_mode:
-                for agent in mgr.non_empty_agents:
-                    if agent.steps > 10:
-                        mgr['evaluation_data']['episodes'] += 1
-                        if agent.hit:
-                            mgr['evaluation_data']['hit'] += 1
-                            mgr['evaluation_data']['hit_steps'] += agent.steps
-                        else:
-                            mgr['evaluation_data']['failed_steps'] += agent.steps
+            # if not self.train_mode:
+            #     for agent in mgr.non_empty_agents:
+            #         if agent.steps > 10:
+            #             mgr['evaluation_data']['episodes'] += 1
+            #             if agent.hit:
+            #                 mgr['evaluation_data']['hit'] += 1
+            #                 mgr['evaluation_data']['hit_steps'] += agent.steps
+            #             else:
+            #                 mgr['evaluation_data']['failed_steps'] += agent.steps
 
             self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}, hit {hit}/[{len(mgr.non_empty_agents)}]')
 

@@ -80,6 +80,10 @@ def format_global_step(num):
     return '%s%s' % (num, ['', 'k', 'm', 'g', 't', 'p'][magnitude])
 
 
+def ma_name2path_name(ma_name: str):
+    return ma_name.replace('?team=', '-team=')
+
+
 def traverse_lists(data: Any | tuple, process) -> list:
     if not isinstance(data, tuple):
         data = (data, )
