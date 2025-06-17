@@ -25,6 +25,8 @@ class Agent:
     max_reached = False  # If has one completed episode that reaches max step (done == True)
     force_terminated = False  # If has one completed episode that is terminated by force
     # (done == True and max_reached == True)
+    hit_reward: int | None = None
+    hit = 0
 
     current_reward = 0  # The reward of the current episode
     current_step = 0  # The step count of the current episode
@@ -45,7 +47,8 @@ class Agent:
                  d_action_sizes: list[int],
                  c_action_size: int,
                  seq_hidden_state_shape: tuple[int, ...],
-                 max_episode_length: int = -1):
+                 max_episode_length: int = -1,
+                 hit_reward: int | None = None):
         self.agent_id = agent_id
         self.obs_shapes = obs_shapes
         self.d_action_sizes = d_action_sizes
@@ -53,6 +56,7 @@ class Agent:
         self.c_action_size = c_action_size
         self.seq_hidden_state_shape = seq_hidden_state_shape
         self.max_episode_length = max_episode_length if max_episode_length != -1 else DEFAULT_MAX_EPISODE_LENGTH
+        self.hit_reward = hit_reward
 
         self._padding_obs_list = [np.zeros(o).astype(np.float32) for o in self.obs_shapes]
         d_action_list = [np.eye(d_action_size, dtype=np.float32)[0]
@@ -133,11 +137,14 @@ class Agent:
         if not self.done:
             self.steps += 1
             self.reward += reward
+            if self.hit_reward is not None and reward >= self.hit_reward:
+                self.hit += 1
 
         if done:
             if not self.done and self.is_empty:
                 self.steps = 0
                 self.reward = 0
+                self.hit = 0
                 self.current_step = 0
                 self.current_reward = 0
                 return
@@ -221,13 +228,6 @@ class Agent:
         if pre_seq_hidden_state is None:
             pre_seq_hidden_state = self._padding_seq_hidden_state
         self._tmp_episode_trans['pre_seq_hidden_state'][self.current_step] = pre_seq_hidden_state
-
-        self._extra_log(obs_list,
-                        action,
-                        reward,
-                        done,
-                        max_reached,
-                        prob)
 
         self.current_step += 1
 
@@ -326,6 +326,7 @@ class Agent:
         self.steps = 0
         self.done = False
         self.max_reached = False
+        self.hit = 0
 
 
 class AgentManager:
@@ -335,7 +336,8 @@ class AgentManager:
                  obs_shapes: list[tuple[int]],
                  d_action_sizes: list[int],
                  c_action_size: int,
-                 max_episode_length: int = -1):
+                 max_episode_length: int = -1,
+                 hit_reward: int | None = None):
         self.name = name
         self.obs_names = obs_names
         self.obs_shapes = obs_shapes
@@ -344,6 +346,7 @@ class AgentManager:
         self.c_action_size = c_action_size
         self.action_size = self.d_action_summed_size + self.c_action_size
         self.max_episode_length = max_episode_length
+        self.hit_reward = hit_reward
 
         self.agents_dict: dict[int, Agent] = {}  # {agent_id: Agent}
         self.agents_liveness: dict[int, int] = {}  # {agent_id: int}
@@ -449,7 +452,8 @@ class AgentManager:
                     self.d_action_sizes,
                     self.c_action_size,
                     seq_hidden_state_shape=self.rl.seq_hidden_state_shape,
-                    max_episode_length=self.max_episode_length
+                    max_episode_length=self.max_episode_length,
+                    hit_reward=self.hit_reward
                 )
             self.agents_liveness[agent_id] = AGENT_MAX_LIVENESS
 
@@ -713,7 +717,8 @@ class MultiAgentsManager:
                  ma_c_action_size: dict[str, int],
                  inference_ma_names: set[str],
                  model_abs_dir: Path,
-                 max_episode_length: int = -1):
+                 max_episode_length: int = -1,
+                 hit_reward: int | None = None):
         self._inference_ma_names = inference_ma_names
         self.model_abs_dir = model_abs_dir
         self._ma_manager = {}
@@ -723,7 +728,8 @@ class MultiAgentsManager:
                                                ma_obs_shapes[n],
                                                ma_d_action_sizes[n],
                                                ma_c_action_size[n],
-                                               max_episode_length=max_episode_length)
+                                               max_episode_length=max_episode_length,
+                                               hit_reward=hit_reward)
 
             if len(ma_obs_shapes) == 1:
                 self._ma_manager[n].set_model_abs_dir(model_abs_dir)

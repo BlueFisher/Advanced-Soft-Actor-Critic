@@ -70,7 +70,7 @@ class Learner(Main):
 
                  render: bool = False,
                  env_args: dict | None = None,
-                 envs: int | None = None,
+                 n_envs: int | None = None,
 
                  unity_port: int | None = None,
                  unity_run_in_editor: bool = False,
@@ -114,7 +114,7 @@ class Learner(Main):
                                                                      learner_port,
 
                                                                      env_args,
-                                                                     envs,
+                                                                     n_envs,
 
                                                                      unity_port,
 
@@ -158,7 +158,7 @@ class Learner(Main):
                      learner_port: int | None,
 
                      env_args: dict | None,
-                     envs: int | None,
+                     n_envs: int | None,
 
                      unity_port: int | None,
 
@@ -189,8 +189,8 @@ class Learner(Main):
             else:
                 config['base_config']['env_args'][k] = config_helper.convert_config_value(v)
 
-        if envs is not None:
-            config['base_config']['n_envs'] = envs
+        if n_envs is not None:
+            config['base_config']['n_envs'] = n_envs
         if unity_port is not None:
             config['base_config']['unity_args']['port'] = unity_port
         if name is not None:
@@ -515,13 +515,18 @@ class Learner(Main):
             rewards = np.array([a.reward for a in mgr.non_empty_agents])
             steps = np.array([a.steps for a in mgr.non_empty_agents])
 
+            summaries = [
+                {'tag': 'reward/mean', 'simple_value': float(rewards.mean())},
+                {'tag': 'reward/max', 'simple_value': float(rewards.max())},
+                {'tag': 'reward/min', 'simple_value': float(rewards.min())},
+                {'tag': 'metric/steps', 'simple_value': steps.mean()}
+            ]
+            if mgr.hit_reward is not None:
+                hit = sum([a.hit for a in mgr.non_empty_agents])
+                summaries.append({'tag': 'reward/hit', 'simple_value': hit / len(mgr.non_empty_agents)})
+
             try:
-                self._ma_agent_manager_buffer[n].cmd_pipe_client.send(('LOG_EPISODE_SUMMARIES', [
-                    {'tag': 'reward/mean', 'simple_value': float(rewards.mean())},
-                    {'tag': 'reward/max', 'simple_value': float(rewards.max())},
-                    {'tag': 'reward/min', 'simple_value': float(rewards.min())},
-                    {'tag': 'metric/steps', 'simple_value': steps.mean()}
-                ]))
+                self._ma_agent_manager_buffer[n].cmd_pipe_client.send(('LOG_EPISODE_SUMMARIES', summaries))
             except Exception as e:
                 self._logger.error(e)
 
@@ -532,7 +537,12 @@ class Learner(Main):
             rewards = [a.reward for a in mgr.non_empty_agents]
             rewards = ", ".join([f"{i:6.1f}" for i in rewards])
             max_step = max([a.steps for a in mgr.non_empty_agents])
-            self._logger.info(f'{n} {iteration}, {iter_time:.2f}s, S {max_step}, R {rewards}')
+
+            if mgr.hit_reward is None:
+                self._logger.info(f'{n} {iteration}, {iter_time:.2f}s, S {max_step}, R {rewards}')
+            else:
+                hit = sum([a.hit for a in mgr.non_empty_agents])
+                self._logger.info(f'{n} {iteration}, {iter_time:.2f}s, S {max_step}, R {rewards}, hit {hit}/[{len(mgr.non_empty_agents)}]')
 
     def _run_learner_server(self, learner_port):
         self._servicer = LearnerService(self)
