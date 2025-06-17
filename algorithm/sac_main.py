@@ -37,7 +37,7 @@ class Main:
 
                  render: bool = False,
                  env_args: dict | None = None,
-                 envs: int | None = None,
+                 n_envs: int | None = None,
                  max_iter: int | None = None,
 
                  unity_port: int | None = None,
@@ -64,7 +64,7 @@ class Main:
 
             render: Whether to render the environment. Defaults to False.
             env_args: Additional arguments for the environment. Defaults to None.
-            envs: Number of environments to use. Defaults to None.
+            n_envs: Number of environments to use. Defaults to None.
             max_iter: Maximum number of iterations. Defaults to None.
             unity_port: Port for Unity environment communication. Defaults to None.
             unity_run_in_editor: Whether Unity is running in editor mode. Defaults to False.
@@ -102,7 +102,7 @@ class Main:
                                                                      override,
 
                                                                      env_args,
-                                                                     envs,
+                                                                     n_envs,
                                                                      max_iter,
 
                                                                      unity_port,
@@ -131,7 +131,7 @@ class Main:
                      override: list[tuple[list[str], str]] | None,
 
                      env_args: dict | None,
-                     envs: int | None,
+                     n_envs: int | None,
                      max_iter: int | None,
 
                      unity_port: int | None,
@@ -158,8 +158,8 @@ class Main:
             else:
                 config['base_config']['env_args'][k] = config_helper.convert_config_value(v)
 
-        if envs is not None:
-            config['base_config']['n_envs'] = envs
+        if n_envs is not None:
+            config['base_config']['n_envs'] = n_envs
         if max_iter is not None:
             config['base_config']['max_iter'] = max_iter
         if unity_port is not None:
@@ -307,7 +307,8 @@ class Main:
                                              ma_c_action_size,
                                              self.inference_ma_names,
                                              self.model_abs_dir,
-                                             max_episode_length=self.base_config['max_step_each_iter'])
+                                             max_episode_length=self.base_config['max_step_each_iter'],
+                                             hit_reward=self.base_config['hit_reward'])
         for n, mgr in self.ma_manager:
             if n not in self.ma_configs:
                 self._logger.warning(f'{n} not in ma_configs')
@@ -518,17 +519,19 @@ class Main:
                 continue
 
             rewards = np.array([a.reward for a in mgr.non_empty_agents])
-            mgr.rl.write_constant_summaries([
-                {'tag': 'reward/mean', 'simple_value': rewards.mean()},
-                {'tag': 'reward/max', 'simple_value': rewards.max()},
-                {'tag': 'reward/min', 'simple_value': rewards.min()}
-            ])
-
             steps = np.array([a.steps for a in mgr.non_empty_agents])
 
-            mgr.rl.write_constant_summaries([
+            summaries = [
+                {'tag': 'reward/mean', 'simple_value': rewards.mean()},
+                {'tag': 'reward/max', 'simple_value': rewards.max()},
+                {'tag': 'reward/min', 'simple_value': rewards.min()},
                 {'tag': 'metric/steps', 'simple_value': steps.mean()},
-            ])
+            ]
+            if mgr.hit_reward is not None:
+                hit = sum([a.hit for a in mgr.non_empty_agents])
+                summaries.append({'tag': 'reward/hit', 'simple_value': hit / len(mgr.non_empty_agents)})
+
+            mgr.rl.write_constant_summaries(summaries)
 
     def _log_episode_info(self, iteration, iter_time):
         for n, mgr in self.ma_manager:
@@ -538,4 +541,9 @@ class Main:
             rewards = [a.reward for a in mgr.non_empty_agents]
             rewards = ", ".join([f"{i:6.1f}" for i in rewards])
             max_step = max([a.steps for a in mgr.non_empty_agents])
-            self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards} [{len(mgr.non_empty_agents)}]')
+
+            if mgr.hit_reward is None:
+                self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards} [{len(mgr.non_empty_agents)}]')
+            else:
+                hit = sum([a.hit for a in mgr.non_empty_agents])
+                self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}, hit {hit}/[{len(mgr.non_empty_agents)}]')

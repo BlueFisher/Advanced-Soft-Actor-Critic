@@ -31,7 +31,8 @@ class OC_Agent(Agent):
                  option_names: list[str],
                  seq_hidden_state_shape: tuple[int, ...],
                  low_seq_hidden_state_shape: tuple[int, ...],
-                 max_episode_length=-1):
+                 max_episode_length=-1,
+                 hit_reward: int | None = None):
 
         self.option_names = option_names
 
@@ -46,7 +47,8 @@ class OC_Agent(Agent):
                          d_action_sizes,
                          c_action_size,
                          seq_hidden_state_shape,
-                         max_episode_length)
+                         max_episode_length,
+                         hit_reward)
 
         self._option_visual = OptionVisual(option_names)
 
@@ -128,12 +130,15 @@ class OC_Agent(Agent):
         if not self.done:
             self.steps += 1
             self.reward += reward
+            if self.hit_reward is not None and reward >= self.hit_reward:
+                self.hit += 1
 
         if done:
             # if the episode is done and the agent is empty, reset the agent
             if not self.done and self.is_empty:
                 self.steps = 0
                 self.reward = 0
+                self.hit = 0
                 self.current_step = 0
                 self.current_reward = 0
                 return
@@ -251,13 +256,6 @@ class OC_Agent(Agent):
         if pre_low_seq_hidden_state is None:
             pre_low_seq_hidden_state = self._padding_low_seq_hidden_state
         self._tmp_episode_trans['pre_low_seq_hidden_state'][self.current_step] = pre_low_seq_hidden_state
-
-        self._extra_log(obs_list,
-                        action,
-                        reward,
-                        done,
-                        max_reached,
-                        prob)
 
         self.current_step += 1
 
@@ -406,9 +404,10 @@ class OC_AgentManager(AgentManager):
                  obs_shapes: list[tuple[int]],
                  d_action_sizes: list[int],
                  c_action_size: int,
-                 max_episode_length: int = -1):
+                 max_episode_length: int = -1,
+                 hit_reward: int | None = None):
         super().__init__(name, obs_names, obs_shapes, d_action_sizes, c_action_size,
-                         max_episode_length)
+                         max_episode_length, hit_reward)
 
         self.agents_dict: dict[int, OC_Agent] = {}
         self.rl: OptionSelectorBase | None = None
@@ -438,7 +437,8 @@ class OC_AgentManager(AgentManager):
                     self.option_names,
                     seq_hidden_state_shape=self.rl.seq_hidden_state_shape,
                     low_seq_hidden_state_shape=self.rl.low_seq_hidden_state_shape,
-                    max_episode_length=self.max_episode_length
+                    max_episode_length=self.max_episode_length,
+                    hit_reward=self.hit_reward
                 )
             self.agents_liveness[agent_id] = AGENT_MAX_LIVENESS
 
@@ -675,7 +675,8 @@ class OC_MultiAgentsManager(MultiAgentsManager):
                  ma_c_action_size: dict[str, int],
                  inference_ma_names: set[str],
                  model_abs_dir: Path,
-                 max_episode_length: int = -1):
+                 max_episode_length: int = -1,
+                 hit_reward: int | None = None):
 
         agent.Agent = OC_Agent
         agent.AgentManager = OC_AgentManager
@@ -686,7 +687,8 @@ class OC_MultiAgentsManager(MultiAgentsManager):
                          ma_c_action_size,
                          inference_ma_names,
                          model_abs_dir,
-                         max_episode_length=max_episode_length)
+                         max_episode_length=max_episode_length,
+                         hit_reward=hit_reward)
 
     def __iter__(self) -> Iterator[tuple[str, OC_AgentManager]]:
         return iter(self._ma_manager.items())

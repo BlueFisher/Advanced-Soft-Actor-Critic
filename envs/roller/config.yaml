@@ -1,6 +1,7 @@
 default:
   base_config:
     env_name: Roller
+    hit_reward: 1
     unity_args:
       build_path:
         win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe

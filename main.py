@@ -13,7 +13,6 @@ except:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('env')
-    parser.add_argument('--hit', type=int, default=None, nargs='?', const=1)
     parser.add_argument('--oc', action='store_true', default=False)
 
     parser.add_argument('--config', '-c', help='Config file')
@@ -61,22 +60,10 @@ if __name__ == '__main__':
         k, v = env_arg.split('=')
         env_args[k] = v
 
-    if args.hit is not None:
-        if args.oc:
-            import algorithm.oc.oc_main_hit
-            algorithm.oc.oc_main_hit.HIT_REWARD = args.hit
-
-            from algorithm.oc.oc_main_hit import OC_MainHit as Main
-        else:
-            import algorithm.sac_main_hit
-            algorithm.sac_main_hit.HIT_REWARD = args.hit
-
-            from algorithm.sac_main_hit import MainHit as Main
+    if args.oc:
+        from algorithm.oc.oc_main import OC_Main as Main
     else:
-        if args.oc:
-            from algorithm.oc.oc_main import OC_Main as Main
-        else:
-            from algorithm.sac_main import Main
+        from algorithm.sac_main import Main
 
     root_dir = Path(__file__).resolve().parent
     Main(root_dir, f'envs/{args.env}',
@@ -88,7 +75,7 @@ if __name__ == '__main__':
          logger_in_file=args.logger_in_file,
          render=args.render,
          env_args=env_args,
-         envs=args.envs,
+         n_envs=args.envs,
          max_iter=args.max_iter,
          unity_port=args.u_port,
          unity_run_in_editor=args.u_editor,

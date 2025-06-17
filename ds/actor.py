@@ -115,7 +115,7 @@ class Actor(Main):
 
                  render: bool = False,
                  env_args: dict | None = None,
-                 envs: int | None = None,
+                 n_envs: int | None = None,
 
                  unity_port: int | None = None,
                  unity_run_in_editor: bool = False,
@@ -151,7 +151,7 @@ class Actor(Main):
                                                                      learner_port,
 
                                                                      env_args,
-                                                                     envs,
+                                                                     n_envs,
 
                                                                      unity_port)
 
@@ -179,7 +179,7 @@ class Actor(Main):
                      learner_port: int | None,
 
                      env_args: dict | None,
-                     envs: int | None,
+                     n_envs: int | None,
 
                      unity_port: int | None):
         config_abs_dir = self.root_dir.joinpath(config_dir)
@@ -207,8 +207,8 @@ class Actor(Main):
             else:
                 config['base_config']['env_args'][k] = config_helper.convert_config_value(v)
 
-        if envs is not None:
-            config['base_config']['n_envs'] = envs
+        if n_envs is not None:
+            config['base_config']['n_envs'] = n_envs
         if unity_port is not None:
             config['base_config']['unity_args']['port'] = unity_port
 
@@ -482,7 +482,12 @@ class Actor(Main):
             rewards = [a.reward for a in mgr.non_empty_agents]
             rewards = ", ".join([f"{i:6.1f}" for i in rewards])
             max_step = max([a.steps for a in mgr.non_empty_agents])
-            self._logger.info(f'{n} {iteration}, T {iter_time:.2f}s, S {max_step}, R {rewards}')
+
+            if mgr.hit_reward is None:
+                self._logger.info(f'{n} {iteration}, T {iter_time:.2f}s, S {max_step}, R {rewards}')
+            else:
+                hit = sum([a.hit for a in mgr.non_empty_agents])
+                self._logger.info(f'{n} {iteration}, T {iter_time:.2f}s, S {max_step}, R {rewards}, hit {hit}/[{len(mgr.non_empty_agents)}]')
 
     def close(self):
         if hasattr(self, 'env'):

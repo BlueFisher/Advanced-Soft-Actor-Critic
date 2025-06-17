@@ -15,7 +15,6 @@ if __name__ == '__main__':
     parser.add_argument('env')
     parser.add_argument('process_type', choices=['learner', 'l',
                                                  'actor', 'a'])
-    parser.add_argument('--hit', type=int, default=None, nargs='?', const=1)
     # TODO: OC
     # parser.add_argument('--oc', action='store_true', default=False)
 
@@ -71,13 +70,7 @@ if __name__ == '__main__':
     config_dir = f'envs/{args.env}'
 
     if args.process_type in ['learner', 'l']:
-        if args.hit is not None:
-            import algorithm.sac_main_hit
-            algorithm.sac_main_hit.HIT_REWARD = args.hit
-
-            from ds.main_hit import LearnerHit as Learner
-        else:
-            from ds.learner import Learner
+        from ds.learner import Learner
         Learner(root_dir, config_dir,
                 config_cat=args.config,
                 override=override,
@@ -90,7 +83,7 @@ if __name__ == '__main__':
 
                 render=args.render,
                 env_args=env_args,
-                envs=args.envs,
+                n_envs=args.envs,
 
                 unity_port=args.u_port,
                 unity_run_in_editor=args.u_editor,
@@ -106,13 +99,7 @@ if __name__ == '__main__':
 
                 debug=args.debug)
     elif args.process_type in ['actor', 'a']:
-        if args.hit is not None:
-            import algorithm.sac_main_hit
-            algorithm.sac_main_hit.HIT_REWARD = args.hit
-
-            from ds.main_hit import ActorHit as Actor
-        else:
-            from ds.actor import Actor
+        from ds.actor import Actor
         Actor(root_dir, config_dir,
               config_cat=args.config,
               override=override,
@@ -124,7 +111,7 @@ if __name__ == '__main__':
 
               render=args.render,
               env_args=env_args,
-              envs=args.envs,
+              n_envs=args.envs,
 
               unity_port=args.u_port,
               unity_run_in_editor=args.u_editor,
