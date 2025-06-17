@@ -1,6 +1,7 @@
 import json
 import logging
 from pathlib import Path
+import time
 
 import numpy as np
 
@@ -37,6 +38,7 @@ class OfflineWrapper(EnvWrapper):
             ma_dataset_info = json.load(f)
 
         ma_names: list[str] = list(ma_dataset_info.keys())
+        ma_path_names: dict[str, str] = {n: ma_dataset_info[n]['path_name'] for n in ma_names}
         ma_obs_names: dict[str, list[str]] = {n: ma_dataset_info[n]['obs_names'] for n in ma_names}
         ma_obs_shapes: dict[str, list[tuple]] = {n: [tuple(s) for s in ma_dataset_info[n]['obs_shapes']] for n in ma_names}
         ma_d_action_sizes: dict[str, list[int]] = {n: ma_dataset_info[n]['d_action_sizes'] for n in ma_names}
@@ -44,6 +46,7 @@ class OfflineWrapper(EnvWrapper):
         ma_ep_count: dict[str, int] = {n: ma_dataset_info[n]['ep_count'] for n in ma_names}
         ma_max_step: dict[str, int] = {n: ma_dataset_info[n]['max_step'] for n in ma_names}
 
+        self.ma_path_names = ma_path_names
         self.ma_names = ma_names
         self.ma_obs_names = ma_obs_names
         self.ma_obs_shapes = ma_obs_shapes
@@ -54,33 +57,37 @@ class OfflineWrapper(EnvWrapper):
 
         self._ma_agent_ids = {n: np.arange(self.n_envs) for n in self.ma_names}  # Fixed
 
-        self._ma_dataset_eps = {n: {
-            **{f'obs-{obs_name}': [] for obs_name in ma_obs_names[n]},
-            'action': [],
-            'reward': [],
-            'done': [],
-            'max_reached': [],
-            'padding_mask': []
-        } for n in ma_names}
-
-        for n in ma_names:
-            self._logger.info(f'Loading dataset {n} ...')
-            dataset_eps = self._ma_dataset_eps[n]
-
-            for k in dataset_eps:
-                npz = np.load(self._dataset_dir / f'dataset-{ma_dataset_info[n]["path_name"]}-{k}.npz')
-                dataset_eps[k] = [npz[f'arr_{i}'] for i in range(ma_ep_count[n])]
-
-            self._logger.info(f'Dataset {n} episode count: {ma_ep_count[n]}, max step (except the last next_obs): {ma_max_step[n]}')
+        self._ma_dataset_eps: dict[str, dict[int, dict]] = {
+            n: {} for n in ma_names  # { ep_index: { obs:xxx, action:xxx, reward: xxx... } }
+        }
 
         self._ma_next_ep_index: dict[str, int] = {n: 0 for n in self.ma_names}
 
+        self._ma_ep_index: dict[str, list[int]] = {}  # {ma_name: (n_envs, )}
+        self._ma_step_index: dict[str, list[int]] = {}  # {ma_name: (n_envs, )}
+
+        for n in self.ma_names:
+            self._ma_ep_index[n] = np.arange(self.n_envs, dtype=np.int32)
+            self._ma_ep_index[n] = self._ma_ep_index[n] % self.ma_ep_count[n]
+
+            self._ma_step_index[n] = np.zeros(self.n_envs, dtype=np.int32)
+
         return ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size
 
-    def reset(self, reset_config=None):
-        self._ma_ep_index = {}  # {ma_name: (n_envs, )}
-        self._ma_step_index = {}  # {ma_name: (n_envs, )}
+    def _load_dataset(self):
+        for n in self.ma_names:
+            dataset_eps = self._ma_dataset_eps[n]
+            path_name = self.ma_path_names[n]
+            ep_indexes = self._ma_ep_index[n]
 
+            self._ma_dataset_eps[n] = {}
+            for ep_index in ep_indexes:
+                if ep_index in dataset_eps:
+                    self._ma_dataset_eps[n][ep_index] = dataset_eps[ep_index]
+                else:
+                    self._ma_dataset_eps[n][ep_index] = dict(np.load(self._dataset_dir / f'{path_name}-{ep_index}.npz'))
+
+    def reset(self, reset_config=None):
         for n in self.ma_names:
             self._ma_ep_index[n] = np.arange(self._ma_next_ep_index[n], self._ma_next_ep_index[n] + self.n_envs, dtype=np.int32)
             self._ma_ep_index[n] = self._ma_ep_index[n] % self.ma_ep_count[n]
@@ -92,15 +99,17 @@ class OfflineWrapper(EnvWrapper):
 
         ma_obs_list = {}
         ma_offline_action = {}
+
+        self._load_dataset()
         for n, obs_names in self.ma_obs_names.items():
             dataset_eps = self._ma_dataset_eps[n]
             ep_indexes, step_indexes = self._ma_ep_index[n], self._ma_step_index[n]
 
-            obs_list = [[dataset_eps[f'obs-{obs_name}'][ep_i][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
+            obs_list = [[dataset_eps[ep_i][f'obs-{obs_name}'][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
                         for obs_name in obs_names]
             ma_obs_list[n] = [np.stack(obs, axis=0) for obs in obs_list]
 
-            offline_action = [dataset_eps['action'][ep_i][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
+            offline_action = [dataset_eps[ep_i]['action'][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
             ma_offline_action[n] = np.stack(offline_action, axis=0)
 
         return self._ma_agent_ids, ma_obs_list, ma_offline_action
@@ -113,21 +122,22 @@ class OfflineWrapper(EnvWrapper):
 
         ma_switch_ep_mask = {}
 
+        self._load_dataset()
         # Get previous reward and done
         for n in self.ma_names:
             dataset_eps = self._ma_dataset_eps[n]
             ep_indexes, step_indexes = self._ma_ep_index[n], self._ma_step_index[n]
 
-            last_reward = [dataset_eps['reward'][ep_i][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
+            last_reward = [dataset_eps[ep_i]['reward'][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
             ma_last_reward[n] = np.stack(last_reward, axis=0)
 
-            done = [dataset_eps['done'][ep_i][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
+            done = [dataset_eps[ep_i]['done'][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
             ma_done[n] = np.stack(done, axis=0)
 
-            max_reached = [dataset_eps['max_reached'][ep_i][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
+            max_reached = [dataset_eps[ep_i]['max_reached'][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
             ma_max_reached[n] = np.stack(max_reached, axis=0)
 
-            padding_mask = [dataset_eps['padding_mask'][ep_i][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
+            padding_mask = [dataset_eps[ep_i]['padding_mask'][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
             ma_padding_mask[n] = np.stack(padding_mask, axis=0)
 
         # Step forward
@@ -156,16 +166,17 @@ class OfflineWrapper(EnvWrapper):
         ma_obs_list = {}
         ma_offline_action = {}
 
+        self._load_dataset()
         # Get current observations
         for n, obs_names in self.ma_obs_names.items():
             dataset_eps = self._ma_dataset_eps[n]
             ep_indexes, step_indexes = self._ma_ep_index[n], self._ma_step_index[n]
 
-            obs_list = [[dataset_eps[f'obs-{obs_name}'][ep_i][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
+            obs_list = [[dataset_eps[ep_i][f'obs-{obs_name}'][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
                         for obs_name in obs_names]
             ma_obs_list[n] = [np.stack(obs, axis=0) for obs in obs_list]
 
-            offline_action = [dataset_eps['action'][ep_i][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
+            offline_action = [dataset_eps[ep_i]['action'][step_i] for ep_i, step_i in zip(ep_indexes, step_indexes)]
             ma_offline_action[n] = np.stack(offline_action, axis=0)
 
         decisionStep = DecisionStep(
@@ -195,11 +206,13 @@ class OfflineWrapper(EnvWrapper):
             dataset_eps = self._ma_dataset_eps[n]
             ep_i = self._ma_next_ep_index[n]
 
-            ma_ep_obs_list[n] = [np.expand_dims(dataset_eps[f'obs-{obs_name}'][ep_i], 0)
+            ma_ep_obs_list[n] = [np.expand_dims(dataset_eps[ep_i][f'obs-{obs_name}'], 0)
                                  for obs_name in self.ma_obs_names[n]]
-            ma_ep_action[n] = np.expand_dims(dataset_eps['action'][ep_i], 0)
-            ma_reward[n] = np.expand_dims(dataset_eps['reward'][ep_i], 0)
-            ma_done[n] = np.expand_dims(dataset_eps['done'][ep_i], 0)
+            ma_ep_action[n] = np.expand_dims(dataset_eps[ep_i]['action'], 0)
+            ma_reward[n] = np.expand_dims(dataset_eps[ep_i]['reward'], 0)
+            done = np.logical_and(dataset_eps[ep_i]['done'],
+                                  dataset_eps[ep_i]['max_reached'])
+            ma_done[n] = np.expand_dims(done, 0)
 
             self._ma_next_ep_index[n] = (self._ma_next_ep_index[n] + 1) % self.ma_ep_count[n]
 
@@ -218,5 +231,5 @@ if __name__ == '__main__':
     })
     env.init()
     env.reset()
-    for i in range(100):
+    for i in range(1000000):
         print(env.step())

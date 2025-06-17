@@ -1,9 +1,9 @@
+import json
 import logging
 from copy import deepcopy
 from pathlib import Path
 from typing import Iterator
 
-from networkx import is_empty
 import numpy as np
 
 from algorithm.imitation_base import ImitationBase
@@ -11,7 +11,7 @@ from algorithm.sac_base import SAC_Base
 from algorithm.utils.elapse_timer import (UnifiedElapsedTimer,
                                           unified_elapsed_timer)
 from algorithm.utils.enums import *
-from algorithm.utils.operators import gen_pre_n_actions
+from algorithm.utils.operators import gen_pre_n_actions, ma_name2path_name
 
 AGENT_MAX_LIVENESS = 20
 NON_EMPTY_STEPS = 2
@@ -480,6 +480,7 @@ class AgentManager:
                    agent_ids: np.ndarray,
                    obs_list: list[np.ndarray],
                    last_reward: np.ndarray,
+                   offline_action: np.ndarray | None = None,
                    disable_sample: bool = False,
                    force_rnd_if_available: bool = False) -> np.ndarray:
         assert len(agent_ids) == obs_list[0].shape[0]
@@ -509,6 +510,7 @@ class AgentManager:
                 pre_action=pre_action,
                 pre_seq_hidden_state=pre_seq_hidden_state,
 
+                offline_action=offline_action,
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
@@ -546,6 +548,7 @@ class AgentManager:
                 ep_pre_actions=ep_pre_actions,
                 ep_pre_attn_states=ep_pre_attn_states,
 
+                offline_action=offline_action,
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
@@ -677,6 +680,9 @@ class AgentManager:
         for episode_trans in self._tmp_episode_trans_list:
             ep_indexes = episode_trans['ep_indexes']
             ep_obses_list = episode_trans['ep_obses_list']
+            ep_actions = episode_trans['ep_actions']
+            ep_rewards = episode_trans['ep_rewards']
+            ep_dones = episode_trans['ep_dones']
             eps = []
             if eps_dir.exists():
                 for eps_path in eps_dir.glob('*.npz'):
@@ -690,8 +696,11 @@ class AgentManager:
             ep_idx = eps[-1] + 1
 
             np.savez(eps_dir / f'{ep_idx}.npz',
-                     **{obs_name: np.squeeze(ep_obses, axis=0) for obs_name, ep_obses in zip(self.obs_names, ep_obses_list)},
-                     ep_indexes=np.squeeze(ep_indexes, axis=0))
+                     index=np.squeeze(ep_indexes, axis=0),
+                     **{f'obs-{obs_name}': np.squeeze(ep_obses, axis=0) for obs_name, ep_obses in zip(self.obs_names, ep_obses_list)},
+                     action=np.squeeze(ep_actions, axis=0),
+                     reward=np.squeeze(ep_rewards, axis=0),
+                     done=np.squeeze(ep_dones, axis=0))
 
 
 class MultiAgentsManager:
@@ -706,6 +715,7 @@ class MultiAgentsManager:
                  model_abs_dir: Path,
                  max_episode_length: int = -1):
         self._inference_ma_names = inference_ma_names
+        self.model_abs_dir = model_abs_dir
         self._ma_manager = {}
         for n in ma_obs_shapes:
             self._ma_manager[n] = AgentManager(n,
@@ -718,7 +728,7 @@ class MultiAgentsManager:
             if len(ma_obs_shapes) == 1:
                 self._ma_manager[n].set_model_abs_dir(model_abs_dir)
             else:
-                self._ma_manager[n].set_model_abs_dir(model_abs_dir / n.replace('?', '-'))
+                self._ma_manager[n].set_model_abs_dir(model_abs_dir / ma_name2path_name(n))
 
     def __iter__(self) -> Iterator[tuple[str, AgentManager]]:
         return iter(self._ma_manager.items())
@@ -769,12 +779,16 @@ class MultiAgentsManager:
                       ma_obs_list: dict[str, list[np.ndarray]],
                       ma_last_reward: dict[str, np.ndarray],
 
+                      ma_offline_action: dict[str, np.ndarray] | None = None,
                       disable_sample: bool = False,
                       force_rnd_if_available: bool = False) -> tuple[dict[str, np.ndarray],
                                                                      dict[str, np.ndarray]]:
 
         ma_d_action = {}
         ma_c_action = {}
+
+        if ma_offline_action is None:
+            ma_offline_action = {}
 
         for n, mgr in self:
             if len(ma_agent_ids[n]) == 0:
@@ -785,6 +799,7 @@ class MultiAgentsManager:
                 agent_ids=ma_agent_ids[n],
                 obs_list=ma_obs_list[n],
                 last_reward=ma_last_reward[n],
+                offline_action=ma_offline_action[n] if n in ma_offline_action else None,
                 disable_sample=disable_sample,
                 force_rnd_if_available=force_rnd_if_available
             )
@@ -864,8 +879,19 @@ class MultiAgentsManager:
             mgr.clear_tmp_episode_trans_list()
 
     def save_tmp_episode_trans_list(self) -> None:
+        ma_episodes_info = {}
+
         for n, mgr in self:
+            ma_episodes_info[n] = {
+                'obs_names': mgr.obs_names,
+                'obs_shapes': mgr.obs_shapes,
+                'd_action_sizes': mgr.d_action_sizes,
+                'c_action_size': mgr.c_action_size,
+            }
             mgr.save_episode()
+
+        with open(self.model_abs_dir / 'episodes_info.json', 'w') as f:
+            json.dump(ma_episodes_info, f, indent=4)
 
     def close(self) -> None:
         for n, mgr in self:

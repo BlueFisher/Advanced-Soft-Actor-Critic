@@ -2365,10 +2365,10 @@ class OptionSelectorBase(SAC_Base):
 
                 if key_batch is not None:
                     (key_indexes,
-                        key_padding_masks,
-                        key_obses_list,
-                        key_option_indexes,
-                        key_pre_seq_hidden_states) = key_batch
+                     key_padding_masks,
+                     key_obses_list,
+                     key_option_indexes,
+                     key_pre_seq_hidden_states) = key_batch
 
                     key_indexes = torch.from_numpy(key_indexes).to(self.device)
                     key_padding_masks = torch.from_numpy(key_padding_masks).to(self.device)

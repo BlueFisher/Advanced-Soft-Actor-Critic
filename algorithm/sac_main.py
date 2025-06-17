@@ -295,7 +295,7 @@ class Main:
             else:
                 self.offline_env = OfflineWrapper(env_name=self.base_config['offline_env_config']['env_name'],
                                                   env_args=self.base_config['offline_env_config']['env_args'],
-                                                  n_envs=self.base_config['n_envs'],
+                                                  n_envs=self.base_config['offline_env_config']['n_envs'],
                                                   model_abs_dir=self.model_abs_dir)
             _ma_obs_names, _ma_obs_shapes, _ma_d_action_sizes, _ma_c_action_size = self.offline_env.init()
         else:
@@ -378,21 +378,6 @@ class Main:
                 if self.base_config['max_step'] != -1 and trained_steps >= self.base_config['max_step']:
                     break
 
-                if self.offline_env is not None:
-                    self.ma_manager.set_train_mode(True)
-                    for _ in range(self.base_config['offline_env_config']['steps_before_eval']):
-                        (ma_ep_obs_list,
-                         ma_ep_action,
-                         ma_reward,
-                         ma_done) = self.offline_env.get_episode()
-
-                        for n, mgr in self.ma_manager:
-                            trained_steps = mgr.il.train(ep_obses_list=ma_ep_obs_list[n],
-                                                         ep_actions=ma_ep_action[n],
-                                                         ep_rewards=ma_reward[n],
-                                                         ep_dones=ma_done[n])
-                    self.ma_manager.set_train_mode(False)
-
                 step = 0
                 iter_time = time.time()
 
@@ -401,12 +386,19 @@ class Main:
                         or self.ma_manager.max_reached \
                         or force_reset:
                     self.ma_manager.reset()
-                    ma_agent_ids, ma_obs_list = self.env.reset(reset_config=self.reset_config)
+
+                    if is_training_iteration and self.offline_env is not None:
+                        ma_agent_ids, ma_obs_list, ma_offline_action = self.offline_env.reset(reset_config=self.reset_config)
+                    else:
+                        ma_agent_ids, ma_obs_list = self.env.reset(reset_config=self.reset_config)
+                        ma_offline_action = None
+
                     ma_d_action, ma_c_action = self.ma_manager.get_ma_action(
                         ma_agent_ids=ma_agent_ids,
                         ma_obs_list=ma_obs_list,
                         ma_last_reward={n: np.zeros(len(agent_ids))
                                         for n, agent_ids in ma_agent_ids.items()},
+                        ma_offline_action=ma_offline_action,
                         disable_sample=self.disable_sample or not is_training_iteration
                     )
 
@@ -416,9 +408,14 @@ class Main:
 
                 while not self.ma_manager.done:
                     with self._profiler('env.step', repeat=10):
-                        (decision_step,
-                            terminal_step,
-                            all_envs_done) = self.env.step(ma_d_action, ma_c_action)
+                        if is_training_iteration and self.offline_env is not None:
+                            (decision_step,
+                             terminal_step,
+                             all_envs_done) = self.offline_env.step(ma_d_action, ma_c_action)
+                        else:
+                            (decision_step,
+                             terminal_step,
+                             all_envs_done) = self.env.step(ma_d_action, ma_c_action)
                         self._extra_step(ma_d_action, ma_c_action)
 
                     if decision_step is None:
@@ -432,6 +429,7 @@ class Main:
                             ma_agent_ids=decision_step.ma_agent_ids,
                             ma_obs_list=decision_step.ma_obs_list,
                             ma_last_reward=decision_step.ma_last_reward,
+                            ma_offline_action=decision_step.ma_offline_action,
                             disable_sample=self.disable_sample or not is_training_iteration
                         )
 
@@ -456,17 +454,16 @@ class Main:
                         if not is_training_iteration:
                             self.ma_manager.log_episode()
 
-                        # If the offline env is not None, ignore the episode and training, only log the episode
-                        if self.offline_env is None:
-                            # Only training in the training iteration, but always put episoded to the buffer
+                        # Only training in the training iteration, OR inference iteration when not offline RL
+                        if is_training_iteration or self.offline_env is None:
                             self.ma_manager.put_episode()
 
-                            if is_training_iteration:
-                                with self._profiler('train', repeat=10) as profiler:
-                                    next_trained_steps = self.ma_manager.train(trained_steps)
-                                    if next_trained_steps == trained_steps:
-                                        profiler.ignore()
-                                    trained_steps = next_trained_steps
+                        if is_training_iteration:
+                            with self._profiler('train', repeat=10) as profiler:
+                                next_trained_steps = self.ma_manager.train(trained_steps)
+                                if next_trained_steps == trained_steps:
+                                    profiler.ignore()
+                                trained_steps = next_trained_steps
 
                     step += 1
 
@@ -477,9 +474,8 @@ class Main:
                     self._log_episode_info(inference_iterations, time.time() - iter_time)
 
                 if self.train_mode:
-                    if self.offline_env is None:
-                        is_training_iteration = not is_training_iteration
-                        self.ma_manager.set_train_mode(is_training_iteration)
+                    is_training_iteration = not is_training_iteration
+                    self.ma_manager.set_train_mode(is_training_iteration)
                 else:
                     self.ma_manager.save_tmp_episode_trans_list()
 

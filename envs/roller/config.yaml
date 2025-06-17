@@ -8,7 +8,7 @@ default:
 
     n_envs: 10
     max_iter: 2000
-    reset_on_iteration: true
+    reset_on_iteration: false
 
   reset_config:
     force_reset: true

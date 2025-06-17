@@ -85,6 +85,8 @@ class SAC_Base:
 
                  use_normalization: bool = False,
 
+                 offline_loss: bool = False,
+
                  action_noise: list[float] | None = None,
 
                  replay_config: dict | None = None):
@@ -155,6 +157,8 @@ class SAC_Base:
 
         use_normalization: false # Whether using observation normalization
 
+        offline_loss: false # Whether using offline loss
+
         action_noise: null # [noise_min, noise_max]
         """
         self._kwargs = locals()
@@ -217,6 +221,8 @@ class SAC_Base:
         self.rnd_n_sample = rnd_n_sample
 
         self.use_normalization = use_normalization
+
+        self.offline_loss = offline_loss
 
         self.action_noise = action_noise
 
@@ -854,12 +860,14 @@ class SAC_Base:
     def _choose_action(self,
                        obs_list: list[torch.Tensor],
                        state: torch.Tensor,
+                       offline_action: torch.Tensor | None = None,
                        disable_sample: bool = False,
                        force_rnd_if_available: bool = False) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             obs_list: list([batch, *obs_shapes_i], ...)
             state: [batch, state_size]
+            offline_action: [batch, action_size]
 
         Returns:
             action: [batch, action_size]
@@ -868,54 +876,59 @@ class SAC_Base:
         batch = state.shape[0]
         d_policy, c_policy = self.model_policy(state, obs_list)
 
-        if self.d_action_sizes:
-            if self.discrete_dqn_like:
-                d_qs, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None, obs_list)
-                d_action_list = [torch.argmax(d_q, dim=-1) for d_q in d_qs.split(self.d_action_sizes, dim=-1)]
-                d_action_list = [functional.one_hot(d_action, d_action_size).type(torch.float32)
-                                 for d_action, d_action_size in zip(d_action_list, self.d_action_sizes)]
-                d_action = torch.concat(d_action_list, dim=-1)  # [batch, d_action_summed_size]
+        if offline_action is None:
+            if self.d_action_sizes:
+                if self.discrete_dqn_like:
+                    d_qs, _ = self.model_q_list[0](state, c_policy.sample() if self.c_action_size else None, obs_list)
+                    d_action_list = [torch.argmax(d_q, dim=-1) for d_q in d_qs.split(self.d_action_sizes, dim=-1)]
+                    d_action_list = [functional.one_hot(d_action, d_action_size).type(torch.float32)
+                                     for d_action, d_action_size in zip(d_action_list, self.d_action_sizes)]
+                    d_action = torch.concat(d_action_list, dim=-1)  # [batch, d_action_summed_size]
 
-                if self.train_mode:
-                    if self.use_rnd and (self.train_mode or force_rnd_if_available):
-                        s_rnd = self.model_rnd.cal_s_rnd(state)  # [batch, f]
-                        t_s_rnd = self.model_target_rnd.cal_s_rnd(state)  # [batch, f]
-                        s_rnd, t_s_rnd = torch.sigmoid(s_rnd), torch.sigmoid(t_s_rnd)
+                    if self.train_mode:
+                        if self.use_rnd and (self.train_mode or force_rnd_if_available):
+                            s_rnd = self.model_rnd.cal_s_rnd(state)  # [batch, f]
+                            t_s_rnd = self.model_target_rnd.cal_s_rnd(state)  # [batch, f]
+                            s_rnd, t_s_rnd = torch.sigmoid(s_rnd), torch.sigmoid(t_s_rnd)
 
-                        s_loss = torch.mean(torch.abs(s_rnd - t_s_rnd), dim=-1)  # [batch, ]
-                        # s_loss = torch.clip(s_loss - 0.1, 0., 0.2)
-                        mask = torch.rand(batch).to(self.device) < s_loss
-                    else:
-                        mask = torch.rand(batch) < self.discrete_dqn_epsilon
+                            s_loss = torch.mean(torch.abs(s_rnd - t_s_rnd), dim=-1)  # [batch, ]
+                            # s_loss = torch.clip(s_loss - 0.1, 0., 0.2)
+                            mask = torch.rand(batch).to(self.device) < s_loss
+                        else:
+                            mask = torch.rand(batch) < self.discrete_dqn_epsilon
 
-                    # Generate random action
-                    d_dist_list = [distributions.OneHotCategorical(logits=torch.ones((batch, d_action_size),
-                                                                                     device=self.device))
-                                   for d_action_size in self.d_action_sizes]
-                    random_d_action = torch.concat([dist.sample() for dist in d_dist_list], dim=-1)
+                        # Generate random action
+                        d_dist_list = [distributions.OneHotCategorical(logits=torch.ones((batch, d_action_size),
+                                                                                         device=self.device))
+                                       for d_action_size in self.d_action_sizes]
+                        random_d_action = torch.concat([dist.sample() for dist in d_dist_list], dim=-1)
 
-                    d_action[mask] = random_d_action[mask]
-            else:
-                if disable_sample:
-                    d_action = d_policy.sample_deter()
-                elif self.use_rnd and (self.train_mode or force_rnd_if_available):
-                    d_action = self.rnd_sample_d_action(state, d_policy)
+                        d_action[mask] = random_d_action[mask]
                 else:
-                    d_action = d_policy.sample()
-        else:
-            d_action = torch.zeros(0, device=self.device)
-
-        if self.c_action_size:
-            if disable_sample:
-                c_action = torch.tanh(c_policy.mean)
-            elif self.use_rnd and (self.train_mode or force_rnd_if_available):
-                c_action = self.rnd_sample_c_action(state, c_policy)
+                    if disable_sample:
+                        d_action = d_policy.sample_deter()
+                    elif self.use_rnd and (self.train_mode or force_rnd_if_available):
+                        d_action = self.rnd_sample_d_action(state, d_policy)
+                    else:
+                        d_action = d_policy.sample()
             else:
-                c_action = torch.tanh(c_policy.sample())
-        else:
-            c_action = torch.zeros(0, device=self.device)
+                d_action = torch.zeros(0, device=self.device)
 
-        d_action, c_action = self._random_action(d_action, c_action)
+            if self.c_action_size:
+                if disable_sample:
+                    c_action = torch.tanh(c_policy.mean)
+                elif self.use_rnd and (self.train_mode or force_rnd_if_available):
+                    c_action = self.rnd_sample_c_action(state, c_policy)
+                else:
+                    c_action = torch.tanh(c_policy.sample())
+            else:
+                c_action = torch.zeros(0, device=self.device)
+
+            d_action, c_action = self._random_action(d_action, c_action)
+
+        else:
+            d_action = offline_action[..., :self.d_action_summed_size]
+            c_action = offline_action[..., self.d_action_summed_size:]
 
         prob = torch.ones((batch,
                            self.d_action_summed_size + self.c_action_size),
@@ -934,6 +947,7 @@ class SAC_Base:
                       pre_action: np.ndarray,
                       pre_seq_hidden_state: np.ndarray,
 
+                      offline_action: np.ndarray | None = None,
                       disable_sample: bool = False,
                       force_rnd_if_available: bool = False) -> tuple[np.ndarray,
                                                                      np.ndarray,
@@ -943,6 +957,8 @@ class SAC_Base:
             obs_list (np): list([batch, *obs_shapes_i], ...)
             pre_action (np): [batch, action_size]
             pre_seq_hidden_state (np): [batch, *seq_hidden_state_shape]
+
+            offline_action (np): [batch, action_size]
 
         Returns:
             action (np): [batch, action_size]
@@ -965,8 +981,10 @@ class SAC_Base:
         if self.seq_encoder is None:
             seq_hidden_state = seq_hidden_state.squeeze(1)
 
+        offline_action = torch.from_numpy(offline_action).to(self.device) if offline_action is not None else None
         action, prob = self._choose_action(obs_list,
                                            state,
+                                           offline_action,
                                            disable_sample,
                                            force_rnd_if_available)
 
@@ -982,6 +1000,8 @@ class SAC_Base:
                            ep_pre_actions: np.ndarray,
                            ep_pre_attn_states: np.ndarray,
 
+                           offline_action: np.ndarray | None = None,
+
                            disable_sample: bool = False,
                            force_rnd_if_available: bool = False) -> tuple[np.ndarray,
                                                                           np.ndarray,
@@ -993,6 +1013,8 @@ class SAC_Base:
             ep_obses_list (np): list([batch, ep_len, *obs_shapes_i], ...)
             ep_pre_actions (np): [batch, ep_len, action_size]
             ep_pre_attn_states (np): [batch, ep_len, *seq_hidden_state_shape]
+
+            offline_action (np): [batch, action_size]
 
         Returns:
             action (np): [batch, action_size]
@@ -1018,8 +1040,10 @@ class SAC_Base:
         state = state.squeeze(1)
         attn_state = attn_state.squeeze(1)
 
+        offline_action = torch.from_numpy(offline_action).to(self.device) if offline_action is not None else None
         action, prob = self._choose_action([ep_obses[:, -1] for ep_obses in ep_obses_list],
                                            state,
+                                           offline_action,
                                            disable_sample,
                                            force_rnd_if_available)
 
@@ -1879,6 +1903,8 @@ class SAC_Base:
             # [ensemble_q_sample, batch, 1] -> [batch, 1]
 
             loss_c_policy = c_alpha * log_prob - min_c_q_for_gradient
+            if self.offline_loss:
+                loss_c_policy += functional.mse_loss(action_sampled, action, reduction='none').sum(-1, keepdim=True)
             # [batch, 1]
 
         loss_policy = torch.mean(loss_d_policy + loss_c_policy)

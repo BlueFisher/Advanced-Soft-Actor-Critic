@@ -12,9 +12,9 @@ base_config:
 
   offline_env_config:
     enabled: false
-    steps_before_eval: 100 # Training steps before online evaluation
     env_name: env_name
     env_args: null
+    n_envs: 50
 
   name: "{time}-{hostname}" # Training name. 
                             # Placeholder "{time}" will be replaced to the time that trianing begins
@@ -96,6 +96,8 @@ sac_config:
   rnd_n_sample: 10 # RND sample times
 
   use_normalization: false # Whether using observation normalization
+
+  offline_loss: false # Whether using offline loss
 
   action_noise: null # [noise_min, noise_max]
 
