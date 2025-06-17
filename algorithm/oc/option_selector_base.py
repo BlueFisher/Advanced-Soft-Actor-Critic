@@ -435,11 +435,6 @@ class OptionSelectorBase(SAC_Base):
 
         self.low_seq_hidden_state_shape = self.option_list[0].seq_hidden_state_shape
 
-    def _init_replay_buffer(self, replay_config=None):
-        self._key_batch = None
-
-        return super()._init_replay_buffer(replay_config)
-
     def set_train_mode(self, train_mode=True):
         super().set_train_mode(train_mode)
 
@@ -2241,7 +2236,6 @@ class OptionSelectorBase(SAC_Base):
 
         key_batch = None
         if self.use_dilation:
-            # TODO: multiple threads risks
             key_trans = {k: np.zeros((v.shape[0],
                                       self.key_max_length + 1,
                                       *v.shape[2:]), dtype=v.dtype)
@@ -2303,164 +2297,94 @@ class OptionSelectorBase(SAC_Base):
                  priority_is if self.use_replay_buffer and self.use_priority else None),
                 key_batch)
 
-    def _sample_thread(self):
-        self._batch_obtained_event.set()
-
-        while not self._closed:
-            if self.use_replay_buffer:
-                with self._profiler(f'thread_{threading.get_ident()}.sample_from_replay_buffer', repeat=10) as profiler:
-                    train_data = self._sample_from_replay_buffer()
-                    if train_data is None:
-                        profiler.ignore()
-                        self._batch = None
-                        self._batch_available_event.set()
-                        time.sleep(1)
-                        continue
-
-                pointers, batch, key_batch = train_data
-                batch_list = [batch]
-                key_batch_list = [key_batch]
-                self._pointers = pointers
-            else:
-                batch_list, key_batch_list = self.batch_buffer.get_batch()
-                if len(batch_list) == 0:
-                    self._batch = None
-                    self._batch_available_event.set()
-                    time.sleep(1)
-                    continue
-
-                batch_list = [(*batch, None) for batch in batch_list]  # None is priority_is
-
-            for batch, key_batch in zip(batch_list, key_batch_list):
-                self._batch_obtained_event.wait()
-                self._batch_obtained_event.clear()
-
-                (bn_indexes,
-                 bn_padding_masks,
-                 bnx_obses_list,
-                 bn_option_indexes,
-                 bn_actions,
-                 bn_rewards,
-                 bn_dones,
-                 bn_mu_probs,
-                 bnx_pre_seq_hidden_states,
-                 bnx_pre_low_seq_hidden_states,
-                 priority_is) = batch
-                """
-                bn_indexes (np.int32): [batch, b + n]
-                bn_padding_masks (bool): [batch, b + n]
-                bnx_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
-                bn_option_indexes (np.int8): [batch, b + n]
-                bn_actions: [batch, b + n, action_size]
-                bn_rewards: [batch, b + n]
-                bn_dones (bool): [batch, b + n]
-                bn_mu_probs: [batch, b + n, action_size]
-                bnx_pre_seq_hidden_states: [batch, b + n + 1, *seq_hidden_state_shape]
-                bnx_pre_low_seq_hidden_states: [batch, b + n + 1, *low_seq_hidden_state_shape]
-                priority_is: [batch, 1]
-                """
-                assert bn_indexes.dtype == np.int32
-                assert bn_option_indexes.dtype == np.int8
-
-                with self._profiler(f'thread_{threading.get_ident()}.to_gpu', repeat=10):
-                    bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
-                    bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
-                    bnx_obses_list = [torch.from_numpy(t).to(self.device) for t in bnx_obses_list]
-                    for i, bnx_obses in enumerate(bnx_obses_list):
-                        # obs is image. It is much faster to convert uint8 to float32 in GPU
-                        if bnx_obses.dtype == torch.uint8:
-                            bnx_obses_list[i] = bnx_obses.type(torch.float32) / 255.
-                    bn_option_indexes = torch.from_numpy(bn_option_indexes).type(torch.int64).to(self.device)
-                    bn_actions = torch.from_numpy(bn_actions).to(self.device)
-                    bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
-                    bn_dones = torch.from_numpy(bn_dones).to(self.device)
-                    bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
-                    bnx_pre_seq_hidden_states = torch.from_numpy(bnx_pre_seq_hidden_states).to(self.device)
-                    bnx_pre_low_seq_hidden_states = torch.from_numpy(bnx_pre_low_seq_hidden_states).to(self.device)
-                    if self.use_replay_buffer and self.use_priority:
-                        priority_is = torch.from_numpy(priority_is).to(self.device)
-
-                    if key_batch is not None:
-                        (key_indexes,
-                         key_padding_masks,
-                         key_obses_list,
-                         key_option_indexes,
-                         key_pre_seq_hidden_states) = key_batch
-
-                        key_indexes = torch.from_numpy(key_indexes).to(self.device)
-                        key_padding_masks = torch.from_numpy(key_padding_masks).to(self.device)
-                        key_obses_list = [torch.from_numpy(t).to(self.device) for t in key_obses_list]
-                        for i, key_obses in enumerate(key_obses_list):
-                            # obs is image
-                            if key_obses.dtype == torch.uint8:
-                                key_obses_list[i] = key_obses.type(torch.float32) / 255.
-                        key_option_indexes = torch.from_numpy(key_option_indexes).to(self.device)
-                        key_pre_seq_hidden_states = torch.from_numpy(key_pre_seq_hidden_states).to(self.device)
-
-                        key_batch = (key_indexes,
-                                     key_padding_masks,
-                                     key_obses_list,
-                                     key_option_indexes,
-                                     key_pre_seq_hidden_states)
-
-                self._batch = (bn_indexes,
-                               bn_padding_masks,
-                               bnx_obses_list,
-                               bn_option_indexes,
-                               bn_actions,
-                               bn_rewards,
-                               bn_dones,
-                               bn_mu_probs,
-                               bnx_pre_seq_hidden_states,
-                               bnx_pre_low_seq_hidden_states,
-                               priority_is)
-
-                self._key_batch = key_batch
-
-                self._batch_available_event.set()
-
     @unified_elapsed_timer('train a step', 10)
     def train(self) -> int:
         step = self.get_global_step()
 
-        if self._batch is None:
-            self._profiler('train a step').ignore()
-            self._batch_obtained_event.set()
-            return step
+        if self.use_replay_buffer:
+            with self._profiler('sample_from_replay_buffer', repeat=10) as profiler:
+                train_data = self._sample_from_replay_buffer()
+                if train_data is None:
+                    profiler.ignore()
+                    self._profiler('train_all').ignore()
+                    return step
 
-        with self._profiler('waiting_batch_available', repeat=10):
-            self._batch_available_event.wait()
-            self._batch_available_event.clear()
+            pointers, batch, key_batch = train_data
+            batch_list = [batch]
+            key_batch_list = [key_batch]
+        else:
+            batch_list, key_batch_list = self.batch_buffer.get_batch()
+            batch_list = [(*batch, None) for batch in batch_list]  # None is priority_is
 
-        (bn_indexes,
-         bn_padding_masks,
-         bnx_obses_list,
-         bn_option_indexes,
-         bn_actions,
-         bn_rewards,
-         bn_dones,
-         bn_mu_probs,
-         bnx_pre_seq_hidden_states,
-         bnx_pre_low_seq_hidden_states,
-         priority_is) = self._batch
+        for batch, key_batch in zip(batch_list, key_batch_list):
+            (bn_indexes,
+             bn_padding_masks,
+             bnx_obses_list,
+             bn_option_indexes,
+             bn_actions,
+             bn_rewards,
+             bn_dones,
+             bn_mu_probs,
+             bnx_pre_seq_hidden_states,
+             bnx_pre_low_seq_hidden_states,
+             priority_is) = batch
 
-        """
-        bn_indexes (np.int32): [batch, b + n]
-        bn_padding_masks (bool): [batch, b + n]
-        bnx_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
-        bn_option_indexes (np.int8): [batch, b + n]
-        bn_actions: [batch, b + n, action_size]
-        bn_rewards: [batch, b + n]
-        bn_dones (bool): [batch, b + n]
-        bn_mu_probs: [batch, b + n, action_size]
-        bnx_pre_seq_hidden_states: [batch, b + n + 1, *seq_hidden_state_shape]
-        bnx_pre_low_seq_hidden_states: [batch, b + n + 1, *low_seq_hidden_state_shape]
-        priority_is: [batch, 1]
-        """
-        pointers = self._pointers  # Could be None if NOT use_replay_buffer
-        key_batch = self._key_batch
+            """
+            bn_indexes (np.int32): [batch, b + n]
+            bn_padding_masks (bool): [batch, b + n]
+            bnx_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
+            bn_option_indexes (np.int8): [batch, b + n]
+            bn_actions: [batch, b + n, action_size]
+            bn_rewards: [batch, b + n]
+            bn_dones (bool): [batch, b + n]
+            bn_mu_probs: [batch, b + n, action_size]
+            bnx_pre_seq_hidden_states: [batch, b + n + 1, *seq_hidden_state_shape]
+            bnx_pre_low_seq_hidden_states: [batch, b + n + 1, *low_seq_hidden_state_shape]
+            priority_is: [batch, 1]
+            """
+            assert bn_indexes.dtype == np.int32
+            assert bn_option_indexes.dtype == np.int8
 
-        self._batch_obtained_event.set()
+            with self._profiler(f'to_gpu', repeat=10):
+                bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
+                bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
+                bnx_obses_list = [torch.from_numpy(t).to(self.device) for t in bnx_obses_list]
+                for i, bnx_obses in enumerate(bnx_obses_list):
+                    # obs is image. It is much faster to convert uint8 to float32 in GPU
+                    if bnx_obses.dtype == torch.uint8:
+                        bnx_obses_list[i] = bnx_obses.type(torch.float32) / 255.
+                bn_option_indexes = torch.from_numpy(bn_option_indexes).type(torch.int64).to(self.device)
+                bn_actions = torch.from_numpy(bn_actions).to(self.device)
+                bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
+                bn_dones = torch.from_numpy(bn_dones).to(self.device)
+                bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
+                bnx_pre_seq_hidden_states = torch.from_numpy(bnx_pre_seq_hidden_states).to(self.device)
+                bnx_pre_low_seq_hidden_states = torch.from_numpy(bnx_pre_low_seq_hidden_states).to(self.device)
+                if self.use_replay_buffer and self.use_priority:
+                    priority_is = torch.from_numpy(priority_is).to(self.device)
+
+                if key_batch is not None:
+                    (key_indexes,
+                        key_padding_masks,
+                        key_obses_list,
+                        key_option_indexes,
+                        key_pre_seq_hidden_states) = key_batch
+
+                    key_indexes = torch.from_numpy(key_indexes).to(self.device)
+                    key_padding_masks = torch.from_numpy(key_padding_masks).to(self.device)
+                    key_obses_list = [torch.from_numpy(t).to(self.device) for t in key_obses_list]
+                    for i, key_obses in enumerate(key_obses_list):
+                        # obs is image
+                        if key_obses.dtype == torch.uint8:
+                            key_obses_list[i] = key_obses.type(torch.float32) / 255.
+                    key_option_indexes = torch.from_numpy(key_option_indexes).to(self.device)
+                    key_pre_seq_hidden_states = torch.from_numpy(key_pre_seq_hidden_states).to(self.device)
+
+                    key_batch = (key_indexes,
+                                 key_padding_masks,
+                                 key_obses_list,
+                                 key_option_indexes,
+                                 key_pre_seq_hidden_states)
 
         with self._profiler('train', repeat=10):
             (obnx_low_target_obses_list,

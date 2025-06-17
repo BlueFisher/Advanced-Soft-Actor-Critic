@@ -1,6 +1,5 @@
 import logging
 import random
-import threading
 from collections import defaultdict
 from itertools import chain
 from pathlib import Path
@@ -612,9 +611,6 @@ class SAC_Base:
             self._update_target_variables()
 
     def _init_replay_buffer(self, replay_config: dict | None = None) -> None:
-        self._batch = None
-        self._pointers = None
-
         if self.train_mode:
             if self.use_replay_buffer:
                 replay_config = {} if replay_config is None else replay_config
@@ -626,11 +622,6 @@ class SAC_Base:
                                                 self.n_step,
                                                 self._padding_action,
                                                 self.batch_size)
-
-            self._batch_available_event = threading.Event()  # Event for batch availability by sample thread
-            self._batch_obtained_event = threading.Event()  # Event for batch obtained by main thread
-
-            threading.Thread(target=self._sample_thread, daemon=True).start()
 
     def set_train_mode(self, train_mode=True):
         self.train_mode = train_mode
@@ -2442,120 +2433,61 @@ class SAC_Base:
                           bnx_pre_seq_hidden_states,
                           priority_is if self.use_priority else None)
 
-    def _sample_thread(self):
-        self._batch_obtained_event.set()
-
-        while not self._closed:
-            if self.use_replay_buffer:
-                with self._profiler(f'thread_{threading.get_ident()}.sample_from_replay_buffer', repeat=10) as profiler:
-                    train_data = self._sample_from_replay_buffer()
-                    if train_data is None:
-                        profiler.ignore()
-                        self._batch = None
-                        time.sleep(1)
-                        continue
-
-                pointers, batch = train_data
-                batch_list = [batch]
-                self._pointers = pointers
-            else:
-                batch_list = self.batch_buffer.get_batch()
-                if len(batch_list) == 0:
-                    self._batch = None
-                    time.sleep(1)
-                    continue
-
-                batch_list = [(*batch, None) for batch in batch_list]  # None is priority_is
-
-            for batch in batch_list:
-                self._batch_obtained_event.wait()
-                self._batch_obtained_event.clear()
-
-                (bn_indexes,
-                 bn_padding_masks,
-                 bnx_obses_list,
-                 bn_actions,
-                 bn_rewards,
-                 bn_dones,
-                 bn_mu_probs,
-                 bnx_pre_seq_hidden_states,
-                 priority_is) = batch
-                """
-                bn_indexes (np.int32): [batch, b + n]
-                bn_padding_masks (bool): [batch, b + n]
-                bnx_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
-                bn_actions: [batch, b + n, action_size]
-                bn_rewards: [batch, b + n]
-                bn_dones (bool): [batch, b + n]
-                bn_mu_probs: [batch, b + n, action_size]
-                bnx_pre_seq_hidden_states: [batch, b + n + 1, *seq_hidden_state_shape]
-                priority_is: [batch, 1]
-                """
-
-                with self._profiler(f'thread_{threading.get_ident()}.to_gpu', repeat=10):
-                    bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
-                    bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
-                    bnx_obses_list = [torch.from_numpy(t).to(self.device) for t in bnx_obses_list]
-                    for i, bnx_obses in enumerate(bnx_obses_list):
-                        # obs is image. It is much faster to convert uint8 to float32 in GPU
-                        if bnx_obses.dtype == torch.uint8:
-                            bnx_obses_list[i] = bnx_obses.type(torch.float32) / 255.
-                    bn_actions = torch.from_numpy(bn_actions).to(self.device)
-                    bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
-                    bn_dones = torch.from_numpy(bn_dones).to(self.device)
-                    bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
-                    bnx_pre_seq_hidden_states = torch.from_numpy(bnx_pre_seq_hidden_states).to(self.device)
-                    if self.use_replay_buffer and self.use_priority:
-                        priority_is = torch.from_numpy(priority_is).to(self.device)
-
-                self._batch = (bn_indexes,
-                               bn_padding_masks,
-                               bnx_obses_list,
-                               bn_actions,
-                               bn_rewards,
-                               bn_dones,
-                               bn_mu_probs,
-                               bnx_pre_seq_hidden_states,
-                               priority_is)
-
-                self._batch_available_event.set()
-
     @unified_elapsed_timer('train a step', 10)
     def train(self) -> int:
         step = self.get_global_step()
 
-        if self._batch is None:
-            self._profiler('train a step').ignore()
-            self._batch_obtained_event.set()
-            return step
+        if self.use_replay_buffer:
+            with self._profiler('sample_from_replay_buffer', repeat=10) as profiler:
+                train_data = self._sample_from_replay_buffer()
+                if train_data is None:
+                    profiler.ignore()
+                    self._profiler('train_all').ignore()
+                    return step
 
-        with self._profiler('waiting_batch_available', repeat=10):
-            self._batch_available_event.wait()
-            self._batch_available_event.clear()
+            pointers, batch = train_data
+            batch_list = [batch]
+        else:
+            batch_list = self.batch_buffer.get_batch()
+            batch_list = [(*batch, None) for batch in batch_list]  # None is priority_is
 
-        (bn_indexes,
-         bn_padding_masks,
-         bnx_obses_list,
-         bn_actions,
-         bn_rewards,
-         bn_dones,
-         bn_mu_probs,
-         bnx_pre_seq_hidden_states,
-         priority_is) = self._batch
-        """
-        bn_indexes (np.int32): [batch, b + n]
-        bn_padding_masks (bool): [batch, b + n]
-        bnx_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
-        bn_actions: [batch, b + n, action_size]
-        bn_rewards: [batch, b + n]
-        bn_dones (bool): [batch, b + n]
-        bn_mu_probs: [batch, b + n, action_size]
-        bnx_pre_seq_hidden_states: [batch, b + n + 1, *seq_hidden_state_shape]
-        priority_is: [batch, 1]
-        """
-        pointers = self._pointers  # Could be None if NOT use_replay_buffer
+        for batch in batch_list:
+            (bn_indexes,
+             bn_padding_masks,
+             bnx_obses_list,
+             bn_actions,
+             bn_rewards,
+             bn_dones,
+             bn_mu_probs,
+             bnx_pre_seq_hidden_states,
+             priority_is) = batch
+            """
+            bn_indexes (np.int32): [batch, b + n]
+            bn_padding_masks (bool): [batch, b + n]
+            bnx_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
+            bn_actions: [batch, b + n, action_size]
+            bn_rewards: [batch, b + n]
+            bn_dones (bool): [batch, b + n]
+            bn_mu_probs: [batch, b + n, action_size]
+            bnx_pre_seq_hidden_states: [batch, b + n + 1, *seq_hidden_state_shape]
+            priority_is: [batch, 1]
+            """
 
-        self._batch_obtained_event.set()
+            with self._profiler(f'to_gpu', repeat=10):
+                bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
+                bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
+                bnx_obses_list = [torch.from_numpy(t).to(self.device) for t in bnx_obses_list]
+                for i, bnx_obses in enumerate(bnx_obses_list):
+                    # obs is image. It is much faster to convert uint8 to float32 in GPU
+                    if bnx_obses.dtype == torch.uint8:
+                        bnx_obses_list[i] = bnx_obses.type(torch.float32) / 255.
+                bn_actions = torch.from_numpy(bn_actions).to(self.device)
+                bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
+                bn_dones = torch.from_numpy(bn_dones).to(self.device)
+                bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
+                bnx_pre_seq_hidden_states = torch.from_numpy(bnx_pre_seq_hidden_states).to(self.device)
+                if self.use_replay_buffer and self.use_priority:
+                    priority_is = torch.from_numpy(priority_is).to(self.device)
 
         with self._profiler('train', repeat=10):
             bnx_target_states = self._train(
@@ -2634,6 +2566,3 @@ class SAC_Base:
 
     def close(self):
         self._closed = True
-
-        if self.train_mode:
-            self._batch_obtained_event.set()
