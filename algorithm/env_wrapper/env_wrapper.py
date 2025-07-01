@@ -2,6 +2,11 @@ from pathlib import Path
 
 import numpy as np
 
+if __name__ in ('__main__', '__mp_main__'):
+    from env_wrapper import DecisionStep, TerminalStep
+else:
+    from .env_wrapper import DecisionStep, TerminalStep
+
 
 class DecisionStep:
     def __init__(self,
@@ -72,7 +77,7 @@ class EnvWrapper:
 
     def step(self,
              ma_d_action: dict[str, np.ndarray],
-             ma_c_action: dict[str, np.ndarray]) -> tuple[DecisionStep, TerminalStep]:
+             ma_c_action: dict[str, np.ndarray]) -> tuple[DecisionStep, TerminalStep, bool]:
         """
         Args:
             ma_d_action: dict[str, (NAgents, discrete_action_size)], one hot like action
