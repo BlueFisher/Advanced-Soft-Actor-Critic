@@ -2,11 +2,6 @@ from pathlib import Path
 
 import numpy as np
 
-if __name__ in ('__main__', '__mp_main__'):
-    from env_wrapper import DecisionStep, TerminalStep
-else:
-    from .env_wrapper import DecisionStep, TerminalStep
-
 
 class DecisionStep:
     def __init__(self,
