@@ -230,7 +230,8 @@ class UnityWrapperProcess:
                 self.ma_d_action_sizes,
                 self.ma_c_action_size)
 
-    def reset(self, reset_config=None):
+    def reset(self, reset_config: dict | None = None) -> tuple[dict[str, np.ndarray],
+                                                               dict[str, list[np.ndarray]]]:
         """
         return:
             ma_agent_ids: dict[str, (NAgents, )]
@@ -251,7 +252,9 @@ class UnityWrapperProcess:
 
         return ma_agent_ids, ma_obs_list
 
-    def step(self, ma_d_action, ma_c_action):
+    def step(self,
+             ma_d_action: dict[str, np.ndarray],
+             ma_c_action: dict[str, np.ndarray]) -> tuple[DecisionStep, TerminalStep, bool]:
         """
         Args:
             ma_d_action: dict[str, (NAgents, discrete_action_size)], one hot like action
@@ -265,6 +268,8 @@ class UnityWrapperProcess:
                           terminal_ma_obs_list
                           terminal_ma_last_reward
                           terminal_ma_max_reached
+
+            all_envs_done: bool
         """
         for n in self.behavior_names:  # sending actions to the environment
             d_action = c_action = None
@@ -549,7 +554,7 @@ class UnityWrapper(EnvWrapper):
 
     def step(self,
              ma_d_action: dict[str, np.ndarray],
-             ma_c_action: dict[str, np.ndarray]) -> tuple[DecisionStep, TerminalStep]:
+             ma_c_action: dict[str, np.ndarray]) -> tuple[DecisionStep, TerminalStep, bool]:
 
         decision_ma_envs_agent_ids = {n: [] for n in self.behavior_names}
         decision_ma_envs_obs_list = {n: [] for n in self.behavior_names}

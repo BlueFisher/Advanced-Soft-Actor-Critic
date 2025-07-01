@@ -385,6 +385,7 @@ class Main:
                 if inference_iterations == 0 \
                         or self.base_config['reset_on_iteration'] \
                         or self.ma_manager.max_reached \
+                        or self.offline_env is not None \
                         or force_reset:
                     self.ma_manager.reset()
 
@@ -400,7 +401,7 @@ class Main:
                         ma_last_reward={n: np.zeros(len(agent_ids))
                                         for n, agent_ids in ma_agent_ids.items()},
                         ma_offline_action=ma_offline_action,
-                        disable_sample=self.disable_sample or not is_training_iteration
+                        disable_sample=self.disable_sample
                     )
 
                     force_reset = False
@@ -408,12 +409,13 @@ class Main:
                     self.ma_manager.reset_and_continue()
 
                 while not self.ma_manager.done:
-                    with self._profiler('env.step', repeat=10):
-                        if is_training_iteration and self.offline_env is not None:
+                    if is_training_iteration and self.offline_env is not None:
+                        with self._profiler('offline_env.step', repeat=10):
                             (decision_step,
                              terminal_step,
-                             all_envs_done) = self.offline_env.step(ma_d_action, ma_c_action)
-                        else:
+                             all_envs_done) = self.offline_env.step()
+                    else:
+                        with self._profiler('env.step', repeat=10):
                             (decision_step,
                              terminal_step,
                              all_envs_done) = self.env.step(ma_d_action, ma_c_action)
@@ -431,7 +433,7 @@ class Main:
                             ma_obs_list=decision_step.ma_obs_list,
                             ma_last_reward=decision_step.ma_last_reward,
                             ma_offline_action=decision_step.ma_offline_action,
-                            disable_sample=self.disable_sample or not is_training_iteration
+                            disable_sample=self.disable_sample
                         )
 
                     self.ma_manager.end_episode(
@@ -455,8 +457,8 @@ class Main:
                         if not is_training_iteration:
                             self.ma_manager.log_episode()
 
-                        # Only training in the training iteration, OR inference iteration when not offline RL
-                        if is_training_iteration or self.offline_env is None:
+                        # If the offline RL is disabled OR is training iteration, put the episode to the manager
+                        if self.offline_env is None or is_training_iteration:
                             self.ma_manager.put_episode()
 
                         if is_training_iteration:
