@@ -7,6 +7,14 @@ default:
         win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
+    offline_env_config:
+      enabled: false
+      env_name: Roller
+      env_args:
+        dataset_path:
+          win32: C:\Users\fisher\Documents\Unity\Demonstrations\Roller
+      n_envs: 50
+
     n_envs: 10
     max_iter: 2000
     reset_on_iteration: false
@@ -14,22 +22,15 @@ default:
   reset_config:
     force_reset: true
 
-  replay_config:
-    beta: 0.1
-    beta_increment_per_sampling: 0
+  # replay_config:
+  #   beta: 0.1
+  #   beta_increment_per_sampling: 0
 
   sac_config:
     use_replay_buffer: true # Whether using prioritized replay buffer
     write_summary_per_step: 10
 
     n_step: 5
-
-    tau: 0.5
-
-    init_log_alpha: -4.6
-
-    v_lambda: 0.99
-    clip_epsilon: 1.
 
   oc_config:
     num_options: 2
