@@ -157,9 +157,9 @@ def simple_visual(height, width, channels) -> tuple[nn.Module, int, int]:
 
     return nn.Sequential(
         nn.Conv2d(channels, 16, [8, 8], [4, 4]),
-        nn.LeakyReLU(),
+        nn.GELU(),
         nn.Conv2d(16, 32, [4, 4], [2, 2]),
-        nn.LeakyReLU(),
+        nn.GELU(),
     ), conv_2_hw, 32
 
 
