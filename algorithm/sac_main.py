@@ -360,6 +360,8 @@ class Main:
                            nn_config=mgr.config['nn_config'],
                            **mgr.config['sac_config'],
 
+                           offline_enabled=self.base_config['offline_env_config']['enabled'],
+
                            replay_config=mgr.config['replay_config'])
             mgr.set_rl(sac)
 
