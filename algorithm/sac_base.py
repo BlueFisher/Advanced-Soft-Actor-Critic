@@ -85,6 +85,7 @@ class SAC_Base:
 
                  use_normalization: bool = False,
 
+                 offline_enabled: bool = False,
                  offline_loss: bool = False,
 
                  action_noise: list[float] | None = None,
@@ -222,6 +223,7 @@ class SAC_Base:
 
         self.use_normalization = use_normalization
 
+        self.offline_enabled = offline_enabled
         self.offline_loss = offline_loss
 
         self.action_noise = action_noise
@@ -1903,9 +1905,11 @@ class SAC_Base:
             # [ensemble_q_sample, batch, 1] -> [batch, 1]
 
             loss_c_policy = c_alpha * log_prob - min_c_q_for_gradient
-            if self.offline_loss:
-                loss_c_policy += functional.mse_loss(action_sampled, action, reduction='none').sum(-1, keepdim=True)
             # [batch, 1]
+
+            if self.offline_enabled and self.offline_loss:
+                loss_c_policy += functional.mse_loss(action_sampled, action, reduction='none').sum(-1, keepdim=True)
+                # [batch, 1]
 
         loss_policy = torch.mean(loss_d_policy + loss_c_policy)
 
