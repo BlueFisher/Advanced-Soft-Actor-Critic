@@ -128,12 +128,12 @@ def episode_to_batch(burn_in_step: int,
     Returns:
         bn_indexes (np.int32): [ep_len - bn + 1, bn]
         bn_padding_masks (bool): [ep_len - bn + 1, bn]
-        m_obses_list: list([ep_len - bn + 1 + 1, bn, *obs_shapes_i], ...)
-        bn_actions: [ep_len - bn + 1, bn, action_size]
+        bnx_obses_list: list([ep_len - bn + 1 + 1, bn, *obs_shapes_i], ...)
+        bnx_actions: [ep_len - bn + 1 + 1, bn, action_size]
         bn_rewards: [ep_len - bn + 1, bn]
         bn_dones (bool): [ep_len - bn + 1, bn]
         bn_probs: [ep_len - bn + 1, bn, action_size]
-        m_pre_seq_hidden_states: [ep_len - bn + 1 + 1, bn, *seq_hidden_state_shape]
+        bnx_pre_seq_hidden_states: [ep_len - bn + 1 + 1, bn, *seq_hidden_state_shape]
     """
 
     bn = burn_in_step + n_step
@@ -172,26 +172,26 @@ def episode_to_batch(burn_in_step: int,
                                 for i in range(ep_len - 1)], axis=0)
     bn_padding_masks = np.concatenate([l_padding_masks[:, i:i + bn]
                                        for i in range(ep_len - 1)], axis=0)
-    tmp_m_obses_list = [None] * len(l_obses_list)
+    tmp_bnx_obses_list = [None] * len(l_obses_list)
     for j, l_obses in enumerate(l_obses_list):
-        tmp_m_obses_list[j] = np.concatenate([l_obses[:, i:i + bn + 1]
-                                              for i in range(ep_len - 1)], axis=0)
-    bn_actions = np.concatenate([l_actions[:, i:i + bn]
-                                for i in range(ep_len - 1)], axis=0)
+        tmp_bnx_obses_list[j] = np.concatenate([l_obses[:, i:i + bn + 1]
+                                                for i in range(ep_len - 1)], axis=0)
+    bnx_actions = np.concatenate([l_actions[:, i:i + bn + 1]
+                                  for i in range(ep_len - 1)], axis=0)
     bn_rewards = np.concatenate([l_rewards[:, i:i + bn]
                                 for i in range(ep_len - 1)], axis=0)
     bn_dones = np.concatenate([l_dones[:, i:i + bn]
                               for i in range(ep_len - 1)], axis=0)
     bn_probs = np.concatenate([l_probs[:, i:i + bn]
                                for i in range(ep_len - 1)], axis=0)
-    m_pre_seq_hidden_states = np.concatenate([l_pre_seq_hidden_states[:, i:i + bn + 1]
-                                              for i in range(ep_len - 1)], axis=0)
+    bnx_pre_seq_hidden_states = np.concatenate([l_pre_seq_hidden_states[:, i:i + bn + 1]
+                                                for i in range(ep_len - 1)], axis=0)
 
     return (bn_indexes,
             bn_padding_masks,
-            tmp_m_obses_list,
-            bn_actions,
+            tmp_bnx_obses_list,
+            bnx_actions,
             bn_rewards,
             bn_dones,
             bn_probs,
-            m_pre_seq_hidden_states)
+            bnx_pre_seq_hidden_states)

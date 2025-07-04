@@ -143,8 +143,9 @@ class BatchBuffer(BatchBuffer):
                  burn_in_step: int,
                  n_step: int,
                  padding_action: np.ndarray,
-                 batch_size: int):
-        super().__init__(burn_in_step, n_step, padding_action, batch_size)
+                 batch_size: int,
+                 max_size: int = 10):
+        super().__init__(burn_in_step, n_step, padding_action, batch_size, max_size)
 
         self._key_batch_list = []
 
@@ -174,64 +175,64 @@ class BatchBuffer(BatchBuffer):
             ep_pre_seq_hidden_states: [1, ep_len, *seq_hidden_state_shape]
             ep_pre_low_seq_hidden_states: [1, ep_len, *low_seq_hidden_state_shape]
         """
-        self._batch_list.clear()
-        self._key_batch_list.clear()
+        with self._lock:
+            ori_batch, ori_key_trans = episode_to_batch(burn_in_step=self.burn_in_step,
+                                                        n_step=self.n_step,
+                                                        padding_action=self.padding_action,
+                                                        l_indexes=ep_indexes,
+                                                        l_padding_masks=ep_padding_masks,
+                                                        l_obses_list=ep_obses_list,
+                                                        l_option_indexes=ep_option_indexes,
+                                                        l_option_changed_indexes=ep_option_changed_indexes,
+                                                        l_actions=ep_actions,
+                                                        l_rewards=ep_rewards,
+                                                        l_dones=ep_dones,
+                                                        l_probs=ep_probs,
+                                                        l_pre_seq_hidden_states=ep_pre_seq_hidden_states,
+                                                        l_pre_low_seq_hidden_states=ep_pre_low_seq_hidden_states)
 
-        ori_batch, ori_key_trans = episode_to_batch(burn_in_step=self.burn_in_step,
-                                                    n_step=self.n_step,
-                                                    padding_action=self.padding_action,
-                                                    l_indexes=ep_indexes,
-                                                    l_padding_masks=ep_padding_masks,
-                                                    l_obses_list=ep_obses_list,
-                                                    l_option_indexes=ep_option_indexes,
-                                                    l_option_changed_indexes=ep_option_changed_indexes,
-                                                    l_actions=ep_actions,
-                                                    l_rewards=ep_rewards,
-                                                    l_dones=ep_dones,
-                                                    l_probs=ep_probs,
-                                                    l_pre_seq_hidden_states=ep_pre_seq_hidden_states,
-                                                    l_pre_low_seq_hidden_states=ep_pre_low_seq_hidden_states)
+            ori_batch = list(ori_batch)
+            ori_key_trans = list(ori_key_trans)
 
-        ori_batch = list(ori_batch)
-        ori_key_trans = list(ori_key_trans)
+            ori_key_batch = traverse_lists(ori_key_trans, lambda k: k.repeat(ori_batch[0].shape[0], axis=0))
 
-        ori_key_batch = traverse_lists(ori_key_trans, lambda k: k.repeat(ori_batch[0].shape[0], axis=0))
+            if self._rest_batch is not None:
+                ori_batch = traverse_lists((self._rest_batch, ori_batch), lambda rb, b: np.concatenate([rb, b]))
+                self._rest_batch = None
 
-        if self._rest_batch is not None:
-            ori_batch = traverse_lists((self._rest_batch, ori_batch), lambda rb, b: np.concatenate([rb, b]))
-            self._rest_batch = None
+                max_key_len = max(self._rest_key_batch[0].shape[1], ori_key_batch[0].shape[1])
+                self._rest_key_batch = _padding_key_batch(max_key_len - self._rest_key_batch[0].shape[1],
+                                                          *self._rest_key_batch)
+                ori_key_batch = _padding_key_batch(max_key_len - ori_key_batch[0].shape[1],
+                                                   *ori_key_batch)
 
-            max_key_len = max(self._rest_key_batch[0].shape[1], ori_key_batch[0].shape[1])
-            self._rest_key_batch = _padding_key_batch(max_key_len - self._rest_key_batch[0].shape[1],
-                                                      *self._rest_key_batch)
-            ori_key_batch = _padding_key_batch(max_key_len - ori_key_batch[0].shape[1],
-                                               *ori_key_batch)
+                ori_key_batch = traverse_lists((self._rest_key_batch, ori_key_batch), lambda rb, b: np.concatenate([rb, b]))
+                self._rest_key_batch = None
 
-            ori_key_batch = traverse_lists((self._rest_key_batch, ori_key_batch), lambda rb, b: np.concatenate([rb, b]))
-            self._rest_key_batch = None
+            ori_batch_size = ori_batch[0].shape[0]
+            idx = np.random.permutation(ori_batch_size)
+            ori_batch = traverse_lists(ori_batch, lambda b: b[idx])
 
-        ori_batch_size = ori_batch[0].shape[0]
-        idx = np.random.permutation(ori_batch_size)
-        ori_batch = traverse_lists(ori_batch, lambda b: b[idx])
+            for i in range(math.ceil(ori_batch_size / self.batch_size)):
+                b_i, b_j = i * self.batch_size, (i + 1) * self.batch_size
 
-        for i in range(math.ceil(ori_batch_size / self.batch_size)):
-            b_i, b_j = i * self.batch_size, (i + 1) * self.batch_size
+                batch = traverse_lists(ori_batch, lambda b: b[b_i:b_j, :])
+                key_batch = traverse_lists(ori_key_batch, lambda b: b[b_i:b_j, :])
 
-            batch = traverse_lists(ori_batch, lambda b: b[b_i:b_j, :])
-            key_batch = traverse_lists(ori_key_batch, lambda b: b[b_i:b_j, :])
-
-            if b_j > ori_batch_size:
-                self._rest_batch = batch
-                self._rest_key_batch = key_batch
-            else:
-                self._batch_list.append(batch)
-                self._key_batch_list.append(key_batch)
+                if b_j > ori_batch_size:
+                    self._rest_batch = batch
+                    self._rest_key_batch = key_batch
+                else:
+                    self._batch_list.append(batch)
+                    self._key_batch_list.append(key_batch)
+                    if len(self._batch_list) > self.max_size:
+                        self._batch_list.pop(0)
+                        self._key_batch_list.pop(0)
 
     def get_batch(self) -> tuple[list[np.ndarray | list[np.ndarray]],
                                  list[np.ndarray | list[np.ndarray]]]:
-        if len(self._batch_list) == 0 and self._rest_batch is not None:
-            r = [self._rest_batch], [self._rest_key_batch]
-            self._rest_batch, self._rest_key_batch = None, None
-            return r
+        with self._lock:
+            if len(self._batch_list) == 0:
+                return None, None
 
-        return self._batch_list, self._key_batch_list
+            return self._batch_list.pop(0), self._key_batch_list.pop(0)
