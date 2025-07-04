@@ -80,5 +80,7 @@ class BatchBuffer:
 
     def get_batch(self) -> list[np.ndarray | list[np.ndarray]]:
         with self._lock:
-            batch_list, self._batch_list = self._batch_list, []
-        return batch_list
+            if len(self._batch_list) == 0:
+                return None
+
+            return self._batch_list.pop(0)
