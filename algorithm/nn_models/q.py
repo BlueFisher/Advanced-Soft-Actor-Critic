@@ -24,8 +24,11 @@ class ModelBaseQ(nn.Module):
     def _build_model(self):
         pass
 
-    def forward(self, state, action, obs_list):
+    def forward(self, state: torch.Tensor, action: torch.Tensor, obs_list: list[torch.Tensor]):
         raise Exception("ModelQ not implemented")
+
+    def __call__(self, state: torch.Tensor, action: torch.Tensor, obs_list: list[torch.Tensor]) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+        return super().__call__(state, action, obs_list)
 
 
 class ModelQ(ModelBaseQ):
@@ -34,7 +37,7 @@ class ModelQ(ModelBaseQ):
                      c_state_n=64, c_state_depth=0,
                      c_action_n=64, c_action_depth=0,
                      c_dense_n=64, c_dense_depth=3,
-                     dropout = 0.):
+                     dropout=0.):
         """
                          state                  c_action
                            │                        │

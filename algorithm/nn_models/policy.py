@@ -100,8 +100,17 @@ class ModelBasePolicy(nn.Module):
     def _build_model(self, **kwargs):
         pass
 
-    def forward(self, state, obs_list) -> tuple[torch.distributions.OneHotCategorical, torch.distributions.Normal]:
+    def forward(self,
+                state: torch.Tensor,
+                obs_list: list[torch.Tensor]) -> tuple[torch.distributions.OneHotCategorical,
+                                                       torch.distributions.Normal]:
         raise Exception("ModelPolicy not implemented")
+
+    def __call__(self,
+                 state: torch.Tensor,
+                 obs_list: list[torch.Tensor]) -> tuple[torch.distributions.OneHotCategorical,
+                                                        torch.distributions.Normal]:
+        return super().__call__(state, obs_list)
 
 
 class ModelPolicy(ModelBasePolicy):
@@ -174,5 +183,8 @@ class ModelTermination(nn.Module):
                      dropout=0.):
         self.dense = LinearLayers(self.state_size, dense_n, dense_depth, output_size=1, dropout=dropout)
 
-    def forward(self, state, obs_list):
+    def forward(self, state: torch.Tensor, obs_list: list[torch.Tensor]) -> torch.Tensor:
         return torch.sigmoid(self.dense(state))
+
+    def __call__(self, state: torch.Tensor, obs_list: list[torch.Tensor]) -> torch.Tensor:
+        return super().__call__(state, obs_list)

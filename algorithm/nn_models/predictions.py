@@ -19,7 +19,7 @@ class ModelBaseTransition(nn.Module):
     def _build_model(self):
         pass
 
-    def forward(self, obs_list, state, action):
+    def forward(self, obs_list: list[torch.Tensor], state: torch.Tensor, action: torch.Tensor):
         # (s_t, a_t) -> p(\approx{s}_{t+1})
         # OR
         # ((s_t, extra_obs_t), a_t) -> p(\approx{s}_{t+1})
@@ -28,6 +28,9 @@ class ModelBaseTransition(nn.Module):
 
     def extra_obs(self, obs_list):
         raise Exception("ModelBaseTransition.extra_obs not implemented")
+
+    def __call__(self, obs_list: list[torch.Tensor], state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+        return super().__call__(obs_list, state, action)
 
 
 class ModelTransition(ModelBaseTransition):
@@ -60,9 +63,12 @@ class ModelBaseReward(nn.Module):
     def _build_model(self):
         pass
 
-    def forward(self, state):
+    def forward(self, state: torch.Tensor):
         # s_t -> \approx{r}_t
         raise Exception("ModelBaseReward not implemented")
+
+    def __call__(self, state: torch.Tensor) -> torch.Tensor:
+        return super().__call__(state)
 
 
 class ModelReward(ModelBaseReward):
@@ -85,7 +91,7 @@ class ModelBaseObservation(nn.Module):
     def _build_model(self):
         pass
 
-    def forward(self, state):
+    def forward(self, state: torch.Tensor):
         # s_t -> \approx{o}_t
         # Could return Tensor or [Tensor, Tensor, ...]
         raise Exception("ModelBaseObservation not implemented")
@@ -93,3 +99,6 @@ class ModelBaseObservation(nn.Module):
     def get_loss(self, state, obs_list) -> torch.Tensor:
         # loss(s_t -> \approx{o}_t, o_t)
         raise Exception("ModelBaseObservation.get_loss not implemented")
+
+    def __call__(self, state: torch.Tensor) -> torch.Tensor:
+        return super().__call__(state)
