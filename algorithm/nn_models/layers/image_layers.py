@@ -128,15 +128,17 @@ class Conv1dLayers(nn.Module):
         self.output_size = self.dense.output_size
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if x.dim() >= 3:
-            batch = x.shape[:-2]
-            x = x.reshape(-1, *x.shape[-2:])
-            x = x.permute([0, 2, 1])
-            hidden = self.conv_layers(x)
-            hidden = hidden.reshape(*batch, self.conv_output_size)
-            return self.dense(hidden)
-        else:
-            raise Exception('The dimension of input should be greater than or equal to 3')
+        assert x.dim() >= 3, 'The dimension of input should be greater than or equal to 3'
+
+        batch = x.shape[:-2]
+        x = x.reshape(-1, *x.shape[-2:])
+        x = x.permute([0, 2, 1])
+        hidden = self.conv_layers(x)
+        hidden = hidden.reshape(*batch, self.conv_output_size)
+        return self.dense(hidden)
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return super().__call__(x)
 
 
 def small_visual(height, width, channels) -> tuple[nn.Module, int, int]:
@@ -209,14 +211,16 @@ class ConvLayers(nn.Module):
         self.output_size = self.dense.output_size
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if x.dim() >= 4:
-            batch = x.shape[:-3]
-            x = x.reshape(-1, *x.shape[-3:])
-            hidden = self.conv_layers(x)
-            hidden = hidden.reshape(*batch, self.conv_output_size)
-            return self.dense(hidden)
-        else:
-            raise Exception('The dimension of input should be greater than or equal to 4')
+        assert x.dim() >= 4, 'The dimension of input should be greater than or equal to 4'
+
+        batch = x.shape[:-3]
+        x = x.reshape(-1, *x.shape[-3:])
+        hidden = self.conv_layers(x)
+        hidden = hidden.reshape(*batch, self.conv_output_size)
+        return self.dense(hidden)
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return super().__call__(x)
 
 
 class ConvTransposeLayers(nn.Module):
@@ -235,15 +239,16 @@ class ConvTransposeLayers(nn.Module):
         self.conv_transpose = conv_transpose
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.dense(x)
+        assert x.dim() >= 2, 'The dimension of input should be greater than or equal to 2'
 
-        if x.dim() >= 2:
-            batch = x.shape[:-1]
-            x = x.reshape(-1, self._channels, self._height, self._width)
-            vis = self.conv_transpose(x)
-            return vis.reshape(*batch, *vis.shape[1:])
-        else:
-            raise Exception('The dimension of input should be greater than or equal to 2')
+        x = self.dense(x)
+        batch = x.shape[:-1]
+        x = x.reshape(-1, self._channels, self._height, self._width)
+        vis = self.conv_transpose(x)
+        return vis.reshape(*batch, *vis.shape[1:])
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return super().__call__(x)
 
 
 class VisionTransformer(nn.Module):
@@ -320,29 +325,31 @@ class VisionTransformer(nn.Module):
         return x
 
     def forward(self, x: torch.Tensor):
-        if x.dim() >= 4:
-            batch = x.shape[:-3]
+        assert x.dim() >= 4, 'The dimension of input should be greater than or equal to 4'
 
-            x = x.reshape(-1, *x.shape[-3:])
+        batch = x.shape[:-3]
 
-            # Reshape and permute the input tensor
-            x = self._process_input(x)
-            n = x.shape[0]
+        x = x.reshape(-1, *x.shape[-3:])
 
-            # Expand the class token to the full batch
-            batch_class_token = self.class_token.expand(n, -1, -1)
-            x = torch.cat([batch_class_token, x], dim=1)
+        # Reshape and permute the input tensor
+        x = self._process_input(x)
+        n = x.shape[0]
 
-            x = self.encoder(x)
+        # Expand the class token to the full batch
+        batch_class_token = self.class_token.expand(n, -1, -1)
+        x = torch.cat([batch_class_token, x], dim=1)
 
-            # Classifier "token" as used by standard language architectures
-            x = x[:, 0]
+        x = self.encoder(x)
 
-            x = x.reshape(*batch, self.hidden_dim)
+        # Classifier "token" as used by standard language architectures
+        x = x[:, 0]
 
-            return x
-        else:
-            raise Exception('The dimension of input should be greater than or equal to 4')
+        x = x.reshape(*batch, self.hidden_dim)
+
+        return x
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return super().__call__(x)
 
 
 class Transform(nn.Module):
@@ -355,10 +362,12 @@ class Transform(nn.Module):
         if self.transform is None:
             return x
 
-        if x.dim() >= 4:
-            batch = x.shape[:-3]
-            x = x.reshape(-1, *x.shape[-3:])
-            x = self.transform(x)
-            return x.reshape(*batch, *x.shape[1:])
-        else:
-            raise Exception('The dimension of input should be greater than or equal to 4')
+        assert x.dim() >= 4, 'The dimension of input should be greater than or equal to 4'
+
+        batch = x.shape[:-3]
+        x = x.reshape(-1, *x.shape[-3:])
+        x = self.transform(x)
+        return x.reshape(*batch, *x.shape[1:])
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return super().__call__(x)

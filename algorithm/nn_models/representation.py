@@ -48,6 +48,13 @@ class ModelBaseRep(nn.Module):
 
         raise Exception("ModelRep not implemented")
 
+    def __call__(self,
+                 obs_list: list[torch.Tensor],
+                 pre_action: torch.Tensor,
+                 pre_seq_hidden_state: torch.Tensor | None,
+                 padding_mask: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+        return super().__call__(obs_list, pre_action, pre_seq_hidden_state, padding_mask)
+
     def _get_empty_seq_hidden_state(self, state: torch.Tensor):
         return torch.zeros((*state.shape[:-1], 0), dtype=state.dtype, device=state.device)
 
@@ -184,8 +191,11 @@ class ModelVOverOptions(nn.Module):
         self.dense = LinearLayers(self.state_size, dense_n, dense_depth,
                                   self.num_options)
 
-    def forward(self, state):
+    def forward(self, state: torch.Tensor) -> torch.Tensor:
         return self.dense(state)
+
+    def __call__(self, state: torch.Tensor) -> torch.Tensor:
+        return super().__call__(state)
 
 
 class ModelBaseRepProjection(nn.Module):
@@ -198,8 +208,11 @@ class ModelBaseRepProjection(nn.Module):
     def _build_model(self):
         pass
 
-    def forward(self, encoder):
+    def forward(self, encoder: torch.Tensor):
         raise Exception("ModelBaseRepProjection not implemented")
+
+    def __call__(self, encoder: torch.Tensor) -> torch.Tensor:
+        return super().__call__(encoder)
 
 
 class ModelRepProjection(ModelBaseRepProjection):
@@ -223,8 +236,11 @@ class ModelBaseRepPrediction(nn.Module):
     def _build_model(self):
         pass
 
-    def forward(self, encoder):
+    def forward(self, encoder: torch.Tensor):
         raise Exception("ModelBaseRepPrediction not implemented")
+
+    def __call__(self, encoder: torch.Tensor) -> torch.Tensor:
+        return super().__call__(encoder)
 
 
 class ModelRepPrediction(ModelBaseRepPrediction):

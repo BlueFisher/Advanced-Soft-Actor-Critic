@@ -55,6 +55,9 @@ class ResBlock(nn.Module):
         else:
             return x
 
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return super().__call__(x)
+
 
 class LinearLayers(nn.Module):
     def __init__(self, input_size, dense_n=64, dense_depth=0, output_size=None,
@@ -107,3 +110,6 @@ class LinearLayers(nn.Module):
         assert x.shape[-1] == self.input_size
 
         return self.dense(x)
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return super().__call__(x)

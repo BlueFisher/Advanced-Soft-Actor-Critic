@@ -98,6 +98,9 @@ class ModelBaseForwardDynamic(nn.Module):
     def forward(self, state, action):
         raise Exception("ModelBaseForwardDynamic not implemented")
 
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return super().__call__(x)
+
 
 class ModelForwardDynamic(ModelBaseForwardDynamic):
     def _build_model(self, dense_n=64, dense_depth=2):
@@ -121,6 +124,9 @@ class ModelBaseInverseDynamic(nn.Module):
 
     def forward(self, state_from, state_to):
         raise Exception("ModelBaseInverseDynamic not implemented")
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return super().__call__(x)
 
 
 class ModelInverseDynamic(ModelBaseInverseDynamic):
