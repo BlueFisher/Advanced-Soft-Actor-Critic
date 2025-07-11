@@ -658,7 +658,7 @@ class UnityWrapper(EnvWrapper):
                 self._generate_processes(force_init=True)
                 self._logger.warning(f'{failed_count} environments restarted')
 
-                return None, None, None
+                raise RuntimeError()
 
         decision_ma_agent_ids = {n: np.concatenate(decision_ma_envs_agent_ids[n]) for n in self.behavior_names}
         decision_ma_obs_list = {n: [np.concatenate(obs) for obs in zip(*decision_ma_envs_obs_list[n])] for n in self.behavior_names}

@@ -107,9 +107,6 @@ class ObsPreprocessor(ObsPreprocessorWrapper):
 
         decision_step, terminal_step, all_envs_done = self._env.step(ma_d_action, ma_c_action)
 
-        if decision_step is None or terminal_step is None:
-            return None, None, None
-
         decision_step.ma_obs_list['UGVParkingAgent?team=0'] = self._preprocess_obs(decision_step.ma_obs_list['UGVParkingAgent?team=0'])
         terminal_step.ma_obs_list['UGVParkingAgent?team=0'] = self._preprocess_obs(terminal_step.ma_obs_list['UGVParkingAgent?team=0'])
 
