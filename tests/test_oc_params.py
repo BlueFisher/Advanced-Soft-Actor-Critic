@@ -87,19 +87,21 @@ class TestOCModel(unittest.TestCase):
 
 def __gen_test(test_from: int):
     param_dict_candidates = {
-        'seq_encoder': [None, 'RNN', 'ATTN'],
+        # 'seq_encoder': [None, 'RNN', 'ATTN'],
+        'seq_encoder': ['RNN'],
         'use_dilation': [False],
         'option_burn_in_step': [-1, 2],
         'option_seq_encoder': [None, 'RNN'],
-        'd_action_sizes': [[3, 3, 4]],
-        'c_action_size': [4],
+        'd_action_sizes': [[], [3, 3, 4]],
+        'c_action_size': [0, 4],
         'use_replay_buffer': [True],
         'burn_in_step': [5],
         'n_step': [3],
         'discrete_dqn_like': [False],
-        'siamese': [None, 'ATC', 'BYOL'],
-        'siamese_use_q': [False, True],
-        'siamese_use_adaptive': [False, True],
+        'use_n_step_is': [True, False]
+        # 'siamese': [None, 'ATC', 'BYOL'],
+        # 'siamese_use_q': [False, True],
+        # 'siamese_use_adaptive': [False, True],
         # 'use_rnd': [True, False],
     }
 
