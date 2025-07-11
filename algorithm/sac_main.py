@@ -459,16 +459,19 @@ class Main:
                         if not is_training_iteration:
                             self.ma_manager.log_episode()
 
-                        # If the offline RL is disabled OR is training iteration, put the episode to the manager
+                        # If the offline RL is disabled
+                        # OR
+                        # offline RL is enabled and is training iteration
                         if self.offline_env is None or is_training_iteration:
                             self.ma_manager.put_episode()
 
-                        if is_training_iteration:
                             with self._profiler('train', repeat=10) as profiler:
                                 next_trained_steps = self.ma_manager.train(trained_steps)
                                 if next_trained_steps == trained_steps:
                                     profiler.ignore()
                                 trained_steps = next_trained_steps
+                    else:
+                        self.ma_manager.log_episode(force=True)
 
                     step += 1
 
@@ -481,8 +484,6 @@ class Main:
                 if self.train_mode:
                     is_training_iteration = not is_training_iteration
                     self.ma_manager.set_train_mode(is_training_iteration)
-                else:
-                    self.ma_manager.save_tmp_episode_trans_list()
 
                 self.ma_manager.reset_dead_agents()
                 self.ma_manager.clear_tmp_episode_trans_list()

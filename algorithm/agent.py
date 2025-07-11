@@ -645,6 +645,10 @@ class AgentManager:
             )
 
     def put_episode(self):
+        """
+        Put all episodes to the RL module.
+        All temp episodes will be cleared after this call.
+        """
         # ep_indexes,
         # ep_obses_list, ep_actions, ep_rewards, ep_dones, ep_probs,
         # ep_pre_seq_hidden_states
@@ -671,40 +675,12 @@ class AgentManager:
         """
         self._tmp_episode_trans_list.clear()
 
-    def log_episode(self) -> None:
+    def log_episode(self, force: bool = False) -> None:
         # ep_indexes,
         # ep_obses_list, ep_actions, ep_rewards, ep_dones, ep_probs,
         # ep_pre_seq_hidden_states
         for episode_trans in self._tmp_episode_trans_list:
-            self.rl.log_episode(**episode_trans)
-
-    def save_episode(self) -> None:
-        eps_dir = self.model_abs_dir / 'episodes'
-
-        for episode_trans in self._tmp_episode_trans_list:
-            ep_indexes = episode_trans['ep_indexes']
-            ep_obses_list = episode_trans['ep_obses_list']
-            ep_actions = episode_trans['ep_actions']
-            ep_rewards = episode_trans['ep_rewards']
-            ep_dones = episode_trans['ep_dones']
-            eps = []
-            if eps_dir.exists():
-                for eps_path in eps_dir.glob('*.npz'):
-                    eps.append(int(eps_path.stem))
-                eps.sort()
-            else:
-                eps_dir.mkdir()
-
-            if len(eps) == 0:
-                eps = [-1]
-            ep_idx = eps[-1] + 1
-
-            np.savez(eps_dir / f'{ep_idx}.npz',
-                     index=np.squeeze(ep_indexes, axis=0),
-                     **{f'obs-{obs_name}': np.squeeze(ep_obses, axis=0) for obs_name, ep_obses in zip(self.obs_names, ep_obses_list)},
-                     action=np.squeeze(ep_actions, axis=0),
-                     reward=np.squeeze(ep_rewards, axis=0),
-                     done=np.squeeze(ep_dones, axis=0))
+            self.rl.log_episode(force, **episode_trans)
 
 
 class MultiAgentsManager:
@@ -854,6 +830,10 @@ class MultiAgentsManager:
             mgr.force_end_all_episodes()
 
     def put_episode(self):
+        """
+        Put all episodes to the RL module.
+        All temp episodes will be cleared after this call.
+        """
         for n, mgr in self:
             mgr.put_episode()
 
@@ -865,11 +845,22 @@ class MultiAgentsManager:
 
         return trained_steps
 
-    def log_episode(self) -> None:
+    def log_episode(self, force: bool = False) -> None:
+        ma_episodes_info = {}
+
         for n, mgr in self:
-            if n in self._inference_ma_names:
-                continue
-            mgr.log_episode()
+            ma_episodes_info[n] = {
+                'obs_names': mgr.obs_names,
+                'obs_shapes': mgr.obs_shapes,
+                'd_action_sizes': mgr.d_action_sizes,
+                'c_action_size': mgr.c_action_size,
+            }
+            mgr.log_episode(force)
+
+        episodes_info_f = self.model_abs_dir / 'episodes_info.json'
+        if not episodes_info_f.exists():
+            with open(self.model_abs_dir / 'episodes_info.json', 'w') as f:
+                json.dump(ma_episodes_info, f, indent=4)
 
     def save_model(self, save_replay_buffer=False) -> None:
         for n, mgr in self:
@@ -883,21 +874,6 @@ class MultiAgentsManager:
         """
         for n, mgr in self:
             mgr.clear_tmp_episode_trans_list()
-
-    def save_tmp_episode_trans_list(self) -> None:
-        ma_episodes_info = {}
-
-        for n, mgr in self:
-            ma_episodes_info[n] = {
-                'obs_names': mgr.obs_names,
-                'obs_shapes': mgr.obs_shapes,
-                'd_action_sizes': mgr.d_action_sizes,
-                'c_action_size': mgr.c_action_size,
-            }
-            mgr.save_episode()
-
-        with open(self.model_abs_dir / 'episodes_info.json', 'w') as f:
-            json.dump(ma_episodes_info, f, indent=4)
 
     def close(self) -> None:
         for n, mgr in self:
