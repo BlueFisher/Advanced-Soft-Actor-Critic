@@ -60,6 +60,7 @@ def initialize_config_from_yaml(default_config_path: Path,
 
     _update_dict(config, config_file['default'])
     if config_cat is not None:
+        assert config_cat in config_file, f'Config category {config_cat} not found in {config_file_path}'
         _update_dict(config, config_file[config_cat])
 
     if override is not None:
