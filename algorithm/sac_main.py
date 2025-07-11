@@ -411,19 +411,19 @@ class Main:
                     self.ma_manager.reset_and_continue()
 
                 while not self.ma_manager.done:
-                    if is_training_iteration and self.offline_env is not None:
-                        with self._profiler('offline_env.step', repeat=10):
-                            (decision_step,
-                             terminal_step,
-                             all_envs_done) = self.offline_env.step()
-                    else:
-                        with self._profiler('env.step', repeat=10):
-                            (decision_step,
-                             terminal_step,
-                             all_envs_done) = self.env.step(ma_d_action, ma_c_action)
-                        self._extra_step(ma_d_action, ma_c_action)
-
-                    if decision_step is None:
+                    try:
+                        if is_training_iteration and self.offline_env is not None:
+                            with self._profiler('offline_env.step', repeat=10):
+                                (decision_step,
+                                terminal_step,
+                                all_envs_done) = self.offline_env.step()
+                        else:
+                            with self._profiler('env.step', repeat=10):
+                                (decision_step,
+                                terminal_step,
+                                all_envs_done) = self.env.step(ma_d_action, ma_c_action)
+                            self._extra_step(ma_d_action, ma_c_action)
+                    except RuntimeError:
                         force_reset = True
 
                         self._logger.error('Step encounters error, episode ignored')
