@@ -2,10 +2,10 @@ default:
   base_config:
     env_name: UGVParking
     env_args:
-      # Parking = 0
-      # ClockwiseRace = 1
-      # AnticlockwiseRace = 2
-      # ReachingPark = 3
+      # ClockwiseRace = 0
+      # AnticlockwiseRace = 1
+      # ReachingPark = 2
+      # Parking = 3
       # TurnAround = 4
       # Combined = 5
       task: 0
@@ -21,15 +21,25 @@ default:
         win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
+    offline_env_config:
+      enabled: false
+      env_name: UGVParking
+      env_args:
+        dataset_path:
+          win32: C:\Users\fisher\Documents\Unity\Demonstrations\UGVParking
+          linux: /data/demonstrations/UGVParking
+      n_envs: 50
+
     n_envs: 50
     obs_preprocessor: obs_preprocessor
-    max_step_each_iter: 500 # Max step in each iteration
 
   reset_config:
-    disabled_wall_piece_reached_reward: 1
-    parking_entry_reached_reward: 2
-    parking_spot_reached_reward: 5
+    clockwise_anticlockwise_done_reward: 1
+    reaching_park_in_inner_reward: 1
+    reaching_park_done_reward: 2
+    parking_done_reward: 5
     disabled_wall_piece: 0 # Binary mask indicating which walls are disabled
+    # disabled_wall_piece: 128 # Binary mask indicating which walls are disabled
 
   nn_config:
     rep:
@@ -42,32 +52,29 @@ default:
     write_summary_per_step: 1000 # Write summaries in TensorBoard every N steps
     save_model_per_step: 5000 # Save model every N steps
 
-    n_step: 3
+    n_step: 5
+    burn_in_step: 15
+    seq_encoder: RNN
+
+    batch_size: 256
 
     use_rnd: false
     rnd_n_sample: 30
 
-    siamese: null
+    siamese: BYOL
     siamese_use_q: true
     siamese_use_adaptive: false
 
+    offline_loss: true
+
   oc_config:
-    option_epsilon: 0.1
+    option_epsilon: 0.2
     terminal_entropy: -0.001 # Tending not to terminate >0, tending to terminate <0
-
-parking:
-  base_config:
-    env_args:
-      task: 0
-    name: "parking-{time}"
-
-  sac_config:
-    nn: nn_low
 
 clockwise_race:
   base_config:
     env_args:
-      task: 1
+      task: 0
     name: "clockwise_race-{time}"
 
   sac_config:
@@ -76,7 +83,7 @@ clockwise_race:
 anticlockwise_race:
   base_config:
     env_args:
-      task: 2
+      task: 1
     name: "anticlockwise_race-{time}"
 
   sac_config:
@@ -85,8 +92,19 @@ anticlockwise_race:
 reaching_park:
   base_config:
     env_args:
-      task: 3
+      task: 2
+    hit_reward: 10
     name: "reaching_park-{time}"
+
+  sac_config:
+    nn: nn_low
+
+parking:
+  base_config:
+    env_args:
+      task: 3
+    hit_reward: 1
+    name: "parking-{time}"
 
   sac_config:
     nn: nn_low
@@ -95,6 +113,7 @@ turn_around:
   base_config:
     env_args:
       task: 4
+    hit_reward: 1
     name: "turn_around-{time}"
 
   sac_config:
@@ -104,16 +123,21 @@ combined:
   base_config:
     env_args:
       task: 5
+    hit_reward: 10
     name: "combined-{time}"
     max_step_each_iter: 650 # Max step in each iteration
 
   sac_config:
     nn: nn_parking
+    burn_in_step: 30
+    seq_encoder: RNN
 
   reset_config:
-    disabled_wall_piece: 2176
+    disabled_wall_piece: 0
 
   oc_config:
+    option_seq_encoder: null # RNN
+
     option_nn_config:
       rep:
         ray_random: 0

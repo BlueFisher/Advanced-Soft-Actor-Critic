@@ -1,16 +1,27 @@
 import torch
-from torchvision.transforms import v2 as T
+from torch.nn import functional
 from torchvision.transforms import InterpolationMode
+from torchvision.transforms import v2 as T
 
 import algorithm.nn_models as m
+from algorithm.nn_models.layers.seq_layers import POSITIONAL_ENCODING
 from algorithm.utils.visualization.image import ImageVisual
 from algorithm.utils.visualization.ray import RayVisual
-
 
 OBS_SHAPES = [(1,), (3, 84, 84), (3, 84, 84), (802,), (6,)]
 
 RAY_SIZE = 400
 AUG_RAY_RANDOM_SIZE = 250
+
+
+COLOR_MAP = torch.tensor([
+    [0, 0, 1],  # target
+    [0, 1, 0],  # obstacle
+    [1, 0, 0],  # ugv
+    [1, 1, 1],  # inner_road
+    [1, 1, 0],  # outer_road
+    [0, 0, 0],  # block
+], dtype=torch.float32)
 
 
 class ModelRep(m.ModelBaseRep):
@@ -21,23 +32,36 @@ class ModelRep(m.ModelBaseRep):
         self._image_visual = ImageVisual()
         self._ray_visual = RayVisual()
 
+        self.seg_num_classes = COLOR_MAP.shape[0]
+        self.register_buffer('color_map', COLOR_MAP.permute(1, 0)[None, None, :, :, None, None])
+
         self.ray_random = ray_random
 
-        self.conv_cam_seg = m.ConvLayers(84, 84, 3, 'simple',
+        self.conv_cam_seg = m.ConvLayers(84, 84, self.seg_num_classes, 'simple',
                                          out_dense_n=64, out_dense_depth=2)
 
-        self.conv_third_cam_seg = m.ConvLayers(84, 84, 3, 'simple',
+        self.conv_third_cam_seg = m.ConvLayers(84, 84, self.seg_num_classes, 'simple',
                                                out_dense_n=64, out_dense_depth=2)
 
         self.ray_conv = m.Conv1dLayers(RAY_SIZE, 2, 'default',
                                        out_dense_n=64, out_dense_depth=2)
 
-        self.dense = m.LinearLayers(64 * 3, dense_n=128, dense_depth=1)
+        self.attn = m.MultiheadAttention(64, 8, pe=POSITIONAL_ENCODING.ROPE)
+
+        self.rnn = m.GRU(4 + self.c_action_size, 64, 1)
 
         self._vis_random_transformers = T.RandomChoice([
             m.Transform(T.RandomResizedCrop(size=(84, 84), scale=(0.8, 0.9), interpolation=InterpolationMode.NEAREST)),
             m.Transform(T.ElasticTransform(alpha=100, sigma=5, interpolation=InterpolationMode.NEAREST))
         ])
+
+    @torch.no_grad()
+    def _map_color(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.unsqueeze(-3)
+        x = torch.argmin(torch.sum((x - self.color_map).pow(2), -4), -3)
+        x = functional.one_hot(x, num_classes=self.seg_num_classes)
+        x = x.permute(0, 1, 4, 2, 3).float()
+        return x
 
     def forward(self,
                 obs_list: list[torch.Tensor],
@@ -47,6 +71,8 @@ class ModelRep(m.ModelBaseRep):
         llm_obs, vis, vis_third, ray, vec = obs_list
 
         """ PREPROCESSING """
+        vec = vec[..., 2:]
+
         # remove the center ray
         ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
@@ -57,17 +83,27 @@ class ModelRep(m.ModelBaseRep):
         ray[..., random_index, 1] = 1.
 
         """ ENCODE """
-        # self._image_visual(vis, vis_third, max_batch=3)
+        vis = self._map_color(vis)
+        vis_third = self._map_color(vis_third)
+
         vis_encoder = self.conv_cam_seg(vis)
         vis_third_encoder = self.conv_third_cam_seg(vis_third)
 
         # self._ray_visual(ray, max_batch=3)
         ray_encoder = self.ray_conv(ray)
 
-        x = self.dense(torch.cat([vis_encoder, vis_third_encoder, ray_encoder], dim=-1))
-        x = torch.cat([x, vec], dim=-1)
+        x = torch.cat([vec, pre_action], dim=-1)
+        if pre_seq_hidden_state is not None:
+            pre_seq_hidden_state = pre_seq_hidden_state[:, 0]
+        x, hn = self.rnn(x, pre_seq_hidden_state)
 
-        return x, self._get_empty_seq_hidden_state(x)
+        sensor = torch.cat([vis_encoder.unsqueeze(-2),
+                            vis_third_encoder.unsqueeze(-2),
+                            ray_encoder.unsqueeze(-2)], dim=-2)
+        attn_x, _ = self.attn(x.unsqueeze(-2), sensor, sensor)
+        x = x + attn_x[..., 0, :]
+
+        return x, hn
 
     def get_state_from_encoders(self,
                                 encoders: torch.Tensor | tuple[torch.Tensor],
@@ -77,10 +113,20 @@ class ModelRep(m.ModelBaseRep):
                                 padding_mask: torch.Tensor | None = None) -> torch.Tensor:
         llm_obs, vis, vis_third, ray, vec = obs_list
 
+        vec = vec[..., 2:]
+
         vis_encoder, vis_third_encoder, ray_encoder = encoders
 
-        x = self.dense(torch.cat([vis_encoder, vis_third_encoder, ray_encoder], dim=-1))
-        x = torch.cat([x, vec], dim=-1)
+        x = torch.cat([vec, pre_action], dim=-1)
+        if pre_seq_hidden_state is not None:
+            pre_seq_hidden_state = pre_seq_hidden_state[:, 0]
+        x, hn = self.rnn(x, pre_seq_hidden_state)
+
+        sensor = torch.cat([vis_encoder.unsqueeze(-2),
+                            vis_third_encoder.unsqueeze(-2),
+                            ray_encoder.unsqueeze(-2)], dim=-2)
+        attn_x, _ = self.attn(x.unsqueeze(-2), sensor, sensor)
+        x = x + attn_x[..., 0, :]
 
         return x
 
@@ -102,6 +148,9 @@ class ModelRep(m.ModelBaseRep):
         ray[..., random_index, 1] = 1.
 
         """ ENCODE """
+        vis_aug = self._map_color(vis_aug)
+        vis_third_aug = self._map_color(vis_third_aug)
+
         vis_encoder = self.conv_cam_seg(vis_aug)
         vis_third_encoder = self.conv_third_cam_seg(vis_third_aug)
 
