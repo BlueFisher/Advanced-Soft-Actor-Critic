@@ -159,9 +159,9 @@ class MultiheadAttention(nn.Module):
             attn_mask = attn_mask.reshape(-1, *attn_mask.shape[-2:])
 
         if self.pe is not None and query_index is None:
-            query_index = torch.arange(query.shape[1], device=query.device)
+            query_index = torch.arange(query.shape[1], device=query.device).unsqueeze(0).repeat_interleave(query.shape[0], dim=0)
         if self.pe is not None and key_index is None:
-            key_index = torch.arange(key.shape[1], device=key.device)
+            key_index = torch.arange(key.shape[1], device=key.device).unsqueeze(0).repeat_interleave(query.shape[0], dim=0)
 
         if self.pe == POSITIONAL_ENCODING.ABSOLUTE:
             pe = self.abpe(query_index)
