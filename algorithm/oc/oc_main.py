@@ -30,7 +30,7 @@ class OC_Main(Main):
 
                  render: bool = False,
                  env_args: dict | None = None,
-                 envs: int | None = None,
+                 n_envs: int | None = None,
                  max_iter: int | None = None,
 
                  unity_port: int | None = None,
@@ -97,7 +97,7 @@ class OC_Main(Main):
                                                                      override,
 
                                                                      env_args,
-                                                                     envs,
+                                                                     n_envs,
                                                                      max_iter,
 
                                                                      unity_port,

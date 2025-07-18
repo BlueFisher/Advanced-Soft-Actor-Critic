@@ -84,6 +84,9 @@ class OptionSelectorBase(SAC_Base):
 
                  use_normalization: bool = False,
 
+                 offline_enabled: bool = False,
+                 offline_loss: bool = False,
+
                  action_noise: list[float] | None = None,
 
                  use_dilation: bool = False,
@@ -167,6 +170,8 @@ class OptionSelectorBase(SAC_Base):
                          use_rnd,
                          rnd_n_sample,
                          use_normalization,
+                         offline_enabled,
+                         offline_loss,
                          action_noise,
                          replay_config)
 
@@ -1968,28 +1973,23 @@ class OptionSelectorBase(SAC_Base):
                 obnx_low_target_states,
                 next_n_vs_over_options)
 
-    _avg_logged_episode_reward = None
-    _avg_logged_episode_count = 1
+    def log_episode(self, force: bool = False, **episode_trans: np.ndarray) -> None:
+        """
+        Log the episode data to the summary writer and save it to a file.
 
-    def log_episode(self, **episode_trans: np.ndarray) -> None:
-        ep_rewards = episode_trans['ep_rewards']
-        reward = ep_rewards.sum()
-        self._avg_logged_episode_count += 1
-        if self._avg_logged_episode_reward is None:
-            self._avg_logged_episode_reward = reward
-        else:
-            self._avg_logged_episode_reward += (reward - self._avg_logged_episode_reward) \
-                / self._avg_logged_episode_count
+        Args:
+            force (bool): If True, log the episode even if summary_writer is None or summary_available is False.
+        """
 
-        if reward < self._avg_logged_episode_reward:
-            return
-
-        if self.summary_writer is None or not self.summary_available:
-            return
+        if not force:
+            if self.summary_writer is None or not self.summary_available:
+                return
 
         ep_indexes = episode_trans['ep_indexes']
         ep_obses_list = episode_trans['ep_obses_list']
         ep_actions = episode_trans['ep_actions']
+        ep_rewards = episode_trans['ep_rewards']
+        ep_dones = episode_trans['ep_dones']
 
         ep_option_indexes = episode_trans['ep_option_indexes']
         ep_option_changed_indexes = episode_trans['ep_option_changed_indexes']
@@ -2041,6 +2041,27 @@ class OptionSelectorBase(SAC_Base):
                 for i, attn_weight in enumerate(attn_weights_list):
                     image = plot_attn_weight(attn_weight[0].cpu().numpy())
                     self.summary_writer.add_figure(f'{summary_name}/{i}', image, self.global_step)
+
+        eps_dir = self.model_abs_dir / 'episodes'
+
+        eps = []
+        if eps_dir.exists():
+            for eps_path in eps_dir.glob('*.npz'):
+                eps.append(int(eps_path.stem))
+            eps.sort()
+        else:
+            eps_dir.mkdir()
+
+        if len(eps) == 0:
+            eps = [-1]
+        ep_idx = eps[-1] + 1
+
+        np.savez(eps_dir / f'{ep_idx}.npz',
+                 index=np.squeeze(ep_indexes, axis=0),
+                 **{f'obs-{obs_name}': np.squeeze(ep_obses, axis=0) for obs_name, ep_obses in zip(self.obs_names, ep_obses_list)},
+                 action=np.squeeze(ep_actions, axis=0),
+                 reward=np.squeeze(ep_rewards, axis=0),
+                 done=np.squeeze(ep_dones, axis=0))
 
         self.summary_available = False
 
