@@ -93,7 +93,7 @@ reaching_park:
   base_config:
     env_args:
       task: 2
-    hit_reward: 10
+    hit_reward: 5
     name: "reaching_park-{time}"
 
   sac_config:
@@ -123,7 +123,7 @@ combined:
   base_config:
     env_args:
       task: 5
-    hit_reward: 10
+    hit_reward: 5
     name: "combined-{time}"
     max_step_each_iter: 650 # Max step in each iteration
 
@@ -143,9 +143,6 @@ combined:
         ray_random: 0
 
     option_configs:
-      - name: parking-byolq-20250320122104DMGt
-        fix_policy: true
-        random_q: true
       - name: clockwise_race-byolq-20250320122743LTbH
         fix_policy: true
         random_q: true
@@ -153,6 +150,9 @@ combined:
         fix_policy: true
         random_q: true
       - name: reaching_park-byolq-20250325141638mOJF
+        fix_policy: true
+        random_q: true
+      - name: parking-byolq-20250320122104DMGt
         fix_policy: true
         random_q: true
       - name: turn_around-byolq-20250320123112JYNg

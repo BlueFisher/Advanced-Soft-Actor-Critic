@@ -97,10 +97,10 @@ class ModelRep(m.ModelBaseRep):
             pre_seq_hidden_state = pre_seq_hidden_state[:, 0]
         x, hn = self.rnn(x, pre_seq_hidden_state)
 
-        sensor = torch.cat([vis_encoder.unsqueeze(-2),
-                            vis_third_encoder.unsqueeze(-2),
-                            ray_encoder.unsqueeze(-2)], dim=-2)
-        attn_x, _ = self.attn(x.unsqueeze(-2), sensor, sensor)
+        sensor_f = torch.cat([vis_encoder.unsqueeze(-2),
+                              vis_third_encoder.unsqueeze(-2),
+                              ray_encoder.unsqueeze(-2)], dim=-2)
+        attn_x, _ = self.attn(x.unsqueeze(-2), sensor_f, sensor_f)
         x = x + attn_x[..., 0, :]
 
         return x, hn
@@ -122,10 +122,10 @@ class ModelRep(m.ModelBaseRep):
             pre_seq_hidden_state = pre_seq_hidden_state[:, 0]
         x, hn = self.rnn(x, pre_seq_hidden_state)
 
-        sensor = torch.cat([vis_encoder.unsqueeze(-2),
-                            vis_third_encoder.unsqueeze(-2),
-                            ray_encoder.unsqueeze(-2)], dim=-2)
-        attn_x, _ = self.attn(x.unsqueeze(-2), sensor, sensor)
+        sensor_f = torch.cat([vis_encoder.unsqueeze(-2),
+                              vis_third_encoder.unsqueeze(-2),
+                              ray_encoder.unsqueeze(-2)], dim=-2)
+        attn_x, _ = self.attn(x.unsqueeze(-2), sensor_f, sensor_f)
         x = x + attn_x[..., 0, :]
 
         return x
