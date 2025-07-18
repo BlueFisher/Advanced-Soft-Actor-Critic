@@ -106,6 +106,25 @@ class ModelBaseAttentionRep(ModelBaseRep):
 
         raise Exception('ModelAttentionRep not implemented')
 
+    def __call__(self,
+                 seq_q_len: int,
+                 index: torch.Tensor,
+                 obs_list: list[torch.Tensor],
+                 pre_action: torch.Tensor,
+                 pre_seq_hidden_state: torch.Tensor | None,
+                 is_prev_hidden_state=False,
+                 query_only_attend_to_rest_key=False,
+                 padding_mask: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+        return nn.Module.__call__(self,
+                                  seq_q_len,
+                                  index,
+                                  obs_list,
+                                  pre_action,
+                                  pre_seq_hidden_state,
+                                  is_prev_hidden_state,
+                                  query_only_attend_to_rest_key,
+                                  padding_mask)
+
     def get_state_from_encoders(self,
                                 seq_q_len: int,
                                 encoders: torch.Tensor | tuple[torch.Tensor],
@@ -160,6 +179,19 @@ class ModelBaseOptionSelectorRep(ModelBaseRep):
 
         raise Exception("ModelOptionSelectorRep not implemented")
 
+    def __call__(self,
+                 obs_list: list[torch.Tensor],
+                 pre_action: torch.Tensor,
+                 pre_seq_hidden_state: torch.Tensor | None,
+                 pre_termination_mask: torch.Tensor | None = None,
+                 padding_mask: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+        return nn.Module.__call__(self,
+                                  obs_list,
+                                  pre_action,
+                                  pre_seq_hidden_state,
+                                  pre_termination_mask,
+                                  padding_mask)
+
 
 class ModelBaseOptionSelectorAttentionRep(ModelBaseOptionSelectorRep, ModelBaseAttentionRep):
     def forward(self,
@@ -173,6 +205,27 @@ class ModelBaseOptionSelectorAttentionRep(ModelBaseOptionSelectorRep, ModelBaseA
                 query_only_attend_to_rest_key=False,
                 padding_mask: torch.Tensor | None = None):
         raise Exception('ModelOptionSelectorAttentionRep not implemented')
+
+    def __call__(self,
+                 seq_q_len: int,
+                 index: torch.Tensor,
+                 obs_list: list[torch.Tensor],
+                 pre_action: torch.Tensor,
+                 pre_seq_hidden_state: torch.Tensor | None,
+                 pre_termination_mask: torch.Tensor | None = None,
+                 is_prev_hidden_state=False,
+                 query_only_attend_to_rest_key=False,
+                 padding_mask: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+        return nn.Module.__call__(self,
+                                  seq_q_len,
+                                  index,
+                                  obs_list,
+                                  pre_action,
+                                  pre_seq_hidden_state,
+                                  pre_termination_mask,
+                                  is_prev_hidden_state,
+                                  query_only_attend_to_rest_key,
+                                  padding_mask)
 
 
 class ModelVOverOptions(nn.Module):
