@@ -36,7 +36,7 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
 
         self.attn = m.MultiheadAttention(64, 8, pe=POSITIONAL_ENCODING.ROPE)
 
-        self.rnn = m.GRU(64 + 4 + self.c_action_size, 64, 1)
+        self.rnn = m.GRU(4 + self.c_action_size, 64, 1)
 
         self._vis_random_transformers = T.RandomChoice([
             m.Transform(T.RandomResizedCrop(size=(84, 84), scale=(0.8, 0.9), interpolation=InterpolationMode.NEAREST)),
@@ -88,17 +88,16 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
 
         ray_encoder = self.ray_conv(ray)
 
-        x = torch.cat([vis_encoder.unsqueeze(-2),
-                       vis_third_encoder.unsqueeze(-2),
-                       ray_encoder.unsqueeze(-2)], dim=-2)
-        x, _ = self.attn(x, x, x)
-        x = x.sum(dim=-2)  # [batch, seq_len, f]
-
-        x = torch.cat([x, vec, pre_action], dim=-1)
-
+        x = torch.cat([vec, pre_action], dim=-1)
         if pre_seq_hidden_state is not None:
             pre_seq_hidden_state = pre_seq_hidden_state[:, 0]
         x, hn = self.rnn(x, pre_seq_hidden_state)
+
+        sensor_f = torch.cat([vis_encoder.unsqueeze(-2),
+                              vis_third_encoder.unsqueeze(-2),
+                              ray_encoder.unsqueeze(-2)], dim=-2)
+        attn_x, _ = self.attn(x.unsqueeze(-2), sensor_f, sensor_f)
+        x = x + attn_x[..., 0, :]
 
         x = torch.cat([llm_state, x], dim=-1)
 
@@ -120,17 +119,16 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
 
         vis_encoder, vis_third_encoder, ray_encoder = encoders
 
-        x = torch.cat([vis_encoder.unsqueeze(-2),
-                       vis_third_encoder.unsqueeze(-2),
-                       ray_encoder.unsqueeze(-2)], dim=-2)
-        x, _ = self.attn(x, x, x)
-        x = x.sum(dim=-2)  # [batch, seq_len, f]
-
-        x = torch.cat([x, vec, pre_action], dim=-1)
-
+        x = torch.cat([vec, pre_action], dim=-1)
         if pre_seq_hidden_state is not None:
             pre_seq_hidden_state = pre_seq_hidden_state[:, 0]
         x, hn = self.rnn(x, pre_seq_hidden_state)
+
+        sensor_f = torch.cat([vis_encoder.unsqueeze(-2),
+                              vis_third_encoder.unsqueeze(-2),
+                              ray_encoder.unsqueeze(-2)], dim=-2)
+        attn_x, _ = self.attn(x.unsqueeze(-2), sensor_f, sensor_f)
+        x = x + attn_x[..., 0, :]
 
         x = torch.cat([llm_state, x], dim=-1)
 
@@ -195,7 +193,7 @@ class ModelRep(m.ModelBaseRep):
 
         self.attn = m.MultiheadAttention(64, 8, pe=POSITIONAL_ENCODING.ROPE)
 
-        self.rnn = m.GRU(64 + 4 + self.c_action_size, 64, 1)
+        self.rnn = m.GRU(4 + self.c_action_size, 64, 1)
 
         self._vis_random_transformers = T.RandomChoice([
             m.Transform(T.RandomResizedCrop(size=(84, 84), scale=(0.8, 0.9), interpolation=InterpolationMode.NEAREST)),
@@ -240,17 +238,16 @@ class ModelRep(m.ModelBaseRep):
         # self._ray_visual(ray, max_batch=3)
         ray_encoder = self.ray_conv(ray)
 
-        x = torch.cat([vis_encoder.unsqueeze(-2),
-                       vis_third_encoder.unsqueeze(-2),
-                       ray_encoder.unsqueeze(-2)], dim=-2)
-        x, _ = self.attn(x, x, x)
-        x = x.sum(dim=-2)  # [batch, seq_len, f]
-
-        x = torch.cat([x, vec, pre_action], dim=-1)
-
+        x = torch.cat([vec, pre_action], dim=-1)
         if pre_seq_hidden_state is not None:
             pre_seq_hidden_state = pre_seq_hidden_state[:, 0]
         x, hn = self.rnn(x, pre_seq_hidden_state)
+
+        sensor_f = torch.cat([vis_encoder.unsqueeze(-2),
+                              vis_third_encoder.unsqueeze(-2),
+                              ray_encoder.unsqueeze(-2)], dim=-2)
+        attn_x, _ = self.attn(x.unsqueeze(-2), sensor_f, sensor_f)
+        x = x + attn_x[..., 0, :]
 
         x = torch.cat([high_state, x], dim=-1)
 
@@ -269,19 +266,18 @@ class ModelRep(m.ModelBaseRep):
 
         vis_encoder, vis_third_encoder, ray_encoder = encoders
 
-        x = torch.cat([vis_encoder.unsqueeze(-2),
-                       vis_third_encoder.unsqueeze(-2),
-                       ray_encoder.unsqueeze(-2)], dim=-2)
-        x, _ = self.attn(x, x, x)
-        x = x.sum(dim=-2)  # [batch, seq_len, f]
-
-        x = torch.cat([x, vec, pre_action], dim=-1)
-
+        x = torch.cat([vec, pre_action], dim=-1)
         if pre_seq_hidden_state is not None:
             pre_seq_hidden_state = pre_seq_hidden_state[:, 0]
         x, hn = self.rnn(x, pre_seq_hidden_state)
 
-        x = torch.cat([high_state, x, vec], dim=-1)
+        sensor_f = torch.cat([vis_encoder.unsqueeze(-2),
+                              vis_third_encoder.unsqueeze(-2),
+                              ray_encoder.unsqueeze(-2)], dim=-2)
+        attn_x, _ = self.attn(x.unsqueeze(-2), sensor_f, sensor_f)
+        x = x + attn_x[..., 0, :]
+
+        x = torch.cat([high_state, x], dim=-1)
 
         return x
 

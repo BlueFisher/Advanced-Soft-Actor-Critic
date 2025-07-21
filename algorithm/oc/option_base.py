@@ -212,7 +212,7 @@ class OptionBase(SAC_Base):
         elif self.seq_encoder == SEQ_ENCODER.RNN:
             batch, l, *_ = l_indexes.shape
 
-            l_states = None
+            l_states = torch.zeros(batch, l, self.state_size, device=self.device)
             l_rnn_states = torch.zeros_like(l_pre_seq_hidden_states)
             initial_rnn_state = self.get_initial_seq_hidden_state(batch, get_numpy=False)
 
@@ -223,8 +223,6 @@ class OptionBase(SAC_Base):
                                                      rnn_state.unsqueeze(1),
                                                      padding_mask=l_padding_masks[:, t:t + 1])
 
-                if l_states is None:
-                    l_states = torch.zeros((batch, l, *f_states.shape[2:]), device=self.device)
                 l_states[:, t:t + 1] = f_states
                 rnn_state[l_padding_masks[:, t]] = initial_rnn_state[l_padding_masks[:, t]]
 
