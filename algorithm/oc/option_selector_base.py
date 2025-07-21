@@ -438,6 +438,7 @@ class OptionSelectorBase(SAC_Base):
                 option.set_global_step(global_step)
                 option.remove_models(global_step)
 
+        self.low_state_size = self.option_list[0].state_size
         self.low_seq_hidden_state_shape = self.option_list[0].seq_hidden_state_shape
 
     def set_train_mode(self, train_mode=True):
@@ -941,15 +942,13 @@ class OptionSelectorBase(SAC_Base):
 
             batch, l, *_ = l_indexes.shape
 
-            l_states = None
+            l_states = torch.zeros((batch, l, self.state), device=self.device)
 
             for t in range(l):
                 f_states, next_rnn_state = model_rep([l_obses[:, t:t + 1, ...] for l_obses in l_obses_list],
                                                      None,
                                                      next_key_rnn_state.unsqueeze(1),
                                                      padding_mask=l_padding_masks[:, t:t + 1, ...])
-                if l_states is None:
-                    l_states = torch.zeros((batch, l, *f_states.shape[2:]), device=self.device)
                 l_states[:, t:t + 1] = f_states
 
             next_f_rnn_states = next_rnn_state.unsqueeze(dim=1)
@@ -1048,7 +1047,7 @@ class OptionSelectorBase(SAC_Base):
 
             batch, l, *_ = l_indexes.shape
 
-            l_states = None
+            l_states = torch.zeros((batch, l, self.state_size), device=self.device)
             l_rnn_states = torch.zeros_like(l_pre_seq_hidden_states)
 
             for t in range(l):
@@ -1057,8 +1056,6 @@ class OptionSelectorBase(SAC_Base):
                                                      key_rnn_state,
                                                      padding_mask=l_padding_masks[:, t:t + 1, ...])
 
-                if l_states is None:
-                    l_states = torch.zeros((batch, l, *f_states.shape[2:]), device=self.device)
                 l_states[:, t:t + 1] = f_states
 
                 l_rnn_states[:, t] = rnn_state
@@ -1099,64 +1096,6 @@ class OptionSelectorBase(SAC_Base):
 
         return l_low_obses_list
 
-    def get_l_low_states(self,
-                         l_indexes: torch.Tensor,
-                         l_padding_masks: torch.Tensor,
-                         l_low_obses_list: list[torch.Tensor],
-                         l_option_indexes: torch.Tensor,
-                         l_pre_actions: torch.Tensor,
-                         l_pre_low_seq_hidden_states: torch.Tensor = None,
-                         is_target=False) -> tuple[torch.Tensor,
-                                                   torch.Tensor]:
-        """
-        Args:
-            l_indexes (torch.int32): [batch, l]
-            l_padding_masks (torch.bool): [batch, l]
-            l_low_obses_list: list([batch, l, *low_obs_shapes_i], ...)
-            l_option_indexes (torch.int64): [batch, l]
-            l_pre_actions: [batch, l, action_size]
-            l_pre_low_seq_hidden_states: [batch, l, *low_seq_hidden_state_shape]
-            is_target: bool
-
-        Returns:
-            l_low_states: [batch, l, low_state_size]
-            l_seq_hidden_states (optional): [batch, 1, *low_seq_hidden_state_shape]
-            l_low_attn_states (optional): [batch, l, *low_seq_hidden_state_shape]
-        """
-
-        l_low_states = None
-        f_or_l_low_seq_hidden_states = None
-
-        for i, option in enumerate(self.option_list):
-            mask = (l_option_indexes == i)
-            if not torch.any(mask):
-                continue
-
-            o_l_states, o_f_or_l_low_seq_hidden_states = option.get_l_states(
-                l_indexes=l_indexes,
-                l_padding_masks=torch.logical_or(l_padding_masks,
-                                                 l_option_indexes != i),
-                l_obses_list=l_low_obses_list,
-                l_pre_actions=l_pre_actions,
-                l_pre_seq_hidden_states=l_pre_low_seq_hidden_states,
-                is_target=is_target
-            )
-
-            if l_low_states is None:
-                l_low_states = o_l_states
-            else:
-                l_low_states[mask] = o_l_states[mask]
-
-            if f_or_l_low_seq_hidden_states is None:
-                f_or_l_low_seq_hidden_states = o_f_or_l_low_seq_hidden_states
-            else:
-                if f_or_l_low_seq_hidden_states.shape[1] == 1:
-                    f_or_l_low_seq_hidden_states[mask[:, -1:]] = o_f_or_l_low_seq_hidden_states[mask[:, -1:]]
-                else:
-                    f_or_l_low_seq_hidden_states[mask] = o_f_or_l_low_seq_hidden_states[mask]
-
-        return l_low_states, f_or_l_low_seq_hidden_states
-
     def get_l_low_states_with_seq_hidden_states(self,
                                                 l_indexes: torch.Tensor,
                                                 l_padding_masks: torch.Tensor,
@@ -1178,8 +1117,8 @@ class OptionSelectorBase(SAC_Base):
             l_low_states: [batch, l, low_state_size]
             l_low_seq_hidden_states: [batch, l, *low_seq_hidden_state_shape]
         """
-        l_low_states = None
-        l_low_seq_hidden_states = None
+        l_low_states = torch.zeros((l_indexes.shape[0], l_indexes.shape[1], self.low_state_size), device=self.device)
+        l_low_seq_hidden_states = torch.zeros((l_indexes.shape[0], l_indexes.shape[1], *self.low_seq_hidden_state_shape), device=self.device)
 
         for i, option in enumerate(self.option_list):
             mask = (l_option_indexes == i)
@@ -1195,15 +1134,8 @@ class OptionSelectorBase(SAC_Base):
                 l_pre_seq_hidden_states=l_pre_low_seq_hidden_states
             )
 
-            if l_low_states is None:
-                l_low_states = o_l_states
-            else:
-                l_low_states[mask] = o_l_states[mask]
-
-            if l_low_seq_hidden_states is None:
-                l_low_seq_hidden_states = o_l_low_seq_hidden_states
-            else:
-                l_low_seq_hidden_states[mask] = o_l_low_seq_hidden_states[mask]
+            l_low_states[mask] = o_l_states[mask]
+            l_low_seq_hidden_states[mask] = o_l_low_seq_hidden_states[mask]
 
         return l_low_states, l_low_seq_hidden_states
 
@@ -1223,7 +1155,7 @@ class OptionSelectorBase(SAC_Base):
         Returns:
             l_low_probs: [batch, l, action_size]
         """
-        l_low_probs = None
+        l_low_probs = torch.zeros_like(l_actions)
 
         for i, option in enumerate(self.option_list):
             mask = (l_option_indexes == i)
@@ -1234,10 +1166,7 @@ class OptionSelectorBase(SAC_Base):
                                            l_states=l_low_states,
                                            l_actions=l_actions)
 
-            if l_low_probs is None:
-                l_low_probs = o_l_probs
-            else:
-                l_low_probs[mask] = o_l_probs[mask]
+            l_low_probs[mask] = o_l_probs[mask]
 
         return l_low_probs
 
@@ -1363,8 +1292,8 @@ class OptionSelectorBase(SAC_Base):
         d_y = torch.zeros((batch, 1), device=self.device)
         c_y = torch.zeros((batch, 1), device=self.device)
 
-        obnx_low_states = None
-        obnx_low_target_states = None
+        obnx_low_states = torch.zeros((batch, self.option_burn_in_step + self.n_step + 1, self.low_state_size), device=self.device)
+        obnx_low_target_states = torch.zeros((batch, self.option_burn_in_step + self.n_step + 1, self.low_state_size), device=self.device)
 
         # Get all states of all options, then replace them according to option_indexes
         for i, option in enumerate(self.option_list):
@@ -1399,9 +1328,6 @@ class OptionSelectorBase(SAC_Base):
                     is_target=True
                 )
 
-            if obnx_low_states is None:
-                obnx_low_states = torch.zeros((batch, *o_obnx_low_states.shape[1:]), device=o_obnx_low_states.device)
-                obnx_low_target_states = torch.zeros((batch, *o_obnx_low_target_states.shape[1:]), device=o_obnx_low_target_states.device)
             obnx_low_states[mask] = o_obnx_low_states
             obnx_low_target_states[mask] = o_obnx_low_target_states
 
@@ -1994,10 +1920,11 @@ class OptionSelectorBase(SAC_Base):
         ep_option_indexes = episode_trans['ep_option_indexes']
         ep_option_changed_indexes = episode_trans['ep_option_changed_indexes']
 
-        image = plot_episode_option_indexes(ep_option_indexes, ep_option_changed_indexes, self.num_options)
-        self.summary_writer.add_figure(f'option_index', image, self.global_step)
+        if self.summary_writer is not None:
+            image = plot_episode_option_indexes(ep_option_indexes, ep_option_changed_indexes, self.num_options)
+            self.summary_writer.add_figure(f'option_index', image, self.global_step)
 
-        if self.seq_encoder == SEQ_ENCODER.ATTN:
+        if self.summary_writer is not None and self.seq_encoder == SEQ_ENCODER.ATTN:
             with torch.no_grad():
                 if self.use_dilation:
                     summary_name = 'key_attn_weight'
