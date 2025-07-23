@@ -105,11 +105,10 @@ class OptionBase(SAC_Base):
 
         state, seq_hidden_state = self.model_rep(obs_list, pre_action, pre_seq_hidden_state)
         # state: [batch, 1, state_size]
-        # seq_hidden_state: [batch, 1, *seq_hidden_state_shape] | [batch, *seq_hidden_state_shape]
+        # seq_hidden_state: [batch, 1, *seq_hidden_state_shape]
         state = state.squeeze(1)
         obs_list = [obs.squeeze(1) for obs in obs_list]
-        if self.seq_encoder is None:
-            seq_hidden_state = seq_hidden_state.squeeze(1)
+        seq_hidden_state = seq_hidden_state.squeeze(1)
 
         action, prob = self._choose_action(obs_list,
                                            state,
@@ -142,93 +141,18 @@ class OptionBase(SAC_Base):
 
         Returns:
             l_states: [batch, l, state_size]
-            l_seq_hidden_states (optional): [batch, l, *seq_hidden_state_shape]
-            f_rnn_states (optional): [batch, 1, *seq_hidden_state_shape]
+            l_seq_hidden_states: [batch, l, *seq_hidden_state_shape]
         """
 
         model_rep = self.model_target_rep if is_target else self.model_rep
 
-        if self.seq_encoder is None:
+        if self.seq_encoder in (None, SEQ_ENCODER.RNN):
             l_states, l_hidden_states = model_rep(l_obses_list,
                                                   l_pre_actions,
                                                   l_pre_seq_hidden_states,
                                                   padding_mask=l_padding_masks)
 
             return l_states, l_hidden_states  # [batch, l, state_size], [batch, l, *seq_hidden_state_shape]
-
-        elif self.seq_encoder == SEQ_ENCODER.RNN:
-            batch, l, *_ = l_indexes.shape
-
-            l_states = None
-            initial_rnn_state = self.get_initial_seq_hidden_state(batch, get_numpy=False)
-
-            rnn_state = l_pre_seq_hidden_states[:, 0]
-            for t in range(l):
-                f_states, rnn_state = model_rep([l_obses[:, t:t + 1, ...] for l_obses in l_obses_list],
-                                                l_pre_actions[:, t:t + 1, ...] if l_pre_actions is not None else None,
-                                                rnn_state.unsqueeze(1),
-                                                padding_mask=l_padding_masks[:, t:t + 1])
-
-                if l_states is None:
-                    l_states = torch.zeros((batch, l, *f_states.shape[2:]), device=self.device)
-                l_states[:, t:t + 1] = f_states
-                rnn_state[l_padding_masks[:, t]] = initial_rnn_state[l_padding_masks[:, t]]
-
-            return l_states, rnn_state.unsqueeze(1)
-
-        elif self.seq_encoder == SEQ_ENCODER.ATTN:
-            raise Exception('seq_encoder in option cannot be ATTN')
-
-    def get_l_states_with_seq_hidden_states(
-        self,
-        l_indexes: torch.Tensor,
-        l_padding_masks: torch.Tensor,
-        l_obses_list: list[torch.Tensor],
-        l_pre_actions: torch.Tensor,
-        l_pre_seq_hidden_states: torch.Tensor
-    ) -> tuple[torch.Tensor,
-               torch.Tensor | None]:
-        """
-        Args:
-            l_indexes (torch.int32): [batch, l]
-            l_padding_masks (torch.bool): [batch, l]
-            l_obses_list: list([batch, l, *obs_shapes_i], ...)
-            l_pre_actions: [batch, l, action_size]
-            l_pre_seq_hidden_states: [batch, l, *seq_hidden_state_shape]
-
-        Returns:
-            l_states: [batch, l, state_size]
-            l_seq_hidden_state: [batch, l, *seq_hidden_state_shape]
-        """
-
-        if self.seq_encoder is None:
-            return self.get_l_states(l_indexes=l_indexes,
-                                     l_padding_masks=l_padding_masks,
-                                     l_obses_list=l_obses_list,
-                                     l_pre_actions=l_pre_actions,
-                                     l_pre_seq_hidden_states=l_pre_seq_hidden_states,
-                                     is_target=False)
-
-        elif self.seq_encoder == SEQ_ENCODER.RNN:
-            batch, l, *_ = l_indexes.shape
-
-            l_states = torch.zeros(batch, l, self.state_size, device=self.device)
-            l_rnn_states = torch.zeros_like(l_pre_seq_hidden_states)
-            initial_rnn_state = self.get_initial_seq_hidden_state(batch, get_numpy=False)
-
-            rnn_state = l_pre_seq_hidden_states[:, 0]
-            for t in range(l):
-                f_states, rnn_state = self.model_rep([l_obses[:, t:t + 1, ...] for l_obses in l_obses_list],
-                                                     l_pre_actions[:, t:t + 1, ...] if l_pre_actions is not None else None,
-                                                     rnn_state.unsqueeze(1),
-                                                     padding_mask=l_padding_masks[:, t:t + 1])
-
-                l_states[:, t:t + 1] = f_states
-                rnn_state[l_padding_masks[:, t]] = initial_rnn_state[l_padding_masks[:, t]]
-
-                l_rnn_states[:, t] = rnn_state
-
-            return l_states, l_rnn_states
 
         elif self.seq_encoder == SEQ_ENCODER.ATTN:
             raise Exception('seq_encoder in option cannot be ATTN')
