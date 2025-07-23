@@ -10,7 +10,7 @@ else:
     from .linear_layers import LinearLayers
 
 
-class GRU(nn.GRU):
+class GRU(nn.Module):
     def __init__(
         self,
         input_size: int,
@@ -21,55 +21,48 @@ class GRU(nn.GRU):
         device=None,
         dtype=None,
     ) -> None:
-        super().__init__(input_size=input_size,
-                         hidden_size=hidden_size,
-                         num_layers=num_layers,
-                         bias=bias,
-                         batch_first=True,
-                         dropout=dropout,
-                         device=device,
-                         dtype=dtype)
+        super().__init__()
 
-    def forward(self, x: torch.Tensor, h0: torch.Tensor = None):
+        self.num_layers = num_layers
+
+        self._grus = nn.ModuleList([
+            nn.GRU(input_size=input_size if i == 0 else hidden_size,
+                   hidden_size=hidden_size,
+                   num_layers=1,
+                   bias=bias,
+                   batch_first=True,
+                   dropout=dropout,
+                   device=device,
+                   dtype=dtype)
+            for i in range(num_layers)
+        ])
+
+    def forward(self, x: torch.Tensor, h0: torch.Tensor = None) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            x: [batch, seq_len, input_size]
+            h0: [batch, num_layers, hidden_size]
+
+        Returns:
+            output: [batch, seq_len, hidden_size]
+            hn: [batch, seq_len, num_layers, hidden_size]
+        """
         if h0 is not None:
             h0 = h0.transpose(0, 1).contiguous()
 
-        output, hn = super().forward(x, h0)
+        hn_list = []
+        for i in range(self.num_layers):
+            _h0 = None
+            if h0 is not None:
+                _h0 = h0[i:i + 1]
 
-        return output, hn.transpose(0, 1)
+            output, _ = self._grus[i](x, _h0)
+            # [batch, seq_len, hidden_size]
+            hn_list.append(output.unsqueeze(2))
+            # [batch, seq_len, 1, hidden_size]
+            x = output
 
-
-class LSTM(nn.LSTM):
-    def __init__(
-        self,
-        input_size: int,
-        hidden_size: int,
-        num_layers: int = 1,
-        bias: bool = True,
-        dropout: float = 0.0,
-        device=None,
-        dtype=None,
-    ) -> None:
-        super().__init__(input_size=input_size,
-                         hidden_size=hidden_size,
-                         num_layers=num_layers,
-                         bias=bias,
-                         batch_first=True,
-                         dropout=dropout,
-                         device=device,
-                         dtype=dtype)
-
-    def forward(self, x: torch.Tensor, hc_0: torch.Tensor = None):
-        if hc_0 is not None:
-            hc_0 = hc_0.transpose(0, 1)
-            h0, c0 = torch.chunk(hc_0, 2, dim=-1)
-            h0 = h0.contiguous()
-            c0 = c0.contiguous()
-            hc_0 = (h0, c0)
-
-        output, (hn, cn) = super().forward(x, hc_0)
-
-        return output, torch.cat([hn, cn], dim=-1).transpose(0, 1)
+        return output, torch.cat(hn_list, dim=2)
 
 
 class POSITIONAL_ENCODING(Enum):
