@@ -472,6 +472,7 @@ class Main:
                                 trained_steps = next_trained_steps
                     else:
                         self.ma_manager.log_episode(force=True)
+                        self.ma_manager.clear_tmp_episode_trans_list()
 
                     step += 1
 
