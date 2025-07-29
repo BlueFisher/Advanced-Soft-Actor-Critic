@@ -34,6 +34,19 @@ ONLY_SEG_OBS_SHAPES = [(1,),
                        (6,)]
 
 
+COLOR_MAP = np.array([
+    [0, 0, 1],  # target
+    [0, 1, 0],  # obstacle
+    [1, 0, 0],  # ugv
+    [1, 1, 1],  # inner_road
+    [1, 1, 0],  # outer_road
+    [0, 0, 0],  # block
+], dtype=np.float32)
+
+NUM_CLASSES = len(COLOR_MAP)
+COLOR_MAP_RESHAPED = COLOR_MAP.reshape(1, NUM_CLASSES, 3, 1, 1)
+
+
 class ObsPreprocessor(ObsPreprocessorWrapper):
     def init(self):
         (ma_obs_names,
@@ -76,8 +89,8 @@ class ObsPreprocessor(ObsPreprocessorWrapper):
                                                       ONLY_SEG_OBS_NAMES[1],
                                                       ONLY_SEG_OBS_NAMES[4]]
             ma_obs_shapes['UGVParkingAgent?team=0'] = [ONLY_SEG_OBS_SHAPES[0],
-                                                       ONLY_SEG_OBS_SHAPES[2],
-                                                       ONLY_SEG_OBS_SHAPES[3],
+                                                       (NUM_CLASSES, 84, 84),
+                                                       (NUM_CLASSES, 84, 84),
                                                        ONLY_SEG_OBS_SHAPES[1],
                                                        ONLY_SEG_OBS_SHAPES[4]]
 
@@ -85,13 +98,32 @@ class ObsPreprocessor(ObsPreprocessorWrapper):
 
         return ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size
 
+    def _map_color(self, x: np.ndarray) -> np.ndarray:
+        """
+        Convert semantic segmentation images with dimensions [batch, 3, height, width]
+        to one-hot NumPy arrays based on COLOR_MAP.
+
+        Args:
+            x (np): Input image array with dimensions [B, 3, H, W].
+
+        Returns:
+            np: One-hot encoded array with dimensions [B, num_classes, H, W].
+        """
+
+        x_expanded = np.expand_dims(x, axis=1)
+        distances = np.sum(np.abs((x_expanded - COLOR_MAP_RESHAPED)), axis=2)
+        indices = np.argmin(distances, axis=1)
+        one_hot = np.eye(NUM_CLASSES, dtype=np.float32)[indices]
+
+        return one_hot.transpose(0, 3, 1, 2)
+
     def _preprocess_obs(self, obs_list: list[np.ndarray]):
         if self._only_cam:
             vis, llm_obs, ray, vis_third, vec = obs_list
             return [llm_obs, vis, vis_third, ray, vec]
         else:
             llm_obs, ray, vis_seg, vis_third_seg, vec = obs_list
-            return [llm_obs, vis_seg, vis_third_seg, ray, vec]
+            return [llm_obs, self._map_color(vis_seg), self._map_color(vis_third_seg), ray, vec]
 
     def reset(self, reset_config: dict | None = None) -> tuple[dict[str, np.ndarray],
                                                                dict[str, list[np.ndarray]]]:

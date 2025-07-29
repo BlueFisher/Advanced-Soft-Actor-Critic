@@ -1,13 +1,12 @@
 import torch
 from torch.nn import functional
-from torchvision.transforms import v2 as T
 from torchvision.transforms import InterpolationMode
+from torchvision.transforms import v2 as T
 
 import algorithm.nn_models as m
 from algorithm.nn_models.layers.seq_layers import POSITIONAL_ENCODING
 
-from .nn_low import OBS_SHAPES, RAY_SIZE, AUG_RAY_RANDOM_SIZE, COLOR_MAP
-
+from .nn_low import AUG_RAY_RANDOM_PROB, NUM_CLASSES, OBS_SHAPES, RAY_SIZE
 
 NUM_OPTIONS = 5
 
@@ -20,36 +19,25 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
         option_eye = torch.eye(NUM_OPTIONS, dtype=torch.float32)
         self.register_buffer('option_eye', option_eye)
 
-        self.seg_num_classes = COLOR_MAP.shape[0]
-        self.register_buffer('color_map', COLOR_MAP.permute(1, 0)[None, None, :, :, None, None])
-
         self.ray_random = ray_random
 
-        self.conv_cam_seg = m.ConvLayers(84, 84, self.seg_num_classes, 'simple',
+        self.conv_cam_seg = m.ConvLayers(84, 84, NUM_CLASSES, 'simple',
                                          out_dense_n=64, out_dense_depth=2)
 
-        self.conv_third_cam_seg = m.ConvLayers(84, 84, self.seg_num_classes, 'simple',
+        self.conv_third_cam_seg = m.ConvLayers(84, 84, NUM_CLASSES, 'simple',
                                                out_dense_n=64, out_dense_depth=2)
 
         self.ray_conv = m.Conv1dLayers(RAY_SIZE, 2, 'default',
                                        out_dense_n=64, out_dense_depth=2)
 
-        self.attn = m.MultiheadAttention(64, 8, pe=POSITIONAL_ENCODING.ROPE)
+        self.dense = m.LinearLayers(6, output_size=64)
 
-        self.rnn = m.GRU(4 + self.c_action_size, 64, 1)
+        self.attn = m.MultiheadAttention(64, 8, pe=POSITIONAL_ENCODING.ROPE)
 
         self._vis_random_transformers = T.RandomChoice([
             m.Transform(T.RandomResizedCrop(size=(84, 84), scale=(0.8, 0.9), interpolation=InterpolationMode.NEAREST)),
             m.Transform(T.ElasticTransform(alpha=100, sigma=5, interpolation=InterpolationMode.NEAREST))
         ])
-
-    @torch.no_grad()
-    def _map_color(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.unsqueeze(-3)
-        x = torch.argmin(torch.sum((x - self.color_map).pow(2), -4), -3)
-        x = functional.one_hot(x, num_classes=self.seg_num_classes)
-        x = x.permute(0, 1, 4, 2, 3).float()
-        return x
 
     def forward(self,
                 obs_list: list[torch.Tensor],
@@ -68,30 +56,22 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
         llm_state = llm_obs.to(torch.long)
         llm_state = self.option_eye[llm_state.squeeze(-1)]
 
-        vec = vec[..., 2:]
-
         # remove the center ray
         ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
 
         """ DOMAIN RANDOMIZATION """
-        random_index = torch.randperm(RAY_SIZE)[:self.ray_random]
-        ray[..., random_index, 0] = 1.
-        ray[..., random_index, 1] = 1.
+        ray_random = torch.rand((ray.shape[0], ray.shape[1], RAY_SIZE, 1), device=ray.device)
+        ray_random = ray_random < self.ray_random
+        ray = ray * (~ray_random) + 1. * ray_random
 
         """ ENCODE """
-        vis = self._map_color(vis)
-        vis_third = self._map_color(vis_third)
-
         vis_encoder = self.conv_cam_seg(vis)
         vis_third_encoder = self.conv_third_cam_seg(vis_third)
 
         ray_encoder = self.ray_conv(ray)
 
-        x = torch.cat([vec, pre_action], dim=-1)
-        if pre_seq_hidden_state is not None:
-            pre_seq_hidden_state = pre_seq_hidden_state[:, 0]
-        x, hn = self.rnn(x, pre_seq_hidden_state)
+        x = self.dense(vec)
 
         sensor_f = torch.cat([vis_encoder.unsqueeze(-2),
                               vis_third_encoder.unsqueeze(-2),
@@ -101,7 +81,7 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
 
         x = torch.cat([llm_state, x], dim=-1)
 
-        return x, hn
+        return x, self._get_empty_seq_hidden_state(x)
 
     def get_state_from_encoders(self,
                                 encoders: torch.Tensor | tuple[torch.Tensor],
@@ -119,10 +99,7 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
 
         vis_encoder, vis_third_encoder, ray_encoder = encoders
 
-        x = torch.cat([vec, pre_action], dim=-1)
-        if pre_seq_hidden_state is not None:
-            pre_seq_hidden_state = pre_seq_hidden_state[:, 0]
-        x, hn = self.rnn(x, pre_seq_hidden_state)
+        x = self.dense(vec)
 
         sensor_f = torch.cat([vis_encoder.unsqueeze(-2),
                               vis_third_encoder.unsqueeze(-2),
@@ -146,15 +123,11 @@ class ModelOptionSelectorRep(m.ModelBaseOptionSelectorRep):
         """ AUGMENTATION """
         vis_aug = self._vis_random_transformers(vis)
         vis_third_aug = self._vis_random_transformers(vis_third)
-        ray_random = (torch.rand(1) * AUG_RAY_RANDOM_SIZE).int()
-        random_index = torch.randperm(RAY_SIZE)[:ray_random]
-        ray[..., random_index, 0] = 1.
-        ray[..., random_index, 1] = 1.
+        ray_random = torch.rand((ray.shape[0], ray.shape[1], RAY_SIZE, 1), device=ray.device)
+        ray_random = ray_random < AUG_RAY_RANDOM_PROB
+        ray = ray * (~ray_random) + 1. * ray_random
 
         """ ENCODE """
-        vis_aug = self._map_color(vis_aug)
-        vis_third_aug = self._map_color(vis_third_aug)
-
         vis_encoder = self.conv_cam_seg(vis_aug)
         vis_third_encoder = self.conv_third_cam_seg(vis_third_aug)
 
@@ -177,36 +150,23 @@ class ModelRep(m.ModelBaseRep):
     def _build_model(self, ray_random):
         self.ray_random = ray_random
 
-        self.seg_num_classes = COLOR_MAP.shape[0]
-        self.register_buffer('color_map', COLOR_MAP.permute(1, 0)[None, None, :, :, None, None])
-
-        self.ray_random = ray_random
-
-        self.conv_cam_seg = m.ConvLayers(84, 84, self.seg_num_classes, 'simple',
+        self.conv_cam_seg = m.ConvLayers(84, 84, NUM_CLASSES, 'simple',
                                          out_dense_n=64, out_dense_depth=2)
 
-        self.conv_third_cam_seg = m.ConvLayers(84, 84, self.seg_num_classes, 'simple',
+        self.conv_third_cam_seg = m.ConvLayers(84, 84, NUM_CLASSES, 'simple',
                                                out_dense_n=64, out_dense_depth=2)
 
         self.ray_conv = m.Conv1dLayers(RAY_SIZE, 2, 'default',
                                        out_dense_n=64, out_dense_depth=2)
 
-        self.attn = m.MultiheadAttention(64, 8, pe=POSITIONAL_ENCODING.ROPE)
+        self.dense = m.LinearLayers(6, output_size=64)
 
-        self.rnn = m.GRU(4 + self.c_action_size, 64, 1)
+        self.attn = m.MultiheadAttention(64, 8, pe=POSITIONAL_ENCODING.ROPE)
 
         self._vis_random_transformers = T.RandomChoice([
             m.Transform(T.RandomResizedCrop(size=(84, 84), scale=(0.8, 0.9), interpolation=InterpolationMode.NEAREST)),
             m.Transform(T.ElasticTransform(alpha=100, sigma=5, interpolation=InterpolationMode.NEAREST))
         ])
-
-    @torch.no_grad()
-    def _map_color(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.unsqueeze(-3)
-        x = torch.argmin(torch.sum((x - self.color_map).pow(2), -4), -3)
-        x = functional.one_hot(x, num_classes=self.seg_num_classes)
-        x = x.permute(0, 1, 4, 2, 3).float()
-        return x
 
     def forward(self,
                 obs_list: list[torch.Tensor],
@@ -217,31 +177,23 @@ class ModelRep(m.ModelBaseRep):
         high_state = high_state[..., NUM_OPTIONS:]
 
         """ PREPROCESSING """
-        vec = vec[..., 2:]
-
         # remove the center ray
         ray = torch.cat([ray[..., :RAY_SIZE], ray[..., RAY_SIZE + 2:]], dim=-1)
         ray = ray.view(*ray.shape[:-1], RAY_SIZE, 2)
 
         """ DOMAIN RANDOMIZATION """
-        random_index = torch.randperm(RAY_SIZE)[:self.ray_random]
-        ray[..., random_index, 0] = 1.
-        ray[..., random_index, 1] = 1.
+        ray_random = torch.rand((ray.shape[0], ray.shape[1], RAY_SIZE, 1), device=ray.device)
+        ray_random = ray_random < self.ray_random
+        ray = ray * (~ray_random) + 1. * ray_random
 
         """ ENCODE """
-        vis = self._map_color(vis)
-        vis_third = self._map_color(vis_third)
-
         vis_encoder = self.conv_cam_seg(vis)
         vis_third_encoder = self.conv_third_cam_seg(vis_third)
 
         # self._ray_visual(ray, max_batch=3)
         ray_encoder = self.ray_conv(ray)
 
-        x = torch.cat([vec, pre_action], dim=-1)
-        if pre_seq_hidden_state is not None:
-            pre_seq_hidden_state = pre_seq_hidden_state[:, 0]
-        x, hn = self.rnn(x, pre_seq_hidden_state)
+        x = self.dense(vec)
 
         sensor_f = torch.cat([vis_encoder.unsqueeze(-2),
                               vis_third_encoder.unsqueeze(-2),
@@ -251,7 +203,7 @@ class ModelRep(m.ModelBaseRep):
 
         x = torch.cat([high_state, x], dim=-1)
 
-        return x, hn
+        return x, self._get_empty_seq_hidden_state(x)
 
     def get_state_from_encoders(self,
                                 encoders: torch.Tensor | tuple[torch.Tensor],
@@ -262,14 +214,9 @@ class ModelRep(m.ModelBaseRep):
         high_state, llm_obs, vis, vis_third, ray, vec = obs_list
         high_state = high_state[..., NUM_OPTIONS:]
 
-        vec = vec[..., 2:]
-
         vis_encoder, vis_third_encoder, ray_encoder = encoders
 
-        x = torch.cat([vec, pre_action], dim=-1)
-        if pre_seq_hidden_state is not None:
-            pre_seq_hidden_state = pre_seq_hidden_state[:, 0]
-        x, hn = self.rnn(x, pre_seq_hidden_state)
+        x = self.dense(vec)
 
         sensor_f = torch.cat([vis_encoder.unsqueeze(-2),
                               vis_third_encoder.unsqueeze(-2),
@@ -293,10 +240,9 @@ class ModelRep(m.ModelBaseRep):
         """ AUGMENTATION """
         vis_aug = self._vis_random_transformers(vis)
         vis_third_aug = self._vis_random_transformers(vis_third)
-        ray_random = (torch.rand(1) * AUG_RAY_RANDOM_SIZE).int()
-        random_index = torch.randperm(RAY_SIZE)[:ray_random]
-        ray[..., random_index, 0] = 1.
-        ray[..., random_index, 1] = 1.
+        ray_random = torch.rand((ray.shape[0], ray.shape[1], RAY_SIZE, 1), device=ray.device)
+        ray_random = ray_random < AUG_RAY_RANDOM_PROB
+        ray = ray * (~ray_random) + 1. * ray_random
 
         """ ENCODE """
         vis_aug = self._map_color(vis_aug)

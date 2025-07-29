@@ -35,9 +35,8 @@ default:
 
   reset_config:
     clockwise_anticlockwise_done_reward: 1
-    reaching_park_in_inner_reward: 1
     reaching_park_done_reward: 2
-    parking_done_reward: 5
+    parking_done_reward: 10
     disabled_wall_piece: 0 # Binary mask indicating which walls are disabled
     # disabled_wall_piece: 128 # Binary mask indicating which walls are disabled
 
@@ -53,10 +52,6 @@ default:
     save_model_per_step: 5000 # Save model every N steps
 
     n_step: 5
-    burn_in_step: 15
-    seq_encoder: RNN
-
-    batch_size: 256
 
     use_rnd: false
     rnd_n_sample: 30
@@ -123,14 +118,13 @@ combined:
   base_config:
     env_args:
       task: 5
-    hit_reward: 5
+    hit_reward: 10
     name: "combined-{time}"
-    max_step_each_iter: 650 # Max step in each iteration
 
   sac_config:
     nn: nn_parking
-    burn_in_step: 30
-    seq_encoder: RNN
+
+    siamese: null
 
   reset_config:
     disabled_wall_piece: 0
@@ -143,19 +137,19 @@ combined:
         ray_random: 0
 
     option_configs:
-      - name: clockwise_race-byolq-20250320122743LTbH
+      - name: clockwise_race-20250726201403vGdm
         fix_policy: true
         random_q: true
-      - name: anticlockwise_race-byolq-20250320122725Kixz
+      - name: anticlockwise_race-20250726194747eTsy
         fix_policy: true
         random_q: true
-      - name: reaching_park-byolq-20250325141638mOJF
+      - name: reaching_park-20250726201508TuDW
         fix_policy: true
         random_q: true
-      - name: parking-byolq-20250320122104DMGt
+      - name: parking-20250726200453RwPB
         fix_policy: true
         random_q: true
-      - name: turn_around-byolq-20250320123112JYNg
+      - name: turn_around-20250726201919UXEV
         fix_policy: true
         random_q: true
 
@@ -167,19 +161,19 @@ combined_new:
 
   oc_config:
     option_configs:
-      - name: parking-byolq-20250320122104DMGt
+      - name: clockwise_race-20250715100122YzHn
         fix_policy: true
         random_q: true
-      - name: clockwise_race-byolq-20250320122743LTbH
+      - name: anticlockwise_race-20250715095359VZQK
         fix_policy: true
         random_q: true
-      - name: anticlockwise_race-byolq-20250320122725Kixz
+      - name: reaching_park-20250715124455pVjf
         fix_policy: true
         random_q: true
-      - name: reaching_park-byolq-20250325141638mOJF
+      - name: parking-20250715100500KaSX
         fix_policy: true
         random_q: true
-      - name: turn_around-byolq-20250320123112JYNg
+      - name: turn_around-20250715100231wlDe
         fix_policy: true
         random_q: true
       - name: new_option
@@ -215,7 +209,6 @@ combined_wo_parking:
     env_args:
       task: 5
     name: "combined_wo_parking-{time}"
-    max_step_each_iter: 650 # Max step in each iteration
 
   sac_config:
     nn: nn_parking

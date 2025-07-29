@@ -510,13 +510,9 @@ class OptionSelectorBase(SAC_Base):
             new_option_index (torch.int64): [batch, ]
             new_option_mask (torch.bool): [batch, ]
         """
-        batch = pre_option_index.shape[0]
-
         option_index = pre_option_index.clone()
 
-        v_over_options_list = [v(state) for v in self.model_v_over_options_list]  # list([batch, num_options], ...)
-        stacked_v_over_options = torch.stack(v_over_options_list)  # [ensemble, batch, num_options]
-        v_over_options, _ = stacked_v_over_options.min(dim=0)  # [batch, num_options]
+        v_over_options = self.model_v_over_options_list[0](state)  # [batch, num_options]
 
         none_option_mask = option_index == -1
 
@@ -533,8 +529,7 @@ class OptionSelectorBase(SAC_Base):
                 loss = torch.sum(torch.abs(rnd - t_rnd), dim=-1)  # [batch, num_options]
                 random_option_index = loss.argmax(dim=-1)  # [batch, ]
             else:
-                dist = distributions.Categorical(logits=torch.ones((batch, self.num_options),
-                                                                   device=self.device))
+                dist = distributions.Categorical(logits=v_over_options)
                 random_option_index = dist.sample()  # [batch, ]
 
             option_index[random_mask] = random_option_index[random_mask]
