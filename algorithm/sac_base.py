@@ -1303,6 +1303,7 @@ class SAC_Base:
 
         if self.c_action_size:
             nx_c_action_sampled = nx_c_policy.rsample()  # [batch, n + 1, c_action_size]
+            # nx_c_action_sampled = torch.atanh(nx_actions)
         else:
             nx_c_action_sampled = torch.zeros(0, device=self.device)
 
@@ -1995,6 +1996,8 @@ class SAC_Base:
             priority_is: [batch, 1]
 
         Returns:
+            bnx_states: [batch, b + n + 1, state_size]
+            next_bn_seq_hidden_states: [batch, b + n + 1, *seq_hidden_state_shape]
             bnx_target_states: [batch, b + n + 1, state_size]
         """
 
@@ -2036,12 +2039,12 @@ class SAC_Base:
                                                priority_is=priority_is)
 
         with torch.no_grad():
-            bnx_states, _ = self.get_l_states(l_indexes=bnx_indexes,
-                                              l_padding_masks=bnx_padding_masks,
-                                              l_obses_list=bnx_obses_list,
-                                              l_pre_actions=bnx_pre_actions,
-                                              l_pre_seq_hidden_states=bnx_pre_seq_hidden_states,
-                                              is_target=False)
+            bnx_states, next_bn_seq_hidden_states = self.get_l_states(l_indexes=bnx_indexes,
+                                                                      l_padding_masks=bnx_padding_masks,
+                                                                      l_obses_list=bnx_obses_list,
+                                                                      l_pre_actions=bnx_pre_actions,
+                                                                      l_pre_seq_hidden_states=bnx_pre_seq_hidden_states,
+                                                                      is_target=False)
 
         obs_list = [bnx_obses[:, self.burn_in_step, ...] for bnx_obses in bnx_obses_list]
         state = bnx_states[:, self.burn_in_step, ...]
@@ -2113,7 +2116,7 @@ class SAC_Base:
 
             self.summary_writer.flush()
 
-        return bnx_target_states
+        return bnx_states, next_bn_seq_hidden_states, bnx_target_states
 
     @torch.no_grad()
     def _get_td_error(self,
@@ -2484,7 +2487,7 @@ class SAC_Base:
                 priority_is = torch.from_numpy(priority_is).to(self.device)
 
         with self._profiler('train', repeat=10):
-            bnx_target_states = self._train(
+            bnx_states, next_bn_seq_hidden_states, bnx_target_states = self._train(
                 bn_indexes=bn_indexes,
                 bn_padding_masks=bn_padding_masks,
                 bnx_obses_list=bnx_obses_list,
@@ -2500,17 +2503,7 @@ class SAC_Base:
 
         if self.use_replay_buffer:
             bn_obses_list = [bnx_obses[:, :-1, ...] for bnx_obses in bnx_obses_list]
-            bn_pre_actions = gen_pre_n_actions(bnx_actions[:, :-1])  # [batch, b + n, action_size]
-            bn_pre_seq_hidden_states = bnx_pre_seq_hidden_states[:, :-1, ...]  # [batch, b + n, *seq_hidden_state_shape]
-
-            with self._profiler('get_l_states', repeat=10):
-                bn_states, next_bn_seq_hidden_states = self.get_l_states(
-                    l_indexes=bn_indexes,
-                    l_padding_masks=bn_padding_masks,
-                    l_obses_list=bn_obses_list,
-                    l_pre_actions=bn_pre_actions,
-                    l_pre_seq_hidden_states=bn_pre_seq_hidden_states,
-                    is_target=False)
+            bn_states = bnx_states[:, :-1, ...]  # [batch, b + n, state_size]
 
             if self.use_n_step_is:
                 with self._profiler('get_l_probs', repeat=10):
