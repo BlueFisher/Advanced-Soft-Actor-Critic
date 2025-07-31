@@ -51,6 +51,7 @@ class ObsPreprocessor(ObsPreprocessorWrapper):
     def init(self):
         (ma_obs_names,
          ma_obs_shapes,
+         ma_obs_dtypes,
          ma_d_action_sizes,
          ma_c_action_size) = self._env.init()
 
@@ -93,10 +94,13 @@ class ObsPreprocessor(ObsPreprocessorWrapper):
                                                        (NUM_CLASSES, 84, 84),
                                                        ONLY_SEG_OBS_SHAPES[1],
                                                        ONLY_SEG_OBS_SHAPES[4]]
+            ma_obs_dtypes['UGVParkingAgent?team=0'][1] = np.bool
+            ma_obs_dtypes['UGVParkingAgent?team=0'][2] = np.bool
 
         logger.info(f'Processed obs: {ma_obs_names["UGVParkingAgent?team=0"]}')
+        logger.info(f'Processed obs: {ma_obs_dtypes["UGVParkingAgent?team=0"]}')
 
-        return ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size
+        return ma_obs_names, ma_obs_shapes, ma_obs_dtypes, ma_d_action_sizes, ma_c_action_size
 
     def _map_color(self, x: np.ndarray) -> np.ndarray:
         """
@@ -113,7 +117,7 @@ class ObsPreprocessor(ObsPreprocessorWrapper):
         x_expanded = np.expand_dims(x, axis=1)
         distances = np.sum(np.abs((x_expanded - COLOR_MAP_RESHAPED)), axis=2)
         indices = np.argmin(distances, axis=1)
-        one_hot = np.eye(NUM_CLASSES, dtype=np.float32)[indices]
+        one_hot = np.eye(NUM_CLASSES, dtype=np.bool)[indices]
 
         return one_hot.transpose(0, 3, 1, 2)
 

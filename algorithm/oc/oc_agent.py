@@ -26,6 +26,7 @@ class OC_Agent(Agent):
     def __init__(self,
                  agent_id: int,
                  obs_shapes: list[tuple],
+                 obs_dtypes: list[np.dtype],
                  d_action_sizes: list[int],
                  c_action_size: int,
                  option_names: list[str],
@@ -44,6 +45,7 @@ class OC_Agent(Agent):
 
         super().__init__(agent_id,
                          obs_shapes,
+                         obs_dtypes,
                          d_action_sizes,
                          c_action_size,
                          seq_hidden_state_shape,
@@ -402,11 +404,12 @@ class OC_AgentManager(AgentManager):
                  name: str,
                  obs_names: list[str],
                  obs_shapes: list[tuple[int]],
+                 obs_dtypes: list[np.dtype],
                  d_action_sizes: list[int],
                  c_action_size: int,
                  max_episode_length: int = -1,
                  hit_reward: int | None = None):
-        super().__init__(name, obs_names, obs_shapes, d_action_sizes, c_action_size,
+        super().__init__(name, obs_names, obs_shapes, obs_dtypes, d_action_sizes, c_action_size,
                          max_episode_length, hit_reward)
 
         self.agents_dict: dict[int, OC_Agent] = {}
@@ -432,6 +435,7 @@ class OC_AgentManager(AgentManager):
                 self.agents_dict[agent_id] = OC_Agent(
                     agent_id,
                     self.obs_shapes,
+                    self.obs_dtypes,
                     self.d_action_sizes,
                     self.c_action_size,
                     self.option_names,
@@ -676,6 +680,7 @@ class OC_MultiAgentsManager(MultiAgentsManager):
     def __init__(self,
                  ma_obs_names: dict[str, list[str]],
                  ma_obs_shapes: dict[str, list[tuple[int, ...]]],
+                 ma_obs_dtypes: dict[str, list[np.dtype]],
                  ma_d_action_sizes: dict[str, list[int]],
                  ma_c_action_size: dict[str, int],
                  inference_ma_names: set[str],
@@ -688,6 +693,7 @@ class OC_MultiAgentsManager(MultiAgentsManager):
 
         super().__init__(ma_obs_names,
                          ma_obs_shapes,
+                         ma_obs_dtypes,
                          ma_d_action_sizes,
                          ma_c_action_size,
                          inference_ma_names,

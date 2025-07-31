@@ -282,7 +282,7 @@ class Main:
             spec.loader.exec_module(obs_preprocessor)
             self.env = obs_preprocessor.ObsPreprocessor(self.env)
 
-        ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size = self.env.init()
+        ma_obs_names, ma_obs_shapes, ma_obs_dtypes, ma_d_action_sizes, ma_c_action_size = self.env.init()
 
         if self.train_mode and self.base_config['offline_env_config']['enabled']:
             from algorithm.env_wrapper.offline_wrapper import OfflineWrapper
@@ -297,12 +297,13 @@ class Main:
                                                   env_args=self.base_config['offline_env_config']['env_args'],
                                                   n_envs=self.base_config['offline_env_config']['n_envs'],
                                                   model_abs_dir=self.model_abs_dir)
-            _ma_obs_names, _ma_obs_shapes, _ma_d_action_sizes, _ma_c_action_size = self.offline_env.init()
+            _ma_obs_names, _ma_obs_shapes, _ma_obs_dtypes, _ma_d_action_sizes, _ma_c_action_size = self.offline_env.init()
         else:
             self.offline_env = None
 
         self.ma_manager = MultiAgentsManager(ma_obs_names,
                                              ma_obs_shapes,
+                                             ma_obs_dtypes,
                                              ma_d_action_sizes,
                                              ma_c_action_size,
                                              self.inference_ma_names,
@@ -318,6 +319,7 @@ class Main:
 
             self._logger.info(f'{n} observation names: {mgr.obs_names}')
             self._logger.info(f'{n} observation shapes: {mgr.obs_shapes}')
+            self._logger.info(f'{n} observation dtyps: {mgr.obs_dtypes}')
             self._logger.info(f'{n} discrete action sizes: {mgr.d_action_sizes}')
             self._logger.info(f'{n} continuous action size: {mgr.c_action_size}')
 
