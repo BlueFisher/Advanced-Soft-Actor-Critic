@@ -648,6 +648,8 @@ class OptionSelectorBase(SAC_Base):
             termination: [batch, ]
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
+        self._process_torch_obs_list(obs_list)
+
         pre_option_index = torch.from_numpy(pre_option_index).type(torch.int64).to(self.device)
         pre_action = torch.from_numpy(pre_action).to(self.device)
         pre_seq_hidden_state = torch.from_numpy(pre_seq_hidden_state).to(self.device)
@@ -738,6 +740,8 @@ class OptionSelectorBase(SAC_Base):
         ep_indexes = torch.from_numpy(ep_indexes).to(self.device)
         ep_padding_masks = torch.from_numpy(ep_padding_masks).to(self.device)
         ep_obses_list = [torch.from_numpy(obs).to(self.device) for obs in ep_obses_list]
+        self._process_torch_obs_list(ep_obses_list)
+
         ep_pre_actions = torch.from_numpy(ep_pre_actions).to(self.device)
         ep_pre_attn_states = torch.from_numpy(ep_pre_attn_states).to(self.device)
 
@@ -833,6 +837,8 @@ class OptionSelectorBase(SAC_Base):
         key_indexes = torch.from_numpy(key_indexes).to(self.device)
         key_padding_masks = torch.from_numpy(key_padding_masks).to(self.device)
         key_obses_list = [torch.from_numpy(obs).to(self.device) for obs in key_obses_list]
+        self._process_torch_obs_list(key_obses_list)
+
         key_option_indexes = key_option_indexes.astype(np.int32)
         key_option_indexes = torch.from_numpy(key_option_indexes).to(self.device)
         key_attn_states = torch.from_numpy(key_attn_states).to(self.device)
@@ -2186,10 +2192,8 @@ class OptionSelectorBase(SAC_Base):
             bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
             bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
             bnx_obses_list = [torch.from_numpy(t).to(self.device) for t in bnx_obses_list]
-            for i, bnx_obses in enumerate(bnx_obses_list):
-                # obs is image. It is much faster to convert uint8 to float32 in GPU
-                if bnx_obses.dtype == torch.uint8:
-                    bnx_obses_list[i] = bnx_obses.type(torch.float32) / 255.
+            self._process_torch_obs_list(bnx_obses_list)
+
             bn_option_indexes = torch.from_numpy(bn_option_indexes).type(torch.int64).to(self.device)
             bnx_actions = torch.from_numpy(bnx_actions).to(self.device)
             bn_rewards = torch.from_numpy(bn_rewards).to(self.device)

@@ -765,6 +765,13 @@ class SAC_Base:
         for t_p, p in zip(self.running_means + self.running_variances, new_means + new_variances):
             t_p.copy_(p)
 
+    def _process_torch_obs_list(self, obs_list: torch.Tensor):
+        for i, o in enumerate(obs_list):
+            if o.dtype == torch.uint8:
+                obs_list[i] = o.type(torch.float32) / 255.
+            elif o.dtype == torch.bool:
+                obs_list[i] = o.type(torch.float32)
+
     #################### ! GET ACTION ####################
 
     @torch.no_grad()
@@ -967,6 +974,8 @@ class SAC_Base:
             seq_hidden_state (np): [batch, *seq_hidden_state_shape]
         """
         obs_list = [torch.from_numpy(obs).to(self.device) for obs in obs_list]
+        self._process_torch_obs_list(obs_list)
+
         pre_action = torch.from_numpy(pre_action).to(self.device)
         pre_seq_hidden_state = torch.from_numpy(pre_seq_hidden_state).to(self.device)
 
@@ -1025,6 +1034,8 @@ class SAC_Base:
         ep_indexes = torch.from_numpy(ep_indexes).to(self.device)
         ep_padding_masks = torch.from_numpy(ep_padding_masks).to(self.device)
         ep_obses_list = [torch.from_numpy(obs).to(self.device) for obs in ep_obses_list]
+        self._process_torch_obs_list(ep_obses_list)
+
         ep_pre_actions = torch.from_numpy(ep_pre_actions).to(self.device)
         ep_pre_attn_states = torch.from_numpy(ep_pre_attn_states).to(self.device)
 
@@ -2474,10 +2485,8 @@ class SAC_Base:
             bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
             bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
             bnx_obses_list = [torch.from_numpy(t).to(self.device) for t in bnx_obses_list]
-            for i, bnx_obses in enumerate(bnx_obses_list):
-                # obs is image. It is much faster to convert uint8 to float32 in GPU
-                if bnx_obses.dtype == torch.uint8:
-                    bnx_obses_list[i] = bnx_obses.type(torch.float32) / 255.
+            self._process_torch_obs_list(bnx_obses_list)
+
             bnx_actions = torch.from_numpy(bnx_actions).to(self.device)
             bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
             bn_dones = torch.from_numpy(bn_dones).to(self.device)
@@ -2485,7 +2494,7 @@ class SAC_Base:
             bnx_pre_seq_hidden_states = torch.from_numpy(bnx_pre_seq_hidden_states).to(self.device)
             if self.use_replay_buffer and self.use_priority:
                 priority_is = torch.from_numpy(priority_is).to(self.device)
-
+ 
         with self._profiler('train', repeat=10):
             bnx_states, next_bn_seq_hidden_states, bnx_target_states = self._train(
                 bn_indexes=bn_indexes,

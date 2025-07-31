@@ -19,8 +19,6 @@ class DataStorage:
         self.capacity = capacity
         self.max_id = 10 * capacity  # For multithreading storage, max_id should be larger than capacity
 
-        self.data_key_is_image = set()
-
     def add(self, data: dict[str, np.ndarray]) -> np.ndarray:
         """
         args: list
@@ -32,25 +30,13 @@ class DataStorage:
             self._buffer = dict()
             self._buffer['_id'] = np.zeros(self.capacity, dtype=np.int64)
             for k, v in data.items():
-                # Store uint8 if data is image
-                if ('camera' in k.lower()
-                        or 'visual' in k.lower()
-                        or 'image' in k.lower()
-                        or 'segmentation' in k.lower()):
-                    self.data_key_is_image.add(k)
-
-                dtype = np.uint8 if k in self.data_key_is_image else v.dtype
-
-                self._buffer[k] = np.zeros([self.capacity] + list(v.shape[1:]), dtype=dtype)
+                self._buffer[k] = np.zeros([self.capacity] + list(v.shape[1:]), dtype=v.dtype)
 
         ids = (np.arange(tmp_len) + self._id) % self.max_id
         pointers = ids % self.capacity
 
         self._buffer['_id'][pointers] = ids
         for k, v in data.items():
-            # Store uint8 [0, 255] if data is image
-            if k in self.data_key_is_image:
-                v = v * 255
             self._buffer[k][pointers] = v
 
         self._size = min(self._size + tmp_len, self.capacity)
@@ -77,9 +63,6 @@ class DataStorage:
                 continue
 
             data[k] = v[ids % self.capacity]
-            # It is faster to convert image uint8 to float32 in GPU
-            # if self._data_key_is_image[k]:
-            #     data[k] = data[k].astype(np.float32) / 255.
 
         return data
 

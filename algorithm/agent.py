@@ -44,6 +44,7 @@ class Agent:
     def __init__(self,
                  agent_id: int,
                  obs_shapes: list[tuple[int, ...]],
+                 obs_dtypes: list[np.dtype],
                  d_action_sizes: list[int],
                  c_action_size: int,
                  seq_hidden_state_shape: tuple[int, ...],
@@ -51,6 +52,7 @@ class Agent:
                  hit_reward: int | None = None):
         self.agent_id = agent_id
         self.obs_shapes = obs_shapes
+        self.obs_dtypes = obs_dtypes
         self.d_action_sizes = d_action_sizes
         self.d_action_summed_size = sum(d_action_sizes)
         self.c_action_size = c_action_size
@@ -58,7 +60,7 @@ class Agent:
         self.max_episode_length = max_episode_length if max_episode_length != -1 else DEFAULT_MAX_EPISODE_LENGTH
         self.hit_reward = hit_reward
 
-        self._padding_obs_list = [np.zeros(o).astype(np.float32) for o in self.obs_shapes]
+        self._padding_obs_list = [np.zeros(s).astype(d) for s, d in zip(self.obs_shapes, self.obs_dtypes)]
         d_action_list = [np.eye(d_action_size, dtype=np.float32)[0]
                          for d_action_size in self.d_action_sizes]
         self._padding_action = np.concatenate(d_action_list + [np.zeros(self.c_action_size, dtype=np.float32)], axis=-1)
@@ -71,7 +73,7 @@ class Agent:
     def _generate_empty_episode_trans(self, episode_length: int = 0) -> dict[str, np.ndarray | list[np.ndarray]]:
         empty_episode_trans = {
             'index': -np.ones((episode_length, ), dtype=np.int32),
-            'obs_list': [np.zeros((episode_length, *s), dtype=np.float32) for s in self.obs_shapes],
+            'obs_list': [np.zeros((episode_length, *s), dtype=d) for s, d in zip(self.obs_shapes, self.obs_dtypes)],
             'action': np.zeros((episode_length, self.d_action_summed_size + self.c_action_size), dtype=np.float32),
             'reward': np.zeros((episode_length, ), dtype=np.float32),
             'done': np.zeros((episode_length, ), dtype=bool),
@@ -334,6 +336,7 @@ class AgentManager:
                  name: str,
                  obs_names: list[str],
                  obs_shapes: list[tuple[int]],
+                 obs_dtypes: list[np.dtype],
                  d_action_sizes: list[int],
                  c_action_size: int,
                  max_episode_length: int = -1,
@@ -341,6 +344,7 @@ class AgentManager:
         self.name = name
         self.obs_names = obs_names
         self.obs_shapes = obs_shapes
+        self.obs_dtypes = obs_dtypes
         self.d_action_sizes = d_action_sizes
         self.d_action_summed_size = sum(d_action_sizes)
         self.c_action_size = c_action_size
@@ -449,6 +453,7 @@ class AgentManager:
                 self.agents_dict[agent_id] = Agent(
                     agent_id,
                     self.obs_shapes,
+                    self.obs_dtypes,
                     self.d_action_sizes,
                     self.c_action_size,
                     seq_hidden_state_shape=self.rl.seq_hidden_state_shape,
@@ -689,6 +694,7 @@ class MultiAgentsManager:
     def __init__(self,
                  ma_obs_names: dict[str, list[str]],
                  ma_obs_shapes: dict[str, list[tuple[int, ...]]],
+                 ma_obs_dtypes: dict[str, list[np.dtype]],
                  ma_d_action_sizes: dict[str, list[int]],
                  ma_c_action_size: dict[str, int],
                  inference_ma_names: set[str],
@@ -702,6 +708,7 @@ class MultiAgentsManager:
             self._ma_manager[n] = AgentManager(n,
                                                ma_obs_names[n],
                                                ma_obs_shapes[n],
+                                               ma_obs_dtypes[n],
                                                ma_d_action_sizes[n],
                                                ma_c_action_size[n],
                                                max_episode_length=max_episode_length,

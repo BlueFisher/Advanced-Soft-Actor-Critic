@@ -46,12 +46,14 @@ class EnvWrapper:
 
     def init(self) -> tuple[dict[str, list[str]],
                             dict[str, list[tuple[int]]],
+                            dict[str, list[np.dtype]],
                             dict[str, list[int]],
                             dict[str, int]]:
         """
         Returns:
             ma_obs_names: dict[str, list[str]]
             ma_obs_shapes: dict[str, list[(o1, ), (o2, ), (o3_1, o3_2, o3_3), ...]]
+            ma_obs_dtypes: dict[str, list[np.dtype]]
             ma_d_action_sizes: dict[str, list[int]], list of all action branches
             ma_c_action_size: dict[str, int]
         """

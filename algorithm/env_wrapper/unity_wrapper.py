@@ -184,7 +184,9 @@ class UnityWrapperProcess:
             continuous action size: int
         """
         self.ma_obs_names: dict[str, list[str]] = {}
-        self.ma_obs_shapes: dict[str, tuple[int, ...]] = {}
+        self.ma_obs_shapes: dict[str, list[tuple[int, ...]]] = {}
+        self.ma_obs_dtypes: dict[str, list[np.dtype]] = {}
+        self.ma_img_obs_indexes: dict[str, list[int]] = {}
         self.ma_d_action_sizes: dict[str, list[int]] = {}
         self.ma_c_action_size: dict[str, int] = {}
 
@@ -198,9 +200,11 @@ class UnityWrapperProcess:
             self.ma_obs_names[n] = obs_names
 
             obs_shapes = [o.shape for o in behavior_spec.observation_specs]
+            obs_dtypes = [np.float32 for _ in obs_shapes]
 
             self._logger.info(f'{n} Observation shapes: {obs_shapes}')
             self.ma_obs_shapes[n] = obs_shapes
+            self.ma_obs_dtypes[n] = obs_dtypes
 
             self._empty_action = behavior_spec.action_spec.empty_action
 
@@ -227,6 +231,7 @@ class UnityWrapperProcess:
 
         return (self.ma_obs_names,
                 self.ma_obs_shapes,
+                self.ma_obs_dtypes,
                 self.ma_d_action_sizes,
                 self.ma_c_action_size)
 
@@ -495,16 +500,16 @@ class UnityWrapper(EnvWrapper):
         if self._seq_processes:
             for env in self._env_processes:
                 results = env.init()
-                ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size = results
+                ma_obs_names, ma_obs_shapes, ma_obs_dtypes, ma_d_action_sizes, ma_c_action_size = results
         else:
             for i, conn in enumerate(self._conns):
                 conn.send((INIT, None))
                 results = self._process_conn_receiving(conn, i)
-                ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size = results
+                ma_obs_names, ma_obs_shapes, ma_obs_dtypes, ma_d_action_sizes, ma_c_action_size = results
 
         self.behavior_names = list(ma_obs_names.keys())
 
-        return ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size
+        return ma_obs_names, ma_obs_shapes, ma_obs_dtypes, ma_d_action_sizes, ma_c_action_size
 
     def _cumulate_ma_n_agents_list(self,
                                    ma_envs_agent_ids: dict[str, list[int]]):
