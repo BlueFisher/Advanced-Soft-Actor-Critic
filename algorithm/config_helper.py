@@ -197,7 +197,7 @@ class ColoredFormatter(logging.Formatter):
         levelname = colored_record.levelname
         seq = MAPPING.get(levelname, 37)  # default white
         colored_levelname = ('{0}{1}m{2}{3}') \
-            .format(PREFIX, seq, levelname, SUFFIX)
+            .format(PREFIX, seq, f'[{levelname}]', SUFFIX)
         colored_record.levelname = colored_levelname
         return logging.Formatter.format(self, colored_record)
 
@@ -214,7 +214,7 @@ def set_logger(debug=False):
     sh.setLevel(logging.DEBUG if debug else logging.INFO)
 
     # Add handler and formatter to logger
-    sh.setFormatter(ColoredFormatter('[%(levelname)s] [%(name)s] %(message)s'))
+    sh.setFormatter(ColoredFormatter('%(levelname)s [%(name)s] %(message)s'))
     logger.addHandler(sh)
 
     logging.getLogger('PIL').setLevel(logging.WARNING)
