@@ -1523,9 +1523,11 @@ class SAC_Base:
         if self.optimizer_rep:
             self.optimizer_rep.zero_grad()
 
-        for loss_q, opt_q in zip(loss_q_list, self.optimizer_q_list):
+        for opt_q in self.optimizer_q_list:
             opt_q.zero_grad()
-            loss_q.backward(retain_graph=True)
+
+        loss = torch.stack(loss_q_list).sum()
+        loss.backward()
 
         grads_rep_main = [m.grad.detach() if m.grad is not None else None
                           for m in self.model_rep.parameters()]
