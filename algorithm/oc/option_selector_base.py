@@ -321,6 +321,11 @@ class OptionSelectorBase(SAC_Base):
                                                                       self.num_options,
                                                                       True).to(self.device)
                                                  for _ in range(self.ensemble_q_num)]
+
+        for model_target_v in self.model_target_v_over_options_list:
+            for param in model_target_v.parameters():
+                param.requires_grad = False
+
         self.optimizer_v_list = [adam_optimizer(self.model_v_over_options_list[i].parameters()) for i in range(self.ensemble_q_num)]
 
         """ SIAMESE REPRESENTATION LEARNING """
@@ -508,7 +513,6 @@ class OptionSelectorBase(SAC_Base):
 
         Returns:
             new_option_index (torch.int64): [batch, ]
-            new_option_mask (torch.bool): [batch, ]
         """
         option_index = pre_option_index.clone()
 
@@ -1010,6 +1014,131 @@ class OptionSelectorBase(SAC_Base):
 
         return l_low_obses_list
 
+    def get_obnx_low_states(self,
+                            obnx_indexes: torch.Tensor,
+                            obnx_padding_masks: torch.Tensor,
+                            obnx_low_obses_list: list[torch.Tensor],
+                            obnx_option_indexes: torch.Tensor,
+                            obnx_pre_actions: torch.Tensor,
+                            obnx_pre_low_seq_hidden_states: torch.Tensor = None,
+                            is_target: bool = False) -> tuple[torch.Tensor,
+                                                              torch.Tensor]:
+        """
+        Args:
+            obnx_indexes (torch.int32): [batch, ob + n + 1]
+            obnx_padding_masks (torch.bool): [batch, ob + n + 1]
+            obnx_low_obses_list: list([batch, ob + n + 1, *low_obs_shapes_i], ...)
+            obnx_option_indexes (torch.int64): [batch, ob + n + 1]
+            obnx_pre_actions: [batch, ob + n + 1, action_size]
+            obnx_pre_low_seq_hidden_states: [batch, ob + n + 1, *low_seq_hidden_state_shape]
+
+        Returns:
+            obnx_low_states: [batch, ob + n + 1, low_state_size]
+            obnx_low_seq_hidden_states: [batch, ob + n + 1, *low_seq_hidden_state_shape]
+        """
+        obnx_low_states = torch.zeros((obnx_indexes.shape[0], obnx_indexes.shape[1], self.low_state_size), device=self.device)
+        obnx_low_seq_hidden_states = torch.zeros((obnx_indexes.shape[0], obnx_indexes.shape[1], *self.low_seq_hidden_state_shape), device=self.device)
+
+        option_index = obnx_option_indexes[:, self.option_burn_in_step]
+
+        for i, option in enumerate(self.option_list):
+            mask = (option_index == i)
+            if not torch.any(mask):
+                continue
+
+            o_obnx_states, o_obnx_low_seq_hidden_states = option.get_l_states(
+                l_indexes=obnx_indexes[mask],
+                l_padding_masks=torch.logical_or(obnx_padding_masks[mask],
+                                                 obnx_option_indexes[mask] != i),
+                l_obses_list=[o[mask] for o in obnx_low_obses_list],
+                l_pre_actions=obnx_pre_actions[mask],
+                l_pre_seq_hidden_states=obnx_pre_low_seq_hidden_states[mask],
+
+                is_target=is_target
+            )
+
+            obnx_low_states[mask] = o_obnx_states
+            obnx_low_seq_hidden_states[mask] = o_obnx_low_seq_hidden_states
+
+        return obnx_low_states, obnx_low_seq_hidden_states
+
+    def get_l_low_states(self,
+                         l_indexes: torch.Tensor,
+                         l_padding_masks: torch.Tensor,
+                         l_low_obses_list: list[torch.Tensor],
+                         l_option_indexes: torch.Tensor,
+                         l_pre_actions: torch.Tensor,
+                         l_pre_low_seq_hidden_states: torch.Tensor = None,
+                         is_target: bool = False) -> tuple[torch.Tensor,
+                                                           torch.Tensor]:
+        """
+        Args:
+            l_indexes (torch.int32): [batch, l]
+            l_padding_masks (torch.bool): [batch, l]
+            l_low_obses_list: list([batch, l, *low_obs_shapes_i], ...)
+            l_option_indexes (torch.int64): [batch, l]
+            l_pre_actions: [batch, l, action_size]
+            l_pre_low_seq_hidden_states: [batch, l, *low_seq_hidden_state_shape]
+
+        Returns:
+            l_low_states: [batch, l, low_state_size]
+            l_low_seq_hidden_states: [batch, l, *low_seq_hidden_state_shape]
+        """
+        l_low_states = torch.zeros((l_indexes.shape[0], l_indexes.shape[1], self.low_state_size), device=self.device)
+        l_low_seq_hidden_states = torch.zeros((l_indexes.shape[0], l_indexes.shape[1], *self.low_seq_hidden_state_shape), device=self.device)
+
+        for i, option in enumerate(self.option_list):
+            mask = (l_option_indexes == i)
+
+            o_l_states, o_l_low_seq_hidden_states = option.get_l_states(
+                l_indexes=l_indexes,
+                l_padding_masks=torch.logical_or(l_padding_masks,
+                                                 l_option_indexes != i),
+                l_obses_list=l_low_obses_list,
+                l_pre_actions=l_pre_actions,
+                l_pre_seq_hidden_states=l_pre_low_seq_hidden_states,
+
+                is_target=is_target
+            )
+
+            l_low_states += o_l_states * mask.unsqueeze(-1)
+            l_low_seq_hidden_states += o_l_low_seq_hidden_states * mask[(Ellipsis, ) + (None,) * len(self.low_seq_hidden_state_shape)]
+
+        return l_low_states, l_low_seq_hidden_states
+
+    @torch.no_grad()
+    def get_obnx_probs(self,
+                       obnx_low_obses_list: list[torch.Tensor],
+                       obnx_low_states: torch.Tensor,
+                       obnx_option_indexes: torch.Tensor,
+                       obnx_actions: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            obnx_low_obses_list: list([batch, l, *low_obs_shapes_i], ...)
+            obnx_low_states: [batch, l, low_state_size]
+            obnx_option_indexes (torch.int64): [batch, l]
+            obnx_actions: [batch, l, action_size]
+
+        Returns:
+            obnx_low_probs: [batch, l, action_size]
+        """
+        obnx_low_probs = torch.zeros_like(obnx_actions)
+
+        option_index = obnx_option_indexes[:, self.option_burn_in_step]
+
+        for i, option in enumerate(self.option_list):
+            mask = (option_index == i)
+            if not torch.any(mask):
+                continue
+
+            o_obnx_probs = option.get_l_probs(l_obses_list=[o[mask] for o in obnx_low_obses_list],
+                                              l_states=obnx_low_states[mask],
+                                              l_actions=obnx_actions[mask])
+
+            obnx_low_probs[mask] = o_obnx_probs
+
+        return obnx_low_probs
+
     @torch.no_grad()
     def get_l_probs(self,
                     l_low_obses_list: list[torch.Tensor],
@@ -1106,10 +1235,41 @@ class OptionSelectorBase(SAC_Base):
 
         return td_error
 
+    def get_low_obnx_data(self,
+                          bn_indexes: torch.Tensor,
+                          bn_padding_masks: torch.Tensor,
+                          bn_option_indexes: torch.Tensor,
+                          bn_actions: torch.Tensor) -> tuple[torch.Tensor,
+                                                             torch.Tensor,
+                                                             torch.Tensor]:
+        """
+        Args:
+            bn_indexes (torch.int32): [batch, b + n]
+            bn_padding_masks (torch.bool): [batch, b + n]
+            bn_option_indexes (torch.int64): [batch, b + n]
+            bn_actions: [batch, b + n, action_size]
+
+        Returns:
+            obnx_indexes: [batch, ob + n + 1]
+            obnx_padding_masks: [batch, ob + n + 1]
+            obn_option_indexes (torch.int64): [batch, ob + n + 1]
+            obnx_pre_actions: [batch, ob + n + 1, action_size]
+        """
+
+        bnx_indexes = torch.concat([bn_indexes[:, self.option_burn_in_from:],
+                                    bn_indexes[:, -1:] + 1], dim=1)
+        bnx_padding_masks = torch.concat([bn_padding_masks[:, self.option_burn_in_from:],
+                                          torch.zeros_like(bn_padding_masks[:, -1:], dtype=torch.bool)], dim=1)
+        bnx_option_indexes = torch.concat([bn_option_indexes[:, self.option_burn_in_from:],
+                                           bn_indexes[:, -1:]], dim=1)
+        bnx_pre_actions = gen_pre_n_actions(bn_actions[:, self.option_burn_in_from:], keep_last_action=True)
+
+        return bnx_indexes, bnx_padding_masks, bnx_option_indexes, bnx_pre_actions
+
     def _train_q(self,
                  bn_indexes: torch.Tensor,
                  bn_padding_masks: torch.Tensor,
-                 bnx_states: torch.Tensor,
+                 bnx_target_states: torch.Tensor,
                  bn_option_indexes: torch.Tensor,
                  obnx_low_obses_list: list[torch.Tensor],
                  obnx_low_target_obses_list: list[torch.Tensor],
@@ -1128,7 +1288,7 @@ class OptionSelectorBase(SAC_Base):
         Args:
             bn_indexes (torch.int32): [batch, b + n],
             bn_padding_masks (torch.bool): [batch, b + n],
-            bnx_states: [batch, b + n + 1]
+            bnx_target_states: [batch, b + n + 1]
             bn_option_indexes (torch.int64): [batch, b + n],
             obnx_low_obses_list: list([batch, ob + n + 1, *low_obs_shapes_i], ...)
             obnx_low_target_obses_list: list([batch, ob + n + 1, *low_obs_shapes_i], ...)
@@ -1140,7 +1300,6 @@ class OptionSelectorBase(SAC_Base):
             priority_is: [batch, 1]
 
         Returns:
-            obnx_low_states: [batch, ob + n + 1, low_state_size]
             obnx_low_target_states: [batch, ob + n + 1, low_state_size]
             next_n_vs_over_options: [batch, n, num_options]
             y: [batch, 1]
@@ -1149,51 +1308,48 @@ class OptionSelectorBase(SAC_Base):
         batch = bn_indexes.shape[0]
         option_index = bn_option_indexes[:, self.burn_in_step]
 
-        next_n_states = bnx_states[:, self.burn_in_step + 1:]
+        next_n_states = bnx_target_states[:, self.burn_in_step + 1:]
         next_n_vs_over_options_list = [v(next_n_states) for v in self.model_target_v_over_options_list]  # list([batch, n, num_options], ...)
         next_n_vs_over_options, _ = torch.min(torch.stack(next_n_vs_over_options_list, -1), dim=-1)
 
         d_y = torch.zeros((batch, 1), device=self.device)
         c_y = torch.zeros((batch, 1), device=self.device)
 
-        obnx_low_states = torch.zeros((batch, self.option_burn_in_step + self.n_step + 1, self.low_state_size), device=self.device)
-        obnx_low_target_states = torch.zeros((batch, self.option_burn_in_step + self.n_step + 1, self.low_state_size), device=self.device)
+        (obnx_indexes,
+         obnx_padding_masks,
+         obnx_option_indexes,
+         obnx_pre_actions) = self.get_low_obnx_data(
+            bn_indexes=bn_indexes,
+            bn_padding_masks=bn_padding_masks,
+            bn_option_indexes=bn_option_indexes,
+            bn_actions=bnx_actions[:, :-1]
+        )
+
+        obnx_low_states, _ = self.get_obnx_low_states(
+            obnx_indexes=obnx_indexes,
+            obnx_padding_masks=obnx_padding_masks,
+            obnx_low_obses_list=obnx_low_obses_list,
+            obnx_option_indexes=obnx_option_indexes,
+            obnx_pre_actions=obnx_pre_actions,
+            obnx_pre_low_seq_hidden_states=obnx_pre_low_seq_hidden_states,
+            is_target=False
+        )
+        with torch.no_grad():
+            obnx_low_target_states, _ = self.get_obnx_low_states(
+                obnx_indexes=obnx_indexes,
+                obnx_padding_masks=obnx_padding_masks,
+                obnx_low_obses_list=obnx_low_target_obses_list,
+                obnx_option_indexes=obnx_option_indexes,
+                obnx_pre_actions=obnx_pre_actions,
+                obnx_pre_low_seq_hidden_states=obnx_pre_low_seq_hidden_states,
+                is_target=True
+            )
 
         # Get all states of all options, then replace them according to option_indexes
         for i, option in enumerate(self.option_list):
             mask = (option_index == i)
             if not torch.any(mask):
                 continue
-
-            (o_obnx_indexes,
-             o_obnx_padding_masks,
-             o_obnx_pre_actions) = option.get_bnx_data(
-                bn_indexes=bn_indexes[mask, self.option_burn_in_from:],
-                bn_padding_masks=bn_padding_masks[mask, self.option_burn_in_from:],
-                bn_actions=bnx_actions[mask, self.option_burn_in_from:-1],
-            )
-
-            o_obnx_low_states, _ = option.get_l_states(
-                l_indexes=o_obnx_indexes,
-                l_padding_masks=o_obnx_padding_masks,
-                l_obses_list=[o[mask] for o in obnx_low_obses_list],
-                l_pre_actions=o_obnx_pre_actions,
-                l_pre_seq_hidden_states=obnx_pre_low_seq_hidden_states[mask],
-                is_target=False
-            )
-
-            with torch.no_grad():
-                o_obnx_low_target_states, _ = option.get_l_states(
-                    l_indexes=o_obnx_indexes,
-                    l_padding_masks=o_obnx_padding_masks,
-                    l_obses_list=[o[mask] for o in obnx_low_target_obses_list],
-                    l_pre_actions=o_obnx_pre_actions,
-                    l_pre_seq_hidden_states=obnx_pre_low_seq_hidden_states[mask],
-                    is_target=True
-                )
-
-            obnx_low_states[mask] = o_obnx_low_states
-            obnx_low_target_states[mask] = o_obnx_low_target_states
 
             o_obn_padding_masks = torch.logical_or(bn_padding_masks[mask, self.option_burn_in_from:],
                                                    bn_option_indexes[mask, self.option_burn_in_from:] != i)
@@ -1207,8 +1363,8 @@ class OptionSelectorBase(SAC_Base):
                                 for obnx_low_obses in obnx_low_obses_list],
                 bnx_target_obses_list=[obnx_low_target_obses[mask]
                                        for obnx_low_target_obses in obnx_low_target_obses_list],
-                bnx_states=o_obnx_low_states,
-                bnx_target_states=o_obnx_low_target_states,
+                bnx_states=obnx_low_states[mask],
+                bnx_target_states=obnx_low_target_states[mask],
                 bnx_actions=bnx_actions[mask, self.option_burn_in_from:],
                 bn_rewards=bn_rewards[mask, self.option_burn_in_from:],
                 bn_dones=bn_dones[mask, self.option_burn_in_from:],
@@ -1225,7 +1381,7 @@ class OptionSelectorBase(SAC_Base):
         for i, option in enumerate(self.option_list):
             option.train_rep_q()
 
-        return (obnx_low_states, obnx_low_target_states,
+        return (obnx_low_target_states,
                 next_n_vs_over_options,
                 d_y + c_y)
 
@@ -1295,8 +1451,9 @@ class OptionSelectorBase(SAC_Base):
             if optimizer is not None:
                 optimizer.zero_grad()
 
-            if loss_v.requires_grad:
-                loss_v.backward(retain_graph=True)
+        loss_v = torch.stack(loss_v_list).sum()
+        if loss_v.requires_grad:
+            loss_v.backward(retain_graph=True)
 
         grads_rep_main = [m.grad.detach() if m.grad is not None else None
                           for m in self.model_rep.parameters()]
@@ -1469,50 +1626,41 @@ class OptionSelectorBase(SAC_Base):
     def _train_terminations(self,
                             y: torch.Tensor,
 
-                            bnx_states: torch.Tensor,
-                            bn_option_indexes: torch.Tensor,
-                            obnx_low_target_obses_list: list[torch.Tensor],
-                            obnx_low_target_states: list[torch.Tensor],
-                            bn_dones: torch.Tensor,
+                            state: torch.Tensor,
+                            option_index: torch.Tensor,
+                            low_obs_list: list[torch.Tensor],
+                            low_state: list[torch.Tensor],
+                            done: torch.Tensor,
                             priority_is: torch.Tensor) -> list[torch.Tensor]:
         """
         Args:
             y: [batch, 1]
 
-            bnx_states: [batch, b + n + 1, state_size]
-            bn_option_indexes (torch.int64): [batch, b + n]s
-            obnx_low_target_obses_list: list([batch, ob + n + 1, *low_obs_shapes_i], ...)
-            obnx_low_target_states: [batch, ob + n + 1, low_state_size]
-            bn_dones (torch.bool): [batch, b + n]
+            state: [batch, state_size]
+            option_index (torch.int64): [batch, ]
+            low_obs_list: list([batch, *low_obs_shapes_i], ...)
+            low_state: [batch, low_state_size]
+            done (torch.bool): [batch, ]
             priority_is: [batch, 1]
 
         Returns:
             loss_v_list: list(torch.float32, ...)
         """
 
-        state = bnx_states[:, self.burn_in_step, ...]
-        option_index = bn_option_indexes[:, self.burn_in_step]
-
-        low_obs_list = [obnx_low_obses[:, self.option_burn_in_step]
-                        for obnx_low_obses in obnx_low_target_obses_list]
-        done = bn_dones[:, self.burn_in_step]
-
         with torch.no_grad():
-            target_v_over_options_list = [v(state) for v in self.model_target_v_over_options_list]  # list([batch, num_options], ...)
-            stacked_target_v_over_options = torch.stack(target_v_over_options_list)  # [ensemble, batch, num_options]
-            target_v_over_options, _ = stacked_target_v_over_options.min(dim=0)  # [batch, num_options]
+            v_over_options_list = [v(state) for v in self.model_v_over_options_list]  # list([batch, num_options], ...)
+            stacked_v_over_options = torch.stack(v_over_options_list)  # [ensemble, batch, num_options]
+            target_v_over_options, _ = stacked_v_over_options.min(dim=0)  # [batch, num_options]
 
         for i, option in enumerate(self.option_list):
             mask = (option_index == i)
             if not torch.any(mask):
                 continue
 
-            low_target_state = obnx_low_target_states[:, self.option_burn_in_step]
-
             option.compute_termination_grads(
                 terminal_entropy=self.terminal_entropy,
                 obs_list=[o[mask] for o in low_obs_list],
-                state=low_target_state[mask],
+                state=low_state[mask],
                 y=y[mask],
                 v_over_options=target_v_over_options[mask],
                 done=done[mask],
@@ -1641,12 +1789,11 @@ class OptionSelectorBase(SAC_Base):
         if self.optimizer_rep:
             self.optimizer_rep.zero_grad()
 
-        (obnx_low_states,
-         obnx_low_target_states,
+        (obnx_low_target_states,
          next_n_vs_over_options,
          y) = self._train_q(bn_indexes=bn_indexes,
                             bn_padding_masks=bn_padding_masks,
-                            bnx_states=bnx_states,
+                            bnx_target_states=bnx_target_states,
                             bn_option_indexes=bn_option_indexes,
                             obnx_low_obses_list=[o for o in obnx_low_obses_list],
                             obnx_low_target_obses_list=obnx_low_target_obses_list,
@@ -1656,7 +1803,6 @@ class OptionSelectorBase(SAC_Base):
                             bn_mu_probs=bn_mu_probs,
                             obnx_pre_low_seq_hidden_states=bnx_pre_low_seq_hidden_states[:, self.option_burn_in_from:],
                             priority_is=priority_is)
-        obnx_low_states = obnx_low_states.detach()  # [batch, ob + n + 1, low_state_size]
         obnx_low_target_states = obnx_low_target_states.detach()  # [batch, ob + n + 1, low_state_size]
         next_n_vs_over_options = next_n_vs_over_options.detach()
         # [batch, n, num_options]
@@ -1692,46 +1838,46 @@ class OptionSelectorBase(SAC_Base):
                                                             l_states=bnx_states[:, self.option_burn_in_from:])
             # list([batch, ob + n + 1, *low_obs_shapes_i], ...)
 
+        with torch.no_grad():
+            (obnx_indexes,
+             obnx_padding_masks,
+             obnx_option_indexes,
+             obnx_pre_actions) = self.get_low_obnx_data(
+                bn_indexes=bn_indexes,
+                bn_padding_masks=bn_padding_masks,
+                bn_option_indexes=bn_option_indexes,
+                bn_actions=bnx_actions[:, :-1]
+            )
+
+            obnx_low_states, next_obnx_low_seq_hidden_states = self.get_l_low_states(
+                l_indexes=obnx_indexes,
+                l_padding_masks=obnx_padding_masks,
+                l_low_obses_list=obnx_low_obses_list,
+                l_option_indexes=obnx_option_indexes,
+                l_pre_actions=obnx_pre_actions,
+                l_pre_low_seq_hidden_states=bnx_pre_low_seq_hidden_states[:, self.option_burn_in_from:],
+                is_target=False
+            )
+
         self._train_terminations(y=y,
 
-                                 bnx_states=bnx_states,
-                                 bn_option_indexes=bn_option_indexes,
-                                 obnx_low_target_obses_list=obnx_low_target_obses_list,
-                                 obnx_low_target_states=obnx_low_target_states,
-                                 bn_dones=bn_dones,
+                                 state=bnx_states[:, self.burn_in_step, ...],
+                                 option_index=bn_option_indexes[:, self.burn_in_step],
+                                 low_obs_list=[obnx_low_obses[:, self.option_burn_in_step]
+                                               for obnx_low_obses in obnx_low_obses_list],
+                                 low_state=obnx_low_states[:, self.option_burn_in_step],
+                                 done=bn_dones[:, self.burn_in_step],
                                  priority_is=priority_is)
-
-        next_obnx_low_seq_hidden_states = torch.zeros_like(bnx_pre_low_seq_hidden_states[:, self.option_burn_in_from:])
 
         for i, option in enumerate(self.option_list):
             mask = (option_index == i)
             if not torch.any(mask):
                 continue
 
-            (o_obnx_indexes,
-             o_obnx_padding_masks,
-             o_obnx_pre_actions) = option.get_bnx_data(
-                bn_indexes=bn_indexes[mask, self.option_burn_in_from:],
-                bn_padding_masks=bn_padding_masks[mask, self.option_burn_in_from:],
-                bn_actions=bnx_actions[mask, self.option_burn_in_from:-1],
-            )
-
-            with torch.no_grad():
-                o_obnx_low_states, next_o_obnx_seq_hidden_states = option.get_l_states(
-                    l_indexes=o_obnx_indexes,
-                    l_padding_masks=o_obnx_padding_masks,
-                    l_obses_list=[o[mask] for o in obnx_low_obses_list],
-                    l_pre_actions=o_obnx_pre_actions,
-                    l_pre_seq_hidden_states=bnx_pre_low_seq_hidden_states[mask, self.option_burn_in_from:],
-                    is_target=False
-                )
-                obnx_low_states[mask] = o_obnx_low_states
-                next_obnx_low_seq_hidden_states[mask] = next_o_obnx_seq_hidden_states
-
             option.train_policy_alpha(bn_padding_masks=bn_padding_masks[mask, self.option_burn_in_from:],
                                       bn_obses_list=[obnx_low_obses[mask, :-1, ...]
                                                      for obnx_low_obses in obnx_low_obses_list],
-                                      bnx_states=o_obnx_low_states,
+                                      bnx_states=obnx_low_states[mask],
                                       bn_actions=bnx_actions[mask, self.option_burn_in_from:-1],
                                       bn_mu_probs=bn_mu_probs[mask, self.option_burn_in_from:])
 
