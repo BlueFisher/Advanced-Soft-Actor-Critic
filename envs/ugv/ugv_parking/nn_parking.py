@@ -281,7 +281,7 @@ class ModelRND(m.ModelRND):
 
 class ModelTermination(m.ModelTermination):
     def _build_model(self):
-        super()._build_model(dense_n=128, dense_depth=2, dropout=0.05)
+        super()._build_model(dense_n=128, dense_depth=2, dropout=0.2)
 
 
 ModelRepProjection = m.ModelRepProjection

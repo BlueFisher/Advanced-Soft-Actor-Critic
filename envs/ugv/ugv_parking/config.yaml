@@ -35,6 +35,7 @@ default:
 
   reset_config:
     clockwise_anticlockwise_done_reward: 1
+    in_inner: 0.5
     reaching_park_done_reward: 2
     parking_done_reward: 10
     disabled_wall_piece: 0 # Binary mask indicating which walls are disabled
@@ -63,8 +64,8 @@ default:
     offline_loss: true
 
   oc_config:
-    option_epsilon: 0.2
-    terminal_entropy: -0.001 # Tending not to terminate >0, tending to terminate <0
+    option_epsilon: 0.1
+    terminal_entropy: -0.01 # Tending not to terminate >0, tending to terminate <0
 
 clockwise_race:
   base_config:
@@ -127,6 +128,7 @@ combined:
     siamese: null
 
   reset_config:
+    in_inner: 2
     disabled_wall_piece: 0
 
   oc_config:
@@ -139,19 +141,19 @@ combined:
     option_configs:
       - name: clockwise_race-20250726201403vGdm
         fix_policy: true
-        random_q: true
+        random_q: false
       - name: anticlockwise_race-20250726194747eTsy
         fix_policy: true
-        random_q: true
+        random_q: false
       - name: reaching_park-20250726201508TuDW
         fix_policy: true
-        random_q: true
+        random_q: false
       - name: parking-20250726200453RwPB
         fix_policy: true
-        random_q: true
+        random_q: false
       - name: turn_around-20250726201919UXEV
         fix_policy: true
-        random_q: true
+        random_q: false
 
 combined_new:
   inherited: combined
