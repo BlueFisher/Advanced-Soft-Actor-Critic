@@ -184,7 +184,9 @@ class ModelTermination(nn.Module):
         self.dense = LinearLayers(self.state_size, dense_n, dense_depth, output_size=1, dropout=dropout)
 
     def forward(self, state: torch.Tensor, obs_list: list[torch.Tensor]) -> torch.Tensor:
-        return torch.sigmoid(self.dense(state))
+        y = self.dense(state)
+        y = torch.clamp(y, -5., 5.)
+        return torch.sigmoid(y)
 
     def __call__(self, state: torch.Tensor, obs_list: list[torch.Tensor]) -> torch.Tensor:
         return super().__call__(state, obs_list)
