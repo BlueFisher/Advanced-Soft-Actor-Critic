@@ -101,7 +101,6 @@ class LinearLayers(nn.Module):
             nn.init.kaiming_uniform_(linear.weight.data)
             torch.zero_(linear.bias.data)
             dense.append(linear)
-            dense.append(nn.Dropout(dropout))
             self.output_size = output_size
 
         self.dense = nn.Sequential(*dense)
