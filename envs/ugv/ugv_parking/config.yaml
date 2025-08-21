@@ -141,19 +141,19 @@ combined:
     option_configs:
       - name: clockwise_race-20250726201403vGdm
         fix_policy: true
-        random_q: false
+        random_q: true
       - name: anticlockwise_race-20250726194747eTsy
         fix_policy: true
-        random_q: false
+        random_q: true
       - name: reaching_park-20250726201508TuDW
         fix_policy: true
-        random_q: false
+        random_q: true
       - name: parking-20250726200453RwPB
         fix_policy: true
-        random_q: false
+        random_q: true
       - name: turn_around-20250726201919UXEV
         fix_policy: true
-        random_q: false
+        random_q: true
 
 combined_new:
   inherited: combined
@@ -163,70 +163,46 @@ combined_new:
 
   oc_config:
     option_configs:
-      - name: clockwise_race-20250715100122YzHn
+      - name: clockwise_race-20250726201403vGdm
         fix_policy: true
         random_q: true
-      - name: anticlockwise_race-20250715095359VZQK
+      - name: anticlockwise_race-20250726194747eTsy
         fix_policy: true
         random_q: true
-      - name: reaching_park-20250715124455pVjf
+      - name: reaching_park-20250726201508TuDW
         fix_policy: true
         random_q: true
-      - name: parking-20250715100500KaSX
+      - name: parking-20250726200453RwPB
         fix_policy: true
         random_q: true
-      - name: turn_around-20250715100231wlDe
+      - name: turn_around-20250726201919UXEV
         fix_policy: true
         random_q: true
       - name: new_option
         fix_policy: false
         random_q: true
 
-combined_nofix:
+combined_wo_parking:
   inherited: combined
 
   base_config:
-    name: "combined-nofix-{time}"
-
-  sac_config:
-    nn: nn_parking
-
-  oc_config:
-    option_configs:
-      - name: parking-20250216130300UKMn
-        fix_policy: false
-        random_q: false
-      - name: clockwise_race-20250216130909nVth
-        fix_policy: false
-        random_q: false
-      - name: anticlockwise_race-20250216130613tsIx
-        fix_policy: false
-        random_q: false
-      - name: reaching_park-20250216131100foqy
-        fix_policy: false
-        random_q: false
-
-combined_wo_parking:
-  base_config:
-    env_args:
-      task: 5
     name: "combined_wo_parking-{time}"
 
-  sac_config:
-    nn: nn_parking
-
   oc_config:
     option_configs:
+      - name: clockwise_race-20250726201403vGdm
+        fix_policy: true
+        random_q: true
+      - name: anticlockwise_race-20250726194747eTsy
+        fix_policy: true
+        random_q: true
+      - name: reaching_park-20250726201508TuDW
+        fix_policy: true
+        random_q: true
       - name: parking-new
         fix_policy: false
         random_q: false
-      - name: clockwise_race-20240729222106DuSY
-        fix_policy: true
-        random_q: true
-      - name: anticlockwise_race-20240729222105pLgE
-        fix_policy: true
-        random_q: true
-      - name: reaching_park-20240901142509rnFA
+      - name: turn_around-20250726201919UXEV
         fix_policy: true
         random_q: true
 

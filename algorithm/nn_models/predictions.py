@@ -50,7 +50,8 @@ class ModelTransition(ModelBaseTransition):
 
         next_state = self.dense(torch.cat([state, action], dim=-1))
         mean, logstd = torch.chunk(next_state, 2, dim=-1)
-        return torch.distributions.Normal(mean, torch.clamp(torch.exp(logstd), 0.1, 1.0))
+        return torch.distributions.Normal(mean, torch.clamp(torch.exp(logstd), 0.1, 1.0),
+                                          validate_args=False)
 
 
 class ModelBaseReward(nn.Module):

@@ -907,7 +907,8 @@ class SAC_Base:
 
                         # Generate random action
                         d_dist_list = [distributions.OneHotCategorical(logits=torch.ones((batch, d_action_size),
-                                                                                         device=self.device))
+                                                                                         device=self.device),
+                                                                       validate_args=False)
                                        for d_action_size in self.d_action_sizes]
                         random_d_action = torch.concat([dist.sample() for dist in d_dist_list], dim=-1)
 
@@ -1772,7 +1773,8 @@ class SAC_Base:
         loss_transition = -torch.mean(approx_next_state_dist.log_prob(bnx_target_states[:, self.burn_in_step + 1:, ...]))
 
         std_normal = distributions.Normal(torch.zeros_like(approx_next_state_dist.loc),
-                                          torch.ones_like(approx_next_state_dist.scale))
+                                          torch.ones_like(approx_next_state_dist.scale),
+                                          validate_args=False)
         kl = distributions.kl.kl_divergence(approx_next_state_dist, std_normal)
         loss_transition = loss_transition + self.transition_kl * torch.mean(kl)
 
@@ -2496,7 +2498,7 @@ class SAC_Base:
             bnx_pre_seq_hidden_states = torch.from_numpy(bnx_pre_seq_hidden_states).to(self.device)
             if self.use_replay_buffer and self.use_priority:
                 priority_is = torch.from_numpy(priority_is).to(self.device)
- 
+
         with self._profiler('train', repeat=10):
             bnx_states, next_bn_seq_hidden_states, bnx_target_states = self._train(
                 bn_indexes=bn_indexes,
