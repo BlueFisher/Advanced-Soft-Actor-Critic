@@ -156,7 +156,8 @@ class ModelPolicy(ModelBasePolicy):
 
         if self.d_action_sizes:
             logits_list = [d_dense(state) for d_dense in self.d_dense_list]
-            d_policy_list = [torch.distributions.OneHotCategorical(logits=logits) for logits in logits_list]
+            d_policy_list = [torch.distributions.OneHotCategorical(logits=logits,
+                                                                   validate_args=False) for logits in logits_list]
             d_policy = JointOneHotCategorical(d_policy_list)
         else:
             d_policy = None
@@ -165,7 +166,8 @@ class ModelPolicy(ModelBasePolicy):
             l = self.c_dense(state)
             mean = self.mean_dense(l)
             logstd = self.logstd_dense(l)
-            c_policy = torch.distributions.Normal(torch.tanh(mean / 5.) * 5., torch.exp(torch.clamp(logstd, -20, 0.5)))
+            c_policy = torch.distributions.Normal(torch.tanh(mean / 5.) * 5., torch.exp(torch.clamp(logstd, -20, 0.5)),
+                                                  validate_args=False)
         else:
             c_policy = None
 

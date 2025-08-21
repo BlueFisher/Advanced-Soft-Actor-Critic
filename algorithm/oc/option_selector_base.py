@@ -533,7 +533,7 @@ class OptionSelectorBase(SAC_Base):
                 loss = torch.sum(torch.abs(rnd - t_rnd), dim=-1)  # [batch, num_options]
                 random_option_index = loss.argmax(dim=-1)  # [batch, ]
             else:
-                dist = distributions.Categorical(logits=v_over_options)
+                dist = distributions.Categorical(logits=v_over_options, validate_args=False)
                 random_option_index = dist.sample()  # [batch, ]
 
             option_index[random_mask] = random_option_index[random_mask]
