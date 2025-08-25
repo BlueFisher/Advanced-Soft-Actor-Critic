@@ -667,11 +667,9 @@ class OptionBase(SAC_Base):
         """
         termination = self.model_termination(state, obs_list)  # [batch, 1]
 
-        # v, _ = v_over_options.max(-1, keepdim=True)  # [batch, 1]
         v = v_over_options.mean(-1, keepdim=True)  # [batch, 1]
 
         adv = y - v + terminal_entropy  # [batch, 1]
-        # adv = functional.normalize(adv, dim=0)
 
         loss_termination = termination * adv * ~done.unsqueeze(-1) * priority_is  # [batch, 1]
 
