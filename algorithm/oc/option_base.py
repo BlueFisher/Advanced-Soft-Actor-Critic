@@ -1,3 +1,5 @@
+import os
+
 import torch
 from torch import nn, optim
 from torch.nn import functional
@@ -15,6 +17,8 @@ class OptionBase(SAC_Base):
                  *args, **kwargs):
         self.option = option
         self.fix_policy = fix_policy
+        if os.environ.get('DISABLE_RANDOM_Q') is not None:
+            random_q = False
         self.random_q = random_q
         super().__init__(*args, **kwargs)
 

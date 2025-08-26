@@ -34,8 +34,9 @@ default:
     obs_preprocessor: obs_preprocessor
 
   reset_config:
+    clockwise_anticlockwise_step_reward: 1
     clockwise_anticlockwise_done_reward: 1
-    in_inner: 0.5
+    in_inner_reward: 2
     reaching_park_done_reward: 2
     parking_done_reward: 10
     disabled_wall_piece: 0 # Binary mask indicating which walls are disabled
@@ -128,8 +129,10 @@ combined:
     siamese: null
 
   reset_config:
-    in_inner: 2
-    disabled_wall_piece: 0
+    clockwise_anticlockwise_step_reward: 0.2
+    in_inner_reward: 5
+    # disabled_wall_piece: 0
+    disabled_wall_piece: 128
 
   oc_config:
     option_seq_encoder: null # RNN
