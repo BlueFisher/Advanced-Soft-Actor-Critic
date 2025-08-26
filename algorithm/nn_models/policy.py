@@ -187,7 +187,7 @@ class ModelTermination(nn.Module):
 
     def forward(self, state: torch.Tensor, obs_list: list[torch.Tensor]) -> torch.Tensor:
         y = self.dense(state)
-        y = torch.clamp(y, -5., 5.)
+        y = torch.clamp(y, -3., 3.)
         return torch.sigmoid(y)
 
     def __call__(self, state: torch.Tensor, obs_list: list[torch.Tensor]) -> torch.Tensor:

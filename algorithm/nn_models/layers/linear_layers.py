@@ -60,7 +60,7 @@ class ResBlock(nn.Module):
 
 
 class LinearLayers(nn.Module):
-    def __init__(self, input_size, dense_n=64, dense_depth=0, output_size=None,
+    def __init__(self, input_size, dense_n: int | list[int] = 64, dense_depth: int = 0, output_size: int = None,
                  activation: nn.Module | None = None,
                  residual: bool = True,
                  dropout: float = 0.):
@@ -87,15 +87,20 @@ class LinearLayers(nn.Module):
         self.input_size = input_size
         self.output_size = input_size
 
+        if isinstance(dense_n, int):
+            dense_n = [dense_n] * dense_depth
+        elif isinstance(dense_n, list):
+            dense_depth = len(dense_n)
+
         dense = []
         for i in range(dense_depth):
-            res = ResBlock(input_size if i == 0 else dense_n, dense_n,
+            res = ResBlock(input_size if i == 0 else dense_n[i - 1], dense_n[i],
                            activation=activation,
                            residual=residual)
 
             dense.append(res)
             dense.append(nn.Dropout(dropout))
-            self.output_size = dense_n
+            self.output_size = dense_n[i]
         if output_size:
             linear = nn.Linear(self.output_size, output_size)
             nn.init.kaiming_uniform_(linear.weight.data)
