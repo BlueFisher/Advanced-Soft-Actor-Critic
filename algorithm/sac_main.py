@@ -272,18 +272,6 @@ class Main:
         else:
             raise RuntimeError(f'Undefined Environment Type: {self.base_config["env_type"]}')
 
-        if self.base_config['obs_preprocessor']:
-            obs_preprocessor_abs_path = self._config_abs_dir / f'{self.base_config["obs_preprocessor"]}.py'
-
-            spec = importlib.util.spec_from_file_location(f'{self._get_relative_package(obs_preprocessor_abs_path)}.{self.base_config["obs_preprocessor"]}',
-                                                          obs_preprocessor_abs_path)
-            self._logger.info(f'Loaded obs preprocessor in env dir: {obs_preprocessor_abs_path}')
-            obs_preprocessor = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(obs_preprocessor)
-            self.env = obs_preprocessor.ObsPreprocessor(self.env)
-
-        ma_obs_names, ma_obs_shapes, ma_obs_dtypes, ma_d_action_sizes, ma_c_action_size = self.env.init()
-
         if self.train_mode and self.base_config['offline_env_config']['enabled']:
             from algorithm.env_wrapper.offline_wrapper import OfflineWrapper
 
@@ -297,9 +285,24 @@ class Main:
                                                   env_args=self.base_config['offline_env_config']['env_args'],
                                                   n_envs=self.base_config['offline_env_config']['n_envs'],
                                                   model_abs_dir=self.model_abs_dir)
-            _ma_obs_names, _ma_obs_shapes, _ma_obs_dtypes, _ma_d_action_sizes, _ma_c_action_size = self.offline_env.init()
+            _ma_obs_names, _ma_obs_shapes, _ma_d_action_sizes, _ma_c_action_size = self.offline_env.init()
         else:
             self.offline_env = None
+
+        if self.base_config['obs_preprocessor']:
+            obs_preprocessor_abs_path = self._config_abs_dir / f'{self.base_config["obs_preprocessor"]}.py'
+
+            spec = importlib.util.spec_from_file_location(f'{self._get_relative_package(obs_preprocessor_abs_path)}.{self.base_config["obs_preprocessor"]}',
+                                                          obs_preprocessor_abs_path)
+            self._logger.info(f'Loaded obs preprocessor in env dir: {obs_preprocessor_abs_path}')
+            obs_preprocessor = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(obs_preprocessor)
+            self.env = obs_preprocessor.ObsPreprocessor(self.env)
+            
+            if self.offline_env is not None:
+                self.offline_env = obs_preprocessor.ObsPreprocessor(self.offline_env)
+
+        ma_obs_names, ma_obs_shapes, ma_obs_dtypes, ma_d_action_sizes, ma_c_action_size = self.env.init()
 
         self.ma_manager = MultiAgentsManager(ma_obs_names,
                                              ma_obs_shapes,
@@ -417,13 +420,13 @@ class Main:
                         if is_training_iteration and self.offline_env is not None:
                             with self._profiler('offline_env.step', repeat=10):
                                 (decision_step,
-                                terminal_step,
-                                all_envs_done) = self.offline_env.step()
+                                 terminal_step,
+                                 all_envs_done) = self.offline_env.step()
                         else:
                             with self._profiler('env.step', repeat=10):
                                 (decision_step,
-                                terminal_step,
-                                all_envs_done) = self.env.step(ma_d_action, ma_c_action)
+                                 terminal_step,
+                                 all_envs_done) = self.env.step(ma_d_action, ma_c_action)
                             self._extra_step(ma_d_action, ma_c_action)
                     except RuntimeError:
                         force_reset = True
