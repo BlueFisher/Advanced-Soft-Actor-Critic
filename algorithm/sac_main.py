@@ -285,7 +285,7 @@ class Main:
                                                   env_args=self.base_config['offline_env_config']['env_args'],
                                                   n_envs=self.base_config['offline_env_config']['n_envs'],
                                                   model_abs_dir=self.model_abs_dir)
-            _ma_obs_names, _ma_obs_shapes, _ma_d_action_sizes, _ma_c_action_size = self.offline_env.init()
+            offline_ma_obs_names, offline_ma_obs_shapes, offline_ma_d_action_sizes, offline_ma_c_action_size = self.offline_env.init()
         else:
             self.offline_env = None
 
@@ -298,11 +298,23 @@ class Main:
             obs_preprocessor = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(obs_preprocessor)
             self.env = obs_preprocessor.ObsPreprocessor(self.env)
-            
+
             if self.offline_env is not None:
                 self.offline_env = obs_preprocessor.ObsPreprocessor(self.offline_env)
 
         ma_obs_names, ma_obs_shapes, ma_obs_dtypes, ma_d_action_sizes, ma_c_action_size = self.env.init()
+
+        if self.offline_env is not None:
+            for n in offline_ma_obs_names:
+                if n not in ma_obs_names:
+                    self._logger.warning(f'Offline env ma_name {n} not in online env')
+                    continue
+                for online_name, offline_name in zip(ma_obs_names[n], offline_ma_obs_names[n]):
+                    if online_name != offline_name:
+                        self._logger.warning(f'{n} obs_name offline {offline_name} not match online {online_name}')
+                for online_os, offline_os in zip(ma_obs_shapes[n], offline_ma_obs_shapes[n]):
+                    if online_os != offline_os:
+                        self._logger.warning(f'{n} obs_shape offline {offline_os} not match online {online_os}')
 
         self.ma_manager = MultiAgentsManager(ma_obs_names,
                                              ma_obs_shapes,
