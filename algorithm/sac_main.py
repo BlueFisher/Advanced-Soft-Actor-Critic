@@ -562,11 +562,13 @@ class Main:
                 continue
             global_step = format_global_step(mgr.rl.get_global_step())
             rewards = [a.reward for a in mgr.non_empty_agents]
+            mean_rewards = np.mean(rewards)
             rewards = ", ".join([f"{i:6.1f}" for i in rewards])
+            mean_rewards = f"{mean_rewards:.2f}"
             max_step = max([a.steps for a in mgr.non_empty_agents])
 
             if mgr.hit_reward is None:
-                self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards} [{len(mgr.non_empty_agents)}]')
+                self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}, mR {mean_rewards} [{len(mgr.non_empty_agents)}]')
             else:
                 hit = sum([a.hit for a in mgr.non_empty_agents])
                 self._logger.info(f'{n} {iteration}({global_step}), T {iter_time:.2f}s, S {max_step}, R {rewards}, hit {hit}/[{len(mgr.non_empty_agents)}]')
