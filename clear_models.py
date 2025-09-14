@@ -28,7 +28,7 @@ if __name__ == '__main__':
                     removed_npz_list.append(npz.stem)
                     npz.unlink()
             removed_npz_list.sort()
-            print('removed:', removed_npz_list.sort())
+            print('removed:', removed_npz_list)
 
     else:
         for model in glob(root + '/**/model', recursive=True):
