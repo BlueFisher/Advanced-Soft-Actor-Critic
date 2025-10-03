@@ -131,8 +131,8 @@ combined:
   reset_config:
     clockwise_anticlockwise_step_reward: 0.2
     in_inner_reward: 5
-    # disabled_wall_piece: 0
-    disabled_wall_piece: 128
+    disabled_wall_piece: 0
+    # disabled_wall_piece: 128
 
   oc_config:
     option_seq_encoder: null # RNN
@@ -143,18 +143,23 @@ combined:
 
     option_configs:
       - name: clockwise_race-20250726201403vGdm
+        display_name: ClockwiseRace
         fix_policy: true
         random_q: true
       - name: anticlockwise_race-20250726194747eTsy
+        display_name: AnticlockwiseRace
         fix_policy: true
         random_q: true
       - name: reaching_park-20250726201508TuDW
+        display_name: ReachingPark
         fix_policy: true
         random_q: true
       - name: parking-20250726200453RwPB
+        display_name: Parking
         fix_policy: true
         random_q: true
       - name: turn_around-20250726201919UXEV
+        display_name: TurnAround
         fix_policy: true
         random_q: true
 

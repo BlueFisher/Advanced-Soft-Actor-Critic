@@ -12,10 +12,12 @@ from ..utils import *
 class OptionBase(SAC_Base):
     def __init__(self,
                  option: int,
+                 display_name: str,
                  fix_policy: bool,
                  random_q: bool,
                  *args, **kwargs):
         self.option = option
+        self.display_name = display_name
         self.fix_policy = fix_policy
         if os.environ.get('DISABLE_RANDOM_Q') is not None:
             random_q = False
