@@ -420,6 +420,8 @@ class OptionSelectorBase(SAC_Base):
 
         self.option_list: list[OptionBase] = [None] * self.num_options
         for i, option_config in enumerate(self.option_configs):
+            display_name = option_config.get('display_name', option_config['name'])
+
             if self.model_abs_dir is not None:
                 option_kwargs['model_abs_dir'] = self.model_abs_dir / option_config['name']
                 option_kwargs['model_abs_dir'].mkdir(parents=True, exist_ok=True)
@@ -429,6 +431,7 @@ class OptionSelectorBase(SAC_Base):
                 option_kwargs['ma_name'] = option_config['name']
 
             self.option_list[i] = OptionBase(option=i,
+                                             display_name=display_name,
                                              fix_policy=option_config['fix_policy'],
                                              random_q=option_config['random_q'],
                                              **option_kwargs)
@@ -462,8 +465,8 @@ class OptionSelectorBase(SAC_Base):
         return self.option_list[0].get_initial_seq_hidden_state(batch_size,
                                                                 get_numpy)
 
-    def get_option_names(self) -> list[str]:
-        return [option.ma_name for option in self.option_list]
+    def get_option_display_names(self) -> list[str]:
+        return [option.display_name for option in self.option_list]
 
     @torch.no_grad()
     def _update_target_variables(self, tau=1.) -> None:
@@ -538,6 +541,7 @@ class OptionSelectorBase(SAC_Base):
 
             option_index[random_mask] = random_option_index[random_mask]
 
+        # print(pre_option_index.cpu().numpy()[0], pre_termination_mask.cpu().numpy()[0], option_index.cpu().numpy()[0])
         return option_index
 
     def _choose_option_action(self,

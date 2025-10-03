@@ -420,7 +420,7 @@ class OC_AgentManager(AgentManager):
 
         self.option_seq_encoder = rl.option_seq_encoder
         self.use_dilation = rl.use_dilation
-        self.option_names = rl.get_option_names()
+        self.option_names = rl.get_option_display_names()
 
     def _verify_agents(self,
                        agent_ids: np.ndarray):
