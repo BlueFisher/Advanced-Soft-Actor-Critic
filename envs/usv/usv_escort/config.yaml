@@ -2,37 +2,131 @@ default:
   base_config:
     env_type: UNITY
     env_name: USVEscort
-    unity_args: # Specific for Unity Environments
+    env_args:
+      max_step: 5000
+      auto_tasks: 1
+
+      guard_agents_count: 2
+      patrol_agents_count: 2
+      scout_agents_count: 2
+      strike_agents_count: 2
+      enemy_agents_count: 2
+
+      random_guard_agents_count_min: -1
+      random_patrol_agents_count_min: -1
+      random_scout_agents_count_min: -1
+      random_strike_agents_count_min: -1
+      random_enemy_agents_count_min: -1
+
+    unity_args:
+      no_graphics: false
+      force_vulkan:
+        win32: false
+        linux: true
       build_path:
         win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
-      no_graphics: false
 
     offline_env_config:
-      enabled: true
+      enabled: false
       env_name: USVEscort
       env_args:
         dataset_path:
           win32: C:\Users\fisher\Documents\Unity\Demonstrations\USVEscort
           linux: /data/demonstrations/USVEscort
+      n_envs: 3
 
-    n_envs: 10
+    n_envs: 50
 
   sac_config:
     write_summary_per_step: 500 # Write summaries in TensorBoard every N steps
     save_model_per_step: 10000 # Save model every N steps
 
     n_step: 3
-    burn_in_step: 10
-    seq_encoder: RNN
 
-  ma_config:
-    USVGuard?team=0:
-      sac_config:
-        nn: nn
-    USVPatrol?team=0:
-      sac_config:
-        nn: nn
-    USVStrike?team=0:
-      sac_config:
-        nn: nn
+    offline_loss: true # Whether using offline loss
+
+guard:
+  base_config:
+    env_args:
+      auto_tasks: 0
+      guard_agents_count: 6
+      patrol_agents_count: 2
+      scout_agents_count: 2
+      strike_agents_count: 2
+      random_guard_agents_count_min: 2
+      random_patrol_agents_count_min: 0
+      random_scout_agents_count_min: 0
+      random_strike_agents_count_min: 0
+      random_enemy_agents_count_min: 0
+
+    name: guard_{time}
+
+guard_inference:
+  base_config:
+    env_args:
+      max_step: 10000
+      guard_agents_count: 4
+      patrol_agents_count: 2
+      scout_agents_count: 2
+      strike_agents_count: 2
+      random_guard_agents_count_min: -1
+      random_patrol_agents_count_min: -1
+      random_scout_agents_count_min: -1
+      random_strike_agents_count_min: -1
+      random_enemy_agents_count_min: -1
+
+patrol:
+  base_config:
+    env_args:
+      guard_agents_count: 0
+      patrol_agents_count: 6
+      scout_agents_count: 0
+      strike_agents_count: 0
+      random_patrol_agents_count_min: 2
+    name: patrol_{time}
+
+scout:
+  base_config:
+    env_args:
+      guard_agents_count: 0
+      patrol_agents_count: 0
+      scout_agents_count: 6
+      strike_agents_count: 0
+      random_scout_agents_count_min: 2
+    name: scout_{time}
+
+strike:
+  base_config:
+    env_args:
+      guard_agents_count: 0
+      patrol_agents_count: 0
+      scout_agents_count: 0
+      strike_agents_count: 6
+      enemy_agents_count: 6
+      random_strike_agents_count_min: 2
+      random_enemy_agents_count_min: 2
+    name: strike_{time}
+
+guard_patrol_scout:
+  base_config:
+    env_args:
+      guard_agents_count: 3
+      patrol_agents_count: 3
+      scout_agents_count: 3
+      strike_agents_count: 0
+      random_guard_agents_count_min: 2
+      random_patrol_agents_count_min: 2
+      random_scout_agents_count_min: 2
+    name: guard_patrol_scout_{time}
+
+  # ma_config:
+  #   USVGuard?team=0:
+  #     sac_config:
+  #       nn: nn
+  #   USVPatrol?team=0:
+  #     sac_config:
+  #       nn: nn
+  #   USVStrike?team=0:
+  #     sac_config:
+  #       nn: nn

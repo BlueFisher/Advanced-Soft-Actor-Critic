@@ -9,14 +9,14 @@ default:
     max_iter: 200
     n_envs: 10
 
-  replay_config:
-    beta: 0.1
-    beta_increment_per_sampling: 0
+  # replay_config:
+  #   beta: 0.1
+  #   beta_increment_per_sampling: 0
 
   sac_config:
     n_step: 5
 
-    init_log_alpha: -4.6
+    # init_log_alpha: -4.6
 
 hard_rnn:
   base_config:
