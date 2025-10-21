@@ -387,7 +387,6 @@ class AgentManager:
 
     @property
     def done(self) -> bool:
-        print(self.name, [[int(a.agent_id), a.episode_length, a.done, a.episode_length] for a in self.agents])
         return all([a.done for a in self.agents])
 
     @property
