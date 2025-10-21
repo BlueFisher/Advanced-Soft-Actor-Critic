@@ -143,7 +143,7 @@ class Agent:
                 self.hit += 1
 
         if done:
-            if not self.done and self.is_empty:
+            if not self.done and self.is_empty and not force_terminated:
                 self.steps = 0
                 self.reward = 0
                 self.hit = 0
@@ -387,6 +387,7 @@ class AgentManager:
 
     @property
     def done(self) -> bool:
+        print(self.name, [[int(a.agent_id), a.episode_length, a.done, a.episode_length] for a in self.agents])
         return all([a.done for a in self.agents])
 
     @property
