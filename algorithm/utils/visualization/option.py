@@ -150,8 +150,7 @@ if __name__ == '__main__':
         option_visual.add_option_termination(option, termination)
         time.sleep(0.3)
     input()
-    option_visual.close()
-    input()
+
     # option_visual.reset()
     # for _ in range(30):
     #     option = np.random.randint(0, 4)
