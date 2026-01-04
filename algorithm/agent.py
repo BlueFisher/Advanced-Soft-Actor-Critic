@@ -622,7 +622,7 @@ class AgentManager:
                     obs_list: list[np.ndarray],
                     last_reward: np.ndarray,
                     max_reached: np.ndarray,
-                    force_terminated: bool = False) -> dict[str, np.ndarray | list[np.ndarray]]:
+                    force_terminated: bool = False):
         for i, agent_id in enumerate(agent_ids):
             if agent_id not in self.agents_dict:
                 continue
