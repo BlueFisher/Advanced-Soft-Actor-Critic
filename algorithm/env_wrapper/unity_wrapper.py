@@ -719,7 +719,7 @@ if __name__ == "__main__":
     N_ENVS = 2
 
     env = UnityWrapper(train_mode=True,
-                       env_name=r'C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe',
+                       env_name=r'D:\Unity\win-RL-Envs\RLEnvironments.exe',
                        n_envs=N_ENVS,
                        max_n_envs_per_process=1,
                        scene='MLAgentsTest',

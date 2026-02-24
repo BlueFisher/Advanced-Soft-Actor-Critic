@@ -227,7 +227,7 @@ class OfflineWrapper(EnvWrapper):
 
 if __name__ == '__main__':
     env = OfflineWrapper('USVEscort', env_args={
-        'dataset_path': r'C:\Users\fisher\Documents\Unity\Demonstrations\USVEscort'
+        'dataset_path': r'D:\Unity\Demonstrations\USVEscort'
     })
     env.init()
     env.reset()

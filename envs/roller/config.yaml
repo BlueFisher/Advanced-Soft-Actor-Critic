@@ -4,7 +4,7 @@ default:
     hit_reward: 1
     unity_args:
       build_path:
-        win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe
+        win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
     offline_env_config:
@@ -12,7 +12,7 @@ default:
       env_name: Roller
       env_args:
         dataset_path:
-          win32: C:\Users\fisher\Documents\Unity\Demonstrations\Roller
+          win32: D:\Unity\Demonstrations\Roller
       n_envs: 50
 
     n_envs: 10

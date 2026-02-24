@@ -18,7 +18,7 @@ default:
         win32: false
         linux: true
       build_path:
-        win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe
+        win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
 
     offline_env_config:
@@ -26,7 +26,7 @@ default:
       env_name: UGVParking
       env_args:
         dataset_path:
-          win32: C:\Users\fisher\Documents\Unity\Demonstrations\UGVParking
+          win32: D:\Unity\Demonstrations\UGVParking
           linux: /data/demonstrations/UGVParking
       n_envs: 50
 

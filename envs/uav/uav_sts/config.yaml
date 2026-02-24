@@ -8,7 +8,7 @@ default:
       strike_agents_count_max: 3
     unity_args:
       build_path:
-        win32: C:\Users\fisher\Documents\Unity\win-RL-Envs\RLEnvironments.exe
+        win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
       no_graphics: false
       force_vulkan:

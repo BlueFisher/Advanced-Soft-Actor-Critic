@@ -5,7 +5,7 @@ import algorithm.nn_models as m
 OBS_NAMES = ['AgentsBufferSensor', 'BoundingBoxSensor', 'CameraSensor',
              'RayPerceptionSensor1', 'RayPerceptionSensor2', 'RayPerceptionSensor3',
              'VectorSensor_size13']
-OBS_SHAPES = [(8, 10), (8, 6), (84, 84, 1), (22,), (22,), (22,), (13,)]
+OBS_SHAPES = [(8, 10), (8, 6), (1, 84, 84), (22,), (22,), (22,), (13,)]
 
 
 class ModelRep(m.ModelBaseRep):
