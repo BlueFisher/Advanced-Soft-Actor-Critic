@@ -1872,6 +1872,8 @@ class OptionSelectorBase(SAC_Base):
         ep_option_indexes = episode_trans['ep_option_indexes']
         ep_option_changed_indexes = episode_trans['ep_option_changed_indexes']
 
+        ep_terminations = episode_trans['ep_terminations']
+
         if self.summary_writer is not None:
             image = plot_episode_option_indexes(ep_option_indexes, ep_option_changed_indexes, self.num_options)
             self.summary_writer.add_figure(f'option_index', image, self.global_step)
@@ -1921,6 +1923,29 @@ class OptionSelectorBase(SAC_Base):
                     image = plot_attn_weight(attn_weight[0].cpu().numpy())
                     self.summary_writer.add_figure(f'{summary_name}/{i}', image, self.global_step)
 
+        with torch.no_grad():
+            ep_indexes_tensor = torch.from_numpy(ep_indexes).to(self.device)
+            ep_obses_list_tensor = [torch.from_numpy(o).to(self.device) for o in ep_obses_list]
+            self._process_torch_obs_list(ep_obses_list_tensor)
+            ep_actions_tensor = torch.from_numpy(ep_actions).to(self.device)
+
+            ep_pre_actions = gen_pre_n_actions(ep_actions_tensor)
+
+            if self.seq_encoder in (None, SEQ_ENCODER.RNN):
+                ep_states_tensor, _ = self.model_rep(ep_obses_list_tensor,
+                                                     ep_pre_actions,
+                                                     None)
+            elif self.seq_encoder == SEQ_ENCODER.ATTN:
+                ep_states_tensor, _, _ = self.model_rep(ep_indexes_tensor.shape[1],
+                                                        ep_indexes_tensor,
+                                                        ep_obses_list_tensor,
+                                                        ep_pre_actions,
+                                                        None)
+
+            # ep_states_tensor: [1, ep_len, state_size]
+            ep_v_over_options_tensor = self.model_v_over_options_list[0](ep_states_tensor)  # [1, ep_len, num_options]
+            ep_v_over_options = ep_v_over_options_tensor.cpu().numpy()  # [1, ep_len, num_options]
+
         eps_dir = self.model_abs_dir / 'episodes'
 
         eps = []
@@ -1940,7 +1965,10 @@ class OptionSelectorBase(SAC_Base):
                  **{f'obs-{obs_name}': np.squeeze(ep_obses, axis=0) for obs_name, ep_obses in zip(self.obs_names, ep_obses_list)},
                  action=np.squeeze(ep_actions, axis=0),
                  reward=np.squeeze(ep_rewards, axis=0),
-                 done=np.squeeze(ep_dones, axis=0))
+                 done=np.squeeze(ep_dones, axis=0),
+                 option_index=np.squeeze(ep_option_indexes, axis=0),
+                 termination=np.squeeze(ep_terminations, axis=0),
+                 v_over_options=np.squeeze(ep_v_over_options, axis=0))
 
         self.summary_available = False
 

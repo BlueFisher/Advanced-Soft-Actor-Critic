@@ -258,6 +258,7 @@ class OC_Agent(Agent):
         if pre_low_seq_hidden_state is None:
             pre_low_seq_hidden_state = self._padding_low_seq_hidden_state
         self._tmp_episode_trans['pre_low_seq_hidden_state'][self.current_step] = pre_low_seq_hidden_state
+        self._tmp_episode_trans['termination'][self.current_step] = self._tmp_termination
 
         self.current_step += 1
 
@@ -319,6 +320,7 @@ class OC_Agent(Agent):
         # [1, episode_len, *seq_hidden_state_shape]
         ep_pre_low_seq_hidden_states = np.expand_dims(tmp['pre_low_seq_hidden_state'], 0)
         # [1, episode_len, *low_seq_hidden_state_shape]
+        ep_terminations = np.expand_dims(tmp['termination'], 0)  # [1, episode_len]
 
         return {
             'ep_indexes': ep_indexes,
@@ -331,6 +333,7 @@ class OC_Agent(Agent):
             'ep_probs': ep_probs,
             'ep_pre_seq_hidden_states': ep_pre_seq_hidden_states,
             'ep_pre_low_seq_hidden_states': ep_pre_low_seq_hidden_states,
+            'ep_terminations': ep_terminations,
         }
 
     @property
