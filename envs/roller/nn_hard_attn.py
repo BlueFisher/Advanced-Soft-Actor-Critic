@@ -15,12 +15,15 @@ class ModelRep(m.ModelBaseAttentionRep):
 
         embed_dim = 6 - EXTRA_SIZE + 2  # 6
         self.mlp = m.LinearLayers(embed_dim, output_size=32)
-        self.attn = m.EpisodeMultiheadAttention(32)
-        self.pos = m.AbsolutePositionalEncoding(32)
+        self.attn = m.EpisodeMultiheadAttention(32,
+                                                num_layers=1,
+                                                pe=m.POSITIONAL_ENCODING.ROPE)
 
-    def forward(self, index, obs_list, pre_action,
-                seq_q_len=1,
-                hidden_state=None,
+    def forward(self, seq_q_len,
+                index,
+                obs_list,
+                pre_action,
+                pre_seq_hidden_state=None,
                 is_prev_hidden_state=False,
                 query_only_attend_to_rest_key=False,
                 padding_mask=None):
@@ -29,12 +32,10 @@ class ModelRep(m.ModelBaseAttentionRep):
         x = torch.concat([obs, pre_action], dim=-1)
         x = self.mlp(x)
 
-        pe = self.pos(index)
-
         output, hn, attn_weights_list = self.attn(x,
                                                   seq_q_len=seq_q_len,
                                                   cut_query=True,
-                                                  hidden_state=hidden_state,
+                                                  hidden_state=pre_seq_hidden_state,
                                                   is_prev_hidden_state=is_prev_hidden_state,
 
                                                   query_only_attend_to_rest_key=query_only_attend_to_rest_key,

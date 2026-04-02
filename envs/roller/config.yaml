@@ -13,6 +13,7 @@ default:
       env_args:
         dataset_path:
           win32: D:\Unity\Demonstrations\Roller
+          linux: null
       n_envs: 50
 
     n_envs: 10
