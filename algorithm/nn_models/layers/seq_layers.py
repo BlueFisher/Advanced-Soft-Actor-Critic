@@ -148,8 +148,8 @@ class MultiheadAttention(nn.Module):
         value = value.reshape(-1, *value.shape[-2:])
         if key_padding_mask is not None:
             key_padding_mask = key_padding_mask.reshape(-1, key_padding_mask.shape[-1])
-        if attn_mask is not None and attn_mask.dim() >= 3:
-            attn_mask = attn_mask.reshape(-1, *attn_mask.shape[-2:])
+        if attn_mask is not None:
+            assert attn_mask.dim() in (2, 3)  # [batch, seq_q_len, seq_k_len] OR [seq_q_len, seq_k_len]
 
         if self.pe is not None and query_index is None:
             query_index = torch.arange(query.shape[1], device=query.device).unsqueeze(0).repeat_interleave(query.shape[0], dim=0)
@@ -198,6 +198,9 @@ class MultiheadAttention(nn.Module):
             if attn_mask.dim() == 3:
                 # [bsz, seq_q_len, seq_k_len] -> [bsz * num_heads, seq_q_len, seq_k_len]
                 attn_mask = attn_mask.repeat(self.num_heads, 1, 1)
+            elif attn_mask.dim() == 2:
+                # [seq_q_len, seq_k_len] -> [bsz * num_heads, seq_q_len, seq_k_len]
+                attn_mask = attn_mask.unsqueeze(0).repeat(query.shape[0] * self.num_heads, 1, 1)
 
             # Prevent NAN
             nan_attn_mask = attn_mask.all(dim=-1)  # [bsz * num_heads, seq_q_len]
@@ -231,6 +234,7 @@ class MultiheadAttention(nn.Module):
         if attn_mask is not None:  # Set NAN zero
             nan_attn_mask = nan_attn_mask[:query.shape[0]]  # [bsz, seq_q_len]
             attn_output = attn_output * ~nan_attn_mask.unsqueeze(-1)
+            attn_output_weights = attn_output_weights * ~nan_attn_mask.unsqueeze(-1)
 
         attn_output = attn_output.reshape(*batch, *attn_output.shape[1:])
         attn_output_weights = attn_output_weights.reshape(*batch, *attn_output_weights.shape[1:])

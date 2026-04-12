@@ -12,11 +12,6 @@ class ModelRep(m.ModelBaseRep):
 
         self.rnn = m.GRU(self.obs_shapes[0][0] - EXTRA_SIZE + self.c_action_size, 32, 1)
 
-        self.dense = nn.Sequential(
-            nn.Linear(32, 32),
-            nn.Tanh()
-        )
-
     def forward(self, obs_list, pre_action, rnn_state=None, padding_mask=None):
         obs = obs_list[0][..., :-EXTRA_SIZE]
 
@@ -28,9 +23,7 @@ class ModelRep(m.ModelBaseRep):
         if padding_mask is not None:
             output = output * (~padding_mask).to(output.dtype).unsqueeze(-1)
 
-        state = self.dense(output)
-
-        return state, hn
+        return output, hn
 
 
 class ModelOptionRep(ModelRep):
