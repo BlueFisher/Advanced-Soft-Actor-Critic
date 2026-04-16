@@ -255,6 +255,9 @@ class PrioritizedReplayBuffer:
         self._lock = ReadWriteLock(None, 1, 1, True, self._logger)
 
         self._sample_executor = concurrent.futures.ThreadPoolExecutor()
+        self._transitions = None
+        self._tmp_prev_n = -1
+        self._tmp_post_n = -1
 
         tqdm_out = TqdmToLogger(self._logger, level=logging.INFO)
         self._fill_bar = tqdm(total=self.batch_size, desc='Filling the buffer...', file=tqdm_out)
@@ -348,14 +351,17 @@ class PrioritizedReplayBuffer:
             self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
             is_weights = np.power(is_weights / np.min(is_weights), -self.beta).astype(np.float32)
 
-            transitions = {k: np.zeros((self.batch_size, prev_n + 1 + post_n, *shape),
-                                       dtype=dtype)
-                           for k, (shape, dtype) in self._trans_storage.get_shape_dtype().items()}
+            if prev_n != self._tmp_prev_n or post_n != self._tmp_post_n:
+                self._tmp_prev_n = prev_n
+                self._tmp_post_n = post_n
+                self._transitions = {k: np.zeros((self.batch_size, prev_n + 1 + post_n, *shape),
+                                                dtype=dtype)
+                                    for k, (shape, dtype) in self._trans_storage.get_shape_dtype().items()}
 
             def _copy_storage_data(offset: int):
                 t_trans = self.get_storage_data(data_ids + offset)
                 for k, v in t_trans.items():
-                    transitions[k][:, prev_n + offset] = v
+                    self._transitions[k][:, prev_n + offset] = v
 
             futures = set()
 
@@ -372,7 +378,7 @@ class PrioritizedReplayBuffer:
 
             concurrent.futures.wait(futures)
 
-            return data_ids, transitions, np.expand_dims(is_weights, axis=1)
+            return data_ids, self._transitions, np.expand_dims(is_weights, axis=1)
 
     def get_curr_id(self) -> int:
         return self._trans_storage.get_curr_id()
