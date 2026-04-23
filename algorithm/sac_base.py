@@ -2384,12 +2384,12 @@ class SAC_Base:
         def set_padding(t, mask):
             t['index'][mask] = -1
             t['padding_mask'][mask] = True
-            for n in self.obs_names:
-                t[f'obs_{n}'][mask] = 0.
-            t['action'][mask] = self._padding_action
-            t['reward'][mask] = 0.
+            # for n in self.obs_names:
+            #     t[f'obs_{n}'][mask] = 0.
+            # t['action'][mask] = self._padding_action
+            # t['reward'][mask] = 0.
             t['done'][mask] = True
-            t['mu_prob'][mask] = 1.
+            # t['mu_prob'][mask] = 1.
             t['pre_seq_hidden_state'][mask] = 0.
 
         trans_index = batch['index'][:, self.burn_in_step]

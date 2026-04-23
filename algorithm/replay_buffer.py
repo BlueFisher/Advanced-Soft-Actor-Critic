@@ -1,4 +1,3 @@
-import concurrent.futures
 import io
 import logging
 import math
@@ -254,11 +253,6 @@ class PrioritizedReplayBuffer:
 
         self._lock = ReadWriteLock(None, 1, 1, True, self._logger)
 
-        self._sample_executor = concurrent.futures.ThreadPoolExecutor()
-        self._transitions = None
-        self._tmp_prev_n = -1
-        self._tmp_post_n = -1
-
         tqdm_out = TqdmToLogger(self._logger, level=logging.INFO)
         self._fill_bar = tqdm(total=self.batch_size, desc='Filling the buffer...', file=tqdm_out)
 
@@ -351,34 +345,14 @@ class PrioritizedReplayBuffer:
             self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
             is_weights = np.power(is_weights / np.min(is_weights), -self.beta).astype(np.float32)
 
-            if prev_n != self._tmp_prev_n or post_n != self._tmp_post_n:
-                self._tmp_prev_n = prev_n
-                self._tmp_post_n = post_n
-                self._transitions = {k: np.zeros((self.batch_size, prev_n + 1 + post_n, *shape),
-                                                dtype=dtype)
-                                    for k, (shape, dtype) in self._trans_storage.get_shape_dtype().items()}
+            offsets = np.arange(-prev_n, post_n + 1, dtype=np.int64)
+            sample_data_ids = (data_ids[:, np.newaxis] + offsets[np.newaxis, :]).reshape(-1)
+            sampled_transitions = self.get_storage_data(sample_data_ids)
 
-            def _copy_storage_data(offset: int):
-                t_trans = self.get_storage_data(data_ids + offset)
-                for k, v in t_trans.items():
-                    self._transitions[k][:, prev_n + offset] = v
+            for k, v in sampled_transitions.items():
+                sampled_transitions[k] = v.reshape(self.batch_size, prev_n + 1 + post_n, *v.shape[1:])
 
-            futures = set()
-
-            future = self._sample_executor.submit(_copy_storage_data, 0)
-            futures.add(future)
-
-            for i in range(prev_n):
-                future = self._sample_executor.submit(_copy_storage_data, -i - 1)
-                futures.add(future)
-
-            for i in range(1, post_n + 1):
-                future = self._sample_executor.submit(_copy_storage_data, i)
-                futures.add(future)
-
-            concurrent.futures.wait(futures)
-
-            return data_ids, self._transitions, np.expand_dims(is_weights, axis=1)
+            return data_ids, sampled_transitions, np.expand_dims(is_weights, axis=1)
 
     def get_curr_id(self) -> int:
         return self._trans_storage.get_curr_id()
