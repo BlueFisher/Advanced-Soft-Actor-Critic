@@ -1,12 +1,19 @@
 import io
 import logging
 import math
+import queue
+import threading
+import time
 from pathlib import Path
 
 import numpy as np
+import torch
 from tqdm import tqdm
 
-from .utils import ReadWriteLock
+if __name__ == '__main__':
+    from utils import ReadWriteLock
+else:
+    from .utils import ReadWriteLock
 
 
 class DataStorage:
@@ -14,7 +21,7 @@ class DataStorage:
     _id = 0
     _buffer = None
 
-    def __init__(self, capacity):
+    def __init__(self, capacity: int):
         self.capacity = capacity
         self.max_id = 10 * capacity  # For multithreading storage, max_id should be larger than capacity
 
@@ -130,7 +137,7 @@ class DataStorage:
 
 
 class SumTree:
-    def __init__(self, capacity):
+    def __init__(self, capacity: int):
         capacity = int(capacity)
         assert capacity & (capacity - 1) == 0
 
@@ -153,10 +160,10 @@ class SumTree:
                     size: capacity - 1                       size: capacity
         """
 
-    def add(self, data_idx, p) -> None:
+    def add(self, data_idx: np.ndarray, p: np.ndarray) -> None:
         self.update(data_idx, p)  # update tree_frame
 
-    def update(self, data_idx, p) -> None:
+    def update(self, data_idx: np.ndarray, p: np.ndarray) -> None:
         tree_idx = self.data_idx_to_leaf_idx(data_idx)
         self._tree[tree_idx] = p
 
@@ -169,7 +176,7 @@ class SumTree:
 
             tree_idx = parent_idx
 
-    def sample(self, batch_size) -> tuple[np.ndarray, np.ndarray]:
+    def sample(self, batch_size: int) -> tuple[np.ndarray, np.ndarray]:
         """
         Returns:
             leaf_idx: The index of leaves of the whole sum tree
@@ -191,10 +198,10 @@ class SumTree:
 
         return leaf_idx, self._tree[leaf_idx]
 
-    def data_idx_to_leaf_idx(self, data_idx) -> np.ndarray:
+    def data_idx_to_leaf_idx(self, data_idx: np.ndarray) -> np.ndarray:
         return data_idx + self.capacity - 1
 
-    def leaf_idx_to_data_idx(self, leaf_idx) -> np.ndarray:
+    def leaf_idx_to_data_idx(self, leaf_idx: np.ndarray) -> np.ndarray:
         return leaf_idx - self.capacity + 1
 
     def clear(self):
@@ -229,6 +236,10 @@ class SumTree:
 class PrioritizedReplayBuffer:
     def __init__(self,
                  batch_size=256,
+                 sample_prev_n=0,
+                 sample_post_n=0,
+                 device: torch.device | None = None,
+
                  capacity=524288,
                  alpha=0.9,  # [0~1] Convert the importance of TD error to priority
                  beta=0.4,  # Importance-sampling, from initial value increasing to 1
@@ -237,6 +248,10 @@ class PrioritizedReplayBuffer:
                  td_error_max=1.,  # Clipped abs error
                  logger_parent_name=''):
         self.batch_size = batch_size
+        self.prev_n = sample_prev_n
+        self.post_n = sample_post_n
+        self.device = device
+
         self.capacity = int(2**math.floor(math.log2(capacity)))
         self.alpha = alpha
         self.beta = beta
@@ -245,6 +260,9 @@ class PrioritizedReplayBuffer:
         self.td_error_max = td_error_max
         self._sum_tree = SumTree(self.capacity)
         self._trans_storage = DataStorage(self.capacity)
+
+        self._queue = queue.Queue(maxsize=1)
+        self._stream = torch.cuda.Stream()
 
         if logger_parent_name != '':
             self._logger = logging.getLogger(f'{logger_parent_name}.replay_buffer')
@@ -255,6 +273,9 @@ class PrioritizedReplayBuffer:
 
         tqdm_out = TqdmToLogger(self._logger, level=logging.INFO)
         self._fill_bar = tqdm(total=self.batch_size, desc='Filling the buffer...', file=tqdm_out)
+
+        self.worker = threading.Thread(target=self._prefetch_loop, daemon=True)
+        self.worker.start()
 
     def add(self, transitions: dict[str, np.ndarray], ignore_size=0) -> None:
         with self._lock.write():
@@ -302,57 +323,62 @@ class PrioritizedReplayBuffer:
                 probs[-ignore_size:] = 0
             self._sum_tree.add(data_pointers, probs)
 
-    def sample(self) -> tuple[np.ndarray, dict[str, np.ndarray], np.ndarray]:
-        """
-        Returns:
-            data index (np.int64): [batch, ]
-            transitions: dict [batch, *]
-            priority weights: [batch, 1]
-        """
-        with self._lock.read():
-            if self._trans_storage.size < self.batch_size:
-                return None
+    def _prefetch_loop(self):
+        while True:
+            if not self.is_lg_batch_size:
+                time.sleep(0.1)
+                continue
 
-            leaf_pointers, p = self._sum_tree.sample(self.batch_size)
+            with self._lock.read():
+                leaf_pointers, p = self._sum_tree.sample(self.batch_size)
 
-            data_pointers = self._sum_tree.leaf_idx_to_data_idx(leaf_pointers)
-            transitions = self._trans_storage.get(data_pointers)
-            data_ids = self._trans_storage.get_ids(data_pointers)
+                data_pointers = self._sum_tree.leaf_idx_to_data_idx(leaf_pointers)
+                data_ids = self._trans_storage.get_ids(data_pointers)
 
-            is_weights = p / self._sum_tree.total_p
-            self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
-            is_weights = np.power(is_weights / np.min(is_weights), -self.beta).astype(np.float32)
+                is_weights = p / self._sum_tree.total_p
+                self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
+                is_weights = np.power(is_weights / np.min(is_weights), -self.beta).astype(np.float32)
 
-            return data_ids, transitions, np.expand_dims(is_weights, axis=1)
+                offsets = np.arange(-self.prev_n, self.post_n + 1, dtype=np.int64)
+                sample_data_ids = (data_ids[:, np.newaxis] + offsets[np.newaxis, :]).reshape(-1)
+                sampled_transitions = self.get_storage_data(sample_data_ids)
 
-    def sample(self, prev_n: int = 0, post_n: int = 0) -> tuple[np.ndarray, dict[str, np.ndarray], np.ndarray]:
+            transitions = {}
+            for k, v in sampled_transitions.items():
+                transition = v.reshape(self.batch_size, self.prev_n + 1 + self.post_n, *v.shape[1:])
+                transition = torch.as_tensor(transition).pin_memory()
+                transitions[k] = transition
+
+            is_weights = torch.as_tensor(is_weights).pin_memory()
+
+            if self.device is not None and self.device.type == 'cuda':
+                with torch.cuda.stream(self._stream):
+                    for k, v in transitions.items():
+                        transitions[k] = v.to(self.device, non_blocking=True)
+                    is_weights = is_weights.to(self.device, non_blocking=True)
+
+            self._queue.put((data_ids, transitions, is_weights), timeout=5)
+
+    def sample(self) -> tuple[np.ndarray,
+                              dict[str, torch.Tensor],
+                              torch.Tensor]:
         """
         Returns:
             data index (np.int64): [batch, ]
             transitions: dict [batch, prev_n + 1 + post_n, *]
             priority weights: [batch, 1]
         """
-        with self._lock.read():
-            if self._trans_storage.size < self.batch_size:
-                return None
+        if not self.is_lg_batch_size:
+            return None
 
-            leaf_pointers, p = self._sum_tree.sample(self.batch_size)
+        data_ids, transitions, is_weights = self._queue.get(timeout=5)
 
-            data_pointers = self._sum_tree.leaf_idx_to_data_idx(leaf_pointers)
-            data_ids = self._trans_storage.get_ids(data_pointers)
+        if self.device is not None and self.device.type == 'cuda':
+            for k, v in transitions.items():
+                v.record_stream(torch.cuda.current_stream())
+            is_weights.record_stream(torch.cuda.current_stream())
 
-            is_weights = p / self._sum_tree.total_p
-            self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
-            is_weights = np.power(is_weights / np.min(is_weights), -self.beta).astype(np.float32)
-
-            offsets = np.arange(-prev_n, post_n + 1, dtype=np.int64)
-            sample_data_ids = (data_ids[:, np.newaxis] + offsets[np.newaxis, :]).reshape(-1)
-            sampled_transitions = self.get_storage_data(sample_data_ids)
-
-            for k, v in sampled_transitions.items():
-                sampled_transitions[k] = v.reshape(self.batch_size, prev_n + 1 + post_n, *v.shape[1:])
-
-            return data_ids, sampled_transitions, np.expand_dims(is_weights, axis=1)
+        return data_ids, transitions, is_weights.unsqueeze(-1)
 
     def get_curr_id(self) -> int:
         return self._trans_storage.get_curr_id()
@@ -429,40 +455,6 @@ class PrioritizedReplayBuffer:
             return self._trans_storage.size > self.batch_size
 
 
-if __name__ == "__main__":
-    import time
-    replay_buffer = PrioritizedReplayBuffer(16, 128)
-
-    while True:
-        batch = 6
-
-        td_error = np.abs(np.random.randn(batch))
-
-        action = np.zeros((batch,))
-        action[-1] = 100
-
-        replay_buffer.add_with_td_error(td_error, {
-            'state': np.zeros((batch, 1)),
-            'action': action,
-            'test': np.arange(6)
-        }, ignore_size=2)
-
-        sampled = replay_buffer.sample()
-        if sampled is None:
-            print('None')
-        else:
-            # print(replay_buffer._sum_tree.total_p)
-            # print(replay_buffer.size)
-            points, trans, ratio = sampled
-            print(points)
-            # # print(replay_buffer._sum_tree.leaf_idx_to_data_idx(points))
-            # for i in range(1, n_step + 1):
-            #     replay_buffer.get_storage_data(points + i)
-            # replay_buffer.update(points, np.random.random(len(points)).astype(np.float32))
-
-        # input()
-
-
 class TqdmToLogger(io.StringIO):
     """
         Output stream for TQDM which will output to logger module instead of
@@ -482,3 +474,38 @@ class TqdmToLogger(io.StringIO):
 
     def flush(self):
         self.logger.log(self.level, self.buf)
+
+
+if __name__ == "__main__":
+    import random
+
+    replay_buffer = PrioritizedReplayBuffer(16, 128)
+
+    while True:
+        batch = random.randint(6, 20)
+
+        td_error = np.abs(np.random.randn(batch))
+
+        action = np.zeros((batch,))
+        action[-1] = 100
+        index = np.arange(batch)
+
+        replay_buffer.add_with_td_error(td_error, {
+            'index': index,
+            'action': action,
+        }, ignore_size=2)
+
+        sampled = replay_buffer.sample()
+        if sampled is None:
+            print('None')
+        else:
+            # print(replay_buffer._sum_tree.total_p)
+            # print(replay_buffer.size)
+            points, trans, ratio = sampled
+            print(trans['index'])
+            # # print(replay_buffer._sum_tree.leaf_idx_to_data_idx(points))
+            # for i in range(1, n_step + 1):
+            #     replay_buffer.get_storage_data(points + i)
+            # replay_buffer.update(points, np.random.random(len(points)).astype(np.float32))
+
+        # input()

@@ -2,6 +2,7 @@ import math
 import threading
 
 import numpy as np
+import torch
 
 from algorithm.utils import episode_to_batch, traverse_lists
 
@@ -14,11 +15,13 @@ class BatchBuffer:
                  n_step: int,
                  padding_action: np.ndarray,
                  batch_size: int,
+                 device: torch.device | None = None,
                  max_size: int = 10):
         self.burn_in_step = burn_in_step
         self.n_step = n_step
         self.padding_action = padding_action  # The discrete padding actions cannot be all zeros
         self.batch_size = batch_size
+        self.device = device
         self.max_size = max_size
 
         self._lock = threading.Lock()
@@ -78,9 +81,15 @@ class BatchBuffer:
                     if len(self._batch_list) > self.max_size:
                         self._batch_list.pop(0)
 
-    def get_batch(self) -> list[np.ndarray | list[np.ndarray]]:
+    def get_batch(self) -> list[torch.Tensor | list[torch.Tensor]]:
         with self._lock:
             if len(self._batch_list) == 0:
                 return None
 
-            return self._batch_list.pop(0)
+            batch = self._batch_list.pop(0)
+
+            batch = traverse_lists(batch, lambda b: torch.from_numpy(b))
+            if self.device is not None and self.device.type == 'cuda':
+                batch = traverse_lists(batch, lambda b: b.to(self.device))
+
+            return batch

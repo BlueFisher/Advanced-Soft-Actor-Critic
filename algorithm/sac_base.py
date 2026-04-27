@@ -622,13 +622,17 @@ class SAC_Base:
             if self.use_replay_buffer:
                 replay_config = {} if replay_config is None else replay_config
                 self.replay_buffer = PrioritizedReplayBuffer(batch_size=self.batch_size,
+                                                             sample_prev_n=self.burn_in_step,
+                                                             sample_post_n=self.n_step,
+                                                             device=self.device,
                                                              logger_parent_name=self._logger.name,
                                                              **replay_config)
             else:
-                self.batch_buffer = BatchBuffer(self.burn_in_step,
-                                                self.n_step,
-                                                self._padding_action,
-                                                self.batch_size)
+                self.batch_buffer = BatchBuffer(burn_in_step=self.burn_in_step,
+                                                n_step=self.n_step,
+                                                padding_action=self._padding_action,
+                                                batch_size=self.batch_size,
+                                                device=self.device)
 
     def set_train_mode(self, train_mode=True):
         self.train_mode = train_mode
@@ -2226,26 +2230,26 @@ class SAC_Base:
                     image = plot_attn_weight(attn_weight[0].cpu().numpy())
                     self.summary_writer.add_figure(f'attn_weight/{i}', image, self.global_step)
 
-        eps_dir = self.model_abs_dir / 'episodes'
+        # eps_dir = self.model_abs_dir / 'episodes'
 
-        eps = []
-        if eps_dir.exists():
-            for eps_path in eps_dir.glob('*.npz'):
-                eps.append(int(eps_path.stem))
-            eps.sort()
-        else:
-            eps_dir.mkdir()
+        # eps = []
+        # if eps_dir.exists():
+        #     for eps_path in eps_dir.glob('*.npz'):
+        #         eps.append(int(eps_path.stem))
+        #     eps.sort()
+        # else:
+        #     eps_dir.mkdir()
 
-        if len(eps) == 0:
-            eps = [-1]
-        ep_idx = eps[-1] + 1
+        # if len(eps) == 0:
+        #     eps = [-1]
+        # ep_idx = eps[-1] + 1
 
-        np.savez(eps_dir / f'{ep_idx}.npz',
-                 index=np.squeeze(ep_indexes, axis=0),
-                 **{f'obs-{obs_name}': np.squeeze(ep_obses, axis=0) for obs_name, ep_obses in zip(self.obs_names, ep_obses_list)},
-                 action=np.squeeze(ep_actions, axis=0),
-                 reward=np.squeeze(ep_rewards, axis=0),
-                 done=np.squeeze(ep_dones, axis=0))
+        # np.savez(eps_dir / f'{ep_idx}.npz',
+        #          index=np.squeeze(ep_indexes, axis=0),
+        #          **{f'obs-{obs_name}': np.squeeze(ep_obses, axis=0) for obs_name, ep_obses in zip(self.obs_names, ep_obses_list)},
+        #          action=np.squeeze(ep_actions, axis=0),
+        #          reward=np.squeeze(ep_rewards, axis=0),
+        #          done=np.squeeze(ep_dones, axis=0))
 
         self.summary_available = False
 
@@ -2345,7 +2349,7 @@ class SAC_Base:
         self.replay_buffer.add(storage_data, ignore_size=1)
 
     def _sample_from_replay_buffer(self) -> tuple[np.ndarray,
-                                                  tuple[np.ndarray | list[np.ndarray], ...]]:
+                                                  tuple[torch.Tensor | list[torch.Tensor], ...]]:
         """
         Sample from replay buffer
 
@@ -2363,14 +2367,13 @@ class SAC_Base:
                 priority_is (np): [batch, 1]
             )
         """
-        sampled = self.replay_buffer.sample(prev_n=self.burn_in_step,
-                                            post_n=self.n_step)
+        sampled = self.replay_buffer.sample()
         if sampled is None:
             return None
 
         """
         trans:
-            index (np.int32): [batch, bn + 1]
+            index (torch.int32): [batch, bn + 1]
             padding_mask (bool): [batch, bn + 1]
             obs_i: [batch, bn + 1, *obs_shapes_i]
             action: [batch, bn + 1, action_size]
@@ -2381,35 +2384,26 @@ class SAC_Base:
         """
         pointers, batch, priority_is = sampled
 
-        def set_padding(t, mask):
-            t['index'][mask] = -1
-            t['padding_mask'][mask] = True
-            # for n in self.obs_names:
-            #     t[f'obs_{n}'][mask] = 0.
-            # t['action'][mask] = self._padding_action
-            # t['reward'][mask] = 0.
-            t['done'][mask] = True
-            # t['mu_prob'][mask] = 1.
-            t['pre_seq_hidden_state'][mask] = 0.
+        index = batch['index'][:, self.burn_in_step]
 
-        trans_index = batch['index'][:, self.burn_in_step]
+        # Vectorized padding on the whole [batch, bn + 1] timeline.
+        # A transition is valid only when index offset matches its relative position to burn_in_step.
+        rel_pos = torch.arange(batch['index'].shape[1], device=self.device) - self.burn_in_step  # [bn + 1]
+        invalid_mask = (batch['index'] - index.unsqueeze(1)) != rel_pos.unsqueeze(0)  # [batch, bn + 1]
+        invalid_mask[:, self.burn_in_step] = False
 
-        # Padding next n_step data
-        for i in range(1, self.n_step + 1):
-            t_trans_index = batch['index'][:, self.burn_in_step + i]
-
-            mask = (t_trans_index - trans_index) != i
-            set_padding({k: v[:, self.burn_in_step + i] for k, v in batch.items()}, mask)
-
-        # Padding previous burn_in_step data
-        for i in range(self.burn_in_step):
-            t_trans_index = batch['index'][:, self.burn_in_step - i - 1]
-
-            mask = (trans_index - t_trans_index) != i + 1
-            set_padding({k: v[:, self.burn_in_step - i - 1] for k, v in batch.items()}, mask)
+        batch['index'][invalid_mask] = -1
+        batch['padding_mask'][invalid_mask] = True
+        # for n in self.obs_names:
+        #     batch[f'obs_{n}'][invalid_mask] = 0.
+        # batch['action'][invalid_mask] = self._padding_action
+        # batch['reward'][invalid_mask] = 0.
+        batch['done'][invalid_mask] = True
+        # batch['mu_prob'][invalid_mask] = 1.
+        batch['pre_seq_hidden_state'][invalid_mask] = 0.
 
         """
-        bnx_indexes (np.int32): [batch, bn + 1]
+        bnx_indexes (torch.int32): [batch, bn + 1]
         bnx_padding_masks (bool): [batch, bn + 1]
         bnx_obses_list: list([batch, bn + 1, *obs_shapes_i], ...)
         bnx_actions: [batch, bn + 1, action_size]
@@ -2485,19 +2479,7 @@ class SAC_Base:
         priority_is: [batch, 1]
         """
 
-        with self._profiler(f'to_gpu', repeat=10):
-            bn_indexes = torch.from_numpy(bn_indexes).to(self.device)
-            bn_padding_masks = torch.from_numpy(bn_padding_masks).to(self.device)
-            bnx_obses_list = [torch.from_numpy(t).to(self.device) for t in bnx_obses_list]
-            self._process_torch_obs_list(bnx_obses_list)
-
-            bnx_actions = torch.from_numpy(bnx_actions).to(self.device)
-            bn_rewards = torch.from_numpy(bn_rewards).to(self.device)
-            bn_dones = torch.from_numpy(bn_dones).to(self.device)
-            bn_mu_probs = torch.from_numpy(bn_mu_probs).to(self.device)
-            bnx_pre_seq_hidden_states = torch.from_numpy(bnx_pre_seq_hidden_states).to(self.device)
-            if self.use_replay_buffer and self.use_priority:
-                priority_is = torch.from_numpy(priority_is).to(self.device)
+        self._process_torch_obs_list(bnx_obses_list)
 
         with self._profiler('train', repeat=10):
             bnx_states, next_bnx_seq_hidden_states, bnx_target_states = self._train(
