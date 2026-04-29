@@ -10,6 +10,8 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+from algorithm.utils.elapse_timer import UnifiedElapsedTimer
+
 if __name__ == '__main__':
     from utils import ReadWriteLock
 else:
@@ -274,11 +276,13 @@ class PrioritizedReplayBuffer:
         tqdm_out = TqdmToLogger(self._logger, level=logging.INFO)
         self._fill_bar = tqdm(total=self.batch_size, desc='Filling the buffer...', file=tqdm_out)
 
+        self._profiler = UnifiedElapsedTimer(self._logger)
+
         self.worker = threading.Thread(target=self._prefetch_loop, daemon=True)
         self.worker.start()
 
     def add(self, transitions: dict[str, np.ndarray], ignore_size=0) -> None:
-        with self._lock.write():
+        with self._lock.write('add'):
             if self._trans_storage.size == 0:
                 max_p = self.td_error_max
             else:
@@ -308,7 +312,7 @@ class PrioritizedReplayBuffer:
         td_error = np.asarray(td_error)
         td_error = td_error.flatten()
 
-        with self._lock.write():
+        with self._lock.write('add_with_td_error'):
             data_pointers = self._trans_storage.add(transitions)
             clipped_errors = np.clip(td_error, self.td_error_min, self.td_error_max)
             if np.isnan(np.min(clipped_errors)):
@@ -329,35 +333,37 @@ class PrioritizedReplayBuffer:
                 time.sleep(0.1)
                 continue
 
-            with self._lock.read():
-                leaf_pointers, p = self._sum_tree.sample(self.batch_size)
+            with self._profiler('sample in _prefetch_loop'):
+                with self._lock.read('_prefetch_loop'):
+                    leaf_pointers, p = self._sum_tree.sample(self.batch_size)
 
-                data_pointers = self._sum_tree.leaf_idx_to_data_idx(leaf_pointers)
-                data_ids = self._trans_storage.get_ids(data_pointers)
+                    data_pointers = self._sum_tree.leaf_idx_to_data_idx(leaf_pointers)
+                    data_ids = self._trans_storage.get_ids(data_pointers)
 
-                is_weights = p / self._sum_tree.total_p
-                self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
-                is_weights = np.power(is_weights / np.min(is_weights), -self.beta).astype(np.float32)
+                    is_weights = p / self._sum_tree.total_p
+                    self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])  # max = 1
+                    is_weights = np.power(is_weights / np.min(is_weights), -self.beta).astype(np.float32)
 
-                offsets = np.arange(-self.prev_n, self.post_n + 1, dtype=np.int64)
-                sample_data_ids = (data_ids[:, np.newaxis] + offsets[np.newaxis, :]).reshape(-1)
-                sampled_transitions = self.get_storage_data(sample_data_ids)
+                    offsets = np.arange(-self.prev_n, self.post_n + 1, dtype=np.int64)
+                    sample_data_ids = (data_ids[:, np.newaxis] + offsets[np.newaxis, :]).reshape(-1)
+                    sampled_transitions = self.get_storage_data(sample_data_ids)
 
-            transitions = {}
-            for k, v in sampled_transitions.items():
-                transition = v.reshape(self.batch_size, self.prev_n + 1 + self.post_n, *v.shape[1:])
-                transition = torch.as_tensor(transition).pin_memory()
-                transitions[k] = transition
+                transitions = {}
+                for k, v in sampled_transitions.items():
+                    transition = v.reshape(self.batch_size, self.prev_n + 1 + self.post_n, *v.shape[1:])
+                    transition = torch.as_tensor(transition).pin_memory()
+                    transitions[k] = transition
 
-            is_weights = torch.as_tensor(is_weights).pin_memory()
+                is_weights = torch.as_tensor(is_weights).pin_memory()
 
-            if self.device is not None and self.device.type == 'cuda':
-                with torch.cuda.stream(self._stream):
-                    for k, v in transitions.items():
-                        transitions[k] = v.to(self.device, non_blocking=True)
-                    is_weights = is_weights.to(self.device, non_blocking=True)
+                if self.device is not None and self.device.type == 'cuda':
+                    with torch.cuda.stream(self._stream):
+                        for k, v in transitions.items():
+                            transitions[k] = v.to(self.device, non_blocking=True)
+                        is_weights = is_weights.to(self.device, non_blocking=True)
 
-            self._queue.put((data_ids, transitions, is_weights), timeout=5)
+            with self._profiler('queue put in _prefetch_loop'):
+                self._queue.put((data_ids, transitions, is_weights))
 
     def sample(self) -> tuple[np.ndarray,
                               dict[str, torch.Tensor],
@@ -371,7 +377,7 @@ class PrioritizedReplayBuffer:
         if not self.is_lg_batch_size:
             return None
 
-        data_ids, transitions, is_weights = self._queue.get(timeout=5)
+        data_ids, transitions, is_weights = self._queue.get()
 
         if self.device is not None and self.device.type == 'cuda':
             for k, v in transitions.items():
@@ -387,15 +393,15 @@ class PrioritizedReplayBuffer:
         """
         Get data without verifying whether data_ids exist
         """
-        with self._lock.read():
+        with self._lock.read('get_storage_data'):
             return self._trans_storage.get(data_ids)
 
     def get_storage_data_ids(self, data_ids) -> np.ndarray:
-        with self._lock.read():
+        with self._lock.read('get_storage_data_ids'):
             return self._trans_storage.get_ids(data_ids)
 
     def update(self, data_ids, td_error) -> None:
-        with self._lock.write():
+        with self._lock.write('update'):
             td_error = np.asarray(td_error)
             td_error = td_error.flatten()
 
@@ -412,7 +418,7 @@ class PrioritizedReplayBuffer:
             self._sum_tree.update(data_ids[mask] % self.capacity, probs[mask])
 
     def update_transitions(self, data_ids: np.ndarray, key: str, data: np.ndarray) -> None:
-        with self._lock.write():
+        with self._lock.write('update_transitions'):
             # Avoid data_ids is overrided by new data
             curr_data_ids = self._trans_storage.get_ids(data_ids)
             mask = curr_data_ids == data_ids

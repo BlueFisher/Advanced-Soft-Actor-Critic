@@ -126,8 +126,8 @@ class ModelBaseAttentionRep(ModelBaseRep):
                                   padding_mask)
 
     def get_state_from_encoders(self,
-                                seq_q_len: int,
                                 encoders: torch.Tensor | tuple[torch.Tensor],
+                                seq_q_len: int,
                                 index: torch.Tensor,
                                 obs_list: list[torch.Tensor],
                                 pre_action: torch.Tensor,

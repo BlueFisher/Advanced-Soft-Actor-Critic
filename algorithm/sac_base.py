@@ -1036,6 +1036,12 @@ class SAC_Base:
             prob (np): [batch, action_size]
             attn_state (np): [batch, *attn_state_shape]
         """
+        ep_indexes = ep_indexes[:, -self.burn_in_step:]
+        ep_padding_masks = ep_padding_masks[:, -self.burn_in_step:]
+        ep_obses_list = [ep_obses[:, -self.burn_in_step:] for ep_obses in ep_obses_list]
+        ep_pre_actions = ep_pre_actions[:, -self.burn_in_step:]
+        ep_pre_attn_states = ep_pre_attn_states[:, -self.burn_in_step:]
+
         ep_indexes = torch.from_numpy(ep_indexes).to(self.device)
         ep_padding_masks = torch.from_numpy(ep_padding_masks).to(self.device)
         ep_obses_list = [torch.from_numpy(obs).to(self.device) for obs in ep_obses_list]
@@ -1683,15 +1689,15 @@ class SAC_Base:
             elif self.seq_encoder == SEQ_ENCODER.ATTN:
                 indexes_at_n = bn_indexes[:, self.burn_in_step:self.burn_in_step + 1]
                 padding_masks_at_n = bn_padding_masks[:, self.burn_in_step:self.burn_in_step + 1]
-                state = self.model_rep.get_state_from_encoders(1,
-                                                               _encoder if len(_encoder) > 1 else _encoder[0],
+                state = self.model_rep.get_state_from_encoders(_encoder if len(_encoder) > 1 else _encoder[0],
+                                                               1,
                                                                indexes_at_n,
                                                                obses_list_at_n,
                                                                pre_actions_at_n,
                                                                None,
                                                                padding_mask=padding_masks_at_n)
-                target_state = self.model_target_rep.get_state_from_encoders(1,
-                                                                             _encoder if len(_encoder) > 1 else _encoder[0],
+                target_state = self.model_target_rep.get_state_from_encoders(_encoder if len(_encoder) > 1 else _encoder[0],
+                                                                             1,
                                                                              indexes_at_n,
                                                                              obses_list_at_n,
                                                                              pre_actions_at_n,
@@ -2220,9 +2226,11 @@ class SAC_Base:
         if self.summary_writer is not None and self.seq_encoder == SEQ_ENCODER.ATTN:
             with torch.no_grad():
                 pre_l_actions = gen_pre_n_actions(ep_actions)
+                torch_obs_list = [torch.from_numpy(o).to(self.device) for o in ep_obses_list]
+                self._process_torch_obs_list(torch_obs_list)
                 *_, attn_weights_list = self.model_rep(ep_indexes.shape[1],
                                                        torch.from_numpy(ep_indexes).to(self.device),
-                                                       [torch.from_numpy(o).to(self.device) for o in ep_obses_list],
+                                                       torch_obs_list,
                                                        torch.from_numpy(pre_l_actions).to(self.device),
                                                        None)
 

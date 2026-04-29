@@ -108,73 +108,76 @@ class ReadWriteLock:
         return self._read_lock(self, custom_log)
 
     class _write_lock:
-        def __init__(self, rwlock, custom_log=None):
+        def __init__(self, rwlock, custom_log: str | None = None):
             self._rwlock = rwlock
             self._custom_log = custom_log
 
         def __enter__(self):
-            self._rwlock.write_acquire(self._custom_log)
+            self._rwlock.write_acquire(self)
 
         def __exit__(self, exc_type, exc_value, traceback):
-            self._rwlock.unlock()
+            self._rwlock.unlock(self)
 
     class _read_lock:
-        def __init__(self, rwlock, custom_log=None):
+        def __init__(self, rwlock, custom_log: str | None = None):
             self._rwlock = rwlock
             self._custom_log = custom_log
 
         def __enter__(self):
-            self._rwlock.read_acquire(self._custom_log)
+            self._rwlock.read_acquire(self)
 
         def __exit__(self, exc_type, exc_value, traceback):
-            self._rwlock.unlock()
+            self._rwlock.unlock(self)
 
-    def write_acquire(self, custom_log=None):
-        me = threading.get_ident()
+    def write_acquire(self, write_lock: _write_lock):
         with self._lock:
             self._write_waiter += 1
             start_time = time.time()
             timeout_occur = 0
 
-            while not self._wcond.wait_for(lambda: self._write_acquire(me),
+            while not self._wcond.wait_for(lambda: self._write_acquire(write_lock),
                                            timeout=self._write_timeout):
                 if not timeout_occur and self._logger is not None:
-                    self._logger.warning(f'Write {_format_lock_log(LockLogState.TIMEOUT, start_time, custom_log)}')
+                    self._logger.warning(f'Write {_format_lock_log(LockLogState.TIMEOUT, start_time, write_lock._custom_log)}')
+                    self._logger.warning(f'Current state: {self._state}, owners: {[(t, l._custom_log) for (t, l) in self._owners]}, read_waiter: {self._read_waiter}, write_waiter: {self._write_waiter}')
                 timeout_occur += 1
 
             if timeout_occur and self._logger is not None:
-                self._logger.warning(f'Write {_format_lock_log(LockLogState.ACQUIRED, start_time, custom_log)}')
+                self._logger.warning(f'Write {_format_lock_log(LockLogState.ACQUIRED, start_time, write_lock._custom_log)}')
             self._write_waiter -= 1
         return True
 
-    def _write_acquire(self, me):
+    def _write_acquire(self, write_lock: _write_lock):
+        me = threading.get_ident()
         # If only the lock is free or current thread is operating
-        if self._state == 0 or (self._state < 0 and me in self._owners):
+        if self._state == 0 or (self._state < 0 and me in [o[0] for o in self._owners]):
             self._state -= 1
-            self._owners.append(me)
+            self._owners.append((me, write_lock))
             return True
-        if self._state > 0 and me in self._owners:
+        if self._state > 0 and me in [o[0] for o in self._owners]:
             raise RuntimeError('Cannot recursively wlock an acquired rlock')
         return False
 
-    def read_acquire(self, custom_log=None):
-        me = threading.get_ident()
+    def read_acquire(self, read_lock: _read_lock):
         with self._lock:
             self._read_waiter += 1
             start_time = time.time()
             timeout_occur = 0
 
-            while not self._rcond.wait_for(lambda: self._read_acquire(me), timeout=self._read_timeout):
+            while not self._rcond.wait_for(lambda: self._read_acquire(read_lock), timeout=self._read_timeout):
                 if not timeout_occur and self._logger is not None:
-                    self._logger.warning(f'Read {_format_lock_log(LockLogState.TIMEOUT, start_time, custom_log)}')
+                    self._logger.warning(f'Read {_format_lock_log(LockLogState.TIMEOUT, start_time, read_lock._custom_log)}')
+                    self._logger.warning(f'Current state: {self._state}, owners: {[(t, l._custom_log) for (t, l) in self._owners]}, read_waiter: {self._read_waiter}, write_waiter: {self._write_waiter}')
                 timeout_occur += 1
 
             if (timeout_occur and self._logger is not None):
-                self._logger.warning(f'Read {_format_lock_log(LockLogState.ACQUIRED, start_time, custom_log)}')
+                self._logger.warning(f'Read {_format_lock_log(LockLogState.ACQUIRED, start_time, read_lock._custom_log)}')
             self._read_waiter -= 1
         return True
 
-    def _read_acquire(self, me):
+    def _read_acquire(self, read_lock: _read_lock):
+        me = threading.get_ident()
+
         if self._state < 0 or (self.max_read is not None and self._state == self.max_read):
             # If write lock is acquired or the number of threads being read reaches the maximum
             return False
@@ -182,19 +185,19 @@ class ReadWriteLock:
         if self._write_waiter == 0:
             ok = True
         else:
-            ok = me in self._owners
+            ok = me in [o[0] for o in self._owners]
         if ok or not self.write_first:
             self._state += 1
-            self._owners.append(me)
+            self._owners.append((me, read_lock))
             return True
 
         return False
 
-    def unlock(self):
+    def unlock(self, lock: _write_lock | _read_lock):
         me = threading.get_ident()
         with self._lock:
             try:
-                self._owners.remove(me)
+                self._owners.remove((me, lock))
             except ValueError:
                 raise RuntimeError('Cannot release un-acquired lock')
 
