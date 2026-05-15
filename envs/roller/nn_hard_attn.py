@@ -19,8 +19,9 @@ class ModelRep(m.ModelBaseAttentionRep):
                                                 num_layers=1,
                                                 num_heads=1,
                                                 out_dense_depth=0,
-                                                pe=m.POSITIONAL_ENCODING.ROPE,
-                                                gate=m.GATE.RESIDUAL)
+                                                pe=m.POSITIONAL_ENCODING.ROPE2,
+                                                gate=m.GATE.RESIDUAL,
+                                                use_layer_norm=True)
 
     def forward(self, seq_q_len,
                 index,

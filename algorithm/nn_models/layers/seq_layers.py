@@ -3,6 +3,7 @@ from enum import Enum
 
 import torch
 from torch import nn
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 if __name__ == '__main__':
     from linear_layers import LinearLayers
@@ -37,11 +38,15 @@ class GRU(nn.Module):
             for i in range(num_layers)
         ])
 
-    def forward(self, x: torch.Tensor, h0: torch.Tensor = None) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self,
+                x: torch.Tensor,
+                h0: torch.Tensor = None,
+                padding_mask: torch.Tensor = None) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             x: [batch, seq_len, input_size]
             h0: [batch, num_layers, hidden_size]
+            padding_mask: [batch, seq_len]
 
         Returns:
             output: [batch, seq_len, hidden_size]
@@ -50,17 +55,71 @@ class GRU(nn.Module):
         if h0 is not None:
             h0 = h0.transpose(0, 1).contiguous()
 
+        batch_size, seq_len, _ = x.shape
+
+        if padding_mask is not None:
+            # Calculate original valid lengths and pre-padding lengths
+            orig_valid_lens = (~padding_mask).sum(dim=1)  # [batch]
+            pre_pad_lens = padding_mask.long().argmin(dim=1)  # [batch]
+
+            # Precisely calculate the index of first post-padding
+            first_post_pad_idx = pre_pad_lens + orig_valid_lens
+
+            # Find samples with post-padding (prevent index overflow at T)
+            has_post_pad = first_post_pad_idx < seq_len
+
+            # Clone a valid mask to avoid polluting the original tensor
+            effective_mask = padding_mask.clone()  # [batch, seq_len]
+
+            # Force the first padding of samples containing post-padding to be valid (False)
+            batch_idx = torch.arange(batch_size, device=x.device)
+            effective_mask[batch_idx[has_post_pad], first_post_pad_idx[has_post_pad]] = False
+
+            # 1. Recalculate new valid lengths (samples with post-padding will auto +1)
+            new_valid_lens = (~effective_mask).sum(dim=1)  # [batch]
+
+            # 2. Left-align shift
+            seq_range = torch.arange(seq_len, device=x.device).unsqueeze(0).expand(batch_size, -1)  # [batch, seq_len]
+            gather_idx = torch.clamp(seq_range + pre_pad_lens.unsqueeze(1), max=seq_len - 1)  # [batch, seq_len]
+            x_aligned = x.gather(1, gather_idx.unsqueeze(-1).expand(-1, -1, x.shape[-1]))  # [batch, seq_len, input_size]
+
+            # 3. Pack
+            pack_lens = new_valid_lens.cpu().clamp(min=1)  # [batch]
+            packed_x = pack_padded_sequence(x_aligned, pack_lens, batch_first=True, enforce_sorted=False)
+
         hn_list = []
         for i in range(self.num_layers):
             _h0 = None
             if h0 is not None:
                 _h0 = h0[i:i + 1]
 
-            output, _ = self._grus[i](x, _h0)
-            # [batch, seq_len, hidden_size]
-            hn_list.append(output.unsqueeze(2))
-            # [batch, seq_len, 1, hidden_size]
-            x = output
+            if padding_mask is not None:
+                packed_out, _ = self._grus[i](packed_x, _h0)
+
+                out_aligned, _ = pad_packed_sequence(packed_out, batch_first=True, total_length=seq_len)
+
+                # 4. Restore to the original positions (shift right)
+                hidden_size = out_aligned.shape[-1]
+                recover_idx = seq_range - pre_pad_lens.unsqueeze(1)
+                recover_idx_safe = torch.clamp(recover_idx, min=0)
+
+                # Gradient-preserving out-of-place gather
+                output = out_aligned.gather(1, recover_idx_safe.unsqueeze(-1).expand(-1, -1, hidden_size))
+
+                # 5. Clean up invalid data
+                # Note: effective_mask must be used here to zero out values!
+                # This preserves the post-padding position we intentionally kept, instead of incorrectly zeroing it out.
+                output = output.masked_fill(effective_mask.unsqueeze(-1), 0.0)
+
+                hn_list.append(output.unsqueeze(2))
+
+                packed_x = packed_out
+            else:
+                output, _ = self._grus[i](x, _h0)
+                # [batch, seq_len, hidden_size]
+                hn_list.append(output.unsqueeze(2))
+                # [batch, seq_len, 1, hidden_size]
+                x = output
 
         return output, torch.cat(hn_list, dim=2)
 
@@ -85,9 +144,12 @@ class MultiheadAttention(nn.Module):
                  num_heads: int = 1,
                  pe: POSITIONAL_ENCODING | None = None,
                  qkv_dense_depth: int = 0,
-                 out_dense_depth: int = 1,
+                 out_dense_depth: int = 0,
+                 out_size: int | None = None,
                  dropout: float = 0.) -> None:
-
+        """
+        out_size: None=embed_dim
+        """
         super().__init__()
 
         self.embed_dim = embed_dim
@@ -115,7 +177,7 @@ class MultiheadAttention(nn.Module):
         self.k_proj = LinearLayers(_ori_embed_dim, dense_n=embed_dim, dense_depth=qkv_dense_depth, output_size=embed_dim, dropout=dropout)
         self.v_proj = LinearLayers(_ori_embed_dim, dense_n=embed_dim, dense_depth=qkv_dense_depth, output_size=embed_dim, dropout=dropout)
 
-        self.out_proj = LinearLayers(embed_dim, dense_n=embed_dim, dense_depth=out_dense_depth, dropout=dropout)
+        self.out_proj = LinearLayers(embed_dim, dense_n=embed_dim, dense_depth=out_dense_depth, output_size=out_size, dropout=dropout)
 
     def forward(self,
                 query: torch.Tensor,
@@ -800,11 +862,35 @@ class RotaryPositionalEncoding2(nn.Module):
 
 
 if __name__ == '__main__':
-    attn = MultiheadAttention(4, num_heads=2, pe=POSITIONAL_ENCODING.ROPE2)
-    x = torch.rand(2, 3, 4)
-    y, w = attn(x, x, x, key_padding_mask=torch.tensor([[True, True, True], [False, True, True]]))
+    B = 4
+    M = 5
+    N = 4
+    dim = 2
+    hidden_dim = 2
+    T = M + N
+    x = torch.randn(B, T, dim, device='cuda')
+    padding_mask = torch.zeros(B, T, dtype=torch.bool, device='cuda')
+    padding_mask[0, :2] = True
+    padding_mask[0, -1:] = True
+    padding_mask[2, :4] = True
+    padding_mask[2, -3:] = True
+    padding_mask[3, :5] = True
+
+    h0 = torch.randn(B, hidden_dim, 2, device='cuda')
+
+    print(padding_mask)
+
+    gru = GRU(input_size=dim, hidden_size=hidden_dim, num_layers=2, device='cuda')
+
+    y, h = gru(x, h0, padding_mask=padding_mask)
     print(y)
-    print(w)
+    print(h)
+    print(y.shape, h.shape)
+    # attn = MultiheadAttention(4, num_heads=2, pe=POSITIONAL_ENCODING.ROPE2)
+    # x = torch.rand(2, 3, 4)
+    # y, w = attn(x, x, x, key_padding_mask=torch.tensor([[True, True, True], [False, True, True]]))
+    # print(y)
+    # print(w)
     # y.mean().backward()
     # for p in attn.parameters():
     #     print(p.grad)

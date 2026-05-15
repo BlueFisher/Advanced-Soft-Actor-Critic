@@ -11,12 +11,12 @@ def get_last_false_indexes(x: torch.Tensor, dim: int, keepdim: bool = False):
 
 def squash_correction_log_prob(dist: torch.distributions.Distribution,
                                x: torch.Tensor) -> torch.Tensor:
-    return dist.log_prob(x) - torch.log(torch.maximum(1 - torch.square(torch.tanh(x)), torch.tensor(1e-2)))
+    return dist.log_prob(x) - torch.sum(torch.log(torch.maximum(1 - torch.square(torch.tanh(x)), torch.tensor(1e-2))), dim=-1, keepdim=True)
 
 
 def squash_correction_prob(dist: torch.distributions.Distribution,
                            x: torch.Tensor) -> torch.Tensor:
-    return torch.exp(dist.log_prob(x)) / (torch.maximum(1 - torch.square(torch.tanh(x)), torch.tensor(1e-2)))
+    return torch.exp(dist.log_prob(x)) / torch.prod(torch.maximum(1 - torch.square(torch.tanh(x)), torch.tensor(1e-2)), dim=-1, keepdim=True)
 
 
 def sum_log_prob(log_prob: torch.Tensor, keepdim=False):

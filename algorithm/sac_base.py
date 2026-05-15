@@ -1094,9 +1094,11 @@ class SAC_Base:
             bnx_pre_actions: [batch, b + n + 1, action_size]
         """
 
-        bnx_indexes = torch.concat([bn_indexes, bn_indexes[:, -1:] + 1], dim=1)
+        # The last index is added 1 if it is not -1, otherwise it remains -1
+        bnx_indexes = torch.concat([bn_indexes, bn_indexes[:, -1:] + (bn_indexes[:, -1:] != -1)], dim=1)
+        # The last padding mask is always True.
         bnx_padding_masks = torch.concat([bn_padding_masks,
-                                          torch.zeros_like(bn_padding_masks[:, -1:], dtype=torch.bool)], dim=1)
+                                          torch.ones_like(bn_padding_masks[:, -1:], dtype=torch.bool)], dim=1)
         bnx_pre_actions = gen_pre_n_actions(bn_actions, keep_last_action=True)
 
         return bnx_indexes, bnx_padding_masks, bnx_pre_actions
@@ -2364,15 +2366,15 @@ class SAC_Base:
         Returns:
             pointers: [batch, ]
             (
-                bn_indexes (np.int32): [batch, b + n]
-                bn_padding_masks (bool): [batch, b + n]
-                bnx_obses_list (np): list([batch, b + n + 1, *obs_shapes_i], ...)
-                bnx_actions (np): [batch, b + n + 1, action_size]
-                bn_rewards (np): [batch, b + n]
-                bn_dones (np): [batch, b + n]
-                bn_mu_probs (np): [batch, b + n, action_size]
-                bnx_seq_hidden_states (np): [batch, b + n + 1, *seq_hidden_state_shape],
-                priority_is (np): [batch, 1]
+                bn_indexes (torch.int32): [batch, b + n]
+                bn_padding_masks (torch.bool): [batch, b + n]
+                bnx_obses_list (torch): list([batch, b + n + 1, *obs_shapes_i], ...)
+                bnx_actions (torch): [batch, b + n + 1, action_size]
+                bn_rewards (torch): [batch, b + n]
+                bn_dones (torch): [batch, b + n]
+                bn_mu_probs (torch): [batch, b + n, action_size]
+                bnx_seq_hidden_states (torch): [batch, b + n + 1, *seq_hidden_state_shape],
+                priority_is (torch): [batch, 1]
             )
         """
         sampled = self.replay_buffer.sample()
@@ -2476,7 +2478,7 @@ class SAC_Base:
          bnx_pre_seq_hidden_states,
          priority_is) = batch
         """
-        bn_indexes (np.int32): [batch, b + n]
+        bn_indexes (int32): [batch, b + n]
         bn_padding_masks (bool): [batch, b + n]
         bnx_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
         bnx_actions: [batch, b + n + 1, action_size]

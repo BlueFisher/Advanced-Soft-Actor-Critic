@@ -18,10 +18,7 @@ class ModelRep(m.ModelBaseRep):
         if rnn_state is not None:
             rnn_state = rnn_state[:, 0]
 
-        output, hn = self.rnn(torch.cat([obs, pre_action], dim=-1), rnn_state)
-
-        if padding_mask is not None:
-            output = output * (~padding_mask).to(output.dtype).unsqueeze(-1)
+        output, hn = self.rnn(torch.cat([obs, pre_action], dim=-1), rnn_state, padding_mask=padding_mask)
 
         return output, hn
 

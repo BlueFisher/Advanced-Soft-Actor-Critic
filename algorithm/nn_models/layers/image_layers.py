@@ -56,15 +56,16 @@ def conv2d_output_shape(
     return h, w
 
 
-def pool_out_shape(h_w: tuple[int, int], kernel_size: int) -> tuple[int, int]:
+def pool_out_shape(h_w: tuple[int, int], kernel_size: int, stride: int) -> tuple[int, int]:
     """
     Calculates the output shape (height and width) of the output of a max pooling layer.
-    kernel_size corresponds to the inputs of the
+    kernel_size and stride correspond to the inputs of the
     torch.nn.MaxPool2d layer (https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html)
     :param kernel_size: The size of the kernel of the convolution
+    :param stride: The stride of the convolution
     """
-    height = (h_w[0] - kernel_size) // 2 + 1
-    width = (h_w[1] - kernel_size) // 2 + 1
+    height = (h_w[0] - kernel_size) // stride + 1
+    width = (h_w[1] - kernel_size) // stride + 1
     return height, width
 
 
@@ -143,14 +144,18 @@ class Conv1dLayers(nn.Module):
 
 def small_visual(height, width, channels) -> tuple[nn.Module, int, int]:
     conv_1_hw = conv2d_output_shape((height, width), 3, 1)
-    conv_2_hw = conv2d_output_shape(conv_1_hw, 3, 1)
+    pool_1_hw = pool_out_shape(conv_1_hw, 2, 2)
+    conv_2_hw = conv2d_output_shape(pool_1_hw, 3, 1)
+    pool_2_hw = pool_out_shape(conv_2_hw, 2, 2)
 
     return nn.Sequential(
         nn.Conv2d(channels, 35, [3, 3], [1, 1]),
         nn.LeakyReLU(),
+        nn.MaxPool2d(2, 2),
         nn.Conv2d(35, 144, [3, 3], [1, 1]),
         nn.LeakyReLU(),
-    ), conv_2_hw, 144
+        nn.MaxPool2d(2, 2),
+    ), pool_2_hw, 144
 
 
 def simple_visual(height, width, channels) -> tuple[nn.Module, int, int]:
@@ -183,7 +188,7 @@ def nature_visual(height, width, channels) -> tuple[nn.Module, int, int]:
 class ConvLayers(nn.Module):
     def __init__(self, in_height: int, in_width: int, in_channels: int,
                  conv: str | tuple[nn.Module, tuple[int, int], int],
-                 out_dense_n: int = 64, out_dense_depth: int = 0, output_size: int = None):
+                 out_dense_n: int | list[int] = 64, out_dense_depth: int = 0, output_size: int = None):
         super().__init__()
 
         if isinstance(conv, str):
