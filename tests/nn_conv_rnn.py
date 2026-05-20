@@ -29,7 +29,7 @@ class ModelRep(m.ModelBaseRep):
 
         if pre_seq_hidden_state is not None:
             pre_seq_hidden_state = pre_seq_hidden_state[:, 0]
-        state, hn = self.rnn(vis, pre_seq_hidden_state)
+        state, hn = self.rnn(vis, pre_seq_hidden_state, padding_mask=padding_mask)
 
         state = self.dense(torch.cat([obs_vec, state], dim=-1))
 

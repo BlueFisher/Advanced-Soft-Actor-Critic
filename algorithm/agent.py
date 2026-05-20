@@ -11,7 +11,7 @@ from algorithm.sac_base import SAC_Base
 from algorithm.utils.elapse_timer import (UnifiedElapsedTimer,
                                           unified_elapsed_timer)
 from algorithm.utils.enums import *
-from algorithm.utils.operators import gen_pre_n_actions, ma_name2path_name
+from algorithm.utils.operators import gen_n_pre_actions, ma_name2path_name
 
 AGENT_MAX_LIVENESS = 20
 NON_EMPTY_STEPS = 2
@@ -548,7 +548,7 @@ class AgentManager:
             ep_padding_masks = ep_indexes == -1
             ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
                              for o, t_o in zip(ep_obses_list, obs_list)]
-            ep_pre_actions = gen_pre_n_actions(ep_actions, True)
+            ep_pre_actions = gen_n_pre_actions(ep_actions, True)
 
             action, prob, seq_hidden_state = self.rl.choose_attn_action(
                 ep_indexes=ep_indexes,

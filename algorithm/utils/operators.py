@@ -34,7 +34,7 @@ def sum_entropy(entropy: torch.Tensor):
     return entropy.sum(-1)
 
 
-def gen_pre_n_actions(n_actions: torch.Tensor | np.ndarray,
+def gen_n_pre_actions(n_actions: torch.Tensor | np.ndarray,
                       keep_last_action=False) -> torch.Tensor | np.ndarray:
     if isinstance(n_actions, torch.Tensor):
         if n_actions.shape[1] == 0 and keep_last_action:

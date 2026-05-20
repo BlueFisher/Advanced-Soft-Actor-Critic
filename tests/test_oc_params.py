@@ -49,21 +49,13 @@ class TestOCModel(unittest.TestCase):
         step = 0
         while step < 10:
             if param_dict['seq_encoder'] in (None, SEQ_ENCODER.RNN):
-                # The same as dialated
                 sac.choose_action(**gen_batch_oc_obs(OBS_SHAPES,
                                                      d_action_sizes=param_dict['d_action_sizes'],
                                                      c_action_size=param_dict['c_action_size'],
                                                      seq_hidden_state_shape=seq_hidden_state_shape,
                                                      low_seq_hidden_state_shape=low_seq_hidden_state_shape))
             elif param_dict['seq_encoder'] == SEQ_ENCODER.ATTN:
-                if param_dict['use_dilation']:
-                    sac.choose_dilated_attn_action(**gen_batch_oc_obs_for_dilated_attn(OBS_SHAPES,
-                                                                                       d_action_sizes=param_dict['d_action_sizes'],
-                                                                                       c_action_size=param_dict['c_action_size'],
-                                                                                       seq_hidden_state_shape=seq_hidden_state_shape,
-                                                                                       low_seq_hidden_state_shape=low_seq_hidden_state_shape))
-                else:
-                    sac.choose_attn_action(**gen_batch_oc_obs_for_attn(OBS_SHAPES,
+                sac.choose_attn_action(**gen_batch_oc_obs_for_attn(OBS_SHAPES,
                                                                        d_action_sizes=param_dict['d_action_sizes'],
                                                                        c_action_size=param_dict['c_action_size'],
                                                                        seq_hidden_state_shape=seq_hidden_state_shape,

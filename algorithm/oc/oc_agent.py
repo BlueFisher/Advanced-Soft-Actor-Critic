@@ -7,7 +7,7 @@ import numpy as np
 from algorithm.oc.option_selector_base import OptionSelectorBase
 from algorithm.utils.elapse_timer import unified_elapsed_timer
 from algorithm.utils.enums import *
-from algorithm.utils.operators import gen_pre_n_actions
+from algorithm.utils.operators import gen_n_pre_actions
 from algorithm.utils.visualization.option import OptionVisual
 
 from .. import agent
@@ -501,7 +501,7 @@ class OC_AgentManager(AgentManager):
 
         pre_option_index = self._get_merged_option_index(agent_ids)
 
-        if self.seq_encoder in (None, SEQ_ENCODER.RNN) and not self.use_dilation:
+        if self.seq_encoder in (None, SEQ_ENCODER.RNN):
             pre_action = self._get_merged_action(agent_ids)
             pre_seq_hidden_state = self._get_merged_seq_hidden_state(agent_ids)
             pre_low_seq_hidden_state = self._get_merged_low_seq_hidden_state(agent_ids)
@@ -525,33 +525,7 @@ class OC_AgentManager(AgentManager):
                 force_rnd_if_available=force_rnd_if_available
             )
 
-        elif self.seq_encoder in (None, SEQ_ENCODER.RNN) and self.use_dilation:
-            pre_action = self._get_merged_action(agent_ids)
-            # pre_seq_hidden_state = self._get_merged_seq_hidden_state(agent_ids)
-            pre_low_seq_hidden_state = self._get_merged_low_seq_hidden_state(agent_ids)
-            pre_termination = self._get_merged_pre_termination(agent_ids)
-
-            pre_key_seq_hidden_state = self._get_merged_key_seq_hidden_state(agent_ids)
-
-            (option_index,
-             action,
-             prob,
-             seq_hidden_state,
-             low_seq_hidden_state,
-             termination) = self.rl.choose_action(
-                obs_list=obs_list,
-                pre_option_index=pre_option_index,
-                pre_action=pre_action,
-                pre_seq_hidden_state=pre_key_seq_hidden_state,  # The previous key seq_hidden_state
-                pre_low_seq_hidden_state=pre_low_seq_hidden_state,
-                pre_termination=pre_termination,
-
-                offline_action=offline_action,
-                disable_sample=disable_sample,
-                force_rnd_if_available=force_rnd_if_available
-            )
-
-        elif self.seq_encoder == SEQ_ENCODER.ATTN and not self.use_dilation:
+        elif self.seq_encoder == SEQ_ENCODER.ATTN:
             pre_low_seq_hidden_state = self._get_merged_low_seq_hidden_state(agent_ids)
             pre_termination = self._get_merged_pre_termination(agent_ids)
 
@@ -581,7 +555,7 @@ class OC_AgentManager(AgentManager):
             ep_padding_masks = ep_indexes == -1
             ep_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
                              for o, t_o in zip(ep_obses_list, obs_list)]
-            ep_pre_actions = gen_pre_n_actions(ep_actions, True)
+            ep_pre_actions = gen_n_pre_actions(ep_actions, True)
 
             (option_index,
              action,
@@ -596,64 +570,6 @@ class OC_AgentManager(AgentManager):
                 ep_pre_attn_states=ep_pre_attn_states,
 
                 pre_option_index=pre_option_index,
-                pre_low_seq_hidden_state=pre_low_seq_hidden_state,
-                pre_termination=pre_termination,
-
-                offline_action=offline_action,
-                disable_sample=disable_sample,
-                force_rnd_if_available=force_rnd_if_available
-            )
-
-        elif self.seq_encoder == SEQ_ENCODER.ATTN and self.use_dilation:
-            index = self._get_merged_index(agent_ids)
-            pre_action = self._get_merged_action(agent_ids)
-            pre_low_seq_hidden_state = self._get_merged_low_seq_hidden_state(agent_ids)
-            pre_termination = self._get_merged_pre_termination(agent_ids)
-
-            key_pre_seq_hidden_state = self._get_merged_key_seq_hidden_state(agent_ids)
-
-            key_trans_length = max([self.agents_dict[agent_id].key_trans_length for agent_id in agent_ids])
-
-            all_key_trans = [self.agents_dict[agent_id].get_key_trans(key_trans_length) for agent_id in agent_ids]
-            (all_key_indexes,
-             all_key_padding_masks,
-             all_key_obses_list,
-             all_key_option_indexes,
-             all_key_attn_states) = zip(*all_key_trans)
-
-            key_indexes = np.concatenate(all_key_indexes)
-            key_padding_masks = np.concatenate(all_key_padding_masks)
-            key_obses_list = [np.concatenate(o) for o in zip(*all_key_obses_list)]
-            key_option_indexes = np.concatenate(all_key_option_indexes)
-            key_attn_states = np.concatenate(all_key_attn_states)
-
-            if key_indexes.shape[1] == 0:
-                key_indexes = np.zeros((key_indexes.shape[0], 1), dtype=key_indexes.dtype)
-            else:
-                key_indexes = np.concatenate([key_indexes, np.expand_dims(index + 1, 1)], axis=1)
-            key_padding_masks = np.concatenate([key_padding_masks,
-                                                np.zeros((key_padding_masks.shape[0], 1), dtype=bool)], axis=1)
-            key_obses_list = [np.concatenate([o, np.expand_dims(t_o, 1)], axis=1)
-                              for o, t_o in zip(key_obses_list, obs_list)]
-            key_option_indexes = np.concatenate([key_option_indexes,
-                                                 -np.ones((key_padding_masks.shape[0], 1), dtype=np.int32)], axis=1)
-            key_attn_states = np.concatenate([key_attn_states,
-                                              np.expand_dims(key_pre_seq_hidden_state, 1)], axis=1)
-
-            (option_index,
-             action,
-             prob,
-             seq_hidden_state,
-             low_seq_hidden_state,
-             termination) = self.rl.choose_dilated_attn_action(
-                key_indexes=key_indexes,
-                key_padding_masks=key_padding_masks,
-                key_obses_list=key_obses_list,
-                key_option_indexes=key_option_indexes,
-                key_attn_states=key_attn_states,
-
-                pre_option_index=pre_option_index,
-                pre_action=pre_action,
                 pre_low_seq_hidden_state=pre_low_seq_hidden_state,
                 pre_termination=pre_termination,
 

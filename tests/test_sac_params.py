@@ -73,11 +73,11 @@ def __gen_test(test_from: int):
         'n_step': [3],
         'seq_encoder': [None, 'RNN', 'ATTN'],
         'discrete_dqn_like': [True, False],
-        # 'siamese': [None, 'ATC', 'BYOL'],
-        # 'siamese_use_q': [False, True],
-        # 'siamese_use_adaptive': [False, True],
+        'siamese': [None, 'ATC', 'BYOL'],
+        'siamese_use_q': [False, True],
+        'siamese_use_adaptive': [False, True],
         'use_n_step_is': [True, False],
-        # 'use_rnd': [True, False],
+        'use_rnd': [True, False],
         # 'action_noise': [None, [0.1, 0.1]]
     }
 

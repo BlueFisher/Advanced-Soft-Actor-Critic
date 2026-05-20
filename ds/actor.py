@@ -15,7 +15,7 @@ import numpy as np
 import algorithm.config_helper as config_helper
 from algorithm.agent import Agent, AgentManager
 from algorithm.sac_main import Main
-from algorithm.utils import ElapsedTimer, ReadWriteLock, gen_pre_n_actions
+from algorithm.utils import ElapsedTimer, ReadWriteLock, gen_n_pre_actions
 from algorithm.utils.elapse_timer import UnifiedElapsedTimer
 from algorithm.utils.enums import *
 

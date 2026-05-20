@@ -29,11 +29,7 @@ def __gen():
                'oc_rnn',
                'oc_rnn_o_rnn',
                'oc_attn',
-               'oc_attn_o_rnn',
-               'oc_dilated_rnn',
-               #    'oc_dilated_rnn_o_rnn',
-               'oc_dilated_attn',
-               #    'oc_dilated_attn_o_rnn'
+               'oc_attn_o_rnn'
                ]
 
     env_args_dict = {

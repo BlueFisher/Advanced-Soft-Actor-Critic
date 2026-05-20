@@ -5,7 +5,7 @@ import torch
 from torch import optim
 
 from .nn_models import *
-from .sac_base import SAC_Base, gen_pre_n_actions
+from .sac_base import SAC_Base, gen_n_pre_actions
 from .utils import *
 
 
@@ -39,7 +39,7 @@ class ImitationBase:
         ep_obses_list = [torch.from_numpy(t).to(self._sac.device) for t in ep_obses_list]
 
         ep_actions = torch.from_numpy(ep_actions).to(self._sac.device)
-        ep_pre_actions = gen_pre_n_actions(ep_actions, keep_last_action=False)
+        ep_pre_actions = gen_n_pre_actions(ep_actions, keep_last_action=False)
 
         initial_seq_hidden_state = self._sac.get_initial_seq_hidden_state(1, get_numpy=False)
         ep_pre_seq_hidden_states = initial_seq_hidden_state.unsqueeze(1).repeat_interleave(ep_len, axis=1)
