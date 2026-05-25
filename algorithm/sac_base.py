@@ -1284,7 +1284,7 @@ class SAC_Base:
                n_padding_masks: torch.Tensor,
                nx_obses_list: list[torch.Tensor],
                nx_states: torch.Tensor,
-               nx_actions: torch.Tensor,
+               n_actions: torch.Tensor,
                n_rewards: torch.Tensor,
                n_dones: torch.Tensor,
                n_mu_probs: torch.Tensor | None) -> tuple[torch.Tensor | None,
@@ -1294,7 +1294,7 @@ class SAC_Base:
             n_padding_masks (torch.bool): [batch, n]
             nx_obses_list: list([batch, n + 1, *obs_shapes_i], ...)
             nx_states: [batch, n + 1, state_size]
-            nx_actions: [batch, n + 1, action_size]
+            n_actions: [batch, n, action_size]
             n_rewards: [batch, n]
             n_dones (torch.bool): [batch, n]
             n_mu_probs: [batch, n, action_size]
@@ -1309,7 +1309,7 @@ class SAC_Base:
         n_states = nx_states[:, :-1, :]  # [batch, n, state_size]
         next_n_states = nx_states[:, 1:, ...]  # [batch, n, state_size]
 
-        n_actions = nx_actions[:, :-1]  # [batch, n, action_size]
+        nx_actions = torch.cat([n_actions, torch.zeros_like(n_actions[:, :1])], dim=1)
 
         nx_d_policy, nx_c_policy = self.model_policy(nx_states, nx_obses_list)
 
@@ -1451,7 +1451,7 @@ class SAC_Base:
                      nx_obses_list: list[torch.Tensor],
                      nx_states: torch.Tensor,
                      nx_target_states: torch.Tensor,
-                     nx_actions: torch.Tensor,
+                     n_actions: torch.Tensor,
                      n_pre_actions: torch.Tensor,
                      n_rewards: torch.Tensor,
                      n_dones: torch.Tensor,
@@ -1468,7 +1468,7 @@ class SAC_Base:
             nx_obses_list: list([batch, n + 1, *obs_shapes_i], ...)
             nx_states: [batch, n + 1, state_size]
             nx_target_states: [batch, n + 1, state_size]
-            nx_actions: [batch, n + 1, action_size]
+            n_actions: [batch, n + 1, action_size]
             n_pre_actions: [batch, n, action_size]
             n_rewards: [batch, n]
             n_dones (torch.bool): [batch, n]
@@ -1485,7 +1485,7 @@ class SAC_Base:
 
         obs_list = [nx_obses[:, 0] for nx_obses in nx_obses_list]
         state = nx_states[:, 0]
-        action = nx_actions[:, 0]
+        action = n_actions[:, 0]
         d_action = action[..., :self.d_action_summed_size]
         c_action = action[..., self.d_action_summed_size:]
 
@@ -1499,7 +1499,7 @@ class SAC_Base:
         d_y, c_y = self._get_y(n_padding_masks=n_padding_masks,
                                nx_obses_list=nx_obses_list,
                                nx_states=nx_states,
-                               nx_actions=nx_actions,
+                               n_actions=n_actions,
                                n_rewards=n_rewards,
                                n_dones=n_dones,
                                n_mu_probs=n_mu_probs if self.use_n_step_is else None)
@@ -1573,7 +1573,7 @@ class SAC_Base:
                                                nx_obses_list=nx_obses_list,
                                                nx_states=nx_states,
                                                nx_target_states=nx_target_states,
-                                               n_actions=nx_actions[:, :-1],
+                                               n_actions=n_actions,
                                                n_rewards=n_rewards)
 
         if self.optimizer_rep:
@@ -2005,7 +2005,7 @@ class SAC_Base:
                bn_indexes: torch.Tensor,
                bn_padding_masks: torch.Tensor,
                bnx_obses_list: list[torch.Tensor],
-               bnx_actions: torch.Tensor,
+               bn_actions: torch.Tensor,
                bn_rewards: torch.Tensor,
                bn_dones: torch.Tensor,
                bn_mu_probs: torch.Tensor,
@@ -2016,7 +2016,7 @@ class SAC_Base:
             bn_indexes (torch.int32): [batch, b + n]
             bn_padding_masks (torch.bool): [batch, b + n]
             bnx_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
-            bnx_actions: [batch, b + n + 1, action_size]
+            bn_actions: [batch, b + n, action_size]
             bn_rewards: [batch, b + n]
             bn_dones (torch.bool): [batch, b + n]
             bn_mu_probs: [batch, b + n, action_size]
@@ -2036,7 +2036,7 @@ class SAC_Base:
          bnx_padding_masks,
          bnx_pre_actions) = self.get_bnx_data(bn_indexes=bn_indexes,
                                               bn_padding_masks=bn_padding_masks,
-                                              bn_actions=bnx_actions[:, :-1])
+                                              bn_actions=bn_actions)
 
         bnx_states, _ = self.get_l_states(l_indexes=bnx_indexes,
                                           l_padding_masks=bnx_padding_masks,
@@ -2060,8 +2060,8 @@ class SAC_Base:
                                                nx_obses_list=[bnx_obses[:, self.burn_in_step:] for bnx_obses in bnx_obses_list],
                                                nx_states=bnx_states[:, self.burn_in_step:],
                                                nx_target_states=bnx_target_states[:, self.burn_in_step:],
-                                               nx_actions=bnx_actions[:, self.burn_in_step:],
-                                               n_pre_actions=bnx_actions[:, self.burn_in_step - 1:-2],
+                                               n_actions=bn_actions[:, self.burn_in_step:],
+                                               n_pre_actions=bn_actions[:, self.burn_in_step - 1:-1],
                                                n_rewards=bn_rewards[:, self.burn_in_step:],
                                                n_dones=bn_dones[:, self.burn_in_step:],
                                                n_mu_probs=bn_mu_probs[:, self.burn_in_step:],
@@ -2078,7 +2078,7 @@ class SAC_Base:
 
         obs_list = [bnx_obses[:, self.burn_in_step] for bnx_obses in bnx_obses_list]
         state = bnx_states[:, self.burn_in_step]
-        action = bnx_actions[:, self.burn_in_step]
+        action = bn_actions[:, self.burn_in_step]
         mu_d_policy_probs = bn_mu_probs[:, self.burn_in_step, :self.d_action_summed_size]
 
         d_policy_entropy, c_policy_entropy = self._train_policy(obs_list=obs_list,
@@ -2092,12 +2092,12 @@ class SAC_Base:
         if self.curiosity is not None:
             loss_curiosity = self._train_curiosity(n_padding_masks=bn_padding_masks[:, self.burn_in_step:],
                                                    nx_states=bnx_states[:, self.burn_in_step:],
-                                                   n_actions=bnx_actions[:, self.burn_in_step:-1])
+                                                   n_actions=bn_actions[:, self.burn_in_step:])
 
         if self.use_rnd:
             loss_rnd = self._train_rnd(n_padding_masks=bn_padding_masks[:, self.burn_in_step:],
                                        n_states=bnx_states[:, self.burn_in_step:-1],
-                                       n_actions=bnx_actions[:, self.burn_in_step:-1])
+                                       n_actions=bn_actions[:, self.burn_in_step:])
 
         if self.summary_writer is not None and self.global_step % self.write_summary_per_step == 0:
             self.summary_available = True
@@ -2159,7 +2159,7 @@ class SAC_Base:
                       nx_obses_list: list[torch.Tensor],
                       state: torch.Tensor,
                       nx_target_states: torch.Tensor,
-                      nx_actions: torch.Tensor,
+                      n_actions: torch.Tensor,
                       n_rewards: torch.Tensor,
                       n_dones: torch.Tensor,
                       n_mu_probs: torch.Tensor | None) -> torch.Tensor:
@@ -2169,7 +2169,7 @@ class SAC_Base:
             nx_obses_list: list([batch, n + 1, *obs_shapes_i], ...)
             state: [batch, state_size]
             nx_target_states: [batch, n + 1, state_size]
-            nx_actions: [batch, n + 1, action_size]
+            n_actions: [batch, n, action_size]
             n_rewards: [batch, n]
             n_dones (torch.bool): [batch, n]
             n_mu_probs: [batch, n, action_size]
@@ -2178,7 +2178,7 @@ class SAC_Base:
             The td-error of observations, [batch, 1]
         """
         obs_list = [nx_obses[:, 0] for nx_obses in nx_obses_list]
-        action = nx_actions[:, 0]
+        action = n_actions[:, 0]
         d_action = action[..., :self.d_action_summed_size]
         c_action = action[..., self.d_action_summed_size:]
 
@@ -2195,7 +2195,7 @@ class SAC_Base:
         d_y, c_y = self._get_y(n_padding_masks=n_padding_masks,
                                nx_obses_list=nx_obses_list,
                                nx_states=nx_target_states,
-                               nx_actions=nx_actions,
+                               n_actions=n_actions,
                                n_rewards=n_rewards,
                                n_dones=n_dones,
                                n_mu_probs=n_mu_probs if self.use_n_step_is else None)
@@ -2377,7 +2377,7 @@ class SAC_Base:
                 bn_indexes (torch.int32): [batch, b + n]
                 bn_padding_masks (torch.bool): [batch, b + n]
                 bnx_obses_list (torch): list([batch, b + n + 1, *obs_shapes_i], ...)
-                bnx_actions (torch): [batch, b + n + 1, action_size]
+                bn_actions (torch): [batch, b + n, action_size]
                 bn_rewards (torch): [batch, b + n]
                 bn_dones (torch): [batch, b + n]
                 bn_mu_probs (torch): [batch, b + n, action_size]
@@ -2441,6 +2441,7 @@ class SAC_Base:
 
         bn_indexes = bnx_indexes[:, :-1]
         bn_padding_masks = bnx_padding_masks[:, :-1]
+        bn_actions = bnx_actions[:, :-1]
         bn_rewards = bnx_rewards[:, :-1]
         bn_dones = bnx_dones[:, :-1]
         bn_mu_probs = bnx_mu_probs[:, :-1]
@@ -2448,7 +2449,7 @@ class SAC_Base:
         return pointers, (bn_indexes,
                           bn_padding_masks,
                           bnx_obses_list,
-                          bnx_actions,
+                          bn_actions,
                           bn_rewards,
                           bn_dones,
                           bn_mu_probs,
@@ -2479,7 +2480,7 @@ class SAC_Base:
         (bn_indexes,
          bn_padding_masks,
          bnx_obses_list,
-         bnx_actions,
+         bn_actions,
          bn_rewards,
          bn_dones,
          bn_mu_probs,
@@ -2489,7 +2490,7 @@ class SAC_Base:
         bn_indexes (int32): [batch, b + n]
         bn_padding_masks (bool): [batch, b + n]
         bnx_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
-        bnx_actions: [batch, b + n + 1, action_size]
+        bn_actions: [batch, b + n, action_size]
         bn_rewards: [batch, b + n]
         bn_dones (bool): [batch, b + n]
         bn_mu_probs: [batch, b + n, action_size]
@@ -2504,7 +2505,7 @@ class SAC_Base:
                 bn_indexes=bn_indexes,
                 bn_padding_masks=bn_padding_masks,
                 bnx_obses_list=bnx_obses_list,
-                bnx_actions=bnx_actions,
+                bn_actions=bn_actions,
                 bn_rewards=bn_rewards,
                 bn_dones=bn_dones,
                 bn_mu_probs=bn_mu_probs,
@@ -2524,7 +2525,7 @@ class SAC_Base:
                     bn_pi_probs_tensor = self.get_l_probs(
                         l_obses_list=bn_obses_list,
                         l_states=bn_states,
-                        l_actions=bnx_actions[:, :-1])
+                        l_actions=bn_actions)
 
             # Update td_error
             if self.use_priority:
@@ -2534,7 +2535,7 @@ class SAC_Base:
                         nx_obses_list=[bnx_obses[:, self.burn_in_step:] for bnx_obses in bnx_obses_list],
                         state=bn_states[:, self.burn_in_step],
                         nx_target_states=bnx_target_states[:, self.burn_in_step:],
-                        nx_actions=bnx_actions[:, self.burn_in_step:],
+                        n_actions=bn_actions[:, self.burn_in_step:],
                         n_rewards=bn_rewards[:, self.burn_in_step:],
                         n_dones=bn_dones[:, self.burn_in_step:],
                         n_mu_probs=bn_pi_probs_tensor[:, self.burn_in_step:] if self.use_n_step_is else None
