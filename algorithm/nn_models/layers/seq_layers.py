@@ -58,33 +58,17 @@ class GRU(nn.Module):
         batch_size, seq_len, _ = x.shape
 
         if padding_mask is not None:
-            # Calculate original valid lengths and pre-padding lengths
-            orig_valid_lens = (~padding_mask).sum(dim=1)  # [batch]
-            pre_pad_lens = padding_mask.long().argmin(dim=1)  # [batch]
+            # 1. State calculation
+            valid_lens = (~padding_mask).sum(dim=1)
+            pre_pad_lens = padding_mask.long().argmin(dim=1)
 
-            # Precisely calculate the index of first post-padding
-            first_post_pad_idx = pre_pad_lens + orig_valid_lens
+            # 2. Left-shift alignment
+            seq_range = torch.arange(seq_len, device=x.device).unsqueeze(0).expand(batch_size, -1)
+            gather_idx = torch.clamp(seq_range + pre_pad_lens.unsqueeze(1), max=seq_len - 1)
+            x_aligned = x.gather(1, gather_idx.unsqueeze(-1).expand(-1, -1, x.shape[-1]))
 
-            # Find samples with post-padding (prevent index overflow at T)
-            has_post_pad = first_post_pad_idx < seq_len
-
-            # Clone a valid mask to avoid polluting the original tensor
-            effective_mask = padding_mask.clone()  # [batch, seq_len]
-
-            # Force the first padding of samples containing post-padding to be valid (False)
-            batch_idx = torch.arange(batch_size, device=x.device)
-            effective_mask[batch_idx[has_post_pad], first_post_pad_idx[has_post_pad]] = False
-
-            # 1. Recalculate new valid lengths (samples with post-padding will auto +1)
-            new_valid_lens = (~effective_mask).sum(dim=1)  # [batch]
-
-            # 2. Left-align shift
-            seq_range = torch.arange(seq_len, device=x.device).unsqueeze(0).expand(batch_size, -1)  # [batch, seq_len]
-            gather_idx = torch.clamp(seq_range + pre_pad_lens.unsqueeze(1), max=seq_len - 1)  # [batch, seq_len]
-            x_aligned = x.gather(1, gather_idx.unsqueeze(-1).expand(-1, -1, x.shape[-1]))  # [batch, seq_len, input_size]
-
-            # 3. Pack
-            pack_lens = new_valid_lens.cpu().clamp(min=1)  # [batch]
+            # 3. Pack the sequence and run the GRU
+            pack_lens = valid_lens.cpu().clamp(min=1)
             packed_x = pack_padded_sequence(x_aligned, pack_lens, batch_first=True, enforce_sorted=False)
 
         hn_list = []
@@ -98,18 +82,24 @@ class GRU(nn.Module):
 
                 out_aligned, _ = pad_packed_sequence(packed_out, batch_first=True, total_length=seq_len)
 
-                # 4. Restore to the original positions (shift right)
+                # 4. Restore to the original positions exactly (autograd-safe)
                 hidden_size = out_aligned.shape[-1]
+                # Step A: Compute the recovery indices (shift right)
+                # Data originally at position t should now be read from position t - pre_pad_lens.
                 recover_idx = seq_range - pre_pad_lens.unsqueeze(1)
+
+                # Step B: Clamp negative indices to the valid range
+                # If an index is < 0, it refers to left padding; clamp it to 0 first to avoid gather errors.
+                # The temporary values are fine; they will be cleared in the next step.
                 recover_idx_safe = torch.clamp(recover_idx, min=0)
 
-                # Gradient-preserving out-of-place gather
+                # Step C: Apply the reverse shift (pure out-of-place, preserving the computation graph and gradients)
                 output = out_aligned.gather(1, recover_idx_safe.unsqueeze(-1).expand(-1, -1, hidden_size))
 
-                # 5. Clean up invalid data
-                # Note: effective_mask must be used here to zero out values!
-                # This preserves the post-padding position we intentionally kept, instead of incorrectly zeroing it out.
-                output = output.masked_fill(effective_mask.unsqueeze(-1), 0.0)
+                # Step D: Clear the temporary values
+                # Using masked_fill is also out-of-place, so it is safe and efficient.
+                # Use the original padding_mask to zero out both leading and trailing padding positions in one pass.
+                output = output.masked_fill(padding_mask.unsqueeze(-1), 0.0)
 
                 hn_list.append(output.unsqueeze(2))
 

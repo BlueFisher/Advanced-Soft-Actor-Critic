@@ -290,7 +290,8 @@ class SAC_Base:
 
         d_action_list = [np.eye(d_action_size, dtype=np.float32)[0]
                          for d_action_size in self.d_action_sizes]
-        self._padding_action = np.concatenate(d_action_list + [np.zeros(self.c_action_size, dtype=np.float32)], axis=-1)
+        self._np_padding_action = np.concatenate(d_action_list + [np.zeros(self.c_action_size, dtype=np.float32)], axis=-1)
+        self._padding_action = torch.from_numpy(self._np_padding_action).to(self.device)
 
         def adam_optimizer(params) -> optim.Adam | None:
             params = list(params)
@@ -630,7 +631,7 @@ class SAC_Base:
             else:
                 self.batch_buffer = BatchBuffer(burn_in_step=self.burn_in_step,
                                                 n_step=self.n_step,
-                                                padding_action=self._padding_action,
+                                                padding_action=self._np_padding_action,
                                                 batch_size=self.batch_size,
                                                 device=self.device)
 
@@ -1098,7 +1099,7 @@ class SAC_Base:
         bnx_indexes = torch.concat([bn_indexes, bn_indexes[:, -1:] + (bn_indexes[:, -1:] != -1)], dim=1)
         # The last padding mask is always True.
         bnx_padding_masks = torch.concat([bn_padding_masks,
-                                          torch.ones_like(bn_padding_masks[:, -1:], dtype=torch.bool)], dim=1)
+                                          bn_padding_masks[:, -1:]], dim=1)
         bnx_pre_actions = gen_n_pre_actions(bn_actions, keep_last_action=True)
 
         return bnx_indexes, bnx_padding_masks, bnx_pre_actions
@@ -1181,6 +1182,7 @@ class SAC_Base:
 
     @torch.no_grad()
     def get_dqn_like_d_y(self,
+                         n_last_masks: torch.Tensor,
                          n_padding_masks: torch.Tensor,
                          n_rewards: torch.Tensor,
                          n_dones: torch.Tensor,
@@ -1188,6 +1190,7 @@ class SAC_Base:
                          stacked_next_target_n_d_qs: torch.Tensor) -> torch.Tensor:
         """
         Args:
+            n_last_masks (torch.bool): [batch, n]
             n_padding_masks (torch.bool): [batch, n]
             n_rewards: [batch, n]
             n_dones (torch.bool): [batch, n]
@@ -1198,7 +1201,7 @@ class SAC_Base:
             y: [batch, 1]
         """
         batch_tensor = torch.arange(n_padding_masks.shape[0], device=self.device)
-        last_solid_index = get_last_false_indexes(n_padding_masks, dim=1)  # [batch, ]
+        last_solid_index = get_last_false_indexes(torch.logical_or(n_last_masks, n_padding_masks), dim=1)  # [batch, ]
 
         done = n_dones[batch_tensor, last_solid_index].unsqueeze(-1)  # [batch, 1]
         stacked_next_q = stacked_next_n_d_qs[:, batch_tensor, last_solid_index, :]
@@ -1230,6 +1233,7 @@ class SAC_Base:
 
     @torch.no_grad()
     def _v_trace(self,
+                 n_last_masks: torch.Tensor,
                  n_padding_masks: torch.Tensor,
                  n_rewards: torch.Tensor,
                  n_dones: torch.Tensor,
@@ -1239,6 +1243,7 @@ class SAC_Base:
                  next_n_vs: torch.Tensor) -> torch.Tensor:
         """
         Args:
+            n_last_masks (torch.bool): [batch, ]
             n_padding_masks (torch.bool): [batch, ]
             n_rewards: [batch, n]
             n_dones (torch.bool): [batch, n]
@@ -1270,7 +1275,7 @@ class SAC_Base:
             # \prod{c_i} * \rho_t * td_error
             td_error = c * rho * td_error
 
-        td_error = td_error * ~n_padding_masks
+        td_error = td_error * ~(torch.logical_or(n_last_masks, n_padding_masks))  # [batch, n]
         # \sum{td_error}
         r = torch.sum(td_error, dim=1, keepdim=True)  # [batch, 1]
 
@@ -1281,6 +1286,7 @@ class SAC_Base:
 
     @torch.no_grad()
     def _get_y(self,
+               n_last_masks: torch.Tensor,
                n_padding_masks: torch.Tensor,
                nx_obses_list: list[torch.Tensor],
                nx_states: torch.Tensor,
@@ -1291,6 +1297,7 @@ class SAC_Base:
                                                          torch.Tensor | None]:
         """
         Args:
+            n_last_masks (torch.bool): [batch, n]
             n_padding_masks (torch.bool): [batch, n]
             nx_obses_list: list([batch, n + 1, *obs_shapes_i], ...)
             nx_states: [batch, n + 1, state_size]
@@ -1357,7 +1364,8 @@ class SAC_Base:
                 stacked_next_n_d_eval_qs = torch.stack(next_n_d_eval_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
                 # [ensemble_q_num, batch, n, d_action_summed_size] -> [ensemble_q_sample, batch, n, d_action_summed_size]
 
-                d_y = self.get_dqn_like_d_y(n_padding_masks=n_padding_masks,
+                d_y = self.get_dqn_like_d_y(n_last_masks=n_last_masks,
+                                            n_padding_masks=n_padding_masks,
                                             n_rewards=n_rewards,
                                             n_dones=n_dones,
                                             stacked_next_n_d_qs=stacked_next_n_d_eval_qs,
@@ -1393,7 +1401,8 @@ class SAC_Base:
                     nx_d_pi_probs = torch.exp(nx_d_policy.log_prob(nx_actions[..., :self.d_action_summed_size]).sum(-1))  # [batch, n + 1]
                     n_d_pi_probs = nx_d_pi_probs[:, :-1]  # [batch, n]
 
-                d_y = self._v_trace(n_padding_masks=n_padding_masks,
+                d_y = self._v_trace(n_last_masks=n_last_masks,
+                                    n_padding_masks=n_padding_masks,
                                     n_rewards=n_rewards,
                                     n_dones=n_dones,
                                     n_mu_probs=n_d_mu_probs if self.use_n_step_is else None,
@@ -1435,7 +1444,8 @@ class SAC_Base:
                 n_c_pi_probs = nx_c_pi_probs[:, :-1]
                 # [batch, n, c_action_size]
 
-            c_y = self._v_trace(n_padding_masks=n_padding_masks,
+            c_y = self._v_trace(n_last_masks=n_last_masks,
+                                n_padding_masks=n_padding_masks,
                                 n_rewards=n_rewards,
                                 n_dones=n_dones,
                                 n_mu_probs=prod_prob(n_c_mu_probs) if self.use_n_step_is else None,
@@ -1447,6 +1457,7 @@ class SAC_Base:
 
     def _train_rep_q(self,
                      n_indexes: torch.Tensor,
+                     n_last_masks: torch.Tensor,
                      n_padding_masks: torch.Tensor,
                      nx_obses_list: list[torch.Tensor],
                      nx_states: torch.Tensor,
@@ -1464,6 +1475,7 @@ class SAC_Base:
         """
         Args:
             n_indexes (torch.int32): [batch, n],
+            n_last_masks (torch.bool): [batch, n],
             n_padding_masks (torch.bool): [batch, n],
             nx_obses_list: list([batch, n + 1, *obs_shapes_i], ...)
             nx_states: [batch, n + 1, state_size]
@@ -1496,7 +1508,8 @@ class SAC_Base:
         d_q_list = [q[0] for q in q_list]  # [batch, action_size]
         c_q_list = [q[1] for q in q_list]  # [batch, 1]
 
-        d_y, c_y = self._get_y(n_padding_masks=n_padding_masks,
+        d_y, c_y = self._get_y(n_last_masks=n_last_masks,
+                               n_padding_masks=n_padding_masks,
                                nx_obses_list=nx_obses_list,
                                nx_states=nx_states,
                                n_actions=n_actions,
@@ -1697,15 +1710,15 @@ class SAC_Base:
             elif self.seq_encoder == SEQ_ENCODER.ATTN:
                 indexes_at_n = n_indexes[:, 0:1]
                 padding_masks_at_n = n_padding_masks[:, 0:1]
-                state = self.model_rep.get_state_from_encoders(_encoder if len(_encoder) > 1 else _encoder[0],
-                                                               1,
+                state = self.model_rep.get_state_from_encoders(1,
+                                                               _encoder if len(_encoder) > 1 else _encoder[0],
                                                                indexes_at_n,
                                                                obses_list_at_n,
                                                                pre_actions_at_n,
                                                                None,
                                                                padding_mask=padding_masks_at_n)
-                target_state = self.model_target_rep.get_state_from_encoders(_encoder if len(_encoder) > 1 else _encoder[0],
-                                                                             1,
+                target_state = self.model_target_rep.get_state_from_encoders(1,
+                                                                             _encoder if len(_encoder) > 1 else _encoder[0],
                                                                              indexes_at_n,
                                                                              obses_list_at_n,
                                                                              pre_actions_at_n,
@@ -2003,6 +2016,7 @@ class SAC_Base:
 
     def _train(self,
                bn_indexes: torch.Tensor,
+               bn_last_masks: torch.Tensor,
                bn_padding_masks: torch.Tensor,
                bnx_obses_list: list[torch.Tensor],
                bn_actions: torch.Tensor,
@@ -2014,6 +2028,7 @@ class SAC_Base:
         """
         Args:
             bn_indexes (torch.int32): [batch, b + n]
+            bn_last_masks (torch.bool): [batch, b + n]
             bn_padding_masks (torch.bool): [batch, b + n]
             bnx_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
             bn_actions: [batch, b + n, action_size]
@@ -2056,6 +2071,7 @@ class SAC_Base:
          loss_siamese,
          loss_siamese_q,
          loss_predictions) = self._train_rep_q(n_indexes=bn_indexes[:, self.burn_in_step:],
+                                               n_last_masks=bn_last_masks[:, self.burn_in_step:],
                                                n_padding_masks=bn_padding_masks[:, self.burn_in_step:],
                                                nx_obses_list=[bnx_obses[:, self.burn_in_step:] for bnx_obses in bnx_obses_list],
                                                nx_states=bnx_states[:, self.burn_in_step:],
@@ -2155,6 +2171,7 @@ class SAC_Base:
 
     @torch.no_grad()
     def _get_td_error(self,
+                      n_last_masks: torch.Tensor,
                       n_padding_masks: torch.Tensor,
                       nx_obses_list: list[torch.Tensor],
                       state: torch.Tensor,
@@ -2165,6 +2182,7 @@ class SAC_Base:
                       n_mu_probs: torch.Tensor | None) -> torch.Tensor:
         """
         Args:
+            n_last_masks (torch.bool): [batch, n]
             n_padding_masks (torch.bool): [batch, n]
             nx_obses_list: list([batch, n + 1, *obs_shapes_i], ...)
             state: [batch, state_size]
@@ -2192,7 +2210,8 @@ class SAC_Base:
                         for q in d_q_list]
             # [batch, 1]
 
-        d_y, c_y = self._get_y(n_padding_masks=n_padding_masks,
+        d_y, c_y = self._get_y(n_last_masks=n_last_masks,
+                               n_padding_masks=n_padding_masks,
                                nx_obses_list=nx_obses_list,
                                nx_states=nx_target_states,
                                n_actions=n_actions,
@@ -2296,13 +2315,13 @@ class SAC_Base:
 
         assert ep_indexes.dtype == np.int32
 
-        ep_padding_masks = np.zeros_like(ep_indexes, dtype=bool)
-        ep_padding_masks[:, -1] = True  # The last step is next_step
-        ep_padding_masks[ep_indexes == -1] = True
+        ep_last_masks = np.zeros_like(ep_indexes, dtype=bool)
+        ep_last_masks[:, -1] = True  # The last step is next_step
+        ep_last_masks[ep_indexes == -1] = True
 
         if self.use_replay_buffer:
             self._fill_replay_buffer(ep_indexes=ep_indexes,
-                                     ep_padding_masks=ep_padding_masks,
+                                     ep_last_masks=ep_last_masks,
                                      ep_obses_list=ep_obses_list,
                                      ep_actions=ep_actions,
                                      ep_rewards=ep_rewards,
@@ -2311,7 +2330,7 @@ class SAC_Base:
                                      ep_pre_seq_hidden_states=ep_pre_seq_hidden_states)
         else:
             self.batch_buffer.put_episode(ep_indexes=ep_indexes,
-                                          ep_padding_masks=ep_padding_masks,
+                                          ep_last_masks=ep_last_masks,
                                           ep_obses_list=ep_obses_list,
                                           ep_actions=ep_actions,
                                           ep_rewards=ep_rewards,
@@ -2321,7 +2340,7 @@ class SAC_Base:
 
     def _fill_replay_buffer(self,
                             ep_indexes: np.ndarray,
-                            ep_padding_masks: np.ndarray,
+                            ep_last_masks: np.ndarray,
                             ep_obses_list: list[np.ndarray],
                             ep_actions: np.ndarray,
                             ep_rewards: np.ndarray,
@@ -2331,7 +2350,7 @@ class SAC_Base:
         """
         Args:
             ep_indexes (np.int32): [1, ep_len]
-            ep_padding_masks: (bool): [1, ep_len]
+            ep_last_masks: (bool): [1, ep_len]
             ep_obses_list (np): list([1, ep_len, *obs_shapes_i], ...)
             ep_actions (np): [1, ep_len, action_size]
             ep_rewards (np): [1, ep_len]
@@ -2342,7 +2361,7 @@ class SAC_Base:
 
         # Reshape [1, ep_len, ...] to [ep_len, ...]
         index = ep_indexes.squeeze(0)
-        padding_mask = ep_padding_masks.squeeze(0)
+        last_mask = ep_last_masks.squeeze(0)
         obs_list = [ep_obses.squeeze(0) for ep_obses in ep_obses_list]
         if self.use_normalization:
             self._udpate_normalizer([torch.from_numpy(obs).to(self.device) for obs in obs_list])
@@ -2354,7 +2373,7 @@ class SAC_Base:
 
         storage_data = {
             'index': index,
-            'padding_mask': padding_mask,
+            'last_mask': last_mask,
             **{f'obs_{name}': obs for name, obs in zip(self.obs_names, obs_list)},
             'action': action,
             'reward': reward,
@@ -2375,6 +2394,7 @@ class SAC_Base:
             pointers: [batch, ]
             (
                 bn_indexes (torch.int32): [batch, b + n]
+                bn_last_masks (torch.bool): [batch, b + n]
                 bn_padding_masks (torch.bool): [batch, b + n]
                 bnx_obses_list (torch): list([batch, b + n + 1, *obs_shapes_i], ...)
                 bn_actions (torch): [batch, b + n, action_size]
@@ -2402,6 +2422,8 @@ class SAC_Base:
         """
         pointers, batch, priority_is = sampled
 
+        batch['padding_mask'] = torch.zeros_like(batch['last_mask'])
+
         index = batch['index'][:, self.burn_in_step]
 
         # Vectorized padding on the whole [batch, bn + 1] timeline.
@@ -2414,14 +2436,15 @@ class SAC_Base:
         batch['padding_mask'][invalid_mask] = True
         # for n in self.obs_names:
         #     batch[f'obs_{n}'][invalid_mask] = 0.
-        # batch['action'][invalid_mask] = self._padding_action
-        # batch['reward'][invalid_mask] = 0.
+        batch['action'][invalid_mask] = self._padding_action
+        batch['reward'][invalid_mask] = 0.
         batch['done'][invalid_mask] = True
-        # batch['mu_prob'][invalid_mask] = 1.
+        batch['mu_prob'][invalid_mask] = 1.
         batch['pre_seq_hidden_state'][invalid_mask] = 0.
 
         """
         bnx_indexes (torch.int32): [batch, bn + 1]
+        bnx_last_masks (bool): [batch, bn + 1]
         bnx_padding_masks (bool): [batch, bn + 1]
         bnx_obses_list: list([batch, bn + 1, *obs_shapes_i], ...)
         bnx_actions: [batch, bn + 1, action_size]
@@ -2431,6 +2454,7 @@ class SAC_Base:
         bnx_pre_seq_hidden_state: [batch, bn + 1, *seq_hidden_state_shape]
         """
         bnx_indexes = batch['index']
+        bnx_last_masks = batch['last_mask']
         bnx_padding_masks = batch['padding_mask']
         bnx_obses_list = [batch[f'obs_{name}'] for name in self.obs_names]
         bnx_actions = batch['action']
@@ -2440,6 +2464,7 @@ class SAC_Base:
         bnx_pre_seq_hidden_states = batch['pre_seq_hidden_state']
 
         bn_indexes = bnx_indexes[:, :-1]
+        bn_last_masks = bnx_last_masks[:, :-1]
         bn_padding_masks = bnx_padding_masks[:, :-1]
         bn_actions = bnx_actions[:, :-1]
         bn_rewards = bnx_rewards[:, :-1]
@@ -2447,6 +2472,7 @@ class SAC_Base:
         bn_mu_probs = bnx_mu_probs[:, :-1]
 
         return pointers, (bn_indexes,
+                          bn_last_masks,
                           bn_padding_masks,
                           bnx_obses_list,
                           bn_actions,
@@ -2454,6 +2480,7 @@ class SAC_Base:
                           bn_dones,
                           bn_mu_probs,
                           bnx_pre_seq_hidden_states,
+
                           priority_is if self.use_priority else None)
 
     @unified_elapsed_timer('train a step', 10)
@@ -2478,6 +2505,7 @@ class SAC_Base:
             batch = (*batch, None)  # None is priority_is
 
         (bn_indexes,
+         bn_last_masks,
          bn_padding_masks,
          bnx_obses_list,
          bn_actions,
@@ -2486,8 +2514,9 @@ class SAC_Base:
          bn_mu_probs,
          bnx_pre_seq_hidden_states,
          priority_is) = batch
-        """
+        """ 
         bn_indexes (int32): [batch, b + n]
+        bn_last_masks (bool): [batch, b + n]
         bn_padding_masks (bool): [batch, b + n]
         bnx_obses_list: list([batch, b + n + 1, *obs_shapes_i], ...)
         bn_actions: [batch, b + n, action_size]
@@ -2503,6 +2532,7 @@ class SAC_Base:
         with self._profiler('train', repeat=10):
             bnx_states, next_bnx_seq_hidden_states, bnx_target_states = self._train(
                 bn_indexes=bn_indexes,
+                bn_last_masks=bn_last_masks,
                 bn_padding_masks=bn_padding_masks,
                 bnx_obses_list=bnx_obses_list,
                 bn_actions=bn_actions,
@@ -2531,6 +2561,7 @@ class SAC_Base:
             if self.use_priority:
                 with self._profiler('get_td_error', repeat=10):
                     td_error = self._get_td_error(
+                        n_last_masks=bn_last_masks[:, self.burn_in_step:],
                         n_padding_masks=bn_padding_masks[:, self.burn_in_step:],
                         nx_obses_list=[bnx_obses[:, self.burn_in_step:] for bnx_obses in bnx_obses_list],
                         state=bn_states[:, self.burn_in_step],
@@ -2569,3 +2600,5 @@ class SAC_Base:
 
     def close(self):
         self._closed = True
+        if hasattr(self, 'replay_buffer'):
+            self.replay_buffer.close()

@@ -104,7 +104,7 @@ def episode_to_batch(burn_in_step: int,
                      n_step: int,
                      padding_action: np.ndarray,
                      l_indexes: np.ndarray,
-                     l_padding_masks: np.ndarray,
+                     l_last_masks: np.ndarray,
                      l_obses_list: list[np.ndarray],
                      l_actions: np.ndarray,
                      l_rewards: np.ndarray,
@@ -117,7 +117,7 @@ def episode_to_batch(burn_in_step: int,
         n_step: int
         padding_action (np): [action_size, ]  The discrete padding actions cannot be all zeros
         l_indexes (np.int32): [1, ep_len]
-        l_padding_masks (bool): [1, ep_len]
+        l_last_masks (bool): [1, ep_len]
         l_obses_list: list([1, ep_len, *obs_shapes_i], ...)
         l_actions: [1, ep_len, action_size]
         l_rewards: [1, ep_len]
@@ -127,7 +127,7 @@ def episode_to_batch(burn_in_step: int,
 
     Returns:
         bn_indexes (np.int32): [ep_len - bn + 1, bn]
-        bn_padding_masks (bool): [ep_len - bn + 1, bn]
+        bn_last_masks (bool): [ep_len - bn + 1, bn]
         bnx_obses_list: list([ep_len - bn + 1 + 1, bn, *obs_shapes_i], ...)
         bnx_actions: [ep_len - bn + 1 + 1, bn, action_size]
         bn_rewards: [ep_len - bn + 1, bn]
@@ -144,9 +144,12 @@ def episode_to_batch(burn_in_step: int,
     l_indexes = np.concatenate([np.full((1, burn_in_step), -1, dtype=l_indexes.dtype),
                                 l_indexes,
                                 np.full((1, n_step - 1), -1, dtype=l_indexes.dtype)], axis=1)
+    l_last_masks = np.concatenate([np.ones((1, burn_in_step), dtype=bool),
+                                   l_last_masks,
+                                   np.ones((1, n_step - 1), dtype=bool)], axis=1)
     l_padding_masks = np.concatenate([np.ones((1, burn_in_step), dtype=bool),
-                                     l_padding_masks,
-                                     np.ones((1, n_step - 1), dtype=bool)], axis=1)
+                                      np.zeros_like(l_last_masks),
+                                      np.ones((1, n_step - 1), dtype=bool)], axis=1)
     for j, l_obses in enumerate(l_obses_list):
         l_obses_list[j] = np.concatenate([np.zeros((1, burn_in_step, *l_obses.shape[2:]), dtype=l_obses.dtype),
                                           l_obses,
@@ -170,13 +173,15 @@ def episode_to_batch(burn_in_step: int,
     # Generate batch
     bn_indexes = np.concatenate([l_indexes[:, i:i + bn]
                                 for i in range(ep_len - 1)], axis=0)
+    bn_last_masks = np.concatenate([l_last_masks[:, i:i + bn]
+                                    for i in range(ep_len - 1)], axis=0)
     bn_padding_masks = np.concatenate([l_padding_masks[:, i:i + bn]
-                                       for i in range(ep_len - 1)], axis=0)
+                                        for i in range(ep_len - 1)], axis=0)
     tmp_bnx_obses_list = [None] * len(l_obses_list)
     for j, l_obses in enumerate(l_obses_list):
         tmp_bnx_obses_list[j] = np.concatenate([l_obses[:, i:i + bn + 1]
                                                 for i in range(ep_len - 1)], axis=0)
-    bnx_actions = np.concatenate([l_actions[:, i:i + bn + 1]
+    bn_actions = np.concatenate([l_actions[:, i:i + bn]
                                   for i in range(ep_len - 1)], axis=0)
     bn_rewards = np.concatenate([l_rewards[:, i:i + bn]
                                 for i in range(ep_len - 1)], axis=0)
@@ -188,9 +193,10 @@ def episode_to_batch(burn_in_step: int,
                                                 for i in range(ep_len - 1)], axis=0)
 
     return (bn_indexes,
+            bn_last_masks,
             bn_padding_masks,
             tmp_bnx_obses_list,
-            bnx_actions,
+            bn_actions,
             bn_rewards,
             bn_dones,
             bn_probs,

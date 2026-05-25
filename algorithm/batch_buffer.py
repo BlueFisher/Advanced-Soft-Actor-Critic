@@ -29,7 +29,7 @@ class BatchBuffer:
 
     def put_episode(self,
                     ep_indexes: np.ndarray,
-                    ep_padding_masks: np.ndarray,
+                    ep_last_masks: np.ndarray,
                     ep_obses_list: list[np.ndarray],
                     ep_actions: np.ndarray,
                     ep_rewards: np.ndarray,
@@ -39,7 +39,7 @@ class BatchBuffer:
         """
         Args:
             ep_indexes (np.int32): [1, ep_len]
-            ep_padding_masks: (bool): [1, ep_len]
+            ep_last_masks: (bool): [1, ep_len]
             ep_obses_list (np): list([1, ep_len, *obs_shapes_i], ...)
             ep_actions (np): [1, ep_len, action_size]
             ep_rewards (np): [1, ep_len]
@@ -52,7 +52,7 @@ class BatchBuffer:
                                          n_step=self.n_step,
                                          padding_action=self.padding_action,
                                          l_indexes=ep_indexes,
-                                         l_padding_masks=ep_padding_masks,
+                                         l_last_masks=ep_last_masks,
                                          l_obses_list=ep_obses_list,
                                          l_actions=ep_actions,
                                          l_rewards=ep_rewards,
