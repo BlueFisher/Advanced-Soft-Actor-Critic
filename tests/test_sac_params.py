@@ -68,17 +68,24 @@ def __gen_test(test_from: int):
     param_dict_candidates = {
         'd_action_sizes': [[], [3, 3, 4]],
         'c_action_size': [0, 4],
+
         'use_replay_buffer': [True, False],
+        'use_priority': [True, False],
+
         'burn_in_step': [5],
         'n_step': [3],
         'seq_encoder': [None, 'RNN', 'ATTN'],
+
         'discrete_dqn_like': [True, False],
+        'use_n_step_is': [True, False],
+
         'siamese': [None, 'ATC', 'BYOL'],
         'siamese_use_q': [False, True],
         'siamese_use_adaptive': [False, True],
-        'use_n_step_is': [True, False],
+
         'use_rnd': [True, False],
-        # 'action_noise': [None, [0.1, 0.1]]
+
+        'use_normalization': [True, False],
     }
 
     possible_param_dicts = get_product(param_dict_candidates)
@@ -87,6 +94,10 @@ def __gen_test(test_from: int):
     for param_dict in possible_param_dicts:
         if not param_dict['d_action_sizes'] and not param_dict['c_action_size']:
             continue
+
+        if 'use_replay_buffer' in param_dict and not param_dict['use_replay_buffer']:
+            if param_dict['use_priority']:
+                continue
 
         if 'siamese' in param_dict and not param_dict['siamese']:
             if param_dict['siamese_use_q'] or param_dict['siamese_use_adaptive']:

@@ -136,6 +136,9 @@ class DataStorage:
     @property
     def is_full(self) -> bool:
         return self._size == self.capacity
+    
+    def close(self):
+        del self._buffer
 
 
 class SumTree:
@@ -233,6 +236,9 @@ class SumTree:
     @property
     def max(self):
         return self._tree[self.capacity - 1:].max()
+    
+    def close(self):
+        del self._tree
 
 
 class PrioritizedReplayBuffer:
@@ -262,6 +268,8 @@ class PrioritizedReplayBuffer:
         self.td_error_max = td_error_max
         self._sum_tree = SumTree(self.capacity)
         self._trans_storage = DataStorage(self.capacity)
+
+        self._closed = False
 
         self._queue = queue.Queue(maxsize=1)
         self._stream = torch.cuda.Stream()
@@ -328,7 +336,7 @@ class PrioritizedReplayBuffer:
             self._sum_tree.add(data_pointers, probs)
 
     def _prefetch_loop(self):
-        while True:
+        while not self._closed:
             if not self.is_lg_batch_size:
                 time.sleep(0.1)
                 continue
@@ -459,6 +467,13 @@ class PrioritizedReplayBuffer:
     def is_lg_batch_size(self) -> bool:
         with self._lock.read():
             return self._trans_storage.size > self.batch_size
+
+    def close(self):
+        self._closed = True
+        while not self._queue.empty():
+            self._queue.get_nowait()
+        self._sum_tree.close()
+        self._trans_storage.close()
 
 
 class TqdmToLogger(io.StringIO):

@@ -310,18 +310,28 @@ class SAC_Base:
 
             p_self = self
 
-            class ModelRep(nn.ModelRep):
-                def forward(self, obs_list, *args, **kwargs):
-                    obs_list = [
-                        torch.clamp(
-                            (obs - mean) / torch.sqrt(variance / (p_self.normalizer_step + 1)),
-                            -5, 5
-                        ) for obs, mean, variance in zip(obs_list,
-                                                         p_self.running_means,
-                                                         p_self.running_variances)
-                    ]
+            def process_normalizer(obs_list):
+                return [
+                    torch.clamp(
+                        (obs - mean) / torch.sqrt(variance / (p_self.normalizer_step + 1)),
+                        -5, 5
+                    ) for obs, mean, variance in zip(obs_list,
+                                                     p_self.running_means,
+                                                     p_self.running_variances)
+                ]
 
-                    return super().forward(obs_list, *args, **kwargs)
+            if self.seq_encoder in (None, SEQ_ENCODER.RNN):
+                class ModelRep(nn.ModelRep):
+                    def forward(self, obs_list, *args, **kwargs):
+                        obs_list = process_normalizer(obs_list)
+
+                        return super().forward(obs_list, *args, **kwargs)
+            else:
+                class ModelRep(nn.ModelRep):
+                    def forward(self, seq_q_len, index, obs_list, *args, **kwargs):
+                        obs_list = process_normalizer(obs_list)
+
+                        return super().forward(seq_q_len, index, obs_list, *args, **kwargs)
         else:
             ModelRep = nn.ModelRep
 
