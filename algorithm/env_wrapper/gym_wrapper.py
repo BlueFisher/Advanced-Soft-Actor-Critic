@@ -3,6 +3,7 @@ from pathlib import Path
 
 import gymnasium as gym
 import numpy as np
+import matplotlib.pyplot as plt
 
 if __name__ in ('__main__', '__mp_main__'):
     from env_wrapper import DecisionStep, EnvWrapper, TerminalStep
@@ -28,6 +29,7 @@ class GymWrapper(EnvWrapper):
         super().__init__(train_mode, env_name, env_args, n_envs, model_abs_dir)
 
         self.render = render
+        self.img_plot = None
 
         self._logger = logging.getLogger('GymWrapper')
         self._logger.info(', '.join(gym.envs.registry.keys()))
@@ -37,7 +39,7 @@ class GymWrapper(EnvWrapper):
                             dict[str, list[int]],
                             dict[str, int]]:
         self.env = env = gym.make_vec(self.env_name,
-                                      render_mode='human' if self.render else None,
+                                      render_mode='rgb_array' if self.render else None,
                                       num_envs=self.n_envs,
                                       **self.env_args)
 
@@ -50,12 +52,13 @@ class GymWrapper(EnvWrapper):
         d_action_sizes, c_action_size = [], 0
 
         if self.is_discrete:
-            d_action_sizes = [env.single_action_space.n]
+            d_action_sizes = [int(env.single_action_space.n)]
         else:
-            c_action_size = env.single_action_space.shape[0]
+            c_action_size = int(env.single_action_space.shape[0])
 
         return ({'gym': ['vector']},
                 {'gym': [obs_shape]},
+                {'gym': [np.float32]},
                 {'gym': d_action_sizes},
                 {'gym': c_action_size})
 
@@ -82,6 +85,19 @@ class GymWrapper(EnvWrapper):
 
         obs, reward, termination, truncation, info = self.env.step(action)
 
+        if self.render:
+            frames = self.env.render()
+            if frames is not None and len(frames) > 0:
+                combined_frame = np.hstack(frames)
+                if self.img_plot is None:
+                    fig, ax = plt.subplots(figsize=(10, 4))
+                    ax.axis('off')
+                    self.img_plot = ax.imshow(combined_frame)
+                else:
+                    self.img_plot.set_data(combined_frame)
+                    plt.draw()
+                    plt.pause(0.01)
+
         agent_ids = np.arange(len(obs))
         obs = obs.astype(np.float32)
         reward = reward.astype(np.float32)
@@ -104,6 +120,7 @@ class GymWrapper(EnvWrapper):
 
     def close(self):
         self.env.close()
+        self._logger.warning('Environment closed.')
 
 
 if __name__ == "__main__":
@@ -111,8 +128,8 @@ if __name__ == "__main__":
 
     N_ENVS = 2
 
-    env = GymWrapper(True, 'ToyStack-v0', render=True, n_envs=N_ENVS)
-    ma_obs_names, ma_obs_shapes, ma_d_action_sizes, ma_c_action_size = env.init()
+    env = GymWrapper(True, 'CartPole-v1', render=True, n_envs=N_ENVS)
+    ma_obs_names, ma_obs_shapes, ma_obs_dtypes, ma_d_action_sizes, ma_c_action_size = env.init()
     ma_names = list(ma_obs_shapes.keys())
 
     for i in range(100):
@@ -136,6 +153,6 @@ if __name__ == "__main__":
             ma_d_action[n] = d_action
             ma_c_action[n] = c_action
 
-            decision_step, terminal_step = env.step(ma_d_action, ma_c_action)
+            decision_step, terminal_step, _ = env.step(ma_d_action, ma_c_action)
 
     env.close()
