@@ -138,7 +138,8 @@ class DataStorage:
         return self._size == self.capacity
     
     def close(self):
-        del self._buffer
+        if hasattr(self, '_buffer') and self._buffer is not None:
+            del self._buffer
 
 
 class SumTree:
