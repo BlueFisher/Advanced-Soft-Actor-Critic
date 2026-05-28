@@ -29,6 +29,7 @@ class GymWrapper(EnvWrapper):
         super().__init__(train_mode, env_name, env_args, n_envs, model_abs_dir)
 
         self.render = render
+        self.render_fig = None
         self.img_plot = None
 
         self._logger = logging.getLogger('GymWrapper')
@@ -86,12 +87,16 @@ class GymWrapper(EnvWrapper):
         obs, reward, termination, truncation, info = self.env.step(action)
 
         if self.render:
+            if self.render_fig is not None and not plt.fignum_exists(self.render_fig.number):
+                raise KeyboardInterrupt('Matplotlib render window has been closed.')
+
             frames = self.env.render()
             if frames is not None and len(frames) > 0:
                 combined_frame = np.hstack(frames)
                 if self.img_plot is None:
                     fig, ax = plt.subplots(figsize=(10, 4))
                     ax.axis('off')
+                    self.render_fig = fig
                     self.img_plot = ax.imshow(combined_frame)
                 else:
                     self.img_plot.set_data(combined_frame)
