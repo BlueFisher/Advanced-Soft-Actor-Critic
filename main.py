@@ -60,11 +60,12 @@ if __name__ == '__main__':
         k, v = env_arg.split('=')
         env_args[k] = v
 
-    if args.oc:
-        from algorithm.oc.oc_main import OC_Main as Main
-    else:
-        from algorithm.sac_main import Main
+    # if args.oc:
+    #     from algorithm.oc.oc_main import OC_Main as Main
+    # else:
+    #     from algorithm.sac_main import Main
 
+    from algorithm.ppo_main import Main
     root_dir = Path(__file__).resolve().parent
     Main(root_dir, f'envs/{args.env}',
          config_cat=args.config,

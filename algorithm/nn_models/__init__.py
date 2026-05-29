@@ -4,3 +4,4 @@ from .policy import *
 from .predictions import *
 from .q import *
 from .representation import *
+from .v import *
