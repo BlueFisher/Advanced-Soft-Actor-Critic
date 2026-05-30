@@ -95,11 +95,11 @@ class ModelBaseForwardDynamic(nn.Module):
     def _build_model(self):
         pass
 
-    def forward(self, state, action):
+    def forward(self, state: torch.Tensor, action: torch.Tensor):
         raise Exception("ModelBaseForwardDynamic not implemented")
 
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        return super().__call__(x)
+    def __call__(self, state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+        return super().__call__(state, action)
 
 
 class ModelForwardDynamic(ModelBaseForwardDynamic):
@@ -107,7 +107,7 @@ class ModelForwardDynamic(ModelBaseForwardDynamic):
         self.dense = LinearLayers(self.state_size + self.action_size,
                                   dense_n, dense_depth, self.state_size)
 
-    def forward(self, state, action):
+    def forward(self, state: torch.Tensor, action: torch.Tensor):
         return self.dense(torch.cat([state, action], dim=-1))
 
 
@@ -122,11 +122,11 @@ class ModelBaseInverseDynamic(nn.Module):
     def _build_model(self):
         pass
 
-    def forward(self, state_from, state_to):
+    def forward(self, state_from: torch.Tensor, state_to: torch.Tensor):
         raise Exception("ModelBaseInverseDynamic not implemented")
 
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        return super().__call__(x)
+    def __call__(self, state_from: torch.Tensor, state_to: torch.Tensor) -> torch.Tensor:
+        return super().__call__(state_from, state_to)
 
 
 class ModelInverseDynamic(ModelBaseInverseDynamic):
@@ -134,5 +134,5 @@ class ModelInverseDynamic(ModelBaseInverseDynamic):
         self.dense = LinearLayers(self.state_size + self.state_size,
                                   dense_n, dense_depth, self.action_size)
 
-    def forward(self, state_from, state_to):
+    def forward(self, state_from: torch.Tensor, state_to: torch.Tensor):
         return self.dense(torch.cat([state_from, state_to], dim=-1))
