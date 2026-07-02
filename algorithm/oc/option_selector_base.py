@@ -1744,7 +1744,8 @@ class OptionSelectorBase(SAC_Base):
                     ep_dones: np.ndarray,
                     ep_probs: list[np.ndarray],
                     ep_pre_seq_hidden_states: np.ndarray,
-                    ep_pre_low_seq_hidden_states: np.ndarray) -> None:
+                    ep_pre_low_seq_hidden_states: np.ndarray,
+                    ep_terminations: np.ndarray) -> None:
         # Ignore episodes which length is too short
         # if ep_indexes.shape[1] < self.n_step:
         #     return
@@ -1814,7 +1815,7 @@ class OptionSelectorBase(SAC_Base):
         last_mask = ep_last_masks.squeeze(0)
         obs_list = [ep_obses.squeeze(0) for ep_obses in ep_obses_list]
         if self.use_normalization:
-            self._udpate_normalizer([torch.from_numpy(obs).to(self.device) for obs in obs_list])
+            self._update_normalizer([torch.from_numpy(obs).to(self.device) for obs in obs_list])
         option_index = ep_option_indexes.squeeze(0)
         option_changed_index = ep_option_changed_indexes.squeeze(0)
         action = ep_actions.squeeze(0)

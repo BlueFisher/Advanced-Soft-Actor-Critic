@@ -25,8 +25,10 @@ def sum_log_prob(log_prob: torch.Tensor, keepdim=False):
 
 
 def prod_prob(prob: torch.Tensor, keepdim=False):
-    prob[prob == torch.inf] = 1.
-    return prob.prod(-1, keepdim=keepdim)
+    prob[torch.isinf(prob)] = 1.
+    prob_prod = prob.prod(-1, keepdim=keepdim)
+    prob_prod[torch.logical_or(torch.isinf(prob_prod), torch.isnan(prob_prod))] = 1.
+    return prob_prod
 
 
 def sum_entropy(entropy: torch.Tensor):

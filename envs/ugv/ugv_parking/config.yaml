@@ -58,9 +58,9 @@ default:
     use_rnd: false
     rnd_n_sample: 30
 
-    siamese: BYOL
-    siamese_use_q: true
-    siamese_use_adaptive: false
+    # siamese: BYOL
+    # siamese_use_q: true
+    # siamese_use_adaptive: false
 
     offline_loss: true
 
@@ -142,23 +142,23 @@ combined:
         ray_random: 0
 
     option_configs:
-      - name: clockwise_race-20250726201403vGdm
+      - name: clockwise_race-20260628103632vQan
         display_name: ClockwiseRace
         fix_policy: true
         random_q: true
-      - name: anticlockwise_race-20250726194747eTsy
+      - name: anticlockwise_race-20260628103650sNrY
         display_name: AnticlockwiseRace
         fix_policy: true
         random_q: true
-      - name: reaching_park-20260214160112XIKx
+      - name: reaching_park-20260619205251dWcm
         display_name: ReachingPark
         fix_policy: true
         random_q: true
-      - name: parking-20250726200453RwPB
+      - name: parking-20260628104417ITzS
         display_name: Parking
         fix_policy: true
         random_q: true
-      - name: turn_around-20250726201919UXEV
+      - name: turn_around-20260628222955dBol
         display_name: TurnAround
         fix_policy: true
         random_q: true

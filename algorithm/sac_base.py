@@ -764,7 +764,7 @@ class SAC_Base:
             )
 
     @torch.no_grad()
-    def _udpate_normalizer(self, obs_list: list[torch.Tensor]) -> None:
+    def _update_normalizer(self, obs_list: list[torch.Tensor]) -> None:
         self.normalizer_step.add_(obs_list[0].shape[0])
 
         input_to_old_means = [obs_list[i] - self.running_means[i] for i in range(len(obs_list))]
@@ -960,7 +960,7 @@ class SAC_Base:
         if self.d_action_sizes and not self.discrete_dqn_like:
             prob[:, :self.d_action_summed_size] = d_policy.probs  # [batch, d_action_summed_size]
         if self.c_action_size:
-            c_prob = squash_correction_prob(c_policy, torch.atanh(c_action))  # [batch, c_action_size]
+            c_prob = squash_correction_prob(c_policy, torch.atanh(torch.clamp(c_action, -0.999, 0.999)))  # [batch, c_action_size]
             prob[:, self.d_action_summed_size:] = c_prob  # [batch, c_action_size]
 
         return torch.cat([d_action, c_action], dim=-1), prob
@@ -1182,7 +1182,7 @@ class SAC_Base:
 
         if self.c_action_size:
             l_selected_c_actions = l_actions[..., self.d_action_summed_size:]
-            c_policy_prob = squash_correction_prob(c_policy, torch.atanh(l_selected_c_actions))
+            c_policy_prob = squash_correction_prob(c_policy, torch.atanh(torch.clamp(l_selected_c_actions, -0.999, 0.999)))
             # [batch, l, c_action_size]
             probs[..., self.d_action_summed_size:] = c_policy_prob  # [batch, l, c_action_size]
 
@@ -1449,7 +1449,7 @@ class SAC_Base:
 
             if self.use_n_step_is:
                 n_c_mu_probs = n_mu_probs[..., self.d_action_summed_size:]  # [batch, n, c_action_size]
-                nx_c_pi_probs = squash_correction_prob(nx_c_policy, torch.atanh(nx_actions[..., self.d_action_summed_size:]))
+                nx_c_pi_probs = squash_correction_prob(nx_c_policy, torch.atanh(torch.clamp(nx_actions[..., self.d_action_summed_size:], -0.999, 0.999)))  # [batch, n + 1, c_action_size]
                 # [batch, n + 1, c_action_size]
                 n_c_pi_probs = nx_c_pi_probs[:, :-1]
                 # [batch, n, c_action_size]
@@ -2374,7 +2374,7 @@ class SAC_Base:
         last_mask = ep_last_masks.squeeze(0)
         obs_list = [ep_obses.squeeze(0) for ep_obses in ep_obses_list]
         if self.use_normalization:
-            self._udpate_normalizer([torch.from_numpy(obs).to(self.device) for obs in obs_list])
+            self._update_normalizer([torch.from_numpy(obs).to(self.device) for obs in obs_list])
         action = ep_actions.squeeze(0)
         reward = ep_rewards.squeeze(0)
         done = ep_dones.squeeze(0)
