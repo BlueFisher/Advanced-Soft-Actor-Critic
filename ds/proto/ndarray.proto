@@ -1,7 +1,0 @@
-syntax = "proto3";
-
-message NDarray {
-  bytes data = 1;
-}
-
-message Empty {}
