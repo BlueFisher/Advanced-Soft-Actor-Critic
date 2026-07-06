@@ -2,8 +2,9 @@ import logging
 import sys
 import unittest
 
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 
+from tests.test_oc_main import *
 from tests.test_oc_params import *
 
 argv = []

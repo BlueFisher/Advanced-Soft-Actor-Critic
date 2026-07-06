@@ -87,3 +87,15 @@ oc_attn_o_rnn:
 
   oc_config:
     option_seq_encoder: RNN
+
+#################### ! DILATED ####################
+
+oc_dilated_attn:
+  inherited: attn
+
+  sac_config:
+    nn: nn_oc_attn
+
+  oc_config:
+    use_dilation: true
+    option_seq_encoder: null

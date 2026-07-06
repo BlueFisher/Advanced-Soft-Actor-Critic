@@ -1,4 +1,4 @@
-import argparse
+import itertools
 import sys
 import unittest
 from pathlib import Path
@@ -9,18 +9,18 @@ from algorithm.oc.oc_main import OC_Main
 
 
 class TestOCMain(unittest.TestCase):
-    def _test(self, config_cat, env_args_dict):
+    def _test(self, config_cat, train_mode, env_args_dict):
         root_dir = Path(__file__).resolve().parent.parent
         OC_Main(root_dir,
                 f'envs/test',
                 config_cat=config_cat,
-                train_mode=False,
+                train_mode=train_mode,
                 env_args=env_args_dict)
 
     @staticmethod
-    def gen_oc(config, param_dict):
+    def gen_oc(config, train_mode, param_dict):
         def func(self):
-            self._test(config, param_dict)
+            self._test(config, train_mode, param_dict)
         return func
 
 
@@ -29,7 +29,8 @@ def __gen():
                'oc_rnn',
                'oc_rnn_o_rnn',
                'oc_attn',
-               'oc_attn_o_rnn'
+               'oc_attn_o_rnn',
+               'oc_dilated_attn',
                ]
 
     env_args_dict = {
@@ -48,11 +49,11 @@ def __gen():
     }
 
     i = 0
-    for config in configs:
-        func_name = f'test_{i:03d}_{config}'
+    for config, train_mode in itertools.product(configs, [True, False]):
+        func_name = f'test_{i:03d}, config={config}, train={train_mode}'
 
         setattr(TestOCMain, func_name,
-                TestOCMain.gen_oc(config, env_args_dict))
+                TestOCMain.gen_oc(config, train_mode, env_args_dict))
 
         i += 1
 

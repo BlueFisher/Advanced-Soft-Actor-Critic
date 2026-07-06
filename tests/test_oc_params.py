@@ -49,13 +49,21 @@ class TestOCModel(unittest.TestCase):
         step = 0
         while step < 10:
             if param_dict['seq_encoder'] in (None, SEQ_ENCODER.RNN):
+                # The same as dialated
                 sac.choose_action(**gen_batch_oc_obs(OBS_SHAPES,
                                                      d_action_sizes=param_dict['d_action_sizes'],
                                                      c_action_size=param_dict['c_action_size'],
                                                      seq_hidden_state_shape=seq_hidden_state_shape,
                                                      low_seq_hidden_state_shape=low_seq_hidden_state_shape))
             elif param_dict['seq_encoder'] == SEQ_ENCODER.ATTN:
-                sac.choose_attn_action(**gen_batch_oc_obs_for_attn(OBS_SHAPES,
+                if param_dict['use_dilation']:
+                    sac.choose_dilated_attn_action(**gen_batch_oc_obs_for_dilated_attn(OBS_SHAPES,
+                                                                                       d_action_sizes=param_dict['d_action_sizes'],
+                                                                                       c_action_size=param_dict['c_action_size'],
+                                                                                       seq_hidden_state_shape=seq_hidden_state_shape,
+                                                                                       low_seq_hidden_state_shape=low_seq_hidden_state_shape))
+                else:
+                    sac.choose_attn_action(**gen_batch_oc_obs_for_attn(OBS_SHAPES,
                                                                        d_action_sizes=param_dict['d_action_sizes'],
                                                                        c_action_size=param_dict['c_action_size'],
                                                                        seq_hidden_state_shape=seq_hidden_state_shape,
@@ -79,22 +87,30 @@ class TestOCModel(unittest.TestCase):
 
 def __gen_test(test_from: int):
     param_dict_candidates = {
-        # 'seq_encoder': [None, 'RNN', 'ATTN'],
-        'seq_encoder': ['RNN'],
-        'use_dilation': [False],
-        'option_burn_in_step': [-1, 2],
-        'option_seq_encoder': [None, 'RNN'],
         'd_action_sizes': [[], [3, 3, 4]],
         'c_action_size': [0, 4],
-        'use_replay_buffer': [True],
+
+        'use_replay_buffer': [True, False],
+        'use_priority': [True, False],
+
         'burn_in_step': [5],
         'n_step': [3],
-        'discrete_dqn_like': [False],
-        'use_n_step_is': [True, False]
+        'seq_encoder': [None, 'RNN', 'ATTN'],
+
+        'use_dilation': [False, True],
+        'option_burn_in_step': [-1, 2],
+        'option_seq_encoder': [None, 'RNN'],
+
+        'discrete_dqn_like': [True, False],
+        'use_n_step_is': [True, False],
+
         # 'siamese': [None, 'ATC', 'BYOL'],
         # 'siamese_use_q': [False, True],
         # 'siamese_use_adaptive': [False, True],
-        # 'use_rnd': [True, False],
+
+        'use_rnd': [True, False],
+
+        'use_normalization': [True, False],
     }
 
     possible_param_dicts = get_product(param_dict_candidates)
@@ -106,6 +122,9 @@ def __gen_test(test_from: int):
                 param_dict['option_burn_in_step'] = 0
             else:
                 continue
+
+        if param_dict['use_dilation'] and param_dict['seq_encoder'] != 'ATTN':
+            continue
 
         if not param_dict['d_action_sizes'] and not param_dict['c_action_size']:
             continue

@@ -130,6 +130,7 @@ def episode_to_batch(burn_in_step: int,
     Returns:
         bn_indexes (np.int32): [ep_len - bn + 1, bn]
         bn_last_masks (bool): [ep_len - bn + 1, bn]
+        bn_padding_masks (bool): [ep_len - bn + 1, bn]
         bnx_obses_list: list([ep_len - bn + 1 + 1, bn, *obs_shapes_i], ...)
         bnx_actions: [ep_len - bn + 1 + 1, bn, action_size]
         bn_rewards: [ep_len - bn + 1, bn]

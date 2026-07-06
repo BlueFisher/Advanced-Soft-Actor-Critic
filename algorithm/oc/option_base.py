@@ -255,7 +255,7 @@ class OptionBase(SAC_Base):
                n_padding_masks: torch.Tensor,
                nx_obses_list: list[torch.Tensor],
                nx_states: torch.Tensor,
-               nx_actions: torch.Tensor,
+               n_actions: torch.Tensor,
                n_rewards: torch.Tensor,
                n_dones: torch.Tensor,
                n_mu_probs: torch.Tensor | None) -> tuple[torch.Tensor | None,
@@ -270,7 +270,7 @@ class OptionBase(SAC_Base):
             n_padding_masks (torch.bool): [batch, n]
             nx_obses_list: list([batch, n + 1, *obs_shapes_i], ...)
             nx_states: [batch, n + 1, state_size]
-            nx_actions: [batch, n + 1, action_size]
+            n_actions: [batch, n, action_size]
             n_rewards: [batch, n]
             n_dones (torch.bool): [batch, n]
             n_mu_probs: [batch, n, action_size]
@@ -284,9 +284,9 @@ class OptionBase(SAC_Base):
 
         next_n_states = nx_states[:, 1:, ...]  # [batch, n, state_size]
 
-        n_actions = nx_actions[:, :-1]  # [batch, n, action_size]
-
         tmp_next_n_vs = next_n_vs_over_options.mean(-1)  # [batch, n]
+
+        nx_actions = torch.cat([n_actions, torch.zeros_like(n_actions[:, :1])], dim=1)
 
         nx_d_policy, nx_c_policy = self.model_policy(nx_states, nx_obses_list)
 
@@ -323,13 +323,13 @@ class OptionBase(SAC_Base):
 
                 d_y = self.get_dqn_like_d_y(
                     n_terminations=n_terminations,
-                                            next_n_vs=tmp_next_n_vs,
+                    next_n_vs=tmp_next_n_vs,
                     n_last_masks=n_last_masks,
-                                            n_padding_masks=n_padding_masks,
-                                            n_rewards=n_rewards,
-                                            n_dones=n_dones,
-                                            stacked_next_n_d_qs=stacked_next_n_d_eval_qs,
-                                            stacked_next_target_n_d_qs=stacked_next_n_d_qs)
+                    n_padding_masks=n_padding_masks,
+                    n_rewards=n_rewards,
+                    n_dones=n_dones,
+                    stacked_next_n_d_qs=stacked_next_n_d_eval_qs,
+                    stacked_next_target_n_d_qs=stacked_next_n_d_qs)
             else:
                 stacked_n_d_qs = torch.stack(n_d_qs_list)[torch.randperm(self.ensemble_q_num)[:self.ensemble_q_sample]]
                 # [ensemble_q_num, batch, n, d_action_summed_size] -> [ensemble_q_sample, batch, n, d_action_summed_size]
@@ -432,13 +432,13 @@ class OptionBase(SAC_Base):
                             next_n_vs_over_options: torch.Tensor,
 
                             n_indexes: torch.Tensor,
-                     n_last_masks: torch.Tensor,
+                            n_last_masks: torch.Tensor,
                             n_padding_masks: torch.Tensor,
                             nx_obses_list: list[torch.Tensor],
                             nx_target_obses_list: list[torch.Tensor],
                             nx_states: torch.Tensor,
                             nx_target_states: torch.Tensor,
-                            nx_actions: torch.Tensor,
+                            n_actions: torch.Tensor,
                             n_pre_actions: torch.Tensor,
                             n_rewards: torch.Tensor,
                             n_dones: torch.Tensor,
@@ -456,7 +456,7 @@ class OptionBase(SAC_Base):
             nx_target_obses_list: list([batch, n + 1, *obs_shapes_i], ...)
             nx_states: [batch, n + 1, state_size]
             nx_target_states: [batch, n + 1, state_size]
-            nx_actions: [batch, n + 1, action_size]
+            n_actions: [batch, n, action_size]
             n_pre_actions: [batch, n, action_size]
             n_rewards: [batch, n]
             n_dones (torch.bool): [batch, n]
@@ -476,7 +476,7 @@ class OptionBase(SAC_Base):
 
         batch = state.shape[0]
 
-        action = nx_actions[:, 0]
+        action = n_actions[:, 0]
         d_action = action[..., :self.d_action_summed_size]
         c_action = action[..., self.d_action_summed_size:]
 
@@ -493,7 +493,7 @@ class OptionBase(SAC_Base):
                                n_padding_masks=n_padding_masks,
                                nx_obses_list=nx_target_obses_list,
                                nx_states=nx_target_states,
-                               nx_actions=nx_actions,
+                               n_actions=n_actions,
                                n_rewards=n_rewards,
                                n_dones=n_dones,
                                n_mu_probs=n_mu_probs)
@@ -564,7 +564,7 @@ class OptionBase(SAC_Base):
                                                nx_obses_list=nx_obses_list,
                                                nx_states=nx_states,
                                                nx_target_states=nx_target_states,
-                                               n_actions=nx_actions[:, :-1],
+                                               n_actions=n_actions,
                                                n_rewards=n_rewards)
 
         loss_q = loss_q_list[0]
@@ -679,7 +679,7 @@ class OptionBase(SAC_Base):
                                   y: torch.Tensor,
                                   v_over_options: torch.Tensor,
                                   done: torch.Tensor,
-                                  priority_is: torch.Tensor):
+                                  priority_is: torch.Tensor | None):
         """
         Args:
             terminal_entropy: float, tending not to terminate >0, tending to terminate <0
@@ -696,7 +696,9 @@ class OptionBase(SAC_Base):
 
         adv = y - v + terminal_entropy  # [batch, 1]
 
-        loss_termination = termination * adv * ~done.unsqueeze(-1) * priority_is  # [batch, 1]
+        loss_termination = termination * adv * ~done.unsqueeze(-1)  # [batch, 1]
+        if priority_is is not None:
+            loss_termination = loss_termination * priority_is
 
         loss_termination = torch.mean(loss_termination)
 
@@ -724,7 +726,7 @@ class OptionBase(SAC_Base):
                       nx_target_obses_list: list[torch.Tensor],
                       state: torch.Tensor,
                       nx_target_states: torch.Tensor,
-                      nx_actions: torch.Tensor,
+                      n_actions: torch.Tensor,
                       n_rewards: torch.Tensor,
                       n_dones: torch.Tensor,
                       n_mu_probs: torch.Tensor | None) -> torch.Tensor:
@@ -738,7 +740,7 @@ class OptionBase(SAC_Base):
             nx_target_obses_list: list([batch, n + 1, *obs_shapes_i], ...)
             state: [batch, state_size]
             nx_target_states: [batch, n + 1, state_size]
-            nx_actions: [batch, n + 1, action_size]
+            n_actions: [batch, n, action_size]
             n_rewards: [batch, n]
             n_dones: [batch, n]
             n_mu_probs: [batch, n, action_size]
@@ -753,7 +755,7 @@ class OptionBase(SAC_Base):
         n_target_terminations = n_target_terminations.squeeze(-1)  # [batch, n]
 
         obs_list = [nx_obses[:, 0] for nx_obses in nx_obses_list]
-        action = nx_actions[:, 0]
+        action = n_actions[:, 0]
         d_action = action[..., :self.d_action_summed_size]
         c_action = action[..., self.d_action_summed_size:]
 
@@ -777,7 +779,7 @@ class OptionBase(SAC_Base):
                                n_padding_masks=n_padding_masks,
                                nx_obses_list=nx_obses_list,
                                nx_states=nx_target_states,
-                               nx_actions=nx_actions,
+                               n_actions=n_actions,
                                n_rewards=n_rewards,
                                n_dones=n_dones,
                                n_mu_probs=n_mu_probs if self.use_n_step_is else None)

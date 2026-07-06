@@ -62,9 +62,12 @@ class ModelRep(m.ModelBaseRep):
 
         bbox = self._handle_bbox(bbox)
 
-        vis = self.conv(torch.cat([vis_camera, vis_segmentation], dim=-1))
+        vis = self.conv(torch.cat([vis_camera, vis_segmentation], dim=-3))
 
         state = self.dense(torch.cat([bbox, vis, vec], dim=-1))
+
+        if rnn_state is not None:
+            rnn_state = rnn_state[:, 0]
 
         state, hn = self.rnn(torch.cat([state, pre_action], dim=-1), rnn_state)
 

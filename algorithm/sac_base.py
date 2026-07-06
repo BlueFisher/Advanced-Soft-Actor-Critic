@@ -2420,7 +2420,7 @@ class SAC_Base:
             return None
 
         """
-        trans:
+        batch:
             index (torch.int32): [batch, bn + 1]
             padding_mask (bool): [batch, bn + 1]
             obs_i: [batch, bn + 1, *obs_shapes_i]

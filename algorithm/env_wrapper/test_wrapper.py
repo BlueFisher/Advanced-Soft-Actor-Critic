@@ -71,10 +71,14 @@ class TestWrapper(EnvWrapper):
                 'test1': 5
             }
 
+        ma_obs_dtypes = {
+            n: [np.float32] for n in self._ma_obs_shapes.keys()
+        }
+
         self._ma_d_action_sizes = ma_d_action_sizes
         self._ma_c_action_size = ma_c_action_size
 
-        return self._ma_obs_names, self._ma_obs_shapes, ma_d_action_sizes, ma_c_action_size
+        return self._ma_obs_names, self._ma_obs_shapes, ma_obs_dtypes, ma_d_action_sizes, ma_c_action_size
 
     def reset(self, reset_config: dict | None = None) -> tuple[dict[str, np.ndarray],
                                                                dict[str, list[np.ndarray]]]:
@@ -116,7 +120,7 @@ class TestWrapper(EnvWrapper):
         for n, agent_ids in ma_agent_ids.items():
             ma_last_reward[n] = np.random.randn(self.n_envs).astype(np.float32)
 
-            done = np.random.rand(self.n_envs) < 0.1
+            done = np.random.rand(self.n_envs) < 0.5
             terminal_ma_agent_ids[n] = agent_ids[done]
             terminal_ma_obs_list[n] = [o[done] for o in ma_obs_list[n]]
             terminal_ma_last_reward[n] = ma_last_reward[n][done]
