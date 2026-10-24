@@ -8,27 +8,35 @@ class LockLogState(Enum):
     REQUEST = 1
     TIMEOUT = 2
     ACQUIRED = 3
+    RELEASED = 4
 
 
 def _format_lock_log(state: LockLogState, start_time, custom_log=None):
-    stack = inspect.stack()
-
     if custom_log is None:
         stack_log = ''
-        for i, frame in enumerate(stack):
-            if '__enter__' in frame.function:
-                frame = stack[i + 1]
-                stack_log = f'[{frame.filename}, {frame.lineno}, {frame.function}]'
-                break
+        frame = inspect.currentframe()
+        try:
+            while frame is not None:
+                if '__enter__' in frame.f_code.co_name or '__exit__' in frame.f_code.co_name:
+                    frame = frame.f_back
+                    if frame is not None:
+                        stack_log = f'[{frame.f_code.co_filename}, {frame.f_lineno}, {frame.f_code.co_name}]'
+                    break
+                frame = frame.f_back
+        finally:
+            # Frame references can retain entire training batches until cyclic GC runs.
+            del frame
 
     log = stack_log if custom_log is None else custom_log
 
     if state == LockLogState.REQUEST:
         return f'Request. {log}, id: {threading.get_ident()}'
     elif state == LockLogState.TIMEOUT:
-        return f'Timeout {time.time()-start_time:.1f}! {log}, id: {threading.get_ident()}'
+        return f'Timeout {time.time()-start_time:.3f}! {log}, id: {threading.get_ident()}'
     elif state == LockLogState.ACQUIRED:
-        return f'Acquired in {time.time()-start_time:.1f}s. {log}, id: {threading.get_ident()}'
+        return f'Acquired in {time.time()-start_time:.3f}s. {log}, id: {threading.get_ident()}'
+    elif state == LockLogState.RELEASED:
+        return f'Released in {time.time()-start_time:.3f}s. {log}, id: {threading.get_ident()}'
 
 
 class MaxMutexCheck:
@@ -99,7 +107,8 @@ class ReadWriteLock:
         self._state = 0
         # postive: Number of threads being read
         # negative: Number of threads being write
-        self._owners = []  # The list of threads idents being operate
+        self._owners = {}  # The list of threads idents being operate
+        # {(thread_ident, lock): (acquired_time)}
 
     def write(self, custom_log=None):
         return self._write_lock(self, custom_log)
@@ -144,6 +153,7 @@ class ReadWriteLock:
 
             if timeout_occur and self._logger is not None:
                 self._logger.warning(f'Write {_format_lock_log(LockLogState.ACQUIRED, start_time, write_lock._custom_log)}')
+            self._logger.debug(f'Write {_format_lock_log(LockLogState.ACQUIRED, start_time, write_lock._custom_log)}')
             self._write_waiter -= 1
         return True
 
@@ -152,7 +162,7 @@ class ReadWriteLock:
         # If only the lock is free or current thread is operating
         if self._state == 0 or (self._state < 0 and me in [o[0] for o in self._owners]):
             self._state -= 1
-            self._owners.append((me, write_lock))
+            self._owners[(me, write_lock)] = time.time()
             return True
         if self._state > 0 and me in [o[0] for o in self._owners]:
             raise RuntimeError('Cannot recursively wlock an acquired rlock')
@@ -172,6 +182,7 @@ class ReadWriteLock:
 
             if (timeout_occur and self._logger is not None):
                 self._logger.warning(f'Read {_format_lock_log(LockLogState.ACQUIRED, start_time, read_lock._custom_log)}')
+            self._logger.debug(f'Read {_format_lock_log(LockLogState.ACQUIRED, start_time, read_lock._custom_log)}')
             self._read_waiter -= 1
         return True
 
@@ -188,7 +199,7 @@ class ReadWriteLock:
             ok = me in [o[0] for o in self._owners]
         if ok or not self.write_first:
             self._state += 1
-            self._owners.append((me, read_lock))
+            self._owners[(me, read_lock)] = time.time()
             return True
 
         return False
@@ -197,8 +208,14 @@ class ReadWriteLock:
         me = threading.get_ident()
         with self._lock:
             try:
-                self._owners.remove((me, lock))
-            except ValueError:
+                acquired_time = self._owners[(me, lock)]
+                del self._owners[(me, lock)]
+                if self._logger is not None:
+                    if isinstance(lock, self._write_lock):
+                        self._logger.debug(f'Write {_format_lock_log(LockLogState.RELEASED, acquired_time, lock._custom_log)}')
+                    elif isinstance(lock, self._read_lock):
+                        self._logger.debug(f'Read {_format_lock_log(LockLogState.RELEASED, acquired_time, lock._custom_log)}')
+            except KeyError:
                 raise RuntimeError('Cannot release un-acquired lock')
 
             if self._state > 0:

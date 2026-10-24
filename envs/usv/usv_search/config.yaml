@@ -2,11 +2,15 @@ default:
   base_config:
     env_name: USVSearch
     unity_args:
+      no_graphics: false
+      force_vulkan:
+        win32: false
+        linux: true
       build_path:
         win32: D:\Unity\win-RL-Envs\RLEnvironments.exe
         linux: /data/linux-RL-Envs/RLEnvironments.x86_64
-      no_graphics: false
 
+    hit_reward: 1.0
     n_envs: 50
     reset_on_iteration: false
 
@@ -18,8 +22,6 @@ default:
 
   nn_config:
     rep:
-      blur: 0
-      brightness: 1
       need_speed: true
 
   sac_config:
@@ -29,48 +31,3 @@ default:
     n_step: 3
     burn_in_step: 10
     seq_encoder: RNN
-
-    use_rnd: true
-    rnd_n_sample: 50
-
-atc:
-  base_config:
-    name: "atc_{time}"
-  sac_config:
-    siamese: ATC
-
-byol:
-  base_config:
-    name: "byol_{time}"
-  sac_config:
-    siamese: BYOL
-
-atc_q:
-  base_config:
-    name: "atc_q_{time}"
-  sac_config:
-    siamese: ATC
-    siamese_use_q: true
-
-byol_q:
-  base_config:
-    name: "byol_q_{time}"
-  sac_config:
-    siamese: BYOL
-    siamese_use_q: true
-
-atc_q_ada:
-  base_config:
-    name: "atc_q_ada_{time}"
-  sac_config:
-    siamese: ATC
-    siamese_use_q: true
-    siamese_use_adaptive: true
-
-byol_q_ada:
-  base_config:
-    name: "byol_q_ada_{time}"
-  sac_config:
-    siamese: BYOL
-    siamese_use_q: true
-    siamese_use_adaptive: true

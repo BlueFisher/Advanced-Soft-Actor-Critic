@@ -136,7 +136,7 @@ class DataStorage:
     @property
     def is_full(self) -> bool:
         return self._size == self.capacity
-    
+
     def close(self):
         if hasattr(self, '_buffer') and self._buffer is not None:
             del self._buffer
@@ -237,7 +237,7 @@ class SumTree:
     @property
     def max(self):
         return self._tree[self.capacity - 1:].max()
-    
+
     def close(self):
         del self._tree
 
@@ -272,8 +272,12 @@ class PrioritizedReplayBuffer:
 
         self._closed = False
 
+        self._enable_prefetch_queue = queue.Queue(maxsize=1)
+        self._enable_prefetch_queue.put(True)
         self._queue = queue.Queue(maxsize=1)
-        self._stream = torch.cuda.Stream()
+        self._stream = (torch.cuda.Stream(device=self.device)
+                        if self.device is not None and self.device.type == 'cuda'
+                        else None)
 
         if logger_parent_name != '':
             self._logger = logging.getLogger(f'{logger_parent_name}.replay_buffer')
@@ -342,7 +346,9 @@ class PrioritizedReplayBuffer:
                 time.sleep(0.1)
                 continue
 
-            with self._profiler('sample in _prefetch_loop'):
+            with self._profiler('sample in _prefetch_loop', repeat=10):
+                self._enable_prefetch_queue.get()  # Wait for the previous sample to be consumed
+
                 with self._lock.read('_prefetch_loop'):
                     leaf_pointers, p = self._sum_tree.sample(self.batch_size)
 
@@ -365,14 +371,24 @@ class PrioritizedReplayBuffer:
 
                 is_weights = torch.as_tensor(is_weights).pin_memory()
 
-                if self.device is not None and self.device.type == 'cuda':
-                    with torch.cuda.stream(self._stream):
-                        for k, v in transitions.items():
-                            transitions[k] = v.to(self.device, non_blocking=True)
-                        is_weights = is_weights.to(self.device, non_blocking=True)
+                # if self.device is not None and self.device.type == 'cuda':
+                #     with torch.cuda.stream(self._stream):
+                #         for k, v in transitions.items():
+                #             transitions[k] = v.to(self.device, non_blocking=True)
+                #         is_weights = is_weights.to(self.device, non_blocking=True)
 
-            with self._profiler('queue put in _prefetch_loop'):
+            with self._profiler('queue put in _prefetch_loop', repeat=10):
                 self._queue.put((data_ids, transitions, is_weights))
+
+    def enable_prefetch(self) -> None:
+        """
+        Enable prefetching of transitions.
+        This method should be called after update td_error, transitions to avoid prefetching lock block the update block.
+        """
+        try:
+            self._enable_prefetch_queue.put_nowait(True)
+        except queue.Full:
+            pass
 
     def sample(self) -> tuple[np.ndarray,
                               dict[str, torch.Tensor],
@@ -389,9 +405,19 @@ class PrioritizedReplayBuffer:
         data_ids, transitions, is_weights = self._queue.get()
 
         if self.device is not None and self.device.type == 'cuda':
-            for k, v in transitions.items():
-                v.record_stream(torch.cuda.current_stream())
-            is_weights.record_stream(torch.cuda.current_stream())
+            # current_stream = torch.cuda.current_stream(self.device)
+
+            # current_stream.wait_stream(self._stream)
+
+            # for v in transitions.values():
+            #     v.record_stream(current_stream)
+            # is_weights.record_stream(current_stream)
+
+            transitions = {
+                k: v.to(self.device, non_blocking=True)
+                for k, v in transitions.items()
+            }
+            is_weights = is_weights.to(self.device, non_blocking=True)
 
         return data_ids, transitions, is_weights.unsqueeze(-1)
 
@@ -466,7 +492,7 @@ class PrioritizedReplayBuffer:
 
     @property
     def is_lg_batch_size(self) -> bool:
-        with self._lock.read():
+        with self._lock.read('is_lg_batch_size'):
             return self._trans_storage.size > self.batch_size
 
     def close(self):

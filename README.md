@@ -22,7 +22,7 @@ This project is the algorithm [Soft Actor-Critic](https://arxiv.org/pdf/1812.059
 
 ## Supported Environments
 
-Gym, PyBullet and Unity environments with ML-Agents. 
+Gym, PyBullet and Unity environments with ML-Agents.
 
 Observation can be any combination of vectors and images, which means an agent can have multiple sensors and the resolution of each image can be different.
 
@@ -164,9 +164,7 @@ oc_config:
       random_q: false # Ignore saved Q network and randomly initialize Q network
 
 ma_config: null
-
 ```
-
 
 ## Start Training
 

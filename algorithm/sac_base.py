@@ -2581,28 +2581,33 @@ class SAC_Base:
                         n_dones=bn_dones[:, self.burn_in_step:],
                         n_mu_probs=bn_pi_probs_tensor[:, self.burn_in_step:] if self.use_n_step_is else None
                     ).detach().cpu().numpy()
-                self.replay_buffer.update(pointers, td_error)
+                with self._profiler('update', repeat=10):
+                    self.replay_buffer.update(pointers, td_error)
 
             bn_padding_masks = bn_padding_masks.detach().cpu().numpy()
             padding_mask = bn_padding_masks.reshape(-1)
 
             # Update seq_hidden_states
             if self.seq_hidden_state_shape[-1] != 0:
-                pointers_list = [pointers + 1 + i for i in range(-self.burn_in_step, self.n_step)]
-                tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
+                with self._profiler('update_pre_seq_hidden_state', repeat=10):
+                    pointers_list = [pointers + 1 + i for i in range(-self.burn_in_step, self.n_step)]
+                    tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
 
-                next_bn_seq_hidden_states = next_bn_seq_hidden_states.detach().cpu().numpy()
-                seq_hidden_state = next_bn_seq_hidden_states.reshape(-1, *next_bn_seq_hidden_states.shape[2:])
-                self.replay_buffer.update_transitions(tmp_pointers[~padding_mask], 'pre_seq_hidden_state', seq_hidden_state[~padding_mask])
+                    next_bn_seq_hidden_states = next_bn_seq_hidden_states.detach().cpu().numpy()
+                    seq_hidden_state = next_bn_seq_hidden_states.reshape(-1, *next_bn_seq_hidden_states.shape[2:])
+                    self.replay_buffer.update_transitions(tmp_pointers[~padding_mask], 'pre_seq_hidden_state', seq_hidden_state[~padding_mask])
 
             # Update n_mu_probs
             if self.use_n_step_is:
-                pointers_list = [pointers + i for i in range(-self.burn_in_step, self.n_step)]
-                tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
+                with self._profiler('update_mu_prob', repeat=10):
+                    pointers_list = [pointers + i for i in range(-self.burn_in_step, self.n_step)]
+                    tmp_pointers = np.stack(pointers_list, axis=1).reshape(-1)
 
-                pi_probs = bn_pi_probs_tensor.detach().cpu().numpy()
-                pi_prob = pi_probs.reshape(-1, *pi_probs.shape[2:])
-                self.replay_buffer.update_transitions(tmp_pointers[~padding_mask], 'mu_prob', pi_prob[~padding_mask])
+                    pi_probs = bn_pi_probs_tensor.detach().cpu().numpy()
+                    pi_prob = pi_probs.reshape(-1, *pi_probs.shape[2:])
+                    self.replay_buffer.update_transitions(tmp_pointers[~padding_mask], 'mu_prob', pi_prob[~padding_mask])
+
+            self.replay_buffer.enable_prefetch()
 
         step = self.increase_global_step()
 
