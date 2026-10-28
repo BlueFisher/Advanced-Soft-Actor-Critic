@@ -23,9 +23,10 @@ class DataStorage:
     _id = 0
     _buffer = None
 
-    def __init__(self, capacity: int):
+    def __init__(self, capacity: int, replay_buffer_logger: logging.Logger):
         self.capacity = capacity
         self.max_id = 10 * capacity  # For multithreading storage, max_id should be larger than capacity
+        self._logger = logging.getLogger(f'{replay_buffer_logger.name}.data_storage')
 
     def add(self, data: dict[str, np.ndarray]) -> np.ndarray:
         """
@@ -38,6 +39,7 @@ class DataStorage:
             self._buffer = dict()
             self._buffer['_id'] = np.zeros(self.capacity, dtype=np.int64)
             for k, v in data.items():
+                self._logger.info(f'Create buffer {k}: ({[self.capacity] + list(v.shape[1:])}, {v.dtype})')
                 self._buffer[k] = np.zeros([self.capacity] + list(v.shape[1:]), dtype=v.dtype)
 
         ids = (np.arange(tmp_len) + self._id) % self.max_id
@@ -268,7 +270,13 @@ class PrioritizedReplayBuffer:
         self.td_error_min = td_error_min
         self.td_error_max = td_error_max
         self._sum_tree = SumTree(self.capacity)
-        self._trans_storage = DataStorage(self.capacity)
+
+        if logger_parent_name != '':
+            self._logger = logging.getLogger(f'{logger_parent_name}.replay_buffer')
+        else:
+            self._logger = logging.getLogger('replay_buffer')
+
+        self._trans_storage = DataStorage(self.capacity, self._logger)
 
         self._closed = False
 
@@ -278,11 +286,6 @@ class PrioritizedReplayBuffer:
         self._stream = (torch.cuda.Stream(device=self.device)
                         if self.device is not None and self.device.type == 'cuda'
                         else None)
-
-        if logger_parent_name != '':
-            self._logger = logging.getLogger(f'{logger_parent_name}.replay_buffer')
-        else:
-            self._logger = logging.getLogger('replay_buffer')
 
         self._lock = ReadWriteLock(None, 1, 1, True, self._logger)
 

@@ -14,6 +14,8 @@ default:
     n_envs: 50
     reset_on_iteration: false
 
+    obs_preprocessor: obs_preprocessor
+
   reset_config:
     spectrum: 0
     force_reset: true
@@ -31,3 +33,6 @@ default:
     n_step: 3
     burn_in_step: 10
     seq_encoder: RNN
+
+    use_rnd: true
+    rnd_n_sample: 50
