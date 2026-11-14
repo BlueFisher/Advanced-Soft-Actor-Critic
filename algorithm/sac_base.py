@@ -2247,6 +2247,7 @@ class SAC_Base:
     def log_episode(self, force: bool = False, **episode_trans: np.ndarray) -> None:
         """
         Log the episode data to the summary writer and save it to a file.
+        episodes/save_count.txt controls how many episodes remain to be saved.
 
         Args:
             force (bool): If True, log the episode even if summary_writer is None or summary_available is False.
@@ -2277,26 +2278,31 @@ class SAC_Base:
                     image = plot_attn_weight(attn_weight[0].cpu().numpy())
                     self.summary_writer.add_figure(f'attn_weight/{i}', image, self.global_step)
 
-        # eps_dir = self.model_abs_dir / 'episodes'
+        eps_dir = self.model_abs_dir / 'episodes'
+        eps_dir.mkdir(exist_ok=True)
+        save_count_path = eps_dir / 'save_count.txt'
+        try:
+            save_count = int(save_count_path.read_text(encoding='utf-8').strip())
+        except (FileNotFoundError, ValueError):
+            save_count = 0
 
-        # eps = []
-        # if eps_dir.exists():
-        #     for eps_path in eps_dir.glob('*.npz'):
-        #         eps.append(int(eps_path.stem))
-        #     eps.sort()
-        # else:
-        #     eps_dir.mkdir()
+        if save_count > 0:
+            eps = []
+            for eps_path in eps_dir.glob('*.npz'):
+                eps.append(int(eps_path.stem))
+            eps.sort()
 
-        # if len(eps) == 0:
-        #     eps = [-1]
-        # ep_idx = eps[-1] + 1
+            if len(eps) == 0:
+                eps = [-1]
+            ep_idx = eps[-1] + 1
 
-        # np.savez(eps_dir / f'{ep_idx}.npz',
-        #          index=np.squeeze(ep_indexes, axis=0),
-        #          **{f'obs-{obs_name}': np.squeeze(ep_obses, axis=0) for obs_name, ep_obses in zip(self.obs_names, ep_obses_list)},
-        #          action=np.squeeze(ep_actions, axis=0),
-        #          reward=np.squeeze(ep_rewards, axis=0),
-        #          done=np.squeeze(ep_dones, axis=0))
+            np.savez(eps_dir / f'{ep_idx}.npz',
+                     index=np.squeeze(ep_indexes, axis=0),
+                     **{f'obs-{obs_name}': np.squeeze(ep_obses, axis=0) for obs_name, ep_obses in zip(self.obs_names, ep_obses_list)},
+                     action=np.squeeze(ep_actions, axis=0),
+                     reward=np.squeeze(ep_rewards, axis=0),
+                     done=np.squeeze(ep_dones, axis=0))
+            save_count_path.write_text(str(save_count - 1), encoding='utf-8')
 
         self.summary_available = False
 
